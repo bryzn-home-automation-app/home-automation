@@ -1,0 +1,43 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/homeplatform}
+    username: ${SPRING_DATASOURCE_USERNAME:homeplatform}
+    password: ${SPRING_DATASOURCE_PASSWORD:changeme}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: 6379
+      password: ${SPRING_REDIS_PASSWORD:}
+
+server:
+  port: 8080
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+# CoServ integration
+coserv:
+  portal-url: ${COSERV_PORTAL_URL:https://myaccount.coserv.com}
+  username: ${COSERV_USERNAME:}
+  password: ${COSERV_PASSWORD:}
+  sync:
+    enabled: true
+    cron: "0 0 * * * *"  # hourly
+
+# Logging
+logging:
+  level:
+    com.homeplatform: DEBUG
+    com.homeplatform.integration: DEBUG
