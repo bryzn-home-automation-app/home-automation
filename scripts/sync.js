@@ -62,13 +62,14 @@ function loadSecrets() {
 }
 
 // ─── Parse args ─────────────────────────────────────────────────
-function parseArgs() {
+function parseArgs(argv) {
   const args = { dryRun: false, date: null, weekly: false };
-  for (let i = 2; i < process.argv.length; i++) {
-    if (process.argv[i] === '--dry-run') args.dryRun = true;
-    if (process.argv[i] === '--weekly') args.weekly = true;
-    if (process.argv[i] === '--date' && process.argv[i + 1]) {
-      args.date = process.argv[i + 1];
+  const a = argv || process.argv;
+  for (let i = 2; i < a.length; i++) {
+    if (a[i] === '--dry-run') args.dryRun = true;
+    if (a[i] === '--weekly') args.weekly = true;
+    if (a[i] === '--date' && a[i + 1]) {
+      args.date = a[i + 1];
     }
   }
   return args;
@@ -76,15 +77,16 @@ function parseArgs() {
 
 // ─── Sync decision logic ────────────────────────────────────────
 
-/** Is today Sunday? (0 = Sun, 1-6 = Mon-Sat) */
-function isSunday() { return new Date().getDay() === 0; }
+/** Is today Sunday? (0 = Sun, 1-6 = Mon-Sat). Accepts optional Date override for testing. */
+function isSunday(now) { return (now || new Date()).getDay() === 0; }
 
 /**
  * Decide what to sync and in what mode.
  * Returns { startDate, endDate, mode } where mode is 'daily' | 'weekly' | 'zero-guard'.
+ * Accepts optional `now` Date for testing.
  */
-async function decideSyncMode(client, args, secrets) {
-  const yesterday = new Date();
+async function decideSyncMode(client, args, secrets, now) {
+  const yesterday = now ? new Date(now) : new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = fmtDate(yesterday);
 
@@ -94,7 +96,7 @@ async function decideSyncMode(client, args, secrets) {
   }
 
   // Explicit --weekly or Sunday: last 7 days
-  if (args.weekly || isSunday()) {
+  if (args.weekly || isSunday(now)) {
     const start = new Date(yesterday);
     start.setDate(start.getDate() - 6); // last 7 days
     return { startDate: fmtDate(start), endDate: yesterdayStr, mode: args.weekly ? 'weekly (forced)' : 'weekly (Sunday)' };
@@ -133,7 +135,10 @@ async function checkZeroGap(client) {
     if (rows.length < ZERO_GUARD_DAYS) return false; // not enough data yet
     const allZero = rows.every(r => parseFloat(r.usage_kwh) === 0);
     if (allZero) {
-      rows.forEach(r => console.log(`   DB: ${r.d.toISOString().substring(0,10)} = ${r.usage_kwh} kWh`));
+      rows.forEach(r => {
+        const d = r.d instanceof Date ? r.d.toISOString().substring(0,10) : String(r.d || '?');
+        console.log(`   DB: ${d} = ${r.usage_kwh} kWh`);
+      });
     }
     return allZero;
   } catch (e) {
@@ -492,4 +497,21 @@ async function main() {
   process.exit(hadError ? 1 : 0);
 }
 
-main();
+// Run main() only when invoked directly (not when required as module for tests)
+if (require.main === module) {
+  main();
+}
+
+// Export testable functions
+module.exports = {
+  parseArgs,
+  decideSyncMode,
+  checkZeroGap,
+  checkPostSyncZeros,
+  parseGreenButtonXml,
+  fmtDate,
+  parseDate,
+  isSunday,
+  SERVICES,
+  ZERO_GUARD_DAYS,
+};
