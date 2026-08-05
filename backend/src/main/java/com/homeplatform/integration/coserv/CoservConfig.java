@@ -5,7 +5,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * CoServ-specific configuration loaded from application.yml / environment.
+ * CoServ SmartHub portal configuration.
  * Credentials must be provided via environment variables — never hardcoded.
  */
 @Data
@@ -13,10 +13,13 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "coserv")
 public class CoservConfig {
 
-    /** CoServ customer portal URL */
-    private String portalUrl = "https://myaccount.coserv.com";
+    /** SmartHub customer portal login page */
+    private String portalUrl = "https://coserv.smarthub.coop/ui/#/login";
 
-    /** Portal login username */
+    /** SmartHub Green Button download page */
+    private String greenButtonPath = "#/usageManagement/greenButton";
+
+    /** Portal login email */
     private String username;
 
     /** Portal login password */

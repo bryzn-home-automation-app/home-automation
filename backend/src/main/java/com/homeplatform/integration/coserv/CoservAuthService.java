@@ -5,11 +5,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
-
 /**
- * Handles Playwright-based authentication with the CoServ customer portal.
- * Manages login, session detection, and token/cookie refresh.
+ * Handles Playwright-based authentication with the CoServ SmartHub portal.
+ * SmartHub is an Angular Material SPA hosted by NISC.
+ *
+ * Login page: https://coserv.smarthub.coop/ui/#/login
+ * Fields: input[aria-label="Email"], input[aria-label="Password"]
+ * Submit: button:has-text("Sign In")
  */
 @Service
 public class CoservAuthService {
@@ -23,7 +25,7 @@ public class CoservAuthService {
     }
 
     /**
-     * Log into CoServ portal and return an authenticated browser context.
+     * Log into SmartHub and return an authenticated browser context.
      * The caller is responsible for closing the browser when done.
      */
     public BrowserContext login(Playwright playwright) {
@@ -36,55 +38,46 @@ public class CoservAuthService {
         Page page = context.newPage();
 
         try {
-            log.info("Navigating to CoServ portal: {}", config.getPortalUrl());
-            page.navigate(config.getPortalUrl());
+            log.info("Navigating to SmartHub login: {}", config.getPortalUrl());
+            page.navigate(config.getPortalUrl(), new Page.NavigateOptions().setTimeout(30000));
+            page.waitForTimeout(2000);
 
-            // Wait for and fill login form
-            // Note: selectors will need to be updated to match actual CoServ portal
-            page.waitForSelector("input[name='username'], input[type='email'], #username",
-                    new Page.WaitForSelectorOptions().setTimeout(10000));
+            // SmartHub Angular Material form fields
+            page.locator("input[aria-label=\"Email\"]").fill(config.getUsername());
+            page.locator("input[aria-label=\"Password\"]").fill(config.getPassword());
+            page.locator("button:has-text(\"Sign In\")").click();
+            page.waitForTimeout(5000);
 
-            // Fill username
-            if (page.locator("input[name='username']").count() > 0) {
-                page.fill("input[name='username']", config.getUsername());
-            } else if (page.locator("#username").count() > 0) {
-                page.fill("#username", config.getUsername());
-            }
-
-            // Fill password
-            if (page.locator("input[name='password']").count() > 0) {
-                page.fill("input[name='password']", config.getPassword());
-            } else if (page.locator("#password").count() > 0) {
-                page.fill("#password", config.getPassword());
-            }
-
-            // Click submit
-            page.click("button[type='submit'], input[type='submit']");
-
-            // Wait for navigation after login
-            page.waitForLoadState();
-
-            // Verify login succeeded (no error message, redirected away from login)
             String currentUrl = page.url();
-            boolean hasError = page.locator(".error, .alert-danger, .login-error").count() > 0;
+            boolean hasError = page.locator("text=Invalid Login").count() > 0;
 
             if (hasError) {
-                log.error("CoServ login failed — error message detected on page");
+                log.error("SmartHub login failed — invalid credentials");
                 page.screenshot(new Page.ScreenshotOptions()
-                        .setPath(Path.of("screenshots/coserv-login-failure.png")));
+                        .setPath(java.nio.file.Path.of("screenshots/coserv-login-failure.png")));
                 context.close();
                 browser.close();
                 return null;
             }
 
-            log.info("CoServ authentication successful, redirected to: {}", currentUrl);
+            // Verify we landed on the home/dashboard page (not still on login)
+            if (currentUrl.contains("/login") || currentUrl.contains("#/login")) {
+                log.error("SmartHub login failed — still on login page after submit");
+                page.screenshot(new Page.ScreenshotOptions()
+                        .setPath(java.nio.file.Path.of("screenshots/coserv-login-redirect-failure.png")));
+                context.close();
+                browser.close();
+                return null;
+            }
+
+            log.info("SmartHub login successful, landed at: {}", currentUrl);
             return context;
 
         } catch (Exception e) {
-            log.error("CoServ authentication error: {}", e.getMessage(), e);
+            log.error("SmartHub authentication error: {}", e.getMessage(), e);
             try {
                 page.screenshot(new Page.ScreenshotOptions()
-                        .setPath(Path.of("screenshots/coserv-auth-error.png")));
+                        .setPath(java.nio.file.Path.of("screenshots/coserv-auth-error.png")));
             } catch (Exception se) {
                 log.warn("Could not capture auth error screenshot", se);
             }
@@ -95,13 +88,12 @@ public class CoservAuthService {
     }
 
     /**
-     * Check if the current session is still valid.
+     * Check if the current SmartHub session is still valid.
      */
     public boolean isSessionValid(BrowserContext context) {
         try {
             Page page = context.pages().get(0);
             page.reload();
-            // If we're redirected to login, session expired
             String url = page.url().toLowerCase();
             return !url.contains("login") && !url.contains("signin");
         } catch (Exception e) {

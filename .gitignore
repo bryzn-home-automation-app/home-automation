@@ -35,6 +35,7 @@ logs/
 # Integration temp files (deleted after processing)
 playwright-traces/
 screenshots/
+green-button-downloads/
 
 # Build
 frontend/build/

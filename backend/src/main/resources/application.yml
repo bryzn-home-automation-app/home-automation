@@ -27,9 +27,10 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
-# CoServ integration
+# CoServ SmartHub integration (Green Button Download)
 coserv:
-  portal-url: ${COSERV_PORTAL_URL:https://myaccount.coserv.com}
+  portal-url: ${COSERV_PORTAL_URL:https://coserv.smarthub.coop/ui/#/login}
+  green-button-path: "#/usageManagement/greenButton"
   username: ${COSERV_USERNAME:}
   password: ${COSERV_PASSWORD:}
   sync:

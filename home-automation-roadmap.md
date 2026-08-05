@@ -72,19 +72,25 @@ The long-term goal is to create a reusable integration framework where CoServ is
 
 ### CoServ Integration Layer
 
-**Authentication:** Playwright browser automation to log into the CoServ customer portal. Credentials stored via environment variables or encrypted DB — never plaintext. Session cookies/tokens managed and refreshed automatically.
+**Portal:** SmartHub by NISC (`coserv.smarthub.coop`) — Angular Material SPA. No public API; data accessed via Green Button Download (NAESB ESPI XML standard).
 
-**Data sync (scheduled, e.g. hourly):**
+**Authentication:** Playwright browser automation logs into SmartHub using `input[aria-label="Email"]` + `input[aria-label="Password"]`. Credentials stored via environment variables — never plaintext.
 
-1. Launch Playwright browser session
-2. Authenticate with CoServ portal
-3. Navigate to usage/billing pages
-4. Download available data exports (XML, Excel, CSV) to a temp directory
-5. Parse and validate downloaded data
-6. Normalize into provider-agnostic models
-7. Insert into PostgreSQL (append-only — never update or delete)
-8. Delete downloaded files after successful processing
-9. Capture screenshots on failure, log errors, notify user if sync requires attention
+**Data download (scheduled, e.g. hourly):**
+
+1. Launch Playwright browser session, authenticate with SmartHub
+2. Navigate to Green Button page (`#/usageManagement/greenButton`)
+3. Open "Green Button Download" modal dialog
+4. For each service (Electric + Natural Gas):
+   - Select service via `#mat-input-2` dropdown
+   - Set interval to DAILY, format to Green Button XML
+   - Set date range via direct text input (MM/DD/YYYY)
+   - Click Download → Green Button ZIP (XML inside)
+5. Parse NAESB ESPI XML: `IntervalBlock/IntervalReading/value` × `10^powerOfTenMultiplier`
+6. Normalize into provider-agnostic `EnergyUsage` records
+7. Insert into PostgreSQL (append-only)
+8. Delete temp ZIP after successful processing
+9. If no data available for a service, store 0 kWh records for that date
 
 ---
 
