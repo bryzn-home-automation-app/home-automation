@@ -93,19 +93,21 @@ async function decideSyncMode(client, args, secrets) {
     return { startDate: args.date, endDate: args.date, mode: 'single' };
   }
 
-  // Explicit --weekly or Sunday: full range
+  // Explicit --weekly or Sunday: last 7 days
   if (args.weekly || isSunday()) {
-    const start = secrets.DATA_START_DATE || yesterdayStr;
-    return { startDate: start, endDate: yesterdayStr, mode: args.weekly ? 'weekly (forced)' : 'weekly (Sunday)' };
+    const start = new Date(yesterday);
+    start.setDate(start.getDate() - 6); // last 7 days
+    return { startDate: fmtDate(start), endDate: yesterdayStr, mode: args.weekly ? 'weekly (forced)' : 'weekly (Sunday)' };
   }
 
   // Daily mode: check for zero gap
   if (client) {
     const zeroGap = await checkZeroGap(client);
     if (zeroGap) {
-      console.log(`⚠  Last ${ZERO_GUARD_DAYS} Electric days all 0 kWh — escalating to weekly sync`);
-      const start = secrets.DATA_START_DATE || yesterdayStr;
-      return { startDate: start, endDate: yesterdayStr, mode: 'zero-guard' };
+      console.log(`⚠  Last ${ZERO_GUARD_DAYS} Electric days all 0 kWh — retrying last 3 days`);
+      const start = new Date(yesterday);
+      start.setDate(start.getDate() - (ZERO_GUARD_DAYS - 1)); // just the last N days
+      return { startDate: fmtDate(start), endDate: yesterdayStr, mode: 'zero-guard' };
     }
   }
 
@@ -467,8 +469,8 @@ async function main() {
       totalRecords += svcRecords;
     }
 
-    // Post-sync: check for persistent zeros after weekly/zero-guard sync
-    if (client && (mode.startsWith('weekly') || mode === 'zero-guard')) {
+    // Post-sync: if zero-guard still has zeros → warn the user
+    if (client && mode === 'zero-guard') {
       await checkPostSyncZeros(client);
     }
 
