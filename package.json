@@ -1,0 +1,11 @@
+{
+  "name": "home-automation",
+  "private": true,
+  "description": "Self-hosted Home Automation Platform — CoServ SmartHub integration tests",
+  "scripts": {
+    "test:live": "node test/coserv-live-test.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.50.0"
+  }
+}
