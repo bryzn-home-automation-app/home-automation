@@ -1,3 +1,5 @@
+import { memo } from 'react';
+
 interface StatTileProps {
   label: string;
   value: string;
@@ -7,7 +9,7 @@ interface StatTileProps {
   icon: React.ReactNode;
 }
 
-export default function StatTile({
+function StatTile({
   label,
   value,
   unit,
@@ -17,30 +19,30 @@ export default function StatTile({
 }: StatTileProps) {
   if (loading) {
     return (
-      <div className="rounded-xl border border-gray-800 bg-gray-900 p-5 animate-pulse">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-10 h-10 rounded-lg bg-gray-800" />
-          <div className="h-4 w-20 bg-gray-800 rounded" />
+      <div className="animate-pulse rounded-[24px] border border-white/10 bg-slate-900/82 p-5">
+        <div className="mb-4 flex items-center gap-3">
+          <div className="h-11 w-11 rounded-2xl bg-white/8" />
+          <div className="h-4 w-24 rounded bg-white/8" />
         </div>
-        <div className="h-8 w-28 bg-gray-800 rounded mb-1" />
-        <div className="h-3 w-16 bg-gray-800 rounded" />
+        <div className="mb-2 h-8 w-28 rounded bg-white/8" />
+        <div className="h-3 w-16 rounded bg-white/8" />
       </div>
     );
   }
 
   return (
-    <div className="rounded-xl border border-gray-800 bg-gray-900 p-5 hover:border-gray-700 transition-colors">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-lg bg-emerald-950/50 border border-emerald-800/50 flex items-center justify-center">
+    <div className="rounded-[24px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_8px_24px_rgba(2,8,23,0.22)] transition-colors hover:border-white/20 hover:bg-slate-900/90">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10">
           {icon}
         </div>
-        <span className="text-sm text-gray-400 font-medium">{label}</span>
+        <span className="text-sm font-medium text-slate-300">{label}</span>
       </div>
-      <div className="flex items-baseline gap-1.5 mb-1">
-        <span className="text-2xl font-bold text-white tracking-tight">
+      <div className="mb-1 flex items-baseline gap-1.5">
+        <span className="text-3xl font-semibold tracking-[-0.04em] text-white">
           {value}
         </span>
-        <span className="text-sm text-gray-500">{unit}</span>
+        <span className="text-sm text-slate-400">{unit}</span>
       </div>
       {trend && (
         <span
@@ -49,7 +51,7 @@ export default function StatTile({
               ? 'text-emerald-400'
               : trend.direction === 'up'
               ? 'text-red-400'
-              : 'text-gray-500'
+              : 'text-slate-500'
           }`}
         >
           {trend.direction === 'down' ? '↓' : '↑'} {trend.pct}% vs last month
@@ -59,11 +61,13 @@ export default function StatTile({
   );
 }
 
+export default memo(StatTile);
+
 /** SVG icons used in stat tiles. */
 export const Icons = {
   Bolt: (
     <svg
-      className="w-5 h-5 text-emerald-400"
+      className="h-5 w-5 text-emerald-200"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -78,7 +82,7 @@ export const Icons = {
   ),
   Calendar: (
     <svg
-      className="w-5 h-5 text-emerald-400"
+      className="h-5 w-5 text-emerald-200"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -93,7 +97,7 @@ export const Icons = {
   ),
   Dollar: (
     <svg
-      className="w-5 h-5 text-emerald-400"
+      className="h-5 w-5 text-emerald-200"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"

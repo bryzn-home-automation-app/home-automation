@@ -1,48 +1,142 @@
+import { useMemo } from 'react';
+import { useQueries } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
 import MonthlyComparison from '../components/MonthlyComparison';
+import { getUsageLevel } from '../utils/usageColor';
+import DeferredRender from '../components/DeferredRender';
+import VirtualizedList from '../components/VirtualizedList';
+import UsageSummaryGrid from '../components/UsageSummaryGrid';
+import { fetchUsageSummary } from '../api/energy';
+import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 
 export default function ElectricalUsage() {
-  const { electricUsage, electricTotal, config } = useUsageData();
+  const { electricUsage, electricTotal, electricMeter, config } = useUsageData();
 
   const data = electricUsage.data ?? [];
   const loading = electricUsage.isLoading;
   const monthKwh = electricTotal.data?.totalKwh ?? 0;
   const kwhRate = config.data?.kwhRate ?? 0.1171;
 
-  // Filter to Electric-only (exclude 0-kWh placeholders for display)
-  const realData = data.filter((d) => d.usageKwh > 0);
   const today = new Date().toISOString().split('T')[0];
-  const todayKwh = realData
-    .filter((d) => d.timestamp.startsWith(today))
-    .reduce((s, d) => s + d.usageKwh, 0);
-
-  // 7-day and 30-day averages
-  const last7 = realData.filter(
-    (d) =>
-      new Date(d.timestamp) >
-      new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+  const realData = useMemo(
+    () => data.filter((d) => d.usageKwh > 0),
+    [data]
   );
-  const avg7 =
-    last7.length > 0
-      ? last7.reduce((s, d) => s + d.usageKwh, 0) / last7.length
-      : 0;
 
-  const last30 = realData.filter(
-    (d) =>
-      new Date(d.timestamp) >
-      new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+  const chartData = useMemo(
+    () =>
+      [...realData].sort(
+        (a, b) =>
+          new Date(a.timestamp).getTime() -
+          new Date(b.timestamp).getTime()
+      ),
+    [realData]
   );
-  const avg30 =
-    last30.length > 0
-      ? last30.reduce((s, d) => s + d.usageKwh, 0) / last30.length
+
+  const tableData = useMemo(
+    () =>
+      [...realData]
+        .sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() -
+            new Date(a.timestamp).getTime()
+        )
+        .slice(0, 30),
+    [realData]
+  );
+
+  const todayKwh = useMemo(
+    () =>
+      realData
+        .filter((d) => d.timestamp.startsWith(today))
+        .reduce((sum, d) => sum + d.usageKwh, 0),
+    [realData, today]
+  );
+
+  const avg7 = useMemo(() => {
+    const last7 = realData.filter(
+      (d) =>
+        new Date(d.timestamp) >
+        new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    );
+    return last7.length > 0
+      ? last7.reduce((sum, d) => sum + d.usageKwh, 0) / last7.length
       : 0;
+  }, [realData]);
+
+  const avg30 = useMemo(() => {
+    const last30 = realData.filter(
+      (d) =>
+        new Date(d.timestamp) >
+        new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    );
+    return last30.length > 0
+      ? last30.reduce((sum, d) => sum + d.usageKwh, 0) / last30.length
+      : 0;
+  }, [realData]);
+
+  const periodDefinitions = useMemo(
+    () => buildUsagePeriods(config.data?.dataStartDate),
+    [config.data?.dataStartDate]
+  );
+
+  const summaryQueries = useQueries({
+    queries: periodDefinitions.map((period) => ({
+      queryKey: ['usage-summary', electricMeter?.id, period.key, period.start, period.end],
+      queryFn: () =>
+        electricMeter
+          ? fetchUsageSummary(electricMeter.id, period.start, period.end)
+          : Promise.resolve(createEmptyUsageSummary(0, period.start, period.end)),
+      enabled: !!electricMeter,
+      staleTime: 300_000,
+    })),
+  });
+
+  const summaryCards = periodDefinitions.map((period, index) => ({
+    label: period.label,
+    rangeStart: period.displayStart,
+    rangeEnd: period.displayEnd,
+    summary:
+      summaryQueries[index]?.data ??
+      createEmptyUsageSummary(electricMeter?.id ?? 0, period.start, period.end),
+  }));
+
+  const summaryLoading = summaryQueries.some((query) => query.isLoading);
 
   return (
-    <div className="space-y-6">
-      {/* Stats row */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div className="space-y-6 sm:space-y-7">
+      <section className="rounded-[30px] border border-white/10 bg-slate-900/84 p-6 shadow-[0_12px_34px_rgba(2,8,23,0.24)] sm:p-7">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+              Electric Module
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
+              Daily electricity usage with quick cost context.
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+              Compare recent consumption patterns, track short-term averages, and scan the latest readings without leaving the dashboard workflow.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Estimated 60-Day Cost</p>
+              <p className="mt-2 text-lg font-semibold text-white">
+                ${(monthKwh * kwhRate).toFixed(2)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Active Readings</p>
+              <p className="mt-2 text-lg font-semibold text-white">{realData.length}</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <StatTile
           label="Today"
           value={todayKwh.toFixed(1)}
@@ -73,74 +167,104 @@ export default function ElectricalUsage() {
         />
       </section>
 
-      {/* Charts */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <UsageChart
-          data={realData.sort(
-            (a, b) =>
-              new Date(a.timestamp).getTime() -
-              new Date(b.timestamp).getTime()
-          )}
-          loading={loading}
-        />
-        <MonthlyComparison data={realData} loading={loading} />
+      <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <DeferredRender minHeight={360}>
+          <UsageChart
+            data={chartData}
+            loading={loading}
+            title="Electric usage trend"
+            emptyText="No electric usage data yet. Run a sync to populate this view."
+            unitLabel="kWh"
+            accentColor="#34d399"
+          />
+        </DeferredRender>
+        <DeferredRender minHeight={360}>
+          <MonthlyComparison
+            data={realData}
+            loading={loading}
+            title="Monthly electric comparison"
+            emptyText="Not enough electric history for a monthly comparison yet."
+            unitLabel="kWh"
+            barColor="#10b981"
+          />
+        </DeferredRender>
       </section>
 
-      {/* Data table */}
-      <section className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4">
-          Electric Usage Log
-        </h3>
+      <UsageSummaryGrid
+        title="Electric highs, lows, and rolling period totals"
+        unitLabel="kWh"
+        summaries={summaryCards}
+        loading={summaryLoading}
+      />
+
+      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+              Usage Log
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-white">
+              Recent electric readings
+            </h3>
+          </div>
+          <p className="text-sm text-slate-400">
+            Based on the latest 30 non-zero entries.
+          </p>
+        </div>
         {loading ? (
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-8 bg-gray-800 rounded" />
+              <div key={i} className="h-10 rounded-2xl bg-white/8" />
             ))}
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-gray-500 border-b border-gray-800">
-                  <th className="pb-2 font-medium">Date</th>
-                  <th className="pb-2 font-medium text-right">kWh</th>
-                  <th className="pb-2 font-medium text-right">Est. Cost</th>
-                  <th className="pb-2 font-medium text-right">Source</th>
-                </tr>
-              </thead>
-              <tbody>
-                {realData
-                  .sort(
-                    (a, b) =>
-                      new Date(b.timestamp).getTime() -
-                      new Date(a.timestamp).getTime()
-                  )
-                  .slice(0, 30)
-                  .map((d) => (
-                    <tr
+            <div className="min-w-[42rem] text-sm">
+              <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-white/10 pb-2 text-left text-slate-400">
+                <div className="font-medium">Date</div>
+                <div className="text-right font-medium">kWh</div>
+                <div className="text-right font-medium">Est. Cost</div>
+                <div className="text-right font-medium">Source</div>
+              </div>
+              <VirtualizedList
+                items={tableData}
+                height={432}
+                itemHeight={58}
+                overscan={6}
+                className="mt-1"
+                renderItem={(d) => {
+                  const usageLevel = getUsageLevel(Number(d.usageKwh));
+
+                  return (
+                    <div
                       key={d.id}
-                      className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+                      className="grid grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-white/6 pr-1 transition-colors hover:bg-slate-950/30"
                     >
-                      <td className="py-2 text-gray-300">
+                      <div className="py-3 text-slate-200">
                         {new Date(d.timestamp).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
                           year: 'numeric',
                         })}
-                      </td>
-                      <td className="py-2 text-right text-white tabular-nums">
-                        {Number(d.usageKwh).toFixed(2)}
-                      </td>
-                      <td className="py-2 text-right text-gray-400 tabular-nums">
+                      </div>
+                      <div className="py-3 text-right tabular-nums">
+                        <span
+                          className={`inline-flex min-w-[5.5rem] items-center justify-end rounded-full border px-2.5 py-1 text-sm font-semibold ${usageLevel.badgeClass}`}
+                        >
+                          {Number(d.usageKwh).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="py-3 text-right tabular-nums text-slate-300">
                         ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
-                      </td>
-                      <td className="py-2 text-right text-gray-500">
+                      </div>
+                      <div className="py-3 text-right text-slate-500">
                         {d.sourceProvider}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+            </div>
           </div>
         )}
       </section>

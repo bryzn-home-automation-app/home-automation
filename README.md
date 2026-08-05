@@ -2,6 +2,8 @@
 
 Self-hosted home intelligence platform running on Docker Compose. Phase 1 integrates with CoServ SmartHub to track energy usage, visualize consumption patterns, and estimate bills.
 
+Built and maintained under the bryzncode mark.
+
 ## Architecture
 
 ```
@@ -35,8 +37,9 @@ Self-hosted home intelligence platform running on Docker Compose. Phase 1 integr
 
 - **Sync and dashboard are fully decoupled.** The sync script writes directly to PostgreSQL. The backend is a thin REST API that reads from the DB. The frontend queries the API.
 - **Sync runs as a standalone CLI** (`node scripts/sync.js`), not in Docker. No browser dependencies in the backend image.
-- **Database is append-only.** Energy usage rows are never updated or deleted. Every record carries batch UUIDs for traceability.
-- **Unique constraint** on `(meter_id, timestamp, source_provider)` prevents duplicate records.
+- **Database is append-only.** Usage rows are never updated or deleted. Every record carries batch UUIDs for traceability.
+- **Tab storage is isolated.** Electric, gas, water, and Roomba data live in separate tables. Weather is the only shared enrichment dataset.
+- **Compatibility view** `energy_usage` keeps the current API contract stable while electric and gas persist into dedicated tables underneath.
 
 ## Tech Stack
 
@@ -108,7 +111,7 @@ Sync pulls energy usage data from CoServ SmartHub via the Green Button Download 
    - Sets the date range, clicks Download
    - Receives a ZIP file containing NAESB ESPI XML
 5. Parses `IntervalBlock/IntervalReading` entries into kWh values
-6. Inserts records into PostgreSQL with `ON CONFLICT DO NOTHING` (idempotent)
+6. Inserts records into the dedicated utility table with `ON CONFLICT DO NOTHING` (idempotent)
 7. Deletes temp files immediately after processing
 8. If no data is available for a service, stores 0 kWh records for that date
 
@@ -235,14 +238,19 @@ All configuration lives in `.env` (gitignored). Copy `.env.example` as a startin
 
 ## Database Schema
 
-Provider-agnostic data model designed for 5+ years of historical retention.
+Module-oriented data model designed for long-term retention without mixing tab data.
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
 | `utility_providers` | Utility companies | name, type, portal_url |
 | `utility_accounts` | Accounts per provider | account_number, service_address, status |
 | `meters` | Physical meters | meter_number, type, location |
-| `energy_usage` | Append-only usage records | timestamp, usage_kwh, cost, ingestion_batch_id |
+| `electric_usage` | Electric tab records | meter_id, timestamp, usage_kwh, ingestion_batch_id |
+| `gas_usage` | Gas tab records | meter_id, timestamp, usage_kwh, ingestion_batch_id |
+| `water_usage` | Water tab records | timestamp, usage_gallons, ingestion_batch_id |
+| `roomba_runs` | Roomba tab records | started_at, duration_minutes, status |
+| `weather_observations` | Shared electric/gas enrichment | observation_date, station_code, avg_temp_f |
+| `energy_usage` | Read-only compatibility view over electric + gas | id, meter_id, timestamp, usage_kwh |
 | `utility_bills` | Append-only bill records | billing_period, amount, status, ingestion_batch_id |
 
 Every ingested record carries audit metadata: `source`, `source_provider`, `ingestion_batch_id` (UUID), `processing_version`.
@@ -290,7 +298,7 @@ home-automation/
 │       ├── java/com/homeplatform/
 │       │   ├── HomePlatformApplication.java
 │       │   ├── config/              # CORS, Jackson
-│       │   ├── model/               # JPA entities (5 tables)
+│       │   ├── model/               # JPA entities and compatibility view mapping
 │       │   ├── repository/          # Spring Data repos
 │       │   ├── service/             # Business logic
 │       │   └── controller/          # REST endpoints

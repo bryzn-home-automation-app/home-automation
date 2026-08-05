@@ -39,6 +39,10 @@ const PROCESSING_VERSION = '1.0';
 const SOURCE_LABEL = 'CoServ Green Button';
 const ZERO_GUARD_DAYS = 3; // consecutive zero days triggers weekly sync
 
+function getUsageTable(meterType) {
+  return meterType === 'GAS' ? 'gas_usage' : 'electric_usage';
+}
+
 // ─── Helpers ───────────────────────────────────────────────────
 const fmtDate = (d) => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
 const parseDate = (str) => { const [m,d,y] = str.split('/').map(Number); return new Date(y, m-1, d); };
@@ -124,12 +128,11 @@ async function decideSyncMode(client, args, secrets, now) {
 async function checkZeroGap(client) {
   try {
     const { rows } = await client.query(
-      `SELECT e.usage_kwh, e.timestamp::date as d
-       FROM energy_usage e
-       JOIN meters m ON e.meter_id = m.id
-       WHERE m.type = 'ELECTRIC' AND e.source_provider = 'coserv'
-         AND e.timestamp::date < CURRENT_DATE
-       ORDER BY e.timestamp::date DESC
+      `SELECT usage_kwh, timestamp::date as d
+       FROM electric_usage
+       WHERE source_provider = 'coserv'
+         AND timestamp::date < CURRENT_DATE
+       ORDER BY timestamp::date DESC
        LIMIT $1`, [ZERO_GUARD_DAYS]
     );
     if (rows.length < ZERO_GUARD_DAYS) return false; // not enough data yet
@@ -154,12 +157,11 @@ async function checkZeroGap(client) {
 async function checkPostSyncZeros(client) {
   try {
     const { rows } = await client.query(
-      `SELECT e.usage_kwh, e.timestamp::date as d
-       FROM energy_usage e
-       JOIN meters m ON e.meter_id = m.id
-       WHERE m.type = 'ELECTRIC' AND e.source_provider = 'coserv'
-         AND e.timestamp::date < CURRENT_DATE
-       ORDER BY e.timestamp::date DESC
+      `SELECT usage_kwh, timestamp::date as d
+       FROM electric_usage
+       WHERE source_provider = 'coserv'
+         AND timestamp::date < CURRENT_DATE
+       ORDER BY timestamp::date DESC
        LIMIT $1`, [ZERO_GUARD_DAYS]
     );
     if (rows.length >= ZERO_GUARD_DAYS && rows.every(r => parseFloat(r.usage_kwh) === 0)) {
@@ -419,6 +421,7 @@ async function main() {
         console.log(`   ○  No usage data in range — storing 0 kWh for each day`);
         if (client) {
           const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
+          const usageTable = getUsageTable(svc.meterType);
           const [sm, sd, sy] = startDate.split('/').map(Number);
           const [em, ed, ey] = endDate.split('/').map(Number);
           const cursor = new Date(sy, sm - 1, sd);
@@ -426,7 +429,7 @@ async function main() {
           while (cursor <= end) {
             const ds = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}-${String(cursor.getDate()).padStart(2,'0')} 00:00:00`;
             await client.query(
-              `INSERT INTO energy_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
+              `INSERT INTO ${usageTable} (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
                VALUES ($1, $2, 0, 0, $3, $4, $5, $6)
                ON CONFLICT DO NOTHING`,
               [meterId, ds, SOURCE_LABEL, 'coserv', batchId, PROCESSING_VERSION]
@@ -453,9 +456,10 @@ async function main() {
 
         if (records.length > 0 && client) {
           const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
+          const usageTable = getUsageTable(svc.meterType);
           for (const rec of records) {
             await client.query(
-              `INSERT INTO energy_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
+              `INSERT INTO ${usageTable} (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT DO NOTHING`,
               [meterId, rec.timestamp, rec.usageKwh, rec.cost || 0,

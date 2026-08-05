@@ -1,5 +1,6 @@
 package com.homeplatform.controller;
 
+import com.homeplatform.dto.UsageRangeSummaryResponse;
 import com.homeplatform.model.EnergyUsage;
 import com.homeplatform.service.EnergyUsageService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -36,6 +37,14 @@ public class EnergyUsageController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
         return ResponseEntity.ok(service.getByMeterAndDateRange(meterId, start, end));
+    }
+
+    @GetMapping("/meter/{meterId}/summary")
+    public ResponseEntity<UsageRangeSummaryResponse> getSummary(
+            @PathVariable Long meterId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime start,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime end) {
+        return ResponseEntity.ok(service.getSummary(meterId, start, end));
     }
 
     @GetMapping("/meter/{meterId}/recent")

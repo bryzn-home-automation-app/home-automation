@@ -1,5 +1,10 @@
 import api from './client';
-import type { EnergyUsage, IntegrationAdapter, IntegrationResult } from '../types';
+import type {
+  EnergyUsage,
+  IntegrationAdapter,
+  IntegrationResult,
+  UsageRangeSummary,
+} from '../types';
 
 /** Fetch recent usage for a meter. Defaults to last 30 days. */
 export async function fetchRecentUsage(meterId: number, days = 30): Promise<EnergyUsage[]> {
@@ -16,6 +21,17 @@ export async function fetchTotalUsage(
 ): Promise<{ meterId: number; days: number; totalKwh: number }> {
   const { data } = await api.get(`/energy-usage/meter/${meterId}/total`, {
     params: { days },
+  });
+  return data;
+}
+
+export async function fetchUsageSummary(
+  meterId: number,
+  start: string,
+  end: string
+): Promise<UsageRangeSummary> {
+  const { data } = await api.get(`/energy-usage/meter/${meterId}/summary`, {
+    params: { start, end },
   });
   return data;
 }

@@ -35,9 +35,8 @@ CREATE TABLE IF NOT EXISTS meters (
     updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
--- Append-only: rows are never updated or deleted.
--- Each sync produces a new ingestion_batch_id for traceability.
-CREATE TABLE IF NOT EXISTS energy_usage (
+-- Electric tab storage. Append-only: rows are never updated or deleted.
+CREATE TABLE IF NOT EXISTS electric_usage (
     id                  SERIAL PRIMARY KEY,
     meter_id            INTEGER        NOT NULL REFERENCES meters(id),
     timestamp           TIMESTAMP      NOT NULL,
@@ -50,11 +49,112 @@ CREATE TABLE IF NOT EXISTS energy_usage (
     created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_energy_usage_meter_time ON energy_usage (meter_id, timestamp);
-CREATE INDEX idx_energy_usage_timestamp   ON energy_usage (timestamp);
-CREATE INDEX idx_energy_usage_batch       ON energy_usage (ingestion_batch_id);
--- Prevent duplicate records — one row per meter+timestamp+provider
-CREATE UNIQUE INDEX IF NOT EXISTS idx_energy_usage_unique ON energy_usage (meter_id, timestamp, source_provider);
+CREATE INDEX IF NOT EXISTS idx_electric_usage_meter_time ON electric_usage (meter_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_electric_usage_timestamp   ON electric_usage (timestamp);
+CREATE INDEX IF NOT EXISTS idx_electric_usage_batch       ON electric_usage (ingestion_batch_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_electric_usage_unique ON electric_usage (meter_id, timestamp, source_provider);
+
+-- Gas tab storage. Append-only: rows are never updated or deleted.
+CREATE TABLE IF NOT EXISTS gas_usage (
+    id                  SERIAL PRIMARY KEY,
+    meter_id            INTEGER        NOT NULL REFERENCES meters(id),
+    timestamp           TIMESTAMP      NOT NULL,
+    usage_kwh           NUMERIC(10,3)  NOT NULL,
+    cost                NUMERIC(10,2),
+    source              VARCHAR(100)   NOT NULL,
+    source_provider     VARCHAR(50)    NOT NULL,
+    ingestion_batch_id  UUID           NOT NULL,
+    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_gas_usage_meter_time ON gas_usage (meter_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_gas_usage_timestamp   ON gas_usage (timestamp);
+CREATE INDEX IF NOT EXISTS idx_gas_usage_batch       ON gas_usage (ingestion_batch_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_gas_usage_unique ON gas_usage (meter_id, timestamp, source_provider);
+
+-- Water tab storage. Kept isolated from the energy datasets.
+CREATE TABLE IF NOT EXISTS water_usage (
+    id                  SERIAL PRIMARY KEY,
+    timestamp           TIMESTAMP      NOT NULL,
+    usage_gallons       NUMERIC(12,3)  NOT NULL,
+    cost                NUMERIC(10,2),
+    source              VARCHAR(100)   NOT NULL,
+    source_provider     VARCHAR(50)    NOT NULL,
+    ingestion_batch_id  UUID           NOT NULL,
+    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_water_usage_timestamp ON water_usage (timestamp);
+CREATE INDEX IF NOT EXISTS idx_water_usage_batch     ON water_usage (ingestion_batch_id);
+
+-- Shared enrichment for electric and gas dashboards.
+CREATE TABLE IF NOT EXISTS weather_observations (
+    id                    SERIAL PRIMARY KEY,
+    observation_date      DATE           NOT NULL,
+    station_code          VARCHAR(100)   NOT NULL,
+    high_temp_f           NUMERIC(5,2),
+    low_temp_f            NUMERIC(5,2),
+    avg_temp_f            NUMERIC(5,2),
+    humidity_pct          NUMERIC(5,2),
+    precipitation_inches  NUMERIC(8,3),
+    source                VARCHAR(100)   NOT NULL,
+    source_provider       VARCHAR(50)    NOT NULL,
+    ingestion_batch_id    UUID,
+    processing_version    VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at            TIMESTAMP      NOT NULL DEFAULT NOW(),
+    UNIQUE (observation_date, station_code, source_provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_weather_observations_date ON weather_observations (observation_date);
+
+-- Roomba tab storage. Kept fully separate from utility data.
+CREATE TABLE IF NOT EXISTS roomba_runs (
+    id                  SERIAL PRIMARY KEY,
+    started_at          TIMESTAMP      NOT NULL,
+    completed_at        TIMESTAMP,
+    duration_minutes    INTEGER,
+    dirt_events         INTEGER,
+    square_feet         INTEGER,
+    status              VARCHAR(50)    NOT NULL DEFAULT 'COMPLETED',
+    source              VARCHAR(100)   NOT NULL,
+    source_provider     VARCHAR(50)    NOT NULL,
+    ingestion_batch_id  UUID,
+    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_roomba_runs_started_at ON roomba_runs (started_at);
+
+-- Compatibility view so the current backend and frontend contract can read
+-- electric + gas records while the physical storage stays isolated.
+CREATE OR REPLACE VIEW energy_usage AS
+SELECT
+    id,
+    meter_id,
+    timestamp,
+    usage_kwh,
+    cost,
+    source,
+    source_provider,
+    ingestion_batch_id,
+    processing_version,
+    created_at
+FROM electric_usage
+UNION ALL
+SELECT
+    -id AS id,
+    meter_id,
+    timestamp,
+    usage_kwh,
+    cost,
+    source,
+    source_provider,
+    ingestion_batch_id,
+    processing_version,
+    created_at
+FROM gas_usage;
 
 -- Append-only: bills are never updated — new statement = new row.
 CREATE TABLE IF NOT EXISTS utility_bills (

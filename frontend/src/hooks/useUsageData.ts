@@ -10,7 +10,7 @@ export function useUsageData() {
   const meters = useQuery<Meter[]>({
     queryKey: ['meters'],
     queryFn: fetchMeters,
-    staleTime: 120_000,
+    staleTime: 300_000,
   });
 
   // App config
@@ -18,14 +18,6 @@ export function useUsageData() {
     queryKey: ['config'],
     queryFn: () => api.get('/config').then((r) => r.data),
     staleTime: 300_000,
-  });
-
-  // All energy usage (last 60 days for charts)
-  const allUsage = useQuery<EnergyUsage[]>({
-    queryKey: ['energy-usage', 'all'],
-    queryFn: () =>
-      api.get('/energy-usage').then((r) => r.data),
-    refetchInterval: 60_000,
   });
 
   // Per-meter totals
@@ -39,7 +31,7 @@ export function useUsageData() {
         ? fetchRecentUsage(electricMeter.id, 60)
         : Promise.resolve([]),
     enabled: !!electricMeter,
-    refetchInterval: 60_000,
+    staleTime: 300_000,
   });
 
   const gasUsage = useQuery<EnergyUsage[]>({
@@ -47,7 +39,7 @@ export function useUsageData() {
     queryFn: () =>
       gasMeter ? fetchRecentUsage(gasMeter.id, 60) : Promise.resolve([]),
     enabled: !!gasMeter,
-    refetchInterval: 60_000,
+    staleTime: 300_000,
   });
 
   const electricTotal = useQuery({
@@ -57,7 +49,7 @@ export function useUsageData() {
         ? fetchTotalUsage(electricMeter.id, 60)
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!electricMeter,
-    refetchInterval: 60_000,
+    staleTime: 300_000,
   });
 
   const gasTotal = useQuery({
@@ -67,13 +59,12 @@ export function useUsageData() {
         ? fetchTotalUsage(gasMeter.id, 60)
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!gasMeter,
-    refetchInterval: 60_000,
+    staleTime: 300_000,
   });
 
   return {
     meters,
     config,
-    allUsage,
     electricMeter,
     gasMeter,
     electricUsage,

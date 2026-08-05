@@ -82,3 +82,19 @@ export interface IntegrationResult {
   completedAt: string;
   durationMs: number;
 }
+
+export interface UsageSummaryPoint {
+  timestamp: string;
+  usageKwh: number;
+}
+
+export interface UsageRangeSummary {
+  meterId: number;
+  start: string;
+  end: string;
+  totalKwh: number;
+  averageKwh: number;
+  readingCount: number;
+  highest: UsageSummaryPoint | null;
+  lowest: UsageSummaryPoint | null;
+}

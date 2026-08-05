@@ -1,5 +1,7 @@
 import { useMemo } from 'react';
 import StatTile, { Icons } from '../components/StatTile';
+import DeferredRender from '../components/DeferredRender';
+import VirtualizedList from '../components/VirtualizedList';
 import {
   AreaChart,
   Area,
@@ -51,15 +53,26 @@ export default function Roomba() {
   const completedRuns = runs.filter((r) => r.completed).length;
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-xl border border-violet-800/50 bg-violet-950/20 p-4 mb-2">
-        <p className="text-xs text-violet-400/80">
+    <div className="space-y-6 sm:space-y-7">
+      <div className="rounded-[28px] border border-amber-300/15 bg-amber-300/8 p-4">
+        <p className="text-xs text-amber-100/80">
           🤖 Mock data — Roomba/smart device integration coming in Phase 3
         </p>
       </div>
 
-      {/* Stats */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <section className="rounded-[30px] border border-white/10 bg-slate-900/84 p-6 shadow-[0_12px_34px_rgba(2,8,23,0.24)] sm:p-7">
+        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+          Device Automation Preview
+        </p>
+        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
+          Visualize smart device routines with the same dashboard system.
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+          The Roomba preview demonstrates how future device telemetry can live beside utility analytics without introducing a separate UX pattern.
+        </p>
+      </section>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <StatTile
           label="Runs (30d)"
           value={String(totalRuns)}
@@ -90,38 +103,136 @@ export default function Roomba() {
         />
       </section>
 
-      {/* Duration chart */}
-      <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-          <h3 className="text-sm font-semibold text-gray-200 mb-4">
-            Cleaning Duration
-          </h3>
+      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)] sm:p-6">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+              Cleaning Map Preview
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-white">
+              Dummy floor map and run path
+            </h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+              Placeholder map for future room-aware cleaning history, no-go zones, and per-room run analytics.
+            </p>
+          </div>
+          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100">
+            Mock Layout
+          </span>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]">
+          <div className="rounded-[24px] border border-white/10 bg-slate-950/45 p-4">
+            <svg
+              viewBox="0 0 640 420"
+              className="h-auto w-full rounded-[18px] border border-white/6 bg-[linear-gradient(180deg,#0b1320_0%,#0c1628_100%)]"
+              role="img"
+              aria-label="Dummy Roomba floor map"
+            >
+              <rect x="16" y="16" width="608" height="388" rx="22" fill="#0f1726" stroke="#334155" strokeWidth="2" />
+
+              <rect x="42" y="42" width="210" height="150" rx="18" fill="#152235" stroke="#475569" />
+              <text x="62" y="74" fill="#e2e8f0" fontSize="20" fontWeight="600">Living Room</text>
+
+              <rect x="270" y="42" width="156" height="112" rx="18" fill="#16273a" stroke="#475569" />
+              <text x="290" y="74" fill="#e2e8f0" fontSize="18" fontWeight="600">Kitchen</text>
+
+              <rect x="444" y="42" width="154" height="176" rx="18" fill="#142233" stroke="#475569" />
+              <text x="466" y="74" fill="#e2e8f0" fontSize="18" fontWeight="600">Bedroom</text>
+
+              <rect x="42" y="210" width="180" height="160" rx="18" fill="#16273a" stroke="#475569" />
+              <text x="62" y="242" fill="#e2e8f0" fontSize="18" fontWeight="600">Office</text>
+
+              <rect x="240" y="172" width="166" height="198" rx="18" fill="#132031" stroke="#475569" />
+              <text x="260" y="204" fill="#e2e8f0" fontSize="18" fontWeight="600">Hall</text>
+
+              <rect x="424" y="238" width="174" height="132" rx="18" fill="#17283b" stroke="#475569" />
+              <text x="446" y="270" fill="#e2e8f0" fontSize="18" fontWeight="600">Dining</text>
+
+              <rect x="256" y="92" width="16" height="48" rx="8" fill="#94a3b8" opacity="0.5" />
+              <rect x="404" y="106" width="16" height="48" rx="8" fill="#94a3b8" opacity="0.5" />
+              <rect x="214" y="262" width="48" height="16" rx="8" fill="#94a3b8" opacity="0.5" />
+              <rect x="406" y="284" width="48" height="16" rx="8" fill="#94a3b8" opacity="0.5" />
+
+              <path
+                d="M112 134 C164 148, 182 176, 214 216 S286 272, 326 262 S392 214, 438 184 S494 218, 532 254 S544 318, 520 336"
+                fill="none"
+                stroke="#22c55e"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray="14 14"
+                opacity="0.9"
+              />
+
+              <circle cx="112" cy="134" r="14" fill="#38bdf8" />
+              <circle cx="520" cy="336" r="16" fill="#f59e0b" />
+              <circle cx="520" cy="336" r="30" fill="#f59e0b" opacity="0.12" />
+
+              <rect x="470" y="314" width="74" height="28" rx="14" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" />
+              <text x="486" y="333" fill="#f8fafc" fontSize="14" fontWeight="700">Roomba</text>
+            </svg>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Current Zone</p>
+              <p className="mt-2 text-lg font-semibold text-white">Dining Room</p>
+              <p className="mt-1 text-sm text-slate-400">Coverage 82% on this mock run.</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Dock Status</p>
+              <p className="mt-2 text-lg font-semibold text-white">Living Room Base</p>
+              <p className="mt-1 text-sm text-slate-400">Battery return route available.</p>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Future Uses</p>
+              <div className="mt-2 space-y-2 text-sm text-slate-300">
+                <p>Room-level clean history</p>
+                <p>No-go zones and schedules</p>
+                <p>Battery and stuck-event overlays</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <DeferredRender minHeight={360}>
+        <div className="rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+          <div className="mb-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">Trend</p>
+            <h3 className="mt-2 text-lg font-semibold text-white">
+              Cleaning Duration
+            </h3>
+          </div>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart
               data={runs}
               margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.12)" />
               <XAxis
                 dataKey="date"
-                tick={{ fill: '#6b7280', fontSize: 11 }}
-                axisLine={{ stroke: '#1f2937' }}
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
                 tickLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fill: '#6b7280', fontSize: 11 }}
-                axisLine={{ stroke: '#1f2937' }}
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
                 tickLine={false}
                 unit="m"
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#111827',
-                  border: '1px solid #1f2937',
-                  borderRadius: '8px',
+                  backgroundColor: '#08101c',
+                  border: '1px solid rgba(148, 163, 184, 0.14)',
+                  borderRadius: '16px',
                   fontSize: '13px',
-                  color: '#f3f4f6',
+                  color: '#f8fafc',
                 }}
                 formatter={(value: number) => [
                   `${value} min`,
@@ -131,44 +242,49 @@ export default function Roomba() {
               <Area
                 type="monotone"
                 dataKey="duration"
-                stroke="#8b5cf6"
-                fill="#8b5cf620"
+                isAnimationActive={false}
+                stroke="#f59e0b"
+                fill="#f59e0b24"
                 strokeWidth={2}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        </DeferredRender>
 
-        {/* Dirt events chart */}
-        <div className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-          <h3 className="text-sm font-semibold text-gray-200 mb-4">
-            Dirt Events per Run
-          </h3>
+        <DeferredRender minHeight={360}>
+        <div className="rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+          <div className="mb-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">Signal</p>
+            <h3 className="mt-2 text-lg font-semibold text-white">
+              Dirt Events per Run
+            </h3>
+          </div>
           <ResponsiveContainer width="100%" height={280}>
             <AreaChart
               data={runs}
               margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.12)" />
               <XAxis
                 dataKey="date"
-                tick={{ fill: '#6b7280', fontSize: 11 }}
-                axisLine={{ stroke: '#1f2937' }}
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
                 tickLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fill: '#6b7280', fontSize: 11 }}
-                axisLine={{ stroke: '#1f2937' }}
+                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
                 tickLine={false}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#111827',
-                  border: '1px solid #1f2937',
-                  borderRadius: '8px',
+                  backgroundColor: '#08101c',
+                  border: '1px solid rgba(148, 163, 184, 0.14)',
+                  borderRadius: '16px',
                   fontSize: '13px',
-                  color: '#f3f4f6',
+                  color: '#f8fafc',
                 }}
                 formatter={(value: number) => [
                   `${value} events`,
@@ -178,60 +294,64 @@ export default function Roomba() {
               <Area
                 type="monotone"
                 dataKey="dirtEvents"
-                stroke="#f59e0b"
-                fill="#f59e0b20"
+                isAnimationActive={false}
+                stroke="#38bdf8"
+                fill="#38bdf824"
                 strokeWidth={2}
               />
             </AreaChart>
           </ResponsiveContainer>
         </div>
+        </DeferredRender>
       </section>
 
-      {/* Run log */}
-      <section className="rounded-xl border border-gray-800 bg-gray-900 p-5">
-        <h3 className="text-sm font-semibold text-gray-200 mb-4">
+      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+        <h3 className="mb-4 text-lg font-semibold text-white">
           Recent Runs
         </h3>
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-gray-500 border-b border-gray-800">
-                <th className="pb-2 font-medium">Date</th>
-                <th className="pb-2 font-medium text-right">Duration</th>
-                <th className="pb-2 font-medium text-right">Dirt Events</th>
-                <th className="pb-2 font-medium text-right">Sq Ft</th>
-                <th className="pb-2 font-medium text-right">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {runs.slice(-10).reverse().map((r, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+          <div className="min-w-[44rem] text-sm">
+            <div className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] border-b border-white/10 pb-2 text-left text-slate-400">
+              <div className="font-medium">Date</div>
+              <div className="text-right font-medium">Duration</div>
+              <div className="text-right font-medium">Dirt Events</div>
+              <div className="text-right font-medium">Sq Ft</div>
+              <div className="text-right font-medium">Status</div>
+            </div>
+            <VirtualizedList
+              items={[...runs].reverse()}
+              height={360}
+              itemHeight={54}
+              overscan={6}
+              className="mt-1"
+              renderItem={(r, index) => (
+                <div
+                  key={`${r.date}-${index}`}
+                  className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] items-center border-b border-white/6 pr-1 transition-colors hover:bg-slate-950/30"
                 >
-                  <td className="py-2 text-gray-300">{r.date}</td>
-                  <td className="py-2 text-right text-white tabular-nums">
+                  <div className="py-3 text-slate-200">{r.date}</div>
+                  <div className="py-3 text-right tabular-nums text-white">
                     {r.duration} min
-                  </td>
-                  <td className="py-2 text-right text-white tabular-nums">
+                  </div>
+                  <div className="py-3 text-right tabular-nums text-white">
                     {r.dirtEvents}
-                  </td>
-                  <td className="py-2 text-right text-gray-400">{r.sqft}</td>
-                  <td className="py-2 text-right">
+                  </div>
+                  <div className="py-3 text-right text-slate-400">{r.sqft}</div>
+                  <div className="py-3 text-right">
                     <span
-                      className={`text-xs px-2 py-0.5 rounded-full ${
+                      className={`rounded-full px-2.5 py-1 text-xs ${
                         r.completed
-                          ? 'bg-emerald-950/50 text-emerald-400 border border-emerald-800/50'
-                          : 'bg-red-950/50 text-red-400 border border-red-800/50'
+                          ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
+                          : 'border border-rose-300/20 bg-rose-300/10 text-rose-200'
                       }`}
                     >
                       {r.completed ? 'Done' : 'Stuck'}
                     </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                </div>
+              )}
+            />
+          </div>
         </div>
       </section>
     </div>
