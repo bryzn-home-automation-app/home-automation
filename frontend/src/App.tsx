@@ -1,73 +1,34 @@
 import { useQuery } from '@tanstack/react-query';
+import { NavLink, Outlet } from 'react-router-dom';
 import api from './api/client';
-import { fetchRecentUsage, fetchTotalUsage } from './api/energy';
-import StatTile, { Icons } from './components/StatTile';
-import UsageChart from './components/UsageChart';
-import MonthlyComparison from './components/MonthlyComparison';
-import IntegrationPanel from './components/IntegrationPanel';
-import type { IntegrationAdapter, EnergyUsage } from './types';
 
-// Hardcoded for now — first meter in the DB (CoServ Electric)
-const METER_ID = 1;
+const TABS = [
+  { path: '/', label: 'Home', icon: '🏠', end: true },
+  { path: '/electric', label: 'Electric', icon: '⚡', end: false },
+  { path: '/gas', label: 'Gas', icon: '🔥', end: false },
+  { path: '/water', label: 'Water', icon: '💧', end: false },
+  { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
+];
 
-function App() {
-  // Backend health check
+export default function App() {
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api.get('/health').then((r) => r.data),
     refetchInterval: 30_000,
   });
 
-  // Integration status
-  const integrations = useQuery<IntegrationAdapter[]>({
-    queryKey: ['integrations'],
-    queryFn: () => api.get('/integrations').then((r) => r.data),
-    refetchInterval: 30_000,
-  });
-
-  // App config (rate, start date)
-  const config = useQuery({
-    queryKey: ['config'],
-    queryFn: () => api.get('/config').then((r) => r.data),
-    staleTime: 300_000, // 5 min
-  });
-
-  // Energy usage data
-  const usage = useQuery<EnergyUsage[]>({
-    queryKey: ['energy-usage', METER_ID],
-    queryFn: () => fetchRecentUsage(METER_ID, 30),
-    refetchInterval: 60_000,
-  });
-
-  const totalUsage = useQuery({
-    queryKey: ['total-usage', METER_ID],
-    queryFn: () => fetchTotalUsage(METER_ID, 30),
-    refetchInterval: 60_000,
-  });
-
-  // Calculate stats from real data
-  const today = new Date().toISOString().split('T')[0];
-  const todayUsage = usage.data?.filter(
-    (d) => d.timestamp.startsWith(today)
-  );
-  const todayKwh = todayUsage?.reduce((sum, d) => sum + d.usageKwh, 0) ?? 0;
-
-  const monthKwh = totalUsage.data?.totalKwh ?? 0;
-  const kwhRate = config.data?.kwhRate ?? 0.12;
-  const estimatedBill = monthKwh * kwhRate;
-
   const backendUp = health.data?.status === 'UP';
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-100">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Header */}
-        <header className="flex items-center justify-between mb-8">
+        <header className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white">
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Home Automation
             </h1>
-            <p className="text-sm text-gray-500 mt-0.5">
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
               CoServ Energy Dashboard
             </p>
           </div>
@@ -77,112 +38,43 @@ function App() {
                 backendUp ? 'bg-emerald-500' : 'bg-red-500'
               }`}
             />
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-gray-500 hidden sm:inline">
               {backendUp ? 'System Online' : 'System Offline'}
             </span>
           </div>
         </header>
 
-        {/* Stat Tiles */}
-        <section className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <StatTile
-            label="Today's Usage"
-            value={todayKwh.toFixed(1)}
-            unit="kWh"
-            loading={usage.isLoading}
-            icon={Icons.Bolt}
-          />
-          <StatTile
-            label="Month Usage"
-            value={monthKwh.toFixed(1)}
-            unit="kWh"
-            loading={totalUsage.isLoading}
-            icon={Icons.Calendar}
-          />
-          <StatTile
-            label="Estimated Bill"
-            value={`$${estimatedBill.toFixed(2)}`}
-            unit=""
-            loading={totalUsage.isLoading}
-            icon={Icons.Dollar}
-          />
-        </section>
+        {/* Tab bar */}
+        <nav className="flex gap-1 mb-6 border-b border-gray-800 overflow-x-auto">
+          {TABS.map((tab) => (
+            <NavLink
+              key={tab.path}
+              to={tab.path}
+              end={tab.end}
+              className={({ isActive }) =>
+                `flex items-center gap-1.5 px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                  isActive
+                    ? 'border-emerald-500 text-white'
+                    : 'border-transparent text-gray-500 hover:text-gray-300 hover:border-gray-600'
+                }`
+              }
+            >
+              <span className="text-base">{tab.icon}</span>
+              <span className="hidden sm:inline">{tab.label}</span>
+            </NavLink>
+          ))}
+        </nav>
 
-        {/* Charts */}
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-          <UsageChart data={usage.data ?? []} loading={usage.isLoading} />
-          <MonthlyComparison
-            data={usage.data ?? []}
-            loading={usage.isLoading}
-          />
-        </section>
-
-        {/* Integration Panel */}
-        <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <IntegrationPanel />
-          <div className="lg:col-span-2 rounded-xl border border-gray-800 bg-gray-900 p-5">
-            <h3 className="text-sm font-semibold text-gray-200 mb-4">
-              Recent Activity
-            </h3>
-            {usage.isLoading ? (
-              <div className="space-y-2 animate-pulse">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-8 bg-gray-800 rounded" />
-                ))}
-              </div>
-            ) : usage.data?.length ? (
-              <div className="space-y-1 max-h-64 overflow-y-auto">
-                {usage.data.slice(0, 10).map((d) => (
-                  <div
-                    key={d.id}
-                    className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-800/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`w-2 h-2 rounded-full ${
-                          d.sourceProvider === 'coserv'
-                            ? 'bg-emerald-500'
-                            : 'bg-blue-500'
-                        }`}
-                      />
-                      <span className="text-sm text-gray-300">
-                        {new Date(d.timestamp).toLocaleDateString('en-US', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-gray-400">
-                        {d.source}
-                      </span>
-                      <span className="text-sm font-medium text-white tabular-nums">
-                        {Number(d.usageKwh).toFixed(2)} kWh
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-32 text-gray-500 text-sm">
-                No usage records yet — click "Sync Now" to pull data from
-                CoServ
-              </div>
-            )}
-          </div>
-        </section>
+        {/* Page content */}
+        <main>
+          <Outlet />
+        </main>
 
         {/* Footer */}
-        <footer className="mt-8 pt-6 border-t border-gray-800 text-xs text-gray-600 text-center">
-          Home Automation Platform &middot; Phase 1 &middot; CoServ
-          Integration &middot;{' '}
-          {integrations.data?.length ?? 0} integration
-          {integrations.data?.length !== 1 ? 's' : ''} registered
+        <footer className="mt-10 pt-5 border-t border-gray-800 text-xs text-gray-600 text-center">
+          Home Automation Platform &middot; Phase 1 &middot; CoServ Integration
         </footer>
       </div>
     </div>
   );
 }
-
-export default App;

@@ -1,0 +1,84 @@
+import { useQuery } from '@tanstack/react-query';
+import { fetchRecentUsage, fetchTotalUsage } from '../api/energy';
+import { fetchMeters } from '../api/meters';
+import api from '../api/client';
+import type { EnergyUsage, Meter } from '../types';
+
+/** Shared hook — all pages use this, React Query cache deduplicates. */
+export function useUsageData() {
+  // Meters
+  const meters = useQuery<Meter[]>({
+    queryKey: ['meters'],
+    queryFn: fetchMeters,
+    staleTime: 120_000,
+  });
+
+  // App config
+  const config = useQuery({
+    queryKey: ['config'],
+    queryFn: () => api.get('/config').then((r) => r.data),
+    staleTime: 300_000,
+  });
+
+  // All energy usage (last 60 days for charts)
+  const allUsage = useQuery<EnergyUsage[]>({
+    queryKey: ['energy-usage', 'all'],
+    queryFn: () =>
+      api.get('/energy-usage').then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+
+  // Per-meter totals
+  const electricMeter = meters.data?.find((m) => m.type === 'ELECTRIC');
+  const gasMeter = meters.data?.find((m) => m.type === 'GAS');
+
+  const electricUsage = useQuery<EnergyUsage[]>({
+    queryKey: ['energy-usage', electricMeter?.id],
+    queryFn: () =>
+      electricMeter
+        ? fetchRecentUsage(electricMeter.id, 60)
+        : Promise.resolve([]),
+    enabled: !!electricMeter,
+    refetchInterval: 60_000,
+  });
+
+  const gasUsage = useQuery<EnergyUsage[]>({
+    queryKey: ['energy-usage', gasMeter?.id],
+    queryFn: () =>
+      gasMeter ? fetchRecentUsage(gasMeter.id, 60) : Promise.resolve([]),
+    enabled: !!gasMeter,
+    refetchInterval: 60_000,
+  });
+
+  const electricTotal = useQuery({
+    queryKey: ['total-usage', electricMeter?.id],
+    queryFn: () =>
+      electricMeter
+        ? fetchTotalUsage(electricMeter.id, 60)
+        : Promise.resolve({ totalKwh: 0 }),
+    enabled: !!electricMeter,
+    refetchInterval: 60_000,
+  });
+
+  const gasTotal = useQuery({
+    queryKey: ['total-usage', gasMeter?.id],
+    queryFn: () =>
+      gasMeter
+        ? fetchTotalUsage(gasMeter.id, 60)
+        : Promise.resolve({ totalKwh: 0 }),
+    enabled: !!gasMeter,
+    refetchInterval: 60_000,
+  });
+
+  return {
+    meters,
+    config,
+    allUsage,
+    electricMeter,
+    gasMeter,
+    electricUsage,
+    gasUsage,
+    electricTotal,
+    gasTotal,
+  };
+}
