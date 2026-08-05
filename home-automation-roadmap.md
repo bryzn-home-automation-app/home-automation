@@ -64,7 +64,7 @@ The first integration will connect to the CoServ customer portal to retrieve hom
 
 The CoServ integration should be isolated as an adapter layer so the core application is not dependent on CoServ-specific behavior. The workflow should include automated login/session handling, scheduled data extraction, file processing, parsing, validation, and normalization into generic application models such as Utility Provider, Utility Account, Meter, Energy Usage, and Utility Bill.
 
-Downloaded files should be stored temporarily or archived as raw imports for debugging and future reprocessing. Parsed data should be stored in PostgreSQL while maintaining historical records instead of overwriting previous values.
+Downloaded files are temporary ingestion artifacts only — processed, validated, and immediately deleted after successful import. The PostgreSQL database is the sole permanent record.
 
 The integration should handle portal changes, authentication failures, and extraction errors gracefully through logging, screenshots/traces from Playwright failures, and user notifications when synchronization requires attention.
 
@@ -79,33 +79,67 @@ The long-term goal is to create a reusable integration framework where CoServ is
 1. Launch Playwright browser session
 2. Authenticate with CoServ portal
 3. Navigate to usage/billing pages
-4. Download available data exports (XML, Excel, CSV)
-5. Archive raw files for debugging/reprocessing
-6. Parse and validate downloaded data
-7. Normalize into provider-agnostic models
-8. Store in PostgreSQL (append-only, never overwrite)
+4. Download available data exports (XML, Excel, CSV) to a temp directory
+5. Parse and validate downloaded data
+6. Normalize into provider-agnostic models
+7. Insert into PostgreSQL (append-only — never update or delete)
+8. Delete downloaded files after successful processing
 9. Capture screenshots on failure, log errors, notify user if sync requires attention
+
+---
+
+## Data Storage Strategy
+
+### Temporary Integration Files
+
+CoServ exports (XML, Excel, CSV) are **temporary ingestion artifacts only**. The Playwright automation downloads them to a temp directory, processes and validates the data, extracts the required information, normalizes it, and stores it in PostgreSQL. Once processing succeeds, the downloaded files are **immediately deleted**. They are never archived, never served, and never considered a source of truth. The database is the sole permanent record.
+
+### Append-Only Database Design
+
+All utility data follows an **append-only (immutable) pattern**:
+- **Never update** existing usage, billing, or meter records
+- **Never delete** historical data
+- New data is always inserted as new rows
+- Every record includes audit metadata for traceability
+
+### Long-Term Retention
+
+The system is designed to retain **5+ years** of historical data for trends, analytics, and future insights. Future optimizations (indexing, partitioning by year, cold storage archival) can be added as data grows, but the default is to retain everything.
+
+### Record Metadata
+
+Every ingested record carries:
+
+| Column              | Purpose                                                       |
+|---------------------|---------------------------------------------------------------|
+| `source`            | Where data came from (e.g. "CoServ API")                      |
+| `source_provider`   | Provider key (e.g. "coserv")                                  |
+| `ingestion_batch_id`| UUID tying all records from one sync run together             |
+| `processing_version`| Version of the parser/normalizer that produced this record    |
+| `created_at`        | When this record was inserted into the database               |
+
+This metadata enables auditing, debugging, and full reprocessing if CoServ changes their export formats or parsing logic — historical records can be traced back to their ingestion batch.
 
 ---
 
 ## Data Model (Provider-Agnostic)
 
 ### UtilityProvider
-`id | name | type | createdDate`
+`id | name | type | portal_url | is_active | created_at | updated_at`
 *Example: CoServ (Electric Provider). Future: Oncor, Atmos Energy, Water Provider.*
 
 ### UtilityAccount
-`id | providerId | accountNumber | serviceAddress | status`
+`id | provider_id | account_number | service_address | status | created_at | updated_at`
 
 ### Meter
-`id | accountId | meterNumber | type | location`
+`id | account_id | meter_number | type | location | created_at | updated_at`
 
 ### EnergyUsage
-`id | meterId | timestamp | usageKwh | cost | source`
-*Example: 2026-08-01 | 45.3 kWh | $5.12 | CoServ API*
+`id | meter_id | timestamp | usage_kwh | cost | source | source_provider | ingestion_batch_id | processing_version | raw_file | created_at`
+*Example: 2026-08-01 | 45.3 kWh | $5.12 | CoServ API | coserv | batch-uuid | v1*
 
 ### UtilityBill
-`id | accountId | billingPeriodStart | billingPeriodEnd | usage | amount | dueDate | status`
+`id | account_id | billing_period_start | billing_period_end | usage_kwh | amount | due_date | status | source | source_provider | ingestion_batch_id | processing_version | raw_file | created_at | updated_at`
 
 ---
 

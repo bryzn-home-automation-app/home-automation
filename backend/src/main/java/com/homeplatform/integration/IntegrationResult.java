@@ -5,10 +5,11 @@ import lombok.Data;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 /**
  * Generic result DTO returned by all integration adapters.
- * Contains synced record counts, errors, raw file paths, and timing info.
+ * Contains synced record counts, errors, and ingest traceability.
  */
 @Data
 @Builder
@@ -16,6 +17,7 @@ public class IntegrationResult {
 
     private String providerKey;
     private String providerName;
+    private UUID batchId;
 
     @Builder.Default
     private boolean success = false;
@@ -27,7 +29,7 @@ public class IntegrationResult {
     private List<String> errors = new ArrayList<>();
 
     @Builder.Default
-    private List<String> rawFiles = new ArrayList<>();
+    private List<String> tempFiles = new ArrayList<>();
 
     private LocalDateTime startedAt;
     private LocalDateTime completedAt;
@@ -37,8 +39,8 @@ public class IntegrationResult {
         this.errors.add(error);
     }
 
-    public void addRawFile(String path) {
-        this.rawFiles.add(path);
+    public void addTempFile(String path) {
+        this.tempFiles.add(path);
     }
 
     public int getTotalSynced() {

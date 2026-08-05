@@ -30,6 +30,7 @@ export interface Meter {
   updatedAt: string;
 }
 
+/** Append-only — never updated or deleted. */
 export interface EnergyUsage {
   id: number;
   meterId: number;
@@ -38,10 +39,13 @@ export interface EnergyUsage {
   usageKwh: number;
   cost?: number;
   source: string;
-  rawFile?: string;
+  sourceProvider: string;
+  ingestionBatchId: string;   // UUID — ties records from one sync together
+  processingVersion: string;  // parser version that produced this record
   createdAt: string;
 }
 
+/** Append-only — new statement = new row, never overwritten. */
 export interface UtilityBill {
   id: number;
   accountId: number;
@@ -52,9 +56,11 @@ export interface UtilityBill {
   amount: number;
   dueDate?: string;
   status: 'ISSUED' | 'PAID' | 'OVERDUE';
-  rawFile?: string;
+  source: string;
+  sourceProvider: string;
+  ingestionBatchId: string;   // UUID — ties records from one sync together
+  processingVersion: string;  // parser version that produced this record
   createdAt: string;
-  updatedAt: string;
 }
 
 export interface IntegrationAdapter {
@@ -66,11 +72,12 @@ export interface IntegrationAdapter {
 export interface IntegrationResult {
   providerKey: string;
   providerName: string;
+  batchId: string;            // UUID — all records from this sync run
   success: boolean;
   usageRecordsSynced: number;
   billRecordsSynced: number;
   errors: string[];
-  rawFiles: string[];
+  tempFiles: string[];        // temp files created (deleted after success)
   startedAt: string;
   completedAt: string;
   durationMs: number;

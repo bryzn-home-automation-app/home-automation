@@ -1,12 +1,18 @@
 package com.homeplatform.model;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
+/**
+ * Append-only bill record. Never updated or deleted.
+ * A new statement for the same period creates a new row.
+ */
 @Entity
 @Table(name = "utility_bills")
 @Data
@@ -46,19 +52,28 @@ public class UtilityBill {
     @Builder.Default
     private String status = "ISSUED";
 
-    @Column(name = "raw_file", length = 500)
-    private String rawFile;
+    // --- Audit / traceability metadata ---
+
+    @NotBlank
+    @Column(nullable = false, length = 100)
+    @Builder.Default
+    private String source = "CoServ API";
+
+    @NotBlank
+    @Column(name = "source_provider", nullable = false, length = 50)
+    @Builder.Default
+    private String sourceProvider = "coserv";
+
+    @NotNull
+    @Column(name = "ingestion_batch_id", nullable = false)
+    private UUID ingestionBatchId;
+
+    @NotBlank
+    @Column(name = "processing_version", nullable = false, length = 20)
+    @Builder.Default
+    private String processingVersion = "1.0";
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
-
-    @Column(name = "updated_at", nullable = false)
-    @Builder.Default
-    private LocalDateTime updatedAt = LocalDateTime.now();
-
-    @PreUpdate
-    protected void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }

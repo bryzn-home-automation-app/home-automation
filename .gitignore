@@ -32,8 +32,7 @@ Desktop.ini
 *.log
 logs/
 
-# Integration artifacts
-backend/src/main/resources/imports/
+# Integration temp files (deleted after processing)
 playwright-traces/
 screenshots/
 
