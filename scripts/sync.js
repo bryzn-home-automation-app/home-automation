@@ -2,18 +2,17 @@
 /**
  * CoServ SmartHub → PostgreSQL Energy Usage Sync
  *
- * Standalone sync script. Reads credentials from .env, logs into SmartHub,
- * downloads Green Button data for Electric + Natural Gas, parses the XML,
- * and inserts records directly into PostgreSQL.
+ * Sync modes (automatic):
+ *   Daily (Mon-Sat):  sync just yesterday — fast append
+ *   Weekly (Sunday):  sync full range from DATA_START_DATE — catches gaps
+ *   Zero-guard:       if last 3 Electric days are all 0.00 kWh,
+ *                     escalate to weekly sync. If still zeros → warn.
  *
  * Usage:
- *   node scripts/sync.js                    # sync yesterday
- *   node scripts/sync.js --date 08/03/2026  # sync a single date
- *   node scripts/sync.js --dry-run          # don't write to DB
- *
- * Every sync downloads a range: DATA_START_DATE → target date.
- * Green Button XML contains all readings in that interval.
- * Running daily (cron) just appends new data — no gaps.
+ *   node scripts/sync.js                    # auto (daily or weekly based on day)
+ *   node scripts/sync.js --weekly           # force full-range sync
+ *   node scripts/sync.js --date 08/03/2026  # sync a specific single date
+ *   node scripts/sync.js --dry-run          # preview only, no DB writes
  *
  * Exit: 0 = success, 1 = errors occurred
  */
@@ -24,7 +23,6 @@ const { Client } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { Writable } = require('stream');
 
 // ─── Config ────────────────────────────────────────────────────
 const COSERV = {
@@ -39,6 +37,11 @@ const SERVICES = [
 
 const PROCESSING_VERSION = '1.0';
 const SOURCE_LABEL = 'CoServ Green Button';
+const ZERO_GUARD_DAYS = 3; // consecutive zero days triggers weekly sync
+
+// ─── Helpers ───────────────────────────────────────────────────
+const fmtDate = (d) => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
+const parseDate = (str) => { const [m,d,y] = str.split('/').map(Number); return new Date(y, m-1, d); };
 
 // ─── Secrets (.env or env vars) ────────────────────────────────
 function loadSecrets() {
@@ -60,9 +63,10 @@ function loadSecrets() {
 
 // ─── Parse args ─────────────────────────────────────────────────
 function parseArgs() {
-  const args = { dryRun: false, date: null };
+  const args = { dryRun: false, date: null, weekly: false };
   for (let i = 2; i < process.argv.length; i++) {
     if (process.argv[i] === '--dry-run') args.dryRun = true;
+    if (process.argv[i] === '--weekly') args.weekly = true;
     if (process.argv[i] === '--date' && process.argv[i + 1]) {
       args.date = process.argv[i + 1];
     }
@@ -70,64 +74,106 @@ function parseArgs() {
   return args;
 }
 
-/** Return { startDate, endDate } as MM/DD/YYYY strings for the Green Button range. */
-function buildDateRange(args, secrets) {
-  const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+// ─── Sync decision logic ────────────────────────────────────────
 
-  const endDate = args.date ? parseDate(args.date) : (() => {
-    const d = new Date(); d.setDate(d.getDate() - 1); return d;
-  })();
+/** Is today Sunday? (0 = Sun, 1-6 = Mon-Sat) */
+function isSunday() { return new Date().getDay() === 0; }
 
-  let startDate;
-  if (secrets.DATA_START_DATE) {
-    startDate = parseDate(secrets.DATA_START_DATE);
-  } else {
-    startDate = new Date(endDate); // default: same day
+/**
+ * Decide what to sync and in what mode.
+ * Returns { startDate, endDate, mode } where mode is 'daily' | 'weekly' | 'zero-guard'.
+ */
+async function decideSyncMode(client, args, secrets) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayStr = fmtDate(yesterday);
+
+  // Explicit --date: single day range
+  if (args.date) {
+    return { startDate: args.date, endDate: args.date, mode: 'single' };
   }
 
-  return { startDate: fmt(startDate), endDate: fmt(endDate) };
+  // Explicit --weekly or Sunday: full range
+  if (args.weekly || isSunday()) {
+    const start = secrets.DATA_START_DATE || yesterdayStr;
+    return { startDate: start, endDate: yesterdayStr, mode: args.weekly ? 'weekly (forced)' : 'weekly (Sunday)' };
+  }
+
+  // Daily mode: check for zero gap
+  if (client) {
+    const zeroGap = await checkZeroGap(client);
+    if (zeroGap) {
+      console.log(`⚠  Last ${ZERO_GUARD_DAYS} Electric days all 0 kWh — escalating to weekly sync`);
+      const start = secrets.DATA_START_DATE || yesterdayStr;
+      return { startDate: start, endDate: yesterdayStr, mode: 'zero-guard' };
+    }
+  }
+
+  // Default: daily — just yesterday
+  return { startDate: yesterdayStr, endDate: yesterdayStr, mode: 'daily' };
 }
 
-function parseDate(str) {
-  const [m, d, y] = str.split('/').map(Number);
-  return new Date(y, m - 1, d);
+/**
+ * Check if the last N Electric days in the DB are all 0.00 kWh.
+ * Returns true if a zero gap is detected (trigger weekly sync).
+ */
+async function checkZeroGap(client) {
+  try {
+    const { rows } = await client.query(
+      `SELECT e.usage_kwh, e.timestamp::date as d
+       FROM energy_usage e
+       JOIN meters m ON e.meter_id = m.id
+       WHERE m.type = 'ELECTRIC' AND e.source_provider = 'coserv'
+         AND e.timestamp::date < CURRENT_DATE
+       ORDER BY e.timestamp::date DESC
+       LIMIT $1`, [ZERO_GUARD_DAYS]
+    );
+    if (rows.length < ZERO_GUARD_DAYS) return false; // not enough data yet
+    const allZero = rows.every(r => parseFloat(r.usage_kwh) === 0);
+    if (allZero) {
+      rows.forEach(r => console.log(`   DB: ${r.d.toISOString().substring(0,10)} = ${r.usage_kwh} kWh`));
+    }
+    return allZero;
+  } catch (e) {
+    console.error('   Zero-gap check failed:', e.message);
+    return false;
+  }
+}
+
+/**
+ * After a weekly/zero-guard sync, check if Electric still has 3+ zeros.
+ * If so, CoServ may have an outage / portal issue — notify user.
+ */
+async function checkPostSyncZeros(client) {
+  try {
+    const { rows } = await client.query(
+      `SELECT e.usage_kwh, e.timestamp::date as d
+       FROM energy_usage e
+       JOIN meters m ON e.meter_id = m.id
+       WHERE m.type = 'ELECTRIC' AND e.source_provider = 'coserv'
+         AND e.timestamp::date < CURRENT_DATE
+       ORDER BY e.timestamp::date DESC
+       LIMIT $1`, [ZERO_GUARD_DAYS]
+    );
+    if (rows.length >= ZERO_GUARD_DAYS && rows.every(r => parseFloat(r.usage_kwh) === 0)) {
+      console.log('');
+      console.log('┌─────────────────────────────────────────┐');
+      console.log('│  ⚠  WARNING: Zero usage detected        │');
+      console.log('│                                         │');
+      console.log(`│  Last ${ZERO_GUARD_DAYS} Electric days are all 0.00 kWh. │`);
+      console.log('│  CoServ portal may have changed or      │');
+      console.log('│  there may be a data issue.             │');
+      console.log('│                                         │');
+      console.log('│  Run: npm run test:live                 │');
+      console.log('│  to verify SmartHub selectors still work │');
+      console.log('└─────────────────────────────────────────┘');
+      console.log('');
+    }
+  } catch (e) { /* ignore */ }
 }
 
 // ─── DB helpers ─────────────────────────────────────────────────
-class DbWriter extends Writable {
-  constructor(client, meterId, batchId, dryRun) {
-    super({ objectMode: true });
-    this.client = client;
-    this.meterId = meterId;
-    this.batchId = batchId;
-    this.dryRun = dryRun;
-    this.count = 0;
-  }
-
-  async _write(record, _enc, callback) {
-    if (this.dryRun) {
-      console.log(`  [dry-run] Would insert: ${record.timestamp} | ${record.usageKwh} kWh`);
-      this.count++;
-      return callback();
-    }
-    try {
-      await this.client.query(
-        `INSERT INTO energy_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-         ON CONFLICT DO NOTHING`,
-        [this.meterId, record.timestamp, record.usageKwh, record.cost || 0,
-         record.source, record.sourceProvider, this.batchId, record.processingVersion]
-      );
-      this.count++;
-    } catch (e) {
-      console.error(`  DB insert error for ${record.timestamp}:`, e.message);
-    }
-    callback();
-  }
-}
-
 async function getOrCreateMeter(client, accountNumber, serviceName) {
-  // Ensure provider
   let provider = (await client.query(
     `SELECT id FROM utility_providers WHERE name = 'CoServ'`
   )).rows[0];
@@ -137,7 +183,6 @@ async function getOrCreateMeter(client, accountNumber, serviceName) {
     )).rows[0];
   }
 
-  // Ensure account
   const fullAcct = `${accountNumber}-${serviceName.toUpperCase()}`;
   let account = (await client.query(
     `SELECT id FROM utility_accounts WHERE account_number = $1`, [fullAcct]
@@ -149,7 +194,6 @@ async function getOrCreateMeter(client, accountNumber, serviceName) {
     )).rows[0];
   }
 
-  // Ensure meter
   const meterNum = `${fullAcct}-${serviceName.toUpperCase()}`;
   let meter = (await client.query(
     `SELECT id FROM meters WHERE meter_number = $1`, [meterNum]
@@ -168,37 +212,28 @@ async function getOrCreateMeter(client, accountNumber, serviceName) {
 function parseGreenButtonXml(xmlText) {
   const results = [];
 
-  // Extract timezone offset
-  let tzOffset = -21600; // default CST (UTC-6)
+  let tzOffset = -21600;
   const ltpMatch = xmlText.match(/<LocalTimeParameters[^>]*>[\s\S]*?<\/LocalTimeParameters>/);
   if (ltpMatch) {
     const tzMatch = ltpMatch[0].match(/<tzOffset>(-?\d+)<\/tzOffset>/);
     if (tzMatch) tzOffset = parseInt(tzMatch[1]);
   }
 
-  // Extract all IntervalBlocks
   const blockRegex = /<IntervalBlock[^>]*>([\s\S]*?)<\/IntervalBlock>/g;
   let blockMatch;
   while ((blockMatch = blockRegex.exec(xmlText)) !== null) {
     const block = blockMatch[1];
 
-    // Get unit of measure from the interval element
     const uomMatch = block.match(/<uom>(\d+)<\/uom>/);
-    const uom = uomMatch ? parseInt(uomMatch[1]) : null;
-    // uom 38 = kW (demand), uom 72 = kWh (energy) — skip demand
-    if (uom === 38) continue;
+    if (uomMatch && parseInt(uomMatch[1]) === 38) continue; // skip demand (kW)
 
-    // Extract each IntervalReading
     const readingRegex = /<IntervalReading>([\s\S]*?)<\/IntervalReading>/g;
     let readingMatch;
     while ((readingMatch = readingRegex.exec(block)) !== null) {
       const reading = readingMatch[1];
-
       const startMatch = reading.match(/<start>(\d+)<\/start>/);
-      const durationMatch = reading.match(/<duration>(\d+)<\/duration>/);
       const valueMatch = reading.match(/<value>(\d+)<\/value>/);
       const multMatch = reading.match(/<powerOfTenMultiplier>(-?\d+)<\/powerOfTenMultiplier>/);
-
       if (!startMatch || !valueMatch) continue;
 
       const epoch = parseInt(startMatch[1]);
@@ -206,10 +241,6 @@ function parseGreenButtonXml(xmlText) {
       const multiplier = multMatch ? parseInt(multMatch[1]) : 0;
       const usageKwh = rawValue / Math.pow(10, multiplier);
 
-      // Green Button timestamps are UTC epoch seconds
-      // tzOffset is in seconds (e.g. -21600 for CST = UTC-6)
-      // We store in UTC: epoch + tzOffset gives local time, but we want UTC
-      // Actually: the epoch IS UTC. Store as UTC timestamp.
       const date = new Date(epoch * 1000);
       const timestamp = date.toISOString().replace('T', ' ').substring(0, 19);
 
@@ -227,7 +258,7 @@ function parseGreenButtonXml(xmlText) {
   return results;
 }
 
-// ─── SmartHub interaction helpers ──────────────────────────────
+// ─── SmartHub interaction ──────────────────────────────────────
 async function fillDateInput(page, inputId, dateStr) {
   await page.evaluate(({ inputId, dateStr }) => {
     const el = document.querySelector(`#${inputId}`);
@@ -241,10 +272,8 @@ async function fillDateInput(page, inputId, dateStr) {
 }
 
 async function downloadGreenButton(page, serviceValue, startDate, endDate) {
-  // Wait for the page to have the download button
   await page.waitForTimeout(2000);
 
-  // Try to find the button — debug what's on page if it fails
   let btnFound = false;
   for (let attempt = 0; attempt < 3; attempt++) {
     const btn = await page.evaluate(() => {
@@ -254,16 +283,14 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
       return false;
     });
     if (btn) { btnFound = true; break; }
-    console.log(`   Retry ${attempt + 1}: button not found, waiting 3s...`);
     await page.waitForTimeout(3000);
   }
   if (!btnFound) {
-    const allText = await page.evaluate(() => document.body.innerText.substring(0, 1500));
-    console.error('   Page text:', allText);
+    const pageText = await page.evaluate(() => document.body.innerText.substring(0, 1500));
+    console.error('   Page text:', pageText);
     throw new Error('Green Button button not found on page');
   }
 
-  // Click to open modal
   await page.evaluate(() => {
     for (const btn of document.querySelectorAll('button')) {
       if (btn.textContent?.includes('Green Button')) { btn.click(); return; }
@@ -271,24 +298,18 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
   });
   await page.waitForTimeout(4000);
 
-  // Select service
   await page.selectOption('#mat-input-2', serviceValue);
   await page.waitForTimeout(200);
-  // Select DAILY interval
   await page.selectOption('#mat-input-3', 'DAILY');
   await page.waitForTimeout(200);
-  // Select Green Button XML format
   await page.selectOption('#mat-input-6', 'GREEN_BUTTON');
   await page.waitForTimeout(200);
-  // Fill date range
   await fillDateInput(page, 'mat-input-4', startDate);
   await fillDateInput(page, 'mat-input-5', endDate);
   await page.waitForTimeout(300);
 
-  // Set up download handler
   const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
 
-  // Click Download
   await page.evaluate(() => {
     const dialog = document.querySelector('.mat-dialog-container');
     for (const btn of dialog?.querySelectorAll('button') || []) {
@@ -298,13 +319,11 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
 
   const download = await downloadPromise;
   if (!download) {
-    // Check for "No usage data" message
     const bodyText = await page.evaluate(() => document.body.innerText || '');
     if (bodyText.includes('No usage data')) return { noData: true };
     return null;
   }
 
-  // Read the ZIP into memory
   const stream = await download.createReadStream();
   const chunks = [];
   for await (const chunk of stream) chunks.push(chunk);
@@ -315,21 +334,14 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
 async function main() {
   const secrets = loadSecrets();
   const args = parseArgs();
-  const { startDate, endDate } = buildDateRange(args, secrets);
-  const batchId = crypto.randomUUID();
 
-  console.log('⚡  CoServ Sync');
-  console.log(`   Range: ${startDate} → ${endDate}  |  Batch: ${batchId}`);
-  if (args.dryRun) console.log('   Mode: DRY RUN (no DB writes)');
-  console.log('');
-
-  // Validate secrets
+  // Validate secrets before DB connect
   if (!secrets.COSERV_USERNAME || !secrets.COSERV_PASSWORD) {
     console.error('❌  Missing COSERV_USERNAME or COSERV_PASSWORD in .env');
     process.exit(1);
   }
 
-  // Connect to DB (unless dry-run)
+  // Connect to DB (unless dry-run) — needed for sync decision
   let client;
   if (!args.dryRun) {
     client = new Client({
@@ -340,10 +352,18 @@ async function main() {
       password: secrets.POSTGRES_PASSWORD || 'changeme',
     });
     await client.connect();
-    console.log('✓  PostgreSQL connected');
-  } else {
-    console.log('○  PostgreSQL skipped (dry-run)');
   }
+
+  // Decide sync mode
+  const { startDate, endDate, mode } = await decideSyncMode(client, args, secrets);
+  const batchId = crypto.randomUUID();
+
+  console.log('⚡  CoServ Sync');
+  console.log(`   Mode: ${mode}  |  Range: ${startDate} → ${endDate}`);
+  console.log(`   Batch: ${batchId}`);
+  if (args.dryRun) console.log('   Mode: DRY RUN (no DB writes)');
+  if (!client) console.log('   DB: skipped (dry-run)');
+  console.log('');
 
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ locale: 'en-US', acceptDownloads: true });
@@ -354,7 +374,7 @@ async function main() {
 
   try {
     // ── Login ──
-    console.log('\n── Login ──');
+    console.log('── Login ──');
     await page.goto(COSERV.loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForTimeout(3000);
 
@@ -366,38 +386,32 @@ async function main() {
 
     if (page.url().includes('/login') || page.url().includes('#/login')) {
       const hasError = await page.locator('text=Invalid Login').count() > 0;
-      if (hasError) {
-        console.error('❌  Login failed: Invalid credentials');
-      } else {
-        console.error('❌  Login failed: still on login page');
-      }
+      console.error(hasError ? '❌  Login failed: Invalid credentials' : '❌  Login failed: still on login page');
       process.exit(1);
     }
     console.log('✓  Logged into SmartHub');
 
-    // Navigate to Green Button page — Angular SPA, use hash change
-    await page.goto('https://coserv.smarthub.coop/ui/#/usageManagement/greenButton',
-      { waitUntil: 'domcontentloaded', timeout: 15000 });
+    // Navigate to Green Button page — use hash change to keep session
+    await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
     await page.waitForTimeout(8000);
-    console.log('✓  On Green Button page');
+    console.log('✓  On Green Button page\n');
 
-    // ── Download per service (single range covers all dates) ──
+    // ── Download per service ──
     for (const svc of SERVICES) {
-      console.log(`\n── ${svc.name} ──`);
+      console.log(`── ${svc.name} ──`);
 
       const result = await downloadGreenButton(page, svc.value, startDate, endDate);
 
       if (!result) {
-        console.log(`   ✗  Download failed`);
+        console.log(`   ✗  Download failed\n`);
         hadError = true;
         continue;
       }
 
       if (result.noData) {
         console.log(`   ○  No usage data in range — storing 0 kWh for each day`);
-        if (!args.dryRun) {
+        if (client) {
           const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
-          // Store 0 kWh for each day in the range
           const [sm, sd, sy] = startDate.split('/').map(Number);
           const [em, ed, ey] = endDate.split('/').map(Number);
           const cursor = new Date(sy, sm - 1, sd);
@@ -414,12 +428,12 @@ async function main() {
             totalRecords++;
           }
         }
+        console.log('');
         continue;
       }
 
       console.log(`   ✓  Downloaded: ${result.filename} (${result.data.length} bytes)`);
 
-      // Extract XML from ZIP
       const AdmZip = require('adm-zip');
       const zip = new AdmZip(result.data);
       const xmlEntries = zip.getEntries().filter(e => e.entryName.endsWith('.xml'));
@@ -430,7 +444,7 @@ async function main() {
         const records = parseGreenButtonXml(xmlText);
         console.log(`   Parsed ${records.length} readings from ${entry.entryName}`);
 
-        if (records.length > 0 && !args.dryRun) {
+        if (records.length > 0 && client) {
           const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
           for (const rec of records) {
             await client.query(
@@ -449,8 +463,13 @@ async function main() {
         svcRecords += records.length;
       }
 
-      console.log(`   ${svc.name}: ${svcRecords} records ${args.dryRun ? '(dry-run)' : 'written'}`);
+      console.log(`   ${svc.name}: ${svcRecords} records ${args.dryRun ? '(dry-run)' : 'written'}\n`);
       totalRecords += svcRecords;
+    }
+
+    // Post-sync: check for persistent zeros after weekly/zero-guard sync
+    if (client && (mode.startsWith('weekly') || mode === 'zero-guard')) {
+      await checkPostSyncZeros(client);
     }
 
   } catch (e) {
@@ -462,11 +481,11 @@ async function main() {
   }
 
   // ── Summary ──
-  console.log(`\n═══════════════════════════════════`);
-  console.log(`  Total: ${totalRecords} records`);
-  console.log(`  Batch: ${batchId}`);
-  console.log(`  Status: ${hadError ? '⚠  Errors occurred' : '✅  Success'}`);
-  console.log(`═══════════════════════════════════\n`);
+  console.log(`╔═══════════════════════════════════╗`);
+  console.log(`║  Mode: ${mode.padEnd(26)}║`);
+  console.log(`║  Total: ${String(totalRecords).padStart(3)} records${' '.repeat(12)}║`);
+  console.log(`║  Status: ${(hadError ? '⚠ Errors' : '✅ Success').padEnd(25)}║`);
+  console.log(`╚═══════════════════════════════════╝\n`);
 
   process.exit(hadError ? 1 : 0);
 }
