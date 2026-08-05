@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS energy_usage (
 CREATE INDEX idx_energy_usage_meter_time ON energy_usage (meter_id, timestamp);
 CREATE INDEX idx_energy_usage_timestamp   ON energy_usage (timestamp);
 CREATE INDEX idx_energy_usage_batch       ON energy_usage (ingestion_batch_id);
+-- Prevent duplicate records — one row per meter+timestamp+provider
+CREATE UNIQUE INDEX IF NOT EXISTS idx_energy_usage_unique ON energy_usage (meter_id, timestamp, source_provider);
 
 -- Append-only: bills are never updated — new statement = new row.
 CREATE TABLE IF NOT EXISTS utility_bills (

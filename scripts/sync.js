@@ -8,8 +8,12 @@
  *
  * Usage:
  *   node scripts/sync.js                    # sync yesterday
- *   node scripts/sync.js --date 08/03/2026  # sync specific date
+ *   node scripts/sync.js --date 08/03/2026  # sync a single date
  *   node scripts/sync.js --dry-run          # don't write to DB
+ *
+ * Every sync downloads a range: DATA_START_DATE → target date.
+ * Green Button XML contains all readings in that interval.
+ * Running daily (cron) just appends new data — no gaps.
  *
  * Exit: 0 = success, 1 = errors occurred
  */
@@ -42,12 +46,13 @@ function loadSecrets() {
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
     fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD|PORTAL_URL)|POSTGRES_(?:DB|USER|PASSWORD))\s*=\s*(.+)/);
+      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD|PORTAL_URL)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|DATA_START_DATE)\s*=\s*(.+)/);
       if (m) secrets[m[1]] = m[2].trim();
     });
   }
   for (const k of ['COSERV_USERNAME','COSERV_PASSWORD','COSERV_PORTAL_URL',
-                   'POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD']) {
+                   'POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD',
+                   'POSTGRES_HOST','POSTGRES_PORT','DATA_START_DATE']) {
     if (process.env[k]) secrets[k] = process.env[k];
   }
   return secrets;
@@ -62,12 +67,30 @@ function parseArgs() {
       args.date = process.argv[i + 1];
     }
   }
-  if (!args.date) {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    args.date = `${String(yesterday.getMonth() + 1).padStart(2, '0')}/${String(yesterday.getDate()).padStart(2, '0')}/${yesterday.getFullYear()}`;
-  }
   return args;
+}
+
+/** Return { startDate, endDate } as MM/DD/YYYY strings for the Green Button range. */
+function buildDateRange(args, secrets) {
+  const fmt = (d) => `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+
+  const endDate = args.date ? parseDate(args.date) : (() => {
+    const d = new Date(); d.setDate(d.getDate() - 1); return d;
+  })();
+
+  let startDate;
+  if (secrets.DATA_START_DATE) {
+    startDate = parseDate(secrets.DATA_START_DATE);
+  } else {
+    startDate = new Date(endDate); // default: same day
+  }
+
+  return { startDate: fmt(startDate), endDate: fmt(endDate) };
+}
+
+function parseDate(str) {
+  const [m, d, y] = str.split('/').map(Number);
+  return new Date(y, m - 1, d);
 }
 
 // ─── DB helpers ─────────────────────────────────────────────────
@@ -217,9 +240,28 @@ async function fillDateInput(page, inputId, dateStr) {
   await page.waitForTimeout(200);
 }
 
-async function downloadGreenButton(page, serviceValue, dateStr) {
-  // Wait for the download button to be visible on the Green Button page
-  await page.waitForSelector('button:has-text("Green Button")', { timeout: 15000 });
+async function downloadGreenButton(page, serviceValue, startDate, endDate) {
+  // Wait for the page to have the download button
+  await page.waitForTimeout(2000);
+
+  // Try to find the button — debug what's on page if it fails
+  let btnFound = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const btn = await page.evaluate(() => {
+      for (const b of document.querySelectorAll('button')) {
+        if (b.textContent?.includes('Green Button')) return true;
+      }
+      return false;
+    });
+    if (btn) { btnFound = true; break; }
+    console.log(`   Retry ${attempt + 1}: button not found, waiting 3s...`);
+    await page.waitForTimeout(3000);
+  }
+  if (!btnFound) {
+    const allText = await page.evaluate(() => document.body.innerText.substring(0, 1500));
+    console.error('   Page text:', allText);
+    throw new Error('Green Button button not found on page');
+  }
 
   // Click to open modal
   await page.evaluate(() => {
@@ -238,9 +280,9 @@ async function downloadGreenButton(page, serviceValue, dateStr) {
   // Select Green Button XML format
   await page.selectOption('#mat-input-6', 'GREEN_BUTTON');
   await page.waitForTimeout(200);
-  // Fill dates
-  await fillDateInput(page, 'mat-input-4', dateStr);
-  await fillDateInput(page, 'mat-input-5', dateStr);
+  // Fill date range
+  await fillDateInput(page, 'mat-input-4', startDate);
+  await fillDateInput(page, 'mat-input-5', endDate);
   await page.waitForTimeout(300);
 
   // Set up download handler
@@ -273,10 +315,11 @@ async function downloadGreenButton(page, serviceValue, dateStr) {
 async function main() {
   const secrets = loadSecrets();
   const args = parseArgs();
+  const { startDate, endDate } = buildDateRange(args, secrets);
   const batchId = crypto.randomUUID();
 
   console.log('⚡  CoServ Sync');
-  console.log(`   Date: ${args.date}  |  Batch: ${batchId}`);
+  console.log(`   Range: ${startDate} → ${endDate}  |  Batch: ${batchId}`);
   if (args.dryRun) console.log('   Mode: DRY RUN (no DB writes)');
   console.log('');
 
@@ -332,44 +375,53 @@ async function main() {
     }
     console.log('✓  Logged into SmartHub');
 
-    // Navigate to Green Button page — use full goto instead of hash change
+    // Navigate to Green Button page — Angular SPA, use hash change
     await page.goto('https://coserv.smarthub.coop/ui/#/usageManagement/greenButton',
       { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await page.waitForTimeout(6000);
+    await page.waitForTimeout(8000);
     console.log('✓  On Green Button page');
 
-    // ── Download per service ──
+    // ── Download per service (single range covers all dates) ──
     for (const svc of SERVICES) {
       console.log(`\n── ${svc.name} ──`);
 
-      const result = await downloadGreenButton(page, svc.value, args.date);
+      const result = await downloadGreenButton(page, svc.value, startDate, endDate);
 
       if (!result) {
-        console.log(`✗  Download failed`);
+        console.log(`   ✗  Download failed`);
         hadError = true;
         continue;
       }
 
       if (result.noData) {
-        console.log(`○  No usage data available — storing 0 kWh`);
+        console.log(`   ○  No usage data in range — storing 0 kWh for each day`);
         if (!args.dryRun) {
           const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
-          await client.query(
-            `INSERT INTO energy_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
-             VALUES ($1, $2, 0, 0, $3, $4, $5, $6)
-             ON CONFLICT DO NOTHING`,
-            [meterId, `${args.date} 00:00:00`, SOURCE_LABEL, 'coserv', batchId, PROCESSING_VERSION]
-          );
-          totalRecords++;
+          // Store 0 kWh for each day in the range
+          const [sm, sd, sy] = startDate.split('/').map(Number);
+          const [em, ed, ey] = endDate.split('/').map(Number);
+          const cursor = new Date(sy, sm - 1, sd);
+          const end = new Date(ey, em - 1, ed);
+          while (cursor <= end) {
+            const ds = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}-${String(cursor.getDate()).padStart(2,'0')} 00:00:00`;
+            await client.query(
+              `INSERT INTO energy_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
+               VALUES ($1, $2, 0, 0, $3, $4, $5, $6)
+               ON CONFLICT DO NOTHING`,
+              [meterId, ds, SOURCE_LABEL, 'coserv', batchId, PROCESSING_VERSION]
+            );
+            cursor.setDate(cursor.getDate() + 1);
+            totalRecords++;
+          }
         }
         continue;
       }
 
-      console.log(`✓  Downloaded: ${result.filename} (${result.data.length} bytes)`);
+      console.log(`   ✓  Downloaded: ${result.filename} (${result.data.length} bytes)`);
 
       // Extract XML from ZIP
-      const Zip = require('adm-zip');
-      const zip = new Zip(result.data);
+      const AdmZip = require('adm-zip');
+      const zip = new AdmZip(result.data);
       const xmlEntries = zip.getEntries().filter(e => e.entryName.endsWith('.xml'));
 
       let svcRecords = 0;
@@ -391,7 +443,7 @@ async function main() {
           }
         } else if (records.length > 0 && args.dryRun) {
           for (const rec of records) {
-            console.log(`   [dry-run] ${rec.timestamp} | ${rec.usageKwh} kWh`);
+            console.log(`      [dry-run] ${rec.timestamp} | ${rec.usageKwh} kWh`);
           }
         }
         svcRecords += records.length;
