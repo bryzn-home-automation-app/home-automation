@@ -6,7 +6,7 @@ spring:
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update    # auto-sync entities to tables (switch to validate + Flyway for prod)
     show-sql: false
     properties:
       hibernate:
@@ -17,6 +17,9 @@ spring:
       host: ${SPRING_REDIS_HOST:localhost}
       port: 6379
       password: ${SPRING_REDIS_PASSWORD:}
+  jackson:
+    serialization:
+      fail-on-empty-beans: false
 
 server:
   port: 8080
@@ -27,18 +30,7 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
-# CoServ SmartHub integration (Green Button Download)
-coserv:
-  portal-url: ${COSERV_PORTAL_URL:https://coserv.smarthub.coop/ui/#/login}
-  green-button-path: "#/usageManagement/greenButton"
-  username: ${COSERV_USERNAME:}
-  password: ${COSERV_PASSWORD:}
-  sync:
-    enabled: true
-    cron: "0 0 * * * *"  # hourly
-
 # Logging
 logging:
   level:
     com.homeplatform: DEBUG
-    com.homeplatform.integration: DEBUG

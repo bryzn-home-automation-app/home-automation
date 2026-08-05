@@ -69,12 +69,25 @@ Then run the backend locally — it connects to the Docker-hosted database.
 
 The initial schema is in `backend/src/main/resources/schema.sql`. It is mounted as an init script for PostgreSQL and runs automatically on first container start. JPA is configured with `ddl-auto: validate` — entities must match the schema exactly.
 
-## CoServ Integration
+## Data Sync (CoServ SmartHub)
 
-The CoServ adapter uses Playwright for browser automation. When running locally (not in Docker), install Playwright browsers:
+Sync pulls energy usage data from CoServ via Green Button Download and stores it in PostgreSQL. The sync is a standalone Node.js script — it runs outside Docker.
 
 ```bash
+# Install Playwright browser (one-time)
 npx playwright install chromium
+
+# Sync yesterday's usage
+npm run sync
+
+# Sync a specific date
+npm run sync -- --date 08/03/2026
+
+# Preview without writing to the database
+npm run sync -- --dry-run
+
+# Verify SmartHub selectors still work (smoke test)
+npm run test:live
 ```
 
-In Docker, the backend container includes Playwright and a headless Chromium.
+Credentials are loaded from the `.env` file at the project root (same file used by Docker Compose, gitignored).

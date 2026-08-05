@@ -45,9 +45,8 @@ services:
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET}
-      COSERV_USERNAME: ${COSERV_USERNAME}
-      COSERV_PASSWORD: ${COSERV_PASSWORD}
-      COSERV_PORTAL_URL: ${COSERV_PORTAL_URL}
+    expose:
+      - "8080"
     ports:
       - "8080:8080"
     depends_on:
@@ -57,25 +56,15 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: homeplatform-frontend
-    ports:
-      - "5173:5173"
-    restart: unless-stopped
-
   nginx:
-    image: nginx:alpine
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
     container_name: homeplatform-nginx
     ports:
       - "80:80"
-    volumes:
-      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
-      - frontend
     restart: unless-stopped
 
 volumes:
