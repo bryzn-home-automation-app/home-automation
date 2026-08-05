@@ -21,6 +21,10 @@ spring:
     serialization:
       fail-on-empty-beans: false
 
+app:
+  kwh-rate: ${KWH_RATE:0.12}
+  data-start-date: ${DATA_START_DATE:07/24/2026}
+
 server:
   port: 8080
 

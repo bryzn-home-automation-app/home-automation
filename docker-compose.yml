@@ -45,6 +45,8 @@ services:
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       JWT_SECRET: ${JWT_SECRET}
+      KWH_RATE: ${KWH_RATE:-0.12}
+      DATA_START_DATE: ${DATA_START_DATE:-07/24/2026}
     expose:
       - "8080"
     ports:

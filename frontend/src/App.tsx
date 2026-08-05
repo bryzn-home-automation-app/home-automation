@@ -25,6 +25,13 @@ function App() {
     refetchInterval: 30_000,
   });
 
+  // App config (rate, start date)
+  const config = useQuery({
+    queryKey: ['config'],
+    queryFn: () => api.get('/config').then((r) => r.data),
+    staleTime: 300_000, // 5 min
+  });
+
   // Energy usage data
   const usage = useQuery<EnergyUsage[]>({
     queryKey: ['energy-usage', METER_ID],
@@ -46,8 +53,8 @@ function App() {
   const todayKwh = todayUsage?.reduce((sum, d) => sum + d.usageKwh, 0) ?? 0;
 
   const monthKwh = totalUsage.data?.totalKwh ?? 0;
-  // Rough TX rate: $0.12/kWh
-  const estimatedBill = monthKwh * 0.12;
+  const kwhRate = config.data?.kwhRate ?? 0.12;
+  const estimatedBill = monthKwh * kwhRate;
 
   const backendUp = health.data?.status === 'UP';
 
