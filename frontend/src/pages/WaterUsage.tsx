@@ -76,14 +76,14 @@ export default function WaterUsage() {
         </p>
       </div>
 
-      <section className="rounded-[30px] border border-white/10 bg-slate-900/84 p-6 shadow-[0_12px_34px_rgba(2,8,23,0.24)] sm:p-7">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
+        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
           Water Module Preview
         </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
+        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
           Prototype the future water dashboard before the live integration lands.
         </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-apptext-soft sm:text-base">
           This mock view keeps the same component language as the live energy modules, so the eventual rollout stays consistent and low-friction.
         </p>
       </section>
@@ -141,14 +141,14 @@ export default function WaterUsage() {
         summaries={summaryCards}
       />
 
-      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
-        <h3 className="mb-2 text-lg font-semibold text-white">
+      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+        <h3 className="mb-2 text-lg font-semibold text-apptext">
           Water Utility Integration
         </h3>
-        <p className="text-sm leading-6 text-slate-400">
+        <p className="text-sm leading-6 text-apptext-muted">
           Water usage tracking will use the same adapter pattern as CoServ.
           Once your water provider offers a customer portal (or CSV export),
-          a new adapter can be built using the <code className="text-slate-200">IntegrationAdapter</code> interface.
+          a new adapter can be built using the <code className="text-apptext-soft">IntegrationAdapter</code> interface.
           Data will flow into the same provider-agnostic data model with
           append-only storage and the same dashboard charts.
         </p>

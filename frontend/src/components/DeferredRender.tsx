@@ -25,7 +25,7 @@ export default function DeferredRender({
       ) : (
         placeholder ?? (
           <div
-            className="rounded-[28px] border border-white/10 bg-slate-900/72 shadow-[0_10px_28px_rgba(2,8,23,0.2)]"
+            className="rounded-[28px] border border-appborder bg-appsurface-raised shadow-[0_10px_28px_var(--appshadow)]"
             style={{ minHeight }}
           />
         )

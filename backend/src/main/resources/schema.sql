@@ -183,3 +183,46 @@ CREATE INDEX idx_utility_bills_batch    ON utility_bills (ingestion_batch_id);
 INSERT INTO utility_providers (name, type, portal_url, is_active)
 VALUES ('CoServ', 'ELECTRIC', 'https://myaccount.coserv.com', TRUE)
 ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- User Management & Access Control
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS users (
+    id              SERIAL PRIMARY KEY,
+    email           VARCHAR(255) NOT NULL UNIQUE,
+    username        VARCHAR(100) NOT NULL UNIQUE,
+    display_name    VARCHAR(200),
+    password_hash   VARCHAR(255),
+    role            VARCHAR(20)  NOT NULL DEFAULT 'USER',      -- ADMIN, USER, GUEST
+    status          VARCHAR(20)  NOT NULL DEFAULT 'PENDING_APPROVAL', -- PENDING_APPROVAL, ACTIVE, DISABLED, EXPIRED
+    is_active       BOOLEAN      NOT NULL DEFAULT FALSE,
+    approved_by     INTEGER      REFERENCES users(id),
+    approved_at     TIMESTAMP,
+    last_login_at   TIMESTAMP,
+    login_count       INTEGER      NOT NULL DEFAULT 0,
+    connection_count  INTEGER      NOT NULL DEFAULT 0,
+    created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_users_username ON users (username);
+CREATE INDEX IF NOT EXISTS idx_users_email    ON users (email);
+CREATE INDEX IF NOT EXISTS idx_users_status   ON users (status);
+CREATE INDEX IF NOT EXISTS idx_users_role     ON users (role);
+
+CREATE TABLE IF NOT EXISTS guest_sessions (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER      NOT NULL REFERENCES users(id),
+    ip_address      VARCHAR(45),
+    user_agent      VARCHAR(500),
+    connected_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
+    last_seen_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
+    expires_at      TIMESTAMP    NOT NULL,
+    status          VARCHAR(20)  NOT NULL DEFAULT 'ACTIVE',   -- ACTIVE, EXPIRED, REVOKED
+    created_at      TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_guest_sessions_user   ON guest_sessions (user_id);
+CREATE INDEX IF NOT EXISTS idx_guest_sessions_status ON guest_sessions (status);
+CREATE INDEX IF NOT EXISTS idx_guest_sessions_expiry ON guest_sessions (expires_at);

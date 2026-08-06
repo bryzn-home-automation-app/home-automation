@@ -60,21 +60,21 @@ export default function GasUsage() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <section className="rounded-[30px] border border-white/10 bg-slate-900/84 p-6 shadow-[0_12px_34px_rgba(2,8,23,0.24)] sm:p-7">
+      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Gas Module
             </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
               Natural gas visibility, ready as more seasonal data arrives.
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
               This view keeps gas usage in the same operating model as electric, even when the dataset is still sparse.
             </p>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4 text-sm text-slate-300">
+          <div className="rounded-2xl border border-appborder bg-appinset p-4 text-sm text-apptext-soft">
             CoServ gas readings will become more useful once colder months build a longer history.
           </div>
         </div>
@@ -129,12 +129,12 @@ export default function GasUsage() {
           </DeferredRender>
         </section>
       ) : (
-        <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-8 text-center shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+        <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-8 text-center shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3 text-4xl">🔥</div>
-          <h3 className="mb-2 text-lg font-semibold text-white">
+          <h3 className="mb-2 text-lg font-semibold text-apptext">
             No Gas Usage Yet
           </h3>
-          <p className="mx-auto max-w-md text-sm leading-6 text-slate-400">
+          <p className="mx-auto max-w-md text-sm leading-6 text-apptext-muted">
             Natural gas data will appear here once you start using gas
             appliances. CoServ tracks both electric and gas on the same meter.
             Data is pulled automatically during each sync.

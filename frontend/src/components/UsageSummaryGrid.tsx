@@ -20,65 +20,65 @@ export default function UsageSummaryGrid({
   loading,
 }: UsageSummaryGridProps) {
   return (
-    <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+    <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Usage Insights
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-white">{title}</h3>
+        <h3 className="mt-2 text-lg font-semibold text-apptext">{title}</h3>
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {summaries.map(({ label, rangeStart, rangeEnd, summary }) => (
           <div
             key={label}
-            className="rounded-[24px] border border-white/10 bg-slate-950/35 p-4"
+            className="rounded-[24px] border border-appborder bg-appinset p-4"
           >
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h4 className="text-sm font-semibold text-white">{label}</h4>
-                <p className="mt-1 text-xs text-slate-500">
+                <h4 className="text-sm font-semibold text-apptext">{label}</h4>
+                <p className="mt-1 text-xs text-apptext-dim">
                   {formatPeriodRange(rangeStart, rangeEnd)}
                 </p>
               </div>
-              <span className="text-xs text-slate-500 text-right">
+              <span className="text-xs text-apptext-dim text-right">
                 {loading ? 'Loading...' : `${summary.readingCount} readings`}
               </span>
             </div>
 
             <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-2xl border border-white/8 bg-slate-950/45 p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Total</p>
-                <p className="mt-2 text-lg font-semibold text-white">
+              <div className="rounded-2xl border border-appborder-light bg-appinset-strong p-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-dim">Total</p>
+                <p className="mt-2 text-lg font-semibold text-apptext">
                   {loading ? '...' : summary.totalKwh.toFixed(1)}
-                  <span className="ml-1 text-sm text-slate-400">{unitLabel}</span>
+                  <span className="ml-1 text-sm text-apptext-muted">{unitLabel}</span>
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-slate-950/45 p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Average</p>
-                <p className="mt-2 text-lg font-semibold text-white">
+              <div className="rounded-2xl border border-appborder-light bg-appinset-strong p-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-dim">Average</p>
+                <p className="mt-2 text-lg font-semibold text-apptext">
                   {loading ? '...' : summary.averageKwh.toFixed(1)}
-                  <span className="ml-1 text-sm text-slate-400">{unitLabel}</span>
+                  <span className="ml-1 text-sm text-apptext-muted">{unitLabel}</span>
                 </p>
               </div>
 
               <div className="rounded-2xl border border-emerald-300/10 bg-emerald-300/8 p-3">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-100/60">Low</p>
-                <p className="mt-2 text-base font-semibold text-white">
+                <p className="mt-2 text-base font-semibold text-apptext">
                   {loading || !summary.lowest ? '...' : `${summary.lowest.usageKwh.toFixed(1)} ${unitLabel}`}
                 </p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-apptext-muted">
                   {loading ? '...' : formatSummaryDate(summary.lowest?.timestamp)}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-rose-300/10 bg-rose-300/8 p-3">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-rose-100/60">High</p>
-                <p className="mt-2 text-base font-semibold text-white">
+                <p className="mt-2 text-base font-semibold text-apptext">
                   {loading || !summary.highest ? '...' : `${summary.highest.usageKwh.toFixed(1)} ${unitLabel}`}
                 </p>
-                <p className="mt-1 text-xs text-slate-400">
+                <p className="mt-1 text-xs text-apptext-muted">
                   {loading ? '...' : formatSummaryDate(summary.highest?.timestamp)}
                 </p>
               </div>

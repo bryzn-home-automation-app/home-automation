@@ -1,6 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 
+/* ── Fixed palettes (independent of theme) ── */
 @theme {
   --color-emerald-950: #022c22;
   --color-emerald-900: #064e3b;
@@ -13,17 +14,147 @@
   --color-ink-900: #08101c;
   --color-ink-800: #0d1726;
   --color-ink-700: #152235;
+
+  /* ── Semantic surface tokens ── */
+  --color-appbg:              var(--appbg);
+  --color-appsurface:         var(--appsurface);
+  --color-appsurface-raised:  var(--appsurface-raised);
+  --color-appinset:           var(--appinset);
+  --color-appinset-strong:    var(--appinset-strong);
+
+  /* ── Semantic text tokens ── */
+  --color-apptext:            var(--apptext);
+  --color-apptext-soft:       var(--apptext-soft);
+  --color-apptext-muted:      var(--apptext-muted);
+  --color-apptext-dim:        var(--apptext-dim);
+
+  /* ── Semantic border tokens ── */
+  --color-appborder:          var(--appborder);
+  --color-appborder-light:    var(--appborder-light);
+  --color-appborder-hover:    var(--appborder-hover);
+
+  /* ── Accent & status ── */
+  --color-appaccent:          var(--appaccent);
+  --color-appaccent-soft:     var(--appaccent-soft);
+  --color-appaccent-border:   var(--appaccent-border);
+  --color-appaccent-text:     var(--appaccent-text);
+  --color-appsuccess:         var(--appsuccess);
+  --color-appwarning:         var(--appwarning);
+  --color-appdanger:          var(--appdanger);
+
+  /* ── Glow / gradient ── */
+  --color-appglow:            var(--appglow);
+  --color-appglow-accent:     var(--appglow-accent);
+  --color-appglow-header:     var(--appglow-header);
+
+  /* ── Chart / recharts ── */
+  --color-appchart-bg:        var(--appchart-bg);
+  --color-appchart-grid:      var(--appchart-grid);
+  --color-appchart-tick:      var(--appchart-tick);
+  --color-appchart-border:    var(--appchart-border);
+
+  /* ── Shadows ── */
+  --color-appshadow:          var(--appshadow);
+  --color-appshadow-lg:       var(--appshadow-lg);
 }
 
-html {
-  font-family: 'Manrope', sans-serif;
+/* ═══════════════════════════════════════════════════════════════
+   Dark theme (default)
+   ═══════════════════════════════════════════════════════════════ */
+:root,
+[data-theme="dark"] {
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
+
+  --apptext:            #f8fafc;
+  --apptext-soft:       #cbd5e1;
+  --apptext-muted:      #94a3b8;
+  --apptext-dim:        #64748b;
+
+  --appborder:          rgba(255, 255, 255, 0.1);
+  --appborder-light:    rgba(255, 255, 255, 0.06);
+  --appborder-hover:    rgba(255, 255, 255, 0.2);
+
+  --appaccent:          #34d399;
+  --appaccent-soft:     rgba(16, 185, 129, 0.15);
+  --appaccent-border:   rgba(52, 211, 153, 0.4);
+  --appaccent-text:     #a7f3d0;
+
+  --appsuccess:         #4ade80;
+  --appwarning:         #fbbf24;
+  --appdanger:          #fb7185;
+
+  --appglow:            rgba(56, 189, 248, 0.16);
+  --appglow-accent:     rgba(16, 185, 129, 0.18);
+  --appglow-header:     rgba(148, 163, 184, 0.04);
+
+  --appchart-bg:        #08101c;
+  --appchart-grid:      rgba(148, 163, 184, 0.12);
+  --appchart-tick:      #94a3b8;
+  --appchart-border:    rgba(148, 163, 184, 0.14);
+
+  --appshadow:          rgba(2, 8, 23, 0.24);
+  --appshadow-lg:       rgba(2, 8, 23, 0.42);
+
   color-scheme: dark;
 }
 
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+/* ═══════════════════════════════════════════════════════════════
+   Light theme
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="light"] {
+  --appbg:              #f8fafc;
+  --appsurface:         #ffffff;
+  --appsurface-raised:  rgba(255, 255, 255, 0.92);
+  --appinset:           rgba(241, 245, 249, 0.7);
+  --appinset-strong:    rgba(226, 232, 240, 0.8);
+
+  --apptext:            #0f172a;
+  --apptext-soft:       #334155;
+  --apptext-muted:      #475569;
+  --apptext-dim:        #64748b;
+
+  --appborder:          rgba(0, 0, 0, 0.08);
+  --appborder-light:    rgba(0, 0, 0, 0.04);
+  --appborder-hover:    rgba(0, 0, 0, 0.15);
+
+  --appaccent:          #059669;
+  --appaccent-soft:     rgba(5, 150, 105, 0.1);
+  --appaccent-border:   rgba(5, 150, 105, 0.3);
+  --appaccent-text:     #065f46;
+
+  --appsuccess:         #16a34a;
+  --appwarning:         #d97706;
+  --appdanger:          #e11d48;
+
+  --appglow:            rgba(56, 189, 248, 0.08);
+  --appglow-accent:     rgba(5, 150, 105, 0.08);
+  --appglow-header:     rgba(0, 0, 0, 0.02);
+
+  --appchart-bg:        #ffffff;
+  --appchart-grid:      rgba(0, 0, 0, 0.08);
+  --appchart-tick:      #64748b;
+  --appchart-border:    rgba(0, 0, 0, 0.1);
+
+  --appshadow:          rgba(0, 0, 0, 0.06);
+  --appshadow-lg:       rgba(0, 0, 0, 0.12);
+
+  color-scheme: light;
 }
 
+/* ── Base ── */
+html {
+  font-family: 'Manrope', sans-serif;
+}
+
+body {
+  @apply bg-appbg text-apptext antialiased;
+}
+
+/* ── Performance ── */
 .perf-section {
   content-visibility: auto;
   contain-intrinsic-size: 1px 720px;
@@ -33,6 +164,7 @@ body {
   min-height: 100vh;
 }
 
+/* ── Scrollbar ── */
 * {
   scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
@@ -53,4 +185,34 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.42);
+}
+
+/* ── Theme toggle button ── */
+.theme-toggle {
+  @apply relative inline-flex h-8 w-14 items-center rounded-full border border-appborder
+         bg-appinset p-0.5 transition-colors duration-300
+         hover:border-appborder-hover focus:outline-none focus-visible:ring-2
+         focus-visible:ring-appaccent focus-visible:ring-offset-2;
+}
+
+.theme-toggle-thumb {
+  @apply flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-md
+         transition-transform duration-300 ease-out;
+}
+
+.theme-toggle-thumb.light {
+  transform: translateX(1.5rem);
+}
+
+/* ── WiFi QR card ── */
+.qr-canvas {
+  image-rendering: pixelated;
+}
+
+/* ── Guest login page background ── */
+.guest-bg {
+  background:
+    radial-gradient(circle at 20% 20%, var(--appglow), transparent 35%),
+    radial-gradient(circle at 80% 80%, var(--appglow-accent), transparent 40%),
+    radial-gradient(circle at 50% 50%, var(--appglow-header), transparent 60%);
 }

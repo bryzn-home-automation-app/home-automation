@@ -24,6 +24,14 @@ spring:
 app:
   kwh-rate: ${KWH_RATE:0.12}
   data-start-date: ${DATA_START_DATE:07/24/2026}
+  jwt:
+    secret: ${JWT_SECRET:home-platform-default-secret-key-change-in-prod-32chars!}
+    expiration-ms: 86400000
+  admin:
+    seed-email: ${ADMIN_EMAIL:bryznnguyen@gmail.com}
+    seed-username: ${ADMIN_USERNAME:bryzncode}
+    seed-password: ${ADMIN_PASSWORD:bryzncode}
+    seed-display-name: ${ADMIN_DISPLAY_NAME:Bryan}
 
 server:
   port: 8080

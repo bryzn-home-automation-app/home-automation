@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
+@org.springframework.context.annotation.Profile("!test")
 public class UsageStorageMigration implements ApplicationRunner {
 
     private final JdbcTemplate jdbcTemplate;

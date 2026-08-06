@@ -107,30 +107,30 @@ export default function ElectricalUsage() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <section className="rounded-[30px] border border-white/10 bg-slate-900/84 p-6 shadow-[0_12px_34px_rgba(2,8,23,0.24)] sm:p-7">
+      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Electric Module
             </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
+            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
               Daily electricity usage with quick cost context.
             </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-300 sm:text-base">
+            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
               Compare recent consumption patterns, track short-term averages, and scan the latest readings without leaving the dashboard workflow.
             </p>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Estimated 60-Day Cost</p>
-              <p className="mt-2 text-lg font-semibold text-white">
+            <div className="rounded-2xl border border-appborder bg-appinset p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Estimated 60-Day Cost</p>
+              <p className="mt-2 text-lg font-semibold text-apptext">
                 ${(monthKwh * kwhRate).toFixed(2)}
               </p>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Active Readings</p>
-              <p className="mt-2 text-lg font-semibold text-white">{realData.length}</p>
+            <div className="rounded-2xl border border-appborder bg-appinset p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Active Readings</p>
+              <p className="mt-2 text-lg font-semibold text-apptext">{realData.length}</p>
             </div>
           </div>
         </div>
@@ -197,30 +197,30 @@ export default function ElectricalUsage() {
         loading={summaryLoading}
       />
 
-      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Usage Log
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
+            <h3 className="mt-2 text-lg font-semibold text-apptext">
               Recent electric readings
             </h3>
           </div>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-apptext-muted">
             Based on the latest 30 non-zero entries.
           </p>
         </div>
         {loading ? (
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-10 rounded-2xl bg-white/8" />
+              <div key={i} className="h-10 rounded-2xl bg-appinset" />
             ))}
           </div>
         ) : (
           <div className="overflow-x-auto">
             <div className="min-w-[42rem] text-sm">
-              <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-white/10 pb-2 text-left text-slate-400">
+              <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-appborder pb-2 text-left text-apptext-dim">
                 <div className="font-medium">Date</div>
                 <div className="text-right font-medium">kWh</div>
                 <div className="text-right font-medium">Est. Cost</div>
@@ -238,9 +238,9 @@ export default function ElectricalUsage() {
                   return (
                     <div
                       key={d.id}
-                      className="grid grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-white/6 pr-1 transition-colors hover:bg-slate-950/30"
+                      className="grid grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
                     >
-                      <div className="py-3 text-slate-200">
+                      <div className="py-3 text-apptext-soft">
                         {new Date(d.timestamp).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -254,10 +254,10 @@ export default function ElectricalUsage() {
                           {Number(d.usageKwh).toFixed(2)}
                         </span>
                       </div>
-                      <div className="py-3 text-right tabular-nums text-slate-300">
+                      <div className="py-3 text-right tabular-nums text-apptext-soft">
                         ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
                       </div>
-                      <div className="py-3 text-right text-slate-500">
+                      <div className="py-3 text-right text-apptext-dim">
                         {d.sourceProvider}
                       </div>
                     </div>

@@ -44,8 +44,23 @@ function generateMockRoombaData(): RoombaRun[] {
   return runs;
 }
 
+/** Theme-aware chart colors */
+function useChartColors() {
+  // We read CSS variables at runtime; these are the recharts config values
+  return {
+    tooltipBg: 'var(--appchart-bg)',
+    tooltipBorder: 'var(--appchart-border)',
+    tooltipText: 'var(--apptext)',
+    tooltipLabel: 'var(--apptext-muted)',
+    gridStroke: 'var(--appchart-grid)',
+    tickFill: 'var(--appchart-tick)',
+    axisStroke: 'var(--appchart-grid)',
+  };
+}
+
 export default function Roomba() {
   const runs = useMemo(() => generateMockRoombaData(), []);
+  const chartColors = useChartColors();
 
   const totalRuns = runs.length;
   const totalMinutes = runs.reduce((s, r) => s + r.duration, 0);
@@ -60,14 +75,14 @@ export default function Roomba() {
         </p>
       </div>
 
-      <section className="rounded-[30px] border border-white/10 bg-slate-900/84 p-6 shadow-[0_12px_34px_rgba(2,8,23,0.24)] sm:p-7">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
+        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
           Device Automation Preview
         </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-white sm:text-3xl">
+        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
           Visualize smart device routines with the same dashboard system.
         </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-apptext-soft sm:text-base">
           The Roomba preview demonstrates how future device telemetry can live beside utility analytics without introducing a separate UX pattern.
         </p>
       </section>
@@ -103,16 +118,16 @@ export default function Roomba() {
         />
       </section>
 
-      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)] sm:p-6">
+      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Cleaning Map Preview
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
+            <h3 className="mt-2 text-lg font-semibold text-apptext">
               Dummy floor map and run path
             </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
               Placeholder map for future room-aware cleaning history, no-go zones, and per-room run analytics.
             </p>
           </div>
@@ -122,10 +137,10 @@ export default function Roomba() {
         </div>
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]">
-          <div className="rounded-[24px] border border-white/10 bg-slate-950/45 p-4">
+          <div className="rounded-[24px] border border-appborder bg-appinset p-4">
             <svg
               viewBox="0 0 640 420"
-              className="h-auto w-full rounded-[18px] border border-white/6 bg-[linear-gradient(180deg,#0b1320_0%,#0c1628_100%)]"
+              className="h-auto w-full rounded-[18px] border border-appborder-light bg-[linear-gradient(180deg,var(--appinset)_0%,var(--appsurface)_100%)]"
               role="img"
               aria-label="Dummy Roomba floor map"
             >
@@ -174,21 +189,21 @@ export default function Roomba() {
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Current Zone</p>
-              <p className="mt-2 text-lg font-semibold text-white">Dining Room</p>
-              <p className="mt-1 text-sm text-slate-400">Coverage 82% on this mock run.</p>
+            <div className="rounded-2xl border border-appborder bg-appinset p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Current Zone</p>
+              <p className="mt-2 text-lg font-semibold text-apptext">Dining Room</p>
+              <p className="mt-1 text-sm text-apptext-muted">Coverage 82% on this mock run.</p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Dock Status</p>
-              <p className="mt-2 text-lg font-semibold text-white">Living Room Base</p>
-              <p className="mt-1 text-sm text-slate-400">Battery return route available.</p>
+            <div className="rounded-2xl border border-appborder bg-appinset p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Dock Status</p>
+              <p className="mt-2 text-lg font-semibold text-apptext">Living Room Base</p>
+              <p className="mt-1 text-sm text-apptext-muted">Battery return route available.</p>
             </div>
 
-            <div className="rounded-2xl border border-white/10 bg-slate-950/35 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-slate-500">Future Uses</p>
-              <div className="mt-2 space-y-2 text-sm text-slate-300">
+            <div className="rounded-2xl border border-appborder bg-appinset p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Future Uses</p>
+              <div className="mt-2 space-y-2 text-sm text-apptext-soft">
                 <p>Room-level clean history</p>
                 <p>No-go zones and schedules</p>
                 <p>Battery and stuck-event overlays</p>
@@ -200,10 +215,10 @@ export default function Roomba() {
 
       <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DeferredRender minHeight={360}>
-        <div className="rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">Trend</p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Trend</p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">
               Cleaning Duration
             </h3>
           </div>
@@ -212,32 +227,34 @@ export default function Roomba() {
               data={runs}
               margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.12)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
               <XAxis
                 dataKey="date"
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
+                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
+                axisLine={{ stroke: chartColors.axisStroke }}
                 tickLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
+                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
+                axisLine={{ stroke: chartColors.axisStroke }}
                 tickLine={false}
                 unit="m"
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#08101c',
-                  border: '1px solid rgba(148, 163, 184, 0.14)',
+                  backgroundColor: chartColors.tooltipBg,
+                  border: `1px solid ${chartColors.tooltipBorder}`,
                   borderRadius: '16px',
                   fontSize: '13px',
-                  color: '#f8fafc',
+                  color: chartColors.tooltipText,
+                  boxShadow: `0 20px 50px var(--appshadow-lg)`,
                 }}
                 formatter={(value: number) => [
                   `${value} min`,
                   'Duration',
                 ]}
+                labelStyle={{ color: chartColors.tooltipLabel, marginBottom: 4 }}
               />
               <Area
                 type="monotone"
@@ -253,10 +270,10 @@ export default function Roomba() {
         </DeferredRender>
 
         <DeferredRender minHeight={360}>
-        <div className="rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
+        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">Signal</p>
-            <h3 className="mt-2 text-lg font-semibold text-white">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Signal</p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">
               Dirt Events per Run
             </h3>
           </div>
@@ -265,31 +282,33 @@ export default function Roomba() {
               data={runs}
               margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
             >
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148, 163, 184, 0.12)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
               <XAxis
                 dataKey="date"
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
+                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
+                axisLine={{ stroke: chartColors.axisStroke }}
                 tickLine={false}
                 interval="preserveStartEnd"
               />
               <YAxis
-                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                axisLine={{ stroke: 'rgba(148, 163, 184, 0.12)' }}
+                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
+                axisLine={{ stroke: chartColors.axisStroke }}
                 tickLine={false}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#08101c',
-                  border: '1px solid rgba(148, 163, 184, 0.14)',
+                  backgroundColor: chartColors.tooltipBg,
+                  border: `1px solid ${chartColors.tooltipBorder}`,
                   borderRadius: '16px',
                   fontSize: '13px',
-                  color: '#f8fafc',
+                  color: chartColors.tooltipText,
+                  boxShadow: `0 20px 50px var(--appshadow-lg)`,
                 }}
                 formatter={(value: number) => [
                   `${value} events`,
                   'Dirt Events',
                 ]}
+                labelStyle={{ color: chartColors.tooltipLabel, marginBottom: 4 }}
               />
               <Area
                 type="monotone"
@@ -305,13 +324,13 @@ export default function Roomba() {
         </DeferredRender>
       </section>
 
-      <section className="perf-section rounded-[28px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_10px_28px_rgba(2,8,23,0.24)]">
-        <h3 className="mb-4 text-lg font-semibold text-white">
+      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+        <h3 className="mb-4 text-lg font-semibold text-apptext">
           Recent Runs
         </h3>
         <div className="overflow-x-auto">
           <div className="min-w-[44rem] text-sm">
-            <div className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] border-b border-white/10 pb-2 text-left text-slate-400">
+            <div className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] border-b border-appborder pb-2 text-left text-apptext-dim">
               <div className="font-medium">Date</div>
               <div className="text-right font-medium">Duration</div>
               <div className="text-right font-medium">Dirt Events</div>
@@ -327,16 +346,16 @@ export default function Roomba() {
               renderItem={(r, index) => (
                 <div
                   key={`${r.date}-${index}`}
-                  className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] items-center border-b border-white/6 pr-1 transition-colors hover:bg-slate-950/30"
+                  className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
                 >
-                  <div className="py-3 text-slate-200">{r.date}</div>
-                  <div className="py-3 text-right tabular-nums text-white">
+                  <div className="py-3 text-apptext-soft">{r.date}</div>
+                  <div className="py-3 text-right tabular-nums text-apptext">
                     {r.duration} min
                   </div>
-                  <div className="py-3 text-right tabular-nums text-white">
+                  <div className="py-3 text-right tabular-nums text-apptext">
                     {r.dirtEvents}
                   </div>
-                  <div className="py-3 text-right text-slate-400">{r.sqft}</div>
+                  <div className="py-3 text-right text-apptext-muted">{r.sqft}</div>
                   <div className="py-3 text-right">
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs ${

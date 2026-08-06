@@ -19,39 +19,39 @@ function StatTile({
 }: StatTileProps) {
   if (loading) {
     return (
-      <div className="animate-pulse rounded-[24px] border border-white/10 bg-slate-900/82 p-5">
+      <div className="animate-pulse rounded-[24px] border border-appborder bg-appsurface-raised p-5">
         <div className="mb-4 flex items-center gap-3">
-          <div className="h-11 w-11 rounded-2xl bg-white/8" />
-          <div className="h-4 w-24 rounded bg-white/8" />
+          <div className="h-11 w-11 rounded-2xl bg-appinset" />
+          <div className="h-4 w-24 rounded bg-appinset" />
         </div>
-        <div className="mb-2 h-8 w-28 rounded bg-white/8" />
-        <div className="h-3 w-16 rounded bg-white/8" />
+        <div className="mb-2 h-8 w-28 rounded bg-appinset" />
+        <div className="h-3 w-16 rounded bg-appinset" />
       </div>
     );
   }
 
   return (
-    <div className="rounded-[24px] border border-white/10 bg-slate-900/82 p-5 shadow-[0_8px_24px_rgba(2,8,23,0.22)] transition-colors hover:border-white/20 hover:bg-slate-900/90">
+    <div className="rounded-[24px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover hover:bg-appinset-strong">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-emerald-300/20 bg-emerald-300/10">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft">
           {icon}
         </div>
-        <span className="text-sm font-medium text-slate-300">{label}</span>
+        <span className="text-sm font-medium text-apptext-soft">{label}</span>
       </div>
       <div className="mb-1 flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tracking-[-0.04em] text-white">
+        <span className="text-3xl font-semibold tracking-[-0.04em] text-apptext">
           {value}
         </span>
-        <span className="text-sm text-slate-400">{unit}</span>
+        <span className="text-sm text-apptext-muted">{unit}</span>
       </div>
       {trend && (
         <span
           className={`text-xs font-medium ${
             trend.direction === 'down'
-              ? 'text-emerald-400'
+              ? 'text-appsuccess'
               : trend.direction === 'up'
-              ? 'text-red-400'
-              : 'text-slate-500'
+              ? 'text-appdanger'
+              : 'text-apptext-dim'
           }`}
         >
           {trend.direction === 'down' ? '↓' : '↑'} {trend.pct}% vs last month
@@ -67,7 +67,7 @@ export default memo(StatTile);
 export const Icons = {
   Bolt: (
     <svg
-      className="h-5 w-5 text-emerald-200"
+      className="h-5 w-5 text-appaccent-text"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -82,7 +82,7 @@ export const Icons = {
   ),
   Calendar: (
     <svg
-      className="h-5 w-5 text-emerald-200"
+      className="h-5 w-5 text-appaccent-text"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"
@@ -97,7 +97,7 @@ export const Icons = {
   ),
   Dollar: (
     <svg
-      className="h-5 w-5 text-emerald-200"
+      className="h-5 w-5 text-appaccent-text"
       fill="none"
       viewBox="0 0 24 24"
       stroke="currentColor"

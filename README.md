@@ -1,6 +1,6 @@
 # Home Automation Platform
 
-Self-hosted home intelligence platform running on Docker Compose. Phase 1 integrates with CoServ SmartHub to track energy usage, visualize consumption patterns, and estimate bills.
+Self-hosted home intelligence platform running on Docker Compose. Phase 1 integrates with CoServ SmartHub to track energy usage, visualize consumption patterns, and estimate bills. Includes role-based access control (RBAC), WiFi guest portal with QR codes, light/dark theming, and admin dashboards.
 
 Built and maintained under the bryzncode mark.
 
@@ -45,13 +45,14 @@ Built and maintained under the bryzncode mark.
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS v4, React Query, Recharts |
-| Backend | Java 21, Spring Boot 3.4, Hibernate/JPA, PostgreSQL |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS v4, React Query, Recharts, qrcode |
+| Backend | Java 21, Spring Boot 3.4, Hibernate/JPA, PostgreSQL, jjwt |
 | Cache | Redis 7 |
 | Sync | Node.js, Playwright (headless Chromium), adm-zip, pg |
 | Infra | Docker Compose, Nginx reverse proxy |
 | Portal | CoServ SmartHub by NISC (Angular Material SPA) |
 | Data format | Green Button (NAESB ESPI XML standard) |
+| Testing | Vitest + Testing Library (frontend), JUnit 5 + H2 (backend) |
 
 ## Getting Started
 
@@ -93,9 +94,202 @@ npm run sync -- --date 07/24/2026   # use your DATA_START_DATE
 | Service | URL |
 |---------|-----|
 | Dashboard | http://localhost |
+| Vite Dev Server | http://localhost:5173 |
 | Backend health | http://localhost/api/health |
 | Swagger UI | http://localhost:8080/swagger-ui |
 | PostgreSQL | localhost:5432 |
+
+## Dashboard
+
+The frontend is a single-page React app served by Nginx.
+
+### Tabs
+
+| Tab | Icon | Description |
+|-----|------|-------------|
+| Home | 🏠 | System snapshot, stat tiles, activity feed, integration panel |
+| Electric | ⚡ | Usage chart, monthly comparison, summary grid, usage log |
+| Gas | 🔥 | Gas usage trend, monthly comparison, period summaries |
+| Water | 💧 | Mock water usage prototype (Phase 2 integration) |
+| Roomba | 🤖 | Mock device telemetry + floor map (Phase 3 integration) |
+| WiFi | 📶 | QR code guest portal, network details, connected guests |
+
+### Features
+
+- **Light/Dark theme** — CSS custom properties with `ThemeContext`, persisted to localStorage, follows OS preference. Toggle in the header nav bar.
+- **Stat tiles** — Today's usage (kWh), month total, estimated bill (kWh × rate)
+- **Daily Usage chart** — Recharts line chart with tooltips, theme-aware colors
+- **Monthly Comparison chart** — Recharts bar chart grouped by month
+- **Integration Panel** — Sync status, CLI instructions, credential setup guide
+- **Recent Activity** — virtualized scrollable list of usage records
+- **Loading/empty/error states** on all components
+- Responsive layout (1-col mobile, 2-col/3-col desktop)
+- **Performance** — `content-visibility: auto`, IntersectionObserver deferred rendering, virtualized lists
+
+### Estimated Bill
+
+The estimated bill multiplies your monthly kWh total by `KWH_RATE` from `.env`. Green Button does not include pricing data, so this is a configuration-driven estimate.
+
+To match your actual CoServ bill, adjust `KWH_RATE` in `.env`:
+```
+KWH_RATE=0.1171   # $0.1171/kWh
+```
+Then run `docker compose restart backend` to pick up the change.
+
+## WiFi & Guest Access
+
+The WiFi tab (`/wifi`) provides a guest portal with QR code scanning.
+
+### Guest Flow
+
+1. **QR Code** — displayed on the WiFi tab, encodes the guest portal URL (`{origin}/guest`)
+2. **Guest scans** — opens `/guest` in their browser
+3. **Enter name** — submits to `POST /api/auth/guest-login`, creates a GUEST account with 30-day expiry
+4. **Connected** — guest session is tracked in real time
+
+### Admin View
+
+Admins see a "Connected Guests" panel on the WiFi tab showing:
+- Guest name, online indicator
+- Visits count (lifetime connections — find-or-reuse)
+- Live kick-off countdown timer
+- Connection time, device info
+
+The guest login backend finds existing guests by display name and increments their connection count, so returning visitors (house sitters, contractors) are tracked across visits.
+
+## Authentication & RBAC
+
+Role-based access control with three tiers.
+
+### Roles
+
+| Role | Access |
+|------|--------|
+| **ADMIN** | Full access: all dashboards + User Management, Guest Management, Audit Logs |
+| **USER** | All dashboards (same as admin). No admin panels. |
+| **GUEST** | Temporary. Auto-expires after 30 days. Limited dashboard access. |
+
+### Account Lifecycle
+
+```
+User Signs Up  →  PENDING_APPROVAL  →  Admin approves + assigns role  →  ACTIVE
+                                        Admin denies  →  deleted
+
+ACTIVE  →  Admin disables  →  DISABLED  →  Admin reactivates  →  ACTIVE
+GUEST   →  30 days pass    →  EXPIRED
+```
+
+- **Self-registration** at `/register` — email + username + password. Enters `PENDING_APPROVAL`.
+- **Guest accounts** are not self-registerable — created via `/guest` name-based login or by admin.
+- **Admin seed** — a default admin is created on first backend startup (configurable via `ADMIN_USERNAME`/`ADMIN_PASSWORD` env vars).
+
+### Auth Endpoints
+
+```
+POST /api/auth/register      # Self-registration (→ PENDING_APPROVAL)
+POST /api/auth/login         # Sign in (ACTIVE only)
+POST /api/auth/guest-login   # Guest sign-in (auto-ACTIVE, 30-day expiry)
+GET  /api/auth/me            # Current user from JWT
+POST /api/auth/heartbeat     # Session keep-alive
+```
+
+### Admin Endpoints
+
+```
+GET   /api/admin/users                 # All users
+GET   /api/admin/users/pending         # Pending approval queue
+POST  /api/admin/users/{id}/approve    # Approve + assign role
+POST  /api/admin/users/{id}/deny       # Deny + delete
+PUT   /api/admin/users/{id}/role       # Change role
+POST  /api/admin/users/{id}/disable    # Disable account
+POST  /api/admin/users/{id}/reactivate # Reactivate account
+GET   /api/admin/guest-sessions        # Active guest sessions
+POST  /api/admin/guest-sessions/expire # Manually expire all
+GET   /api/admin/stats                 # Active guests + pending count
+```
+
+### Admin Pages
+
+| Page | Route | Description |
+|------|-------|-------------|
+| User Management | `/admin/users` | Approve/deny registrations, assign roles, disable/reactivate |
+| Guest Management | `/admin/guests` | Live guest session table, manual expiry |
+| Audit Logs | `/admin/logs` | Activity feed: logins, registrations, approvals, guest joins |
+
+Admin tabs appear in the nav bar only for ADMIN users, with amber accent styling to visually distinguish them.
+
+### Security
+
+- **JWT-based** — HMAC-SHA256, 24-hour expiry. Token stored in localStorage.
+- **Filter** — `JwtAuthFilter` authenticates all `/api/*` routes except login/register/guest-login/health.
+- **Route guards** — `ProtectedRoute` redirects to `/login`; `AdminRoute` redirects to `/`.
+- **Passwords** — SHA-256 hashed with random 16-byte salt.
+
+## Configuration
+
+All configuration lives in `.env` (gitignored). Copy `.env.example` as a starting point.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `POSTGRES_DB` | `homeplatform` | Database name |
+| `POSTGRES_USER` | `homeplatform` | Database user |
+| `POSTGRES_PASSWORD` | `changeme` | Database password |
+| `COSERV_USERNAME` | — | SmartHub login email |
+| `COSERV_PASSWORD` | — | SmartHub login password |
+| `COSERV_PORTAL_URL` | `coserv.smarthub.coop/ui/#/login` | SmartHub login URL |
+| `DATA_START_DATE` | `07/24/2026` | Earliest date to query (house purchase / move-in) |
+| `KWH_RATE` | `0.12` | Electric rate in $/kWh for bill estimation |
+| `JWT_SECRET` | — | JWT signing key (256-bit minimum) |
+| `ADMIN_USERNAME` | `bryzncode` | Seed admin username |
+| `ADMIN_PASSWORD` | `bryzncode` | Seed admin password |
+| `ADMIN_EMAIL` | `bryznnguyen@gmail.com` | Seed admin email |
+| `ADMIN_DISPLAY_NAME` | `Bryan` | Seed admin display name |
+
+## API Endpoints
+
+### Health
+
+```
+GET /api/health
+→ { "status": "UP", "database": "connected", "timestamp": "..." }
+```
+
+### Config
+
+```
+GET /api/config
+→ { "kwhRate": 0.1171, "dataStartDate": "07/24/2026" }
+```
+
+### Energy Usage
+
+```
+GET /api/energy-usage
+→ [ { id, timestamp, usageKwh, cost, source, sourceProvider, ... } ]
+
+GET /api/energy-usage/meter/{id}/recent?days=30
+GET /api/energy-usage/meter/{id}/range?start=...&end=...
+GET /api/energy-usage/meter/{id}/summary?start=...&end=...
+GET /api/energy-usage/meter/{id}/total?days=30
+```
+
+### Utility Providers
+
+```
+GET /api/utility-providers
+GET /api/utility-providers/active
+GET /api/utility-providers/type/ELECTRIC
+```
+
+### Integrations
+
+```
+GET /api/integrations
+→ [ { "key": "coserv", "name": "CoServ", "type": "ELECTRIC", "healthy": "true" } ]
+
+GET /api/integrations/coserv
+→ { "dbConnected": true, "syncCommand": "npm run sync", ... }
+```
 
 ## Data Sync
 
@@ -149,92 +343,7 @@ Set up a daily cron/task scheduler job:
 
 The script handles Sunday/weekday logic automatically. Zero-guard escalation happens inline. No special scheduling needed.
 
-## API Endpoints
-
-### Health
-
-```
-GET /api/health
-→ { "status": "UP", "database": "connected", "timestamp": "..." }
-```
-
-### Config
-
-```
-GET /api/config
-→ { "kwhRate": 0.1171, "dataStartDate": "07/24/2026" }
-```
-
-### Energy Usage
-
-```
-GET /api/energy-usage
-→ [ { id, timestamp, usageKwh, cost, source, sourceProvider, ... } ]
-
-GET /api/energy-usage/meter/{id}/recent?days=30
-GET /api/energy-usage/meter/{id}/range?start=...&end=...
-GET /api/energy-usage/meter/{id}/total?days=30
-```
-
-### Utility Providers
-
-```
-GET /api/utility-providers
-GET /api/utility-providers/active
-GET /api/utility-providers/type/ELECTRIC
-```
-
-### Integrations
-
-```
-GET /api/integrations
-→ [ { "key": "coserv", "name": "CoServ", "type": "ELECTRIC", "healthy": "true" } ]
-
-GET /api/integrations/coserv
-→ { "dbConnected": true, "syncCommand": "npm run sync", ... }
-```
-
-## Dashboard
-
-The frontend is a single-page React app served by Nginx.
-
-### Features
-
-- **Stat tiles** — Today's usage (kWh), month total, estimated bill (kWh × rate)
-- **Daily Usage chart** — Recharts line chart with tooltips, dark theme
-- **Monthly Comparison chart** — Recharts bar chart grouped by month
-- **Integration Panel** — Sync status, CLI instructions, credential setup guide
-- **Recent Activity** — scrollable list of the last 10 usage records
-- **Loading/empty/error states** on all components
-- Responsive layout (1-col mobile, 2-col/3-col desktop)
-
-### Estimated Bill
-
-The estimated bill multiplies your monthly kWh total by `KWH_RATE` from `.env`. Green Button does not include pricing data, so this is a configuration-driven estimate.
-
-To match your actual CoServ bill, adjust `KWH_RATE` in `.env`:
-
-```
-KWH_RATE=0.1171   # $0.1171/kWh
-```
-
-Then run `docker compose restart backend` to pick up the change.
-
-## Configuration
-
-All configuration lives in `.env` (gitignored). Copy `.env.example` as a starting point.
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `POSTGRES_DB` | `homeplatform` | Database name |
-| `POSTGRES_USER` | `homeplatform` | Database user |
-| `POSTGRES_PASSWORD` | `changeme` | Database password |
-| `COSERV_USERNAME` | — | SmartHub login email |
-| `COSERV_PASSWORD` | — | SmartHub login password |
-| `COSERV_PORTAL_URL` | `coserv.smarthub.coop/ui/#/login` | SmartHub login URL |
-| `DATA_START_DATE` | `07/24/2026` | Earliest date to query (house purchase / move-in) |
-| `KWH_RATE` | `0.12` | Electric rate in $/kWh for bill estimation |
-| `JWT_SECRET` | — | JWT signing key (future auth) |
+**Note:** Utility data typically lags 1–2 days. A sync for "yesterday" may return `0 kWh` if CoServ hasn't posted the data yet. Re-running `--date` for that day later will populate the actual values.
 
 ## Database Schema
 
@@ -242,6 +351,8 @@ Module-oriented data model designed for long-term retention without mixing tab d
 
 | Table | Purpose | Key columns |
 |-------|---------|-------------|
+| `users` | Auth & RBAC | email, username, password_hash, role (ADMIN/USER/GUEST), status (PENDING_APPROVAL/ACTIVE/DISABLED/EXPIRED), connection_count |
+| `guest_sessions` | Guest session tracking | user_id, ip_address, user_agent, connected_at, expires_at, status |
 | `utility_providers` | Utility companies | name, type, portal_url |
 | `utility_accounts` | Accounts per provider | account_number, service_address, status |
 | `meters` | Physical meters | meter_number, type, location |
@@ -259,26 +370,34 @@ See `backend/src/main/resources/schema.sql` for the full DDL.
 
 ## Testing
 
-### Unit Tests
+### Backend Tests
+
+```bash
+cd backend && mvn test
+```
+
+**36 tests** across 2 test files:
+- `JwtUtilTest` — 12 tests: token generation, validation, expiry, claims extraction, tamper detection
+- `UserServiceTest` — 24 tests: registration, login (success/failure/pending/disabled), guest login (find-or-reuse, connection count, session creation, expiry, reactivation), approval workflow (approve/deny/list), disable/reactivate, role management, guest session management
+
+Runs against H2 in-memory database. PostgreSQL-specific migrations are excluded via `@Profile("!test")`.
+
+### Frontend Tests
+
+```bash
+cd frontend && npm run test
+```
+
+**16 tests** across 3 test files (Vitest + Testing Library):
+- `AuthContext.test.tsx` — 7 tests: initial state, login, localStorage persistence, logout, role detection (ADMIN/USER/GUEST), axios interceptor
+- `Guards.test.tsx` — 4 tests: ProtectedRoute loading/redirect, AdminRoute redirect
+- `Login.test.tsx` — 5 tests: form rendering, register/guest links, API call on submit, error display
+
+### Root Tests
 
 ```bash
 node --test test/sync.test.js        # 37 tests: args, modes, XML parser, zero-gap
-```
-
-Covers all sync logic branches without hitting SmartHub or the database.
-
-### Live Smoke Test
-
-```bash
 npm run test:live                    # hits real SmartHub, verifies all selectors
-```
-
-Verifies login flow, Green Button page, modal dialog, form fields, and download. Run this when you suspect SmartHub changed their UI.
-
-### Java Backend Tests
-
-```bash
-cd backend && mvn test               # unit tests (live tests excluded by default)
 ```
 
 ## Project Structure
@@ -293,30 +412,62 @@ home-automation/
 │
 ├── backend/                         # Spring Boot REST API
 │   ├── Dockerfile                   # Lightweight JRE image (~300MB)
-│   ├── pom.xml                      # spring-boot-web, jpa, postgresql, redis
-│   └── src/main/
-│       ├── java/com/homeplatform/
+│   ├── pom.xml                      # spring-boot-web, jpa, postgresql, redis, jjwt, h2
+│   └── src/
+│       ├── main/java/com/homeplatform/
 │       │   ├── HomePlatformApplication.java
-│       │   ├── config/              # CORS, Jackson
-│       │   ├── model/               # JPA entities and compatibility view mapping
+│       │   ├── config/              # CORS, Jackson, DataSeeder, UsageStorageMigration
+│       │   ├── controller/          # Health, Config, Meter, EnergyUsage, Auth, Admin
+│       │   ├── dto/                 # Request/response records
+│       │   ├── model/               # JPA entities (User, GuestSession, EnergyUsage, etc.)
 │       │   ├── repository/          # Spring Data repos
-│       │   ├── service/             # Business logic
-│       │   └── controller/          # REST endpoints
-│       └── resources/
-│           ├── application.yml      # Spring config
-│           └── schema.sql           # PostgreSQL DDL + seed data
+│       │   ├── security/            # JwtUtil, JwtAuthFilter, SecurityConfig
+│       │   └── service/             # UserService, EnergyUsageService, etc.
+│       ├── main/resources/
+│       │   ├── application.yml      # Spring config
+│       │   └── schema.sql           # PostgreSQL DDL + seed data
+│       └── test/                    # JUnit 5 + H2 tests
 │
 ├── nginx/                           # Reverse proxy
 │   ├── Dockerfile                   # Multi-stage: React build + Nginx
 │   └── default.conf                 # /api → backend, other → React SPA
 │
 ├── frontend/                        # React dashboard
-│   ├── Dockerfile                   # Dev server (not used in production)
+│   ├── vite.config.ts               # Vite + Tailwind + Vitest config
 │   └── src/
-│       ├── App.tsx                  # Dashboard layout
-│       ├── api/                     # Typed API client (axios)
-│       ├── components/              # StatTile, UsageChart, etc.
-│       └── types/                   # TypeScript interfaces
+│       ├── main.tsx                 # Root: providers, router, lazy routes
+│       ├── App.tsx                  # Dashboard shell: header, nav, theme toggle, auth
+│       ├── context/
+│       │   ├── ThemeContext.tsx      # Light/dark theme provider
+│       │   └── AuthContext.tsx       # JWT auth provider
+│       ├── components/
+│       │   ├── Guard.tsx            # ProtectedRoute, AdminRoute
+│       │   ├── StatTile.tsx         # KPI card
+│       │   ├── UsageChart.tsx       # Recharts line chart
+│       │   ├── MonthlyComparison.tsx # Recharts bar chart
+│       │   ├── UsageSummaryGrid.tsx  # Period summary grid
+│       │   ├── VirtualizedList.tsx   # Windowing list
+│       │   ├── DeferredRender.tsx    # IntersectionObserver lazy render
+│       │   └── IntegrationPanel.tsx  # CoServ sync panel
+│       ├── pages/
+│       │   ├── HomeSummary.tsx       # Home dashboard
+│       │   ├── ElectricalUsage.tsx   # Electric tab
+│       │   ├── GasUsage.tsx          # Gas tab
+│       │   ├── WaterUsage.tsx        # Water tab
+│       │   ├── Roomba.tsx            # Roomba tab
+│       │   ├── WiFiPage.tsx          # WiFi + QR + guest list
+│       │   ├── Login.tsx             # Sign in
+│       │   ├── Register.tsx          # Self-registration
+│       │   ├── GuestLogin.tsx        # Guest name-based entry
+│       │   └── admin/
+│       │       ├── UserManagement.tsx # Approve/deny/role/disable
+│       │       ├── GuestManagement.tsx# Session table + expiry
+│       │       └── AuditLogs.tsx      # Activity feed
+│       ├── api/                     # Typed API client (axios, auth.ts, energy.ts, meters.ts)
+│       ├── hooks/                   # useUsageData, useDeferredMount
+│       ├── utils/                   # usageColor, usageSummary
+│       ├── types/                   # TypeScript interfaces
+│       └── test/                    # Vitest + Testing Library tests
 │
 ├── scripts/
 │   └── sync.js                      # Standalone sync CLI (all modes)
@@ -325,8 +476,10 @@ home-automation/
 │   ├── coserv-live-test.js          # Live SmartHub smoke test
 │   └── sync.test.js                 # Unit tests (37 assertions)
 │
-└── docs/
-    └── development.md               # Detailed dev guide
+├── docs/
+│   └── development.md               # Detailed dev guide
+│
+└── green-button-downloads/          # Downloaded ZIP/XML (gitignored)
 ```
 
 ## Future Phases
