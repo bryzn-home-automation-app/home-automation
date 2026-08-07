@@ -14,6 +14,8 @@ export interface RegisterRequest {
 
 export interface GuestLoginRequest {
   displayName: string;
+  accentColor?: string;
+  avatarUrl?: string;
 }
 
 export interface LoginResponse {
@@ -22,6 +24,28 @@ export interface LoginResponse {
   username: string;
   displayName: string;
   role: 'ADMIN' | 'USER' | 'GUEST';
+  phone?: string | null;
+  avatarUrl?: string | null;
+  accentColor?: string | null;
+}
+
+export interface ProfileResponse {
+  id: number;
+  username: string;
+  email: string;
+  displayName: string;
+  phone: string | null;
+  avatarUrl: string | null;
+  accentColor: string;
+  role: string;
+  status: string;
+}
+
+export interface ProfileUpdateRequest {
+  displayName?: string;
+  phone?: string;
+  avatarUrl?: string;
+  accentColor?: string;
 }
 
 export interface AdminUser {
@@ -35,7 +59,9 @@ export interface AdminUser {
   loginCount: number;
   createdAt: string;
   approvedAt: string | null;
-  online: boolean;
+  isOnline: boolean;
+  avatarUrl: string | null;
+  accentColor: string | null;
 }
 
 export interface GuestSession {
@@ -80,7 +106,7 @@ export async function heartbeat(): Promise<void> {
 // ── Admin ──
 
 export async function fetchAllUsers(): Promise<AdminUser[]> {
-  const { data } = await api.get('/admin/users');
+  const { data } = await api.get('/auth/users');
   return data;
 }
 
@@ -136,5 +162,28 @@ export async function fetchAdminStats(): Promise<{
   timestamp: number;
 }> {
   const { data } = await api.get('/admin/stats');
+  return data;
+}
+
+// ── Profile ──
+
+export async function fetchProfile(): Promise<ProfileResponse> {
+  const { data } = await api.get('/auth/profile');
+  return data;
+}
+
+export async function updateProfile(req: ProfileUpdateRequest): Promise<ProfileResponse> {
+  const { data } = await api.put('/auth/profile', req);
+  return data;
+}
+
+// ── Upload ──
+
+export async function uploadAvatar(file: File): Promise<{ avatarUrl: string }> {
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await api.post('/upload/avatar', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
   return data;
 }

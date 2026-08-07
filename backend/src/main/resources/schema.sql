@@ -202,6 +202,9 @@ CREATE TABLE IF NOT EXISTS users (
     last_login_at   TIMESTAMP,
     login_count       INTEGER      NOT NULL DEFAULT 0,
     connection_count  INTEGER      NOT NULL DEFAULT 0,
+    phone             VARCHAR(30),
+    avatar_url        VARCHAR(500),
+    accent_color      VARCHAR(7)   NOT NULL DEFAULT '#34d399',
     created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMP    NOT NULL DEFAULT NOW()
 );
@@ -226,3 +229,62 @@ CREATE TABLE IF NOT EXISTS guest_sessions (
 CREATE INDEX IF NOT EXISTS idx_guest_sessions_user   ON guest_sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_guest_sessions_status ON guest_sessions (status);
 CREATE INDEX IF NOT EXISTS idx_guest_sessions_expiry ON guest_sessions (expires_at);
+
+-- ============================================================
+-- Notification Center
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS notifications (
+    id            SERIAL PRIMARY KEY,
+    user_id       INTEGER      NOT NULL REFERENCES users(id),
+    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI
+    severity      VARCHAR(20)  NOT NULL DEFAULT 'INFO',  -- CRITICAL, WARNING, INFO, SUCCESS
+    title         VARCHAR(200) NOT NULL,
+    message       VARCHAR(1000),
+    is_read       BOOLEAN      NOT NULL DEFAULT FALSE,
+    created_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_notifications_user     ON notifications (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_unread   ON notifications (user_id, is_read);
+CREATE INDEX IF NOT EXISTS idx_notifications_category ON notifications (user_id, category, created_at DESC);
+
+-- ============================================================
+-- Maintenance Log
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS maintenance_records (
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER         NOT NULL REFERENCES users(id),
+    title               VARCHAR(200)    NOT NULL,
+    description         TEXT,
+    category            VARCHAR(50)     NOT NULL,
+    area                VARCHAR(50),
+    priority            VARCHAR(20)     NOT NULL DEFAULT 'MEDIUM',
+    status              VARCHAR(20)     NOT NULL DEFAULT 'SCHEDULED',
+    scheduled_date      DATE,
+    started_date        DATE,
+    completed_date      DATE,
+    requested_by        VARCHAR(200),
+    completed_by        VARCHAR(200),
+    estimated_cost      NUMERIC(12,2),
+    actual_cost         NUMERIC(12,2),
+    labor_cost          NUMERIC(12,2),
+    material_cost       NUMERIC(12,2),
+    contractor_name     VARCHAR(200),
+    company             VARCHAR(200),
+    receipt_number      VARCHAR(100),
+    warranty_expiration DATE,
+    photos_before       TEXT,
+    photos_during       TEXT,
+    photos_after        TEXT,
+    documents           TEXT,
+    notes               TEXT,
+    created_at          TIMESTAMP       NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMP       NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_maintenance_user       ON maintenance_records (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_maintenance_status     ON maintenance_records (user_id, status);
+CREATE INDEX IF NOT EXISTS idx_maintenance_category   ON maintenance_records (user_id, category);
+CREATE INDEX IF NOT EXISTS idx_maintenance_completed  ON maintenance_records (user_id, completed_date DESC);

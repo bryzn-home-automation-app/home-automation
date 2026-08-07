@@ -28,13 +28,19 @@ public class UserService {
     private final UserRepository userRepo;
     private final GuestSessionRepository sessionRepo;
     private final JwtUtil jwtUtil;
+    private final NotificationService notificationService;
+    private final MaintenanceService maintenanceService;
 
     public UserService(UserRepository userRepo,
                        GuestSessionRepository sessionRepo,
-                       JwtUtil jwtUtil) {
+                       JwtUtil jwtUtil,
+                       NotificationService notificationService,
+                       MaintenanceService maintenanceService) {
         this.userRepo = userRepo;
         this.sessionRepo = sessionRepo;
         this.jwtUtil = jwtUtil;
+        this.notificationService = notificationService;
+        this.maintenanceService = maintenanceService;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -94,6 +100,10 @@ public class UserService {
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole().name());
 
+        // Seed sample data on first login for demo
+        notificationService.seedSampleNotifications(user.getId());
+        maintenanceService.seedSampleRecords(user.getId());
+
         // Only create guest sessions for GUEST users
         if (user.getRole() == Role.GUEST) {
             GuestSession session = GuestSession.builder()
@@ -109,9 +119,7 @@ public class UserService {
         }
 
         log.info("User '{}' (role={}) logged in", user.getUsername(), user.getRole());
-        return new LoginResponse(token, user.getId(), user.getUsername(),
-                user.getDisplayName() != null ? user.getDisplayName() : user.getUsername(),
-                user.getRole().name());
+        return toLoginResponse(token, user);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -134,7 +142,9 @@ public class UserService {
             user.setConnectionCount(user.getConnectionCount() + 1);
             user.setLastLoginAt(LocalDateTime.now());
             user.setLoginCount(user.getLoginCount() + 1);
-            user.setStatus(AccountStatus.ACTIVE); // re-activate if expired
+            user.setStatus(AccountStatus.ACTIVE);
+            if (req.accentColor() != null) user.setAccentColor(req.accentColor());
+            if (req.avatarUrl() != null) user.setAvatarUrl(req.avatarUrl());
         } else {
             String username = baseUsername;
             if (userRepo.existsByUsername(username)) {
@@ -146,6 +156,8 @@ public class UserService {
                     .displayName(req.displayName())
                     .role(Role.GUEST)
                     .status(AccountStatus.ACTIVE)
+                    .accentColor(req.accentColor() != null ? req.accentColor() : "#a78bfa")
+                    .avatarUrl(req.avatarUrl())
                     .lastLoginAt(LocalDateTime.now())
                     .loginCount(1)
                     .connectionCount(1)
@@ -167,8 +179,7 @@ public class UserService {
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole().name());
 
         log.info("Guest '{}' connected from {}", user.getDisplayName(), req.ipAddress());
-        return new LoginResponse(token, user.getId(), user.getUsername(),
-                user.getDisplayName(), user.getRole().name());
+        return toLoginResponse(token, user);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -178,9 +189,40 @@ public class UserService {
     public LoginResponse me(Long userId) {
         User user = userRepo.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        return new LoginResponse(null, user.getId(), user.getUsername(),
-                user.getDisplayName() != null ? user.getDisplayName() : user.getUsername(),
-                user.getRole().name());
+        return toLoginResponse(null, user);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Profile
+    // ═══════════════════════════════════════════════════════════
+
+    public ProfileResponse getProfile(Long userId) {
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        return new ProfileResponse(user.getId(), user.getUsername(), user.getEmail(),
+                user.getDisplayName(), user.getPhone(), user.getAvatarUrl(),
+                user.getAccentColor(), user.getRole().name(), user.getStatus().name());
+    }
+
+    @Transactional
+    public ProfileResponse updateProfile(Long userId, ProfileUpdateRequest req) {
+        User user = userRepo.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        if (req.displayName() != null && !req.displayName().isBlank()) {
+            user.setDisplayName(req.displayName());
+        }
+        if (req.phone() != null) {
+            user.setPhone(req.phone().isBlank() ? null : req.phone());
+        }
+        if (req.avatarUrl() != null) {
+            user.setAvatarUrl(req.avatarUrl().isBlank() ? null : req.avatarUrl());
+        }
+        if (req.accentColor() != null && !req.accentColor().isBlank()) {
+            user.setAccentColor(req.accentColor());
+        }
+        user = userRepo.save(user);
+        log.info("Profile updated for user '{}'", user.getUsername());
+        return getProfile(user.getId());
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -191,9 +233,14 @@ public class UserService {
         Set<Long> onlineUserIds = sessionRepo.findByStatus(GuestSession.Status.ACTIVE)
                 .stream().map(s -> s.getUser().getId()).collect(Collectors.toSet());
 
+        // Role priority: ADMIN → USER → GUEST (ascending), then newest first
+        Map<String, Integer> rolePriority = Map.of("ADMIN", 0, "USER", 1, "GUEST", 2);
+
         return userRepo.findAll().stream()
                 .map(u -> toResponse(u, onlineUserIds.contains(u.getId())))
-                .sorted(Comparator.comparing(AdminUserResponse::createdAt).reversed())
+                .sorted(Comparator
+                        .<AdminUserResponse, Integer>comparing(r -> rolePriority.getOrDefault(r.role(), 9))
+                        .thenComparing(Comparator.comparing(AdminUserResponse::createdAt).reversed()))
                 .collect(Collectors.toList());
     }
 
@@ -287,8 +334,9 @@ public class UserService {
 
     @Transactional
     public void expireGuestSessions() {
+        var cutoff = LocalDateTime.now().minusDays(GUEST_EXPIRY_DAYS);
         List<GuestSession> expired = sessionRepo.findByStatus(GuestSession.Status.ACTIVE).stream()
-                .filter(s -> s.getExpiresAt().isBefore(LocalDateTime.now()))
+                .filter(s -> s.getLastSeenAt().isBefore(cutoff))
                 .collect(Collectors.toList());
 
         expired.forEach(s -> {
@@ -303,7 +351,7 @@ public class UserService {
         });
 
         if (!expired.isEmpty()) {
-            log.info("Expired {} guest sessions", expired.size());
+            log.info("Expired {} guest sessions (inactive > {} days)", expired.size(), GUEST_EXPIRY_DAYS);
         }
     }
 
@@ -311,6 +359,7 @@ public class UserService {
         sessionRepo.findByUserIdAndStatus(userId, GuestSession.Status.ACTIVE)
                 .forEach(s -> {
                     s.setLastSeenAt(LocalDateTime.now());
+                    s.setExpiresAt(LocalDateTime.now().plusDays(GUEST_EXPIRY_DAYS));
                     sessionRepo.save(s);
                 });
     }
@@ -340,12 +389,19 @@ public class UserService {
     // Helpers
     // ═══════════════════════════════════════════════════════════
 
+    private LoginResponse toLoginResponse(String token, User u) {
+        return new LoginResponse(token, u.getId(), u.getUsername(),
+                u.getDisplayName() != null ? u.getDisplayName() : u.getUsername(),
+                u.getRole().name(), u.getPhone(), u.getAvatarUrl(), u.getAccentColor());
+    }
+
     private AdminUserResponse toResponse(User u, boolean isOnline) {
         return new AdminUserResponse(
                 u.getId(), u.getEmail(), u.getUsername(), u.getDisplayName(),
                 u.getRole().name(), u.getStatus().name(),
                 u.getLastLoginAt(), u.getLoginCount(),
-                u.getCreatedAt(), u.getApprovedAt(), isOnline);
+                u.getCreatedAt(), u.getApprovedAt(), isOnline,
+                u.getAvatarUrl(), u.getAccentColor());
     }
 
     private GuestSessionResponse toSessionResponse(GuestSession s) {

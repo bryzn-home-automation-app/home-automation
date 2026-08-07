@@ -5,5 +5,8 @@ public record LoginResponse(
         Long userId,
         String username,
         String displayName,
-        String role
+        String role,
+        String phone,
+        String avatarUrl,
+        String accentColor
 ) {}

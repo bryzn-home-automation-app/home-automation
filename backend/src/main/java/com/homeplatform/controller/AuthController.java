@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -52,7 +53,7 @@ public class AuthController {
             HttpServletRequest httpReq) {
         String ip = getClientIp(httpReq);
         String ua = httpReq.getHeader("User-Agent");
-        GuestLoginRequest enriched = new GuestLoginRequest(req.displayName(), ip, ua);
+        GuestLoginRequest enriched = new GuestLoginRequest(req.displayName(), req.accentColor(), req.avatarUrl(), ip, ua);
         return ResponseEntity.ok(userService.guestLogin(enriched));
     }
 
@@ -74,6 +75,46 @@ public class AuthController {
             userService.heartbeat(userId);
         }
         return ResponseEntity.ok(Map.of("status", "ok"));
+    }
+
+    /** Get all users — any authenticated user can see the household. */
+    @GetMapping("/users")
+    public ResponseEntity<List<com.homeplatform.dto.AdminUserResponse>> users(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        return ResponseEntity.ok(userService.getAllUsers());
+    }
+
+    /** Get full user profile. */
+    @GetMapping("/profile")
+    public ResponseEntity<?> profile(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            return ResponseEntity.ok(userService.getProfile(userId));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    /** Update user profile. */
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateProfile(
+            @Valid @RequestBody ProfileUpdateRequest req,
+            HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        try {
+            return ResponseEntity.ok(userService.updateProfile(userId, req));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     private String getClientIp(HttpServletRequest request) {

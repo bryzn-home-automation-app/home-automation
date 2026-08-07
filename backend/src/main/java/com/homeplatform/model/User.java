@@ -55,6 +55,16 @@ public class User {
     @Builder.Default
     private Integer connectionCount = 0;
 
+    @Column(length = 30)
+    private String phone;
+
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
+    @Column(name = "accent_color", length = 7)
+    @Builder.Default
+    private String accentColor = "#34d399";
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

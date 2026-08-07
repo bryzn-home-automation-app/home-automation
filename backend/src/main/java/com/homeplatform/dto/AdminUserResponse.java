@@ -13,5 +13,7 @@ public record AdminUserResponse(
         int loginCount,
         LocalDateTime createdAt,
         LocalDateTime approvedAt,
-        boolean isOnline
+        boolean isOnline,
+        String avatarUrl,
+        String accentColor
 ) {}

@@ -20,6 +20,7 @@ interface AuthContextValue {
   isGuest: boolean;
   login: (token: string, user: LoginResponse) => void;
   logout: () => void;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -31,6 +32,7 @@ const AuthContext = createContext<AuthContextValue>({
   isGuest: false,
   login: () => {},
   logout: () => {},
+  refreshUser: async () => {},
 });
 
 const TOKEN_KEY = 'auth_token';
@@ -119,6 +121,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* */ }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    try {
+      const u = await fetchMe();
+      setUser(u);
+    } catch {
+      // session invalid — clear
+    }
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -130,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isGuest: user?.role === 'GUEST',
         login,
         logout,
+        refreshUser,
       }}
     >
       {children}

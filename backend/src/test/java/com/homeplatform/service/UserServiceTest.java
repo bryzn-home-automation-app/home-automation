@@ -147,7 +147,7 @@ class UserServiceTest {
         @DisplayName("should create new guest with ACTIVE status on first visit")
         void firstGuestVisitCreatesUser() {
             var resp = userService.guestLogin(
-                new GuestLoginRequest("Sarah", "192.168.1.1", "iPhone"));
+                new GuestLoginRequest("Sarah", null, null, "192.168.1.1", "iPhone"));
             assertNotNull(resp.token());
             assertEquals("GUEST", resp.role());
 
@@ -162,9 +162,9 @@ class UserServiceTest {
         @DisplayName("should reuse existing guest and increment connectionCount")
         void reuseExistingGuest() {
             var first = userService.guestLogin(
-                new GuestLoginRequest("Sarah", "192.168.1.1", "iPhone"));
+                new GuestLoginRequest("Sarah", null, null, "192.168.1.1", "iPhone"));
             var second = userService.guestLogin(
-                new GuestLoginRequest("Sarah", "192.168.1.2", "Android"));
+                new GuestLoginRequest("Sarah", null, null, "192.168.1.2", "Android"));
 
             assertEquals(first.userId(), second.userId(), "Same guest should reuse account");
 
@@ -175,7 +175,7 @@ class UserServiceTest {
         @Test
         @DisplayName("should create guest session on each login")
         void createsGuestSession() {
-            userService.guestLogin(new GuestLoginRequest("Mike", "10.0.0.1", "Chrome"));
+            userService.guestLogin(new GuestLoginRequest("Mike", null, null, "10.0.0.1", "Chrome"));
             List<GuestSession> sessions = sessionRepo.findByStatus(GuestSession.Status.ACTIVE);
             assertEquals(1, sessions.size());
             assertEquals("Mike", sessions.get(0).getUser().getDisplayName());
@@ -185,7 +185,7 @@ class UserServiceTest {
         @Test
         @DisplayName("should set 30-day expiry on guest sessions")
         void guestSessionExpiresIn30Days() {
-            userService.guestLogin(new GuestLoginRequest("Tom", "1.1.1.1", "Firefox"));
+            userService.guestLogin(new GuestLoginRequest("Tom", null, null, "1.1.1.1", "Firefox"));
             List<GuestSession> sessions = sessionRepo.findByStatus(GuestSession.Status.ACTIVE);
             var expiresAt = sessions.get(0).getExpiresAt();
             var expectedMin = java.time.LocalDateTime.now().plusDays(29).plusHours(23);
@@ -196,7 +196,7 @@ class UserServiceTest {
         @DisplayName("should reactivate expired guest when they return")
         void reactivateExpiredGuest() {
             var resp = userService.guestLogin(
-                new GuestLoginRequest("LateVisitor", "1.1.1.1", "Safari"));
+                new GuestLoginRequest("LateVisitor", null, null, "1.1.1.1", "Safari"));
             Long userId = resp.userId();
 
             // Manually expire them
@@ -206,7 +206,7 @@ class UserServiceTest {
 
             // They come back
             var resp2 = userService.guestLogin(
-                new GuestLoginRequest("LateVisitor", "2.2.2.2", "Safari"));
+                new GuestLoginRequest("LateVisitor", null, null, "2.2.2.2", "Safari"));
             assertEquals(userId, resp2.userId());
             User reloaded = userRepo.findById(userId).orElseThrow();
             assertEquals(AccountStatus.ACTIVE, reloaded.getStatus());
@@ -321,9 +321,9 @@ class UserServiceTest {
         @DisplayName("should return active guest sessions")
         void getActiveGuestSessions() {
             userService.guestLogin(
-                new GuestLoginRequest("G1", "10.0.0.1", "Chrome"));
+                new GuestLoginRequest("G1", null, null, "10.0.0.1", "Chrome"));
             userService.guestLogin(
-                new GuestLoginRequest("G2", "10.0.0.2", "Firefox"));
+                new GuestLoginRequest("G2", null, null, "10.0.0.2", "Firefox"));
 
             var sessions = userService.getActiveGuestSessions();
             assertEquals(2, sessions.size());
@@ -336,7 +336,7 @@ class UserServiceTest {
         void activeGuestCount() {
             assertEquals(0, userService.getActiveGuestCount());
             userService.guestLogin(
-                new GuestLoginRequest("Counter", "1.1.1.1", "Test"));
+                new GuestLoginRequest("Counter", null, null, "1.1.1.1", "Test"));
             assertEquals(1, userService.getActiveGuestCount());
         }
 
@@ -345,7 +345,7 @@ class UserServiceTest {
         void expireGuestSessions() {
             // Create a guest with a past expiry
             userService.guestLogin(
-                new GuestLoginRequest("ExpiredG", "1.1.1.1", "Test"));
+                new GuestLoginRequest("ExpiredG", null, null, "1.1.1.1", "Test"));
             // Manually set expiry to past
             var sessions = sessionRepo.findByStatus(GuestSession.Status.ACTIVE);
             sessions.forEach(s -> {

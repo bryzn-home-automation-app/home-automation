@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { fetchGuestSessions, fetchGuestSessionCount, type GuestSession } from '../api/auth';
+import OnlineDot from '../components/profile/OnlineDot';
 
 function timeAgo(iso: string): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -307,7 +308,7 @@ function GuestRow({ session }: { session: GuestSession }) {
     <div className="flex items-center gap-4 rounded-2xl border border-appborder bg-appinset px-5 py-4 transition-colors hover:border-appborder-hover">
       {/* Online dot + name */}
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        <span className="inline-flex h-3 w-3 shrink-0 rounded-full bg-appsuccess shadow-[0_0_12px_var(--appsuccess)]" />
+        <OnlineDot />
         <span className="text-base font-semibold text-apptext truncate">{session.guestName}</span>
       </div>
 

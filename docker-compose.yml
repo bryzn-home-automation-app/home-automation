@@ -57,6 +57,8 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    volumes:
+      - uploads_data:/app/uploads
 
   nginx:
     build:
@@ -72,3 +74,4 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:

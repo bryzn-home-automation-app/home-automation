@@ -4,12 +4,13 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
-import { ProtectedRoute, AdminRoute } from './components/Guard';
+import { ProtectedRoute, AdminRoute, MemberRoute } from './components/Guard';
 import App from './App';
 import './index.css';
 
 // ── Public pages (no auth required) ──
 const GuestLogin = lazy(() => import('./pages/GuestLogin'));
+const GuestHome = lazy(() => import('./pages/GuestHome'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
 
@@ -20,6 +21,11 @@ const GasUsage = lazy(() => import('./pages/GasUsage'));
 const WaterUsage = lazy(() => import('./pages/WaterUsage'));
 const Roomba = lazy(() => import('./pages/Roomba'));
 const WiFiPage = lazy(() => import('./pages/WiFiPage'));
+
+// ── Other protected pages ──
+const NotificationsPage = lazy(() => import('./pages/Notifications'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const MaintenanceDashboard = lazy(() => import('./pages/MaintenanceDashboard'));
 
 // ── Admin pages ──
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
@@ -58,6 +64,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Routes>
                 {/* ── Public routes (no auth required) ── */}
                 <Route path="/guest" element={<GuestLogin />} />
+                <Route path="/guest/home" element={<GuestHome />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
 
@@ -70,10 +77,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="water" element={<WaterUsage />} />
                     <Route path="roomba" element={<Roomba />} />
                     <Route path="wifi" element={<WiFiPage />} />
+                    <Route path="notifications" element={<NotificationsPage />} />
+                    <Route path="profile" element={<ProfilePage />} />
+                    <Route path="users" element={<UserManagement />} />
+                    <Route element={<MemberRoute />}>
+                      <Route path="maintenance" element={<MaintenanceDashboard />} />
+                    </Route>
 
                     {/* ── Admin-only routes ── */}
                     <Route element={<AdminRoute />}>
-                      <Route path="admin/users" element={<UserManagement />} />
                       <Route path="admin/guests" element={<GuestManagement />} />
                       <Route path="admin/logs" element={<AuditLogs />} />
                     </Route>

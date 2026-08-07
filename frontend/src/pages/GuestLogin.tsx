@@ -1,11 +1,32 @@
-import { useState, type FormEvent } from 'react';
-import { guestLogin } from '../api/auth';
+import { useState, useRef, type FormEvent, type ChangeEvent } from 'react';
+import { guestLogin, uploadAvatar } from '../api/auth';
+import Avatar from '../components/profile/Avatar';
+import ColorPicker from '../components/profile/ColorPicker';
 
 export default function GuestLogin() {
   const [name, setName] = useState('');
+  const [accentColor, setAccentColor] = useState('#A855F7');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [submittedName, setSubmittedName] = useState('');
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const { avatarUrl: url } = await uploadAvatar(file);
+      setAvatarUrl(url);
+    } catch {
+      setError('Photo upload failed. Try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -23,9 +44,17 @@ export default function GuestLogin() {
 
     setLoading(true);
     try {
-      const resp = await guestLogin({ displayName: trimmed });
+      const resp = await guestLogin({
+        displayName: trimmed,
+        accentColor,
+        avatarUrl: avatarUrl || undefined,
+      });
       sessionStorage.setItem('guestName', resp.displayName);
       sessionStorage.setItem('guestToken', resp.token);
+      sessionStorage.setItem('guestAccent', accentColor);
+      sessionStorage.setItem('guestAvatar', avatarUrl || '');
+      setSubmittedName(trimmed);
+      setSubmittedName(trimmed);
       setSubmitted(true);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Connection failed. Please try again.');
@@ -39,11 +68,12 @@ export default function GuestLogin() {
       <div className="guest-bg flex min-h-screen items-center justify-center px-4">
         <div className="w-full max-w-md text-center">
           <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-appaccent-soft text-4xl">
-              ✅
+            {/* Avatar preview on success */}
+            <div className="mx-auto mb-5 flex justify-center">
+              <Avatar displayName={submittedName} avatarUrl={avatarUrl} accentColor={accentColor} size={80} />
             </div>
             <h1 className="text-2xl font-semibold tracking-[-0.04em] text-apptext">
-              Welcome, {name.trim()}!
+              Welcome, {submittedName}!
             </h1>
             <p className="mt-3 text-apptext-soft leading-6">
               You&rsquo;re now connected as a guest. Your session is active and the homeowner has been notified.
@@ -71,9 +101,28 @@ export default function GuestLogin() {
               </div>
             </div>
 
-            <p className="mt-6 text-xs text-apptext-muted">
-              You can close this page. Guest access auto-expires in 30 days.
+            <button
+              type="button"
+              onClick={() => { window.location.href = '/guest/home'; }}
+              className="mt-6 w-full rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98]"
+              style={{ background: accentColor }}
+            >
+              See Who&rsquo;s Here →
+            </button>
+
+            <p className="mt-4 text-xs text-apptext-muted">
+              Guest access auto-expires after 30 days.
             </p>
+
+            {/* bryzncode trademark */}
+            <div className="mt-4 flex items-center justify-center gap-1.5">
+              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-dim">
+                powered by
+              </span>
+              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+                bryzncode
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -92,9 +141,47 @@ export default function GuestLogin() {
               Guest Access
             </h1>
             <p className="mt-2 text-sm text-apptext-soft leading-6">
-              Welcome to the home automation portal. Enter your name below to connect as a guest.
+              Welcome! Enter your name, pick a color, and optionally add a photo to personalize your visit.
             </p>
           </div>
+
+          {/* Live avatar preview */}
+          <div className="mb-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="group relative"
+              disabled={uploading}
+            >
+              <Avatar
+                displayName={name || '?'}
+                avatarUrl={avatarUrl}
+                accentColor={accentColor}
+                size={80}
+              />
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="text-2xl text-white">📷</span>
+              </div>
+              {uploading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
+                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                </div>
+              )}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+          </div>
+          <p className="mb-6 -mt-2 text-center text-xs text-apptext-dim">
+            {avatarUrl ? 'Tap to change photo' : 'Tap avatar to add a photo'}
+            {avatarUrl && (
+              <button type="button" onClick={() => setAvatarUrl(null)} className="ml-1 text-appdanger hover:underline">(remove)</button>
+            )}
+          </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
@@ -111,17 +198,26 @@ export default function GuestLogin() {
                 autoFocus
                 className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
               />
-              {error && (
-                <p className="mt-2 text-sm text-appdanger flex items-center gap-1.5">
-                  <span>⚠</span> {error}
-                </p>
-              )}
             </div>
+
+            <div>
+              <label className="mb-3 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+                Your Color
+              </label>
+              <ColorPicker selected={accentColor} onChange={setAccentColor} />
+            </div>
+
+            {error && (
+              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-appdanger">
+                {error}
+              </div>
+            )}
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-appaccent px-4 py-3.5 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-appaccent focus-visible:ring-offset-2 disabled:opacity-60"
+              disabled={loading || uploading}
+              className="w-full rounded-2xl font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-appaccent focus-visible:ring-offset-2 disabled:opacity-60 px-4 py-3.5 text-sm"
+              style={{ background: accentColor }}
             >
               {loading ? 'Connecting...' : 'Connect as Guest'}
             </button>
@@ -134,9 +230,19 @@ export default function GuestLogin() {
           </p>
 
           <div className="mt-6 flex items-center justify-center gap-2">
-            <span className="inline-flex h-2 w-2 rounded-full bg-appaccent opacity-60" />
+            <span className="inline-flex h-2 w-2 rounded-full opacity-60" style={{ background: accentColor }} />
             <span className="text-[10px] uppercase tracking-[0.2em] text-apptext-dim">Secure Connection</span>
-            <span className="inline-flex h-2 w-2 rounded-full bg-appaccent opacity-60" />
+            <span className="inline-flex h-2 w-2 rounded-full opacity-60" style={{ background: accentColor }} />
+          </div>
+
+          {/* bryzncode trademark */}
+          <div className="mt-4 flex items-center justify-center gap-1.5">
+            <span className="text-[10px] uppercase tracking-[0.2em] text-apptext-dim">
+              powered by
+            </span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+              bryzncode
+            </span>
           </div>
         </div>
       </div>
