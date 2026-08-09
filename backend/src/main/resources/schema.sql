@@ -190,6 +190,21 @@ SELECT
 FROM hourly_electric_usage;
 
 -- Append-only: bills are never updated — new statement = new row.
+
+-- Diagnostic event log for admin debug dashboard.
+CREATE TABLE IF NOT EXISTS app_events (
+    id              SERIAL PRIMARY KEY,
+    timestamp       TIMESTAMP      NOT NULL DEFAULT NOW(),
+    category        VARCHAR(50)    NOT NULL,
+    level           VARCHAR(10)    NOT NULL,
+    source          VARCHAR(100)   NOT NULL,
+    message         TEXT           NOT NULL,
+    details         TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_app_events_timestamp ON app_events (timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_app_events_category  ON app_events (category);
+CREATE INDEX IF NOT EXISTS idx_app_events_level     ON app_events (level);
 CREATE TABLE IF NOT EXISTS utility_bills (
     id                    SERIAL PRIMARY KEY,
     account_id            INTEGER        NOT NULL REFERENCES utility_accounts(id),

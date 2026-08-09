@@ -9,6 +9,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
+import com.homeplatform.service.AppEventService;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -24,6 +25,7 @@ class WeatherServiceTest {
     private WeatherService weatherService;
     private WeatherObservationRepository repo;
     private RestTemplate restTemplate;
+    private AppEventService appEventService;
 
     private static final double LAT = 33.2150;
     private static final double LON = -97.1330;
@@ -32,7 +34,8 @@ class WeatherServiceTest {
     void setUp() {
         repo = mock(WeatherObservationRepository.class);
         restTemplate = mock(RestTemplate.class);
-        weatherService = new WeatherService(repo, restTemplate);
+        appEventService = mock(AppEventService.class);
+        weatherService = new WeatherService(repo, restTemplate, appEventService);
     }
 
     // ── Sample Open-Meteo JSON ──────────────────────────────────

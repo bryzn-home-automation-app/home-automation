@@ -282,14 +282,23 @@ POST  /api/admin/users/{id}/reactivate # Reactivate account
 GET   /api/admin/guest-sessions        # Active guest sessions
 POST  /api/admin/guest-sessions/expire # Manually expire all
 GET   /api/admin/stats                 # Active guests + pending count
+
+# Debug Dashboard (ADMIN only)
+GET   /api/admin/events?hours=&category=&level=&limit=  # Diagnostic event feed
+GET   /api/admin/events/summary                          # 24h event counts
+GET   /api/admin/health                                  # DB/JVM/thread health
+GET   /api/admin/db/tables                               # Table list with sizes
+GET   /api/admin/db/stats                                # Row counts + DB size
+POST  /api/admin/db/query  { "query": "SELECT ..." }     # Read-only SQL console
 ```
 
 ### Admin Pages
 
 | Page | Route | Description |
 |------|-------|-------------|
-| User Management | `/admin/users` | Approve/deny registrations, assign roles, disable/reactivate |
+| User Management | `/users` | Approve/deny registrations, assign roles, disable/reactivate |
 | Guest Management | `/admin/guests` | Live guest session table, manual expiry |
+| Debug | `/admin/debug` | System health (DB/uptime/heap/threads), event feed with category/level filters, DB Explorer with table presets and SQL console, sync history |
 | Audit Logs | `/admin/logs` | Activity feed: logins, registrations, approvals, guest joins |
 
 Admin tabs appear in the nav bar only for ADMIN users, with amber accent styling to visually distinguish them.

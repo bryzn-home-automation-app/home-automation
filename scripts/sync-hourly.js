@@ -40,7 +40,7 @@ function loadSecrets() {
   }
   for (const k of ['COSERV_USERNAME', 'COSERV_PASSWORD',
                    'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
-                   'POSTGRES_HOST', 'POSTGRES_PORT']) {
+                   'POSTGRES_HOST', 'POSTGRES_PORT', 'KWH_RATE']) {
     if (process.env[k]) s[k] = process.env[k];
   }
   return s;
@@ -152,7 +152,7 @@ async function captureAuthToken(secrets) {
 }
 
 // ─── Fetch usage for a date via API ─────────────────────────────
-async function fetchUsageForDate(apiHeaders, dateStr) {
+async function fetchUsageForDate(apiHeaders, dateStr, kwhRate = 0.1171) {
   const [m, d, y] = dateStr.split('/').map(Number);
 
   // Start and end of the day in CT (UTC-5), converted to epoch ms
@@ -209,7 +209,7 @@ async function fetchUsageForDate(apiHeaders, dateStr) {
     records.push({
       timestamp: tsForDateAndHour(m, d, y, hour),
       usageKwh: Math.round(pt.y * 1000) / 1000,
-      cost: 0,
+      cost: Math.round(pt.y * kwhRate * 100) / 100,
       source: SOURCE_LABEL,
       sourceProvider: SOURCE_PROVIDER,
       processingVersion: PROCESSING_VERSION,
@@ -277,7 +277,7 @@ async function main() {
 
   while (cursor <= end) {
     const dateStr = fmtDate(cursor);
-    const records = await fetchUsageForDate(apiHeaders, dateStr);
+    const records = await fetchUsageForDate(apiHeaders, dateStr, secrets.KWH_RATE || '0.1171');
     const dailyTotal = records.reduce((s, r) => s + r.usageKwh, 0);
 
     if (args.dryRun) {

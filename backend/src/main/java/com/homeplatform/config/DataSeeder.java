@@ -1,5 +1,6 @@
 package com.homeplatform.config;
 
+import com.homeplatform.service.AppEventService;
 import com.homeplatform.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,7 @@ public class DataSeeder implements CommandLineRunner {
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
 
     private final UserService userService;
+    private final AppEventService appEventService;
 
     @Value("${app.admin.seed-email:bryznnguyen@gmail.com}")
     private String adminEmail;
@@ -27,13 +29,16 @@ public class DataSeeder implements CommandLineRunner {
     @Value("${app.admin.seed-display-name:Bryan}")
     private String adminDisplayName;
 
-    public DataSeeder(UserService userService) {
+    public DataSeeder(UserService userService, AppEventService appEventService) {
         this.userService = userService;
+        this.appEventService = appEventService;
     }
 
     @Override
     public void run(String... args) {
+        appEventService.info("system", "DataSeeder", "Backend starting up — checking admin seed");
         log.info("Checking for admin user seed...");
         userService.seedAdminIfNeeded(adminEmail, adminUsername, adminPassword, adminDisplayName);
+        appEventService.info("system", "DataSeeder", "Backend startup complete");
     }
 }

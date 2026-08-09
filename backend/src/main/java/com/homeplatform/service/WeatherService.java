@@ -29,10 +29,13 @@ public class WeatherService {
 
     private final WeatherObservationRepository repo;
     private final RestTemplate restTemplate;
+    private final AppEventService appEventService;
 
-    public WeatherService(WeatherObservationRepository repo, RestTemplate restTemplate) {
+    public WeatherService(WeatherObservationRepository repo, RestTemplate restTemplate,
+                          AppEventService appEventService) {
         this.repo = repo;
         this.restTemplate = restTemplate;
+        this.appEventService = appEventService;
     }
 
     // ── Public API ──────────────────────────────────────────────
@@ -82,6 +85,8 @@ public class WeatherService {
             return new WeatherResponse(lat, lon, current, days, hourly, agg);
         } catch (Exception e) {
             log.warn("Open-Meteo fetch failed for {} ({} → {}): {}", stationCode, start, end, e.getMessage());
+            appEventService.warn("weather", "WeatherService",
+                    "Open-Meteo fetch failed: " + e.getMessage());
             // Fall back to whatever we have in cache, even if incomplete
             if (!cached.isEmpty()) {
                 log.debug("Returning partial cache ({} records) after API failure", cached.size());

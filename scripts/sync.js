@@ -53,13 +53,13 @@ function loadSecrets() {
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
     fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD|PORTAL_URL)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|DATA_START_DATE)\s*=\s*(.+)/);
+      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD|PORTAL_URL)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|DATA_START_DATE|KWH_RATE)\s*=\s*(.+)/);
       if (m) secrets[m[1]] = m[2].trim();
     });
   }
   for (const k of ['COSERV_USERNAME','COSERV_PASSWORD','COSERV_PORTAL_URL',
                    'POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD',
-                   'POSTGRES_HOST','POSTGRES_PORT','DATA_START_DATE']) {
+                   'POSTGRES_HOST','POSTGRES_PORT','DATA_START_DATE','KWH_RATE']) {
     if (process.env[k]) secrets[k] = process.env[k];
   }
   return secrets;
@@ -304,8 +304,9 @@ async function getOrCreateMeter(client, accountNumber, serviceName) {
 }
 
 // ─── Green Button XML parser ────────────────────────────────────
-function parseGreenButtonXml(xmlText) {
+function parseGreenButtonXml(xmlText, kwhRate) {
   const results = [];
+  const rate = parseFloat(kwhRate) || 0.1171;
 
   let tzOffset = -21600;
   const ltpMatch = xmlText.match(/<LocalTimeParameters[^>]*>[\s\S]*?<\/LocalTimeParameters>/);
@@ -342,7 +343,7 @@ function parseGreenButtonXml(xmlText) {
       results.push({
         timestamp,
         usageKwh: Math.round(usageKwh * 1000) / 1000,
-        cost: 0,
+        cost: Math.round(usageKwh * rate * 100) / 100,
         source: SOURCE_LABEL,
         sourceProvider: 'coserv',
         processingVersion: PROCESSING_VERSION,
@@ -581,7 +582,7 @@ async function main(cfg) {
       let svcRecords = 0;
       for (const entry of xmlEntries) {
         const xmlText = entry.getData().toString('utf8');
-        const records = parseGreenButtonXml(xmlText);
+        const records = parseGreenButtonXml(xmlText, secrets.KWH_RATE || '0.1171');
         console.log(`   Parsed ${records.length} readings from ${entry.entryName}`);
 
         if (records.length > 0 && client) {

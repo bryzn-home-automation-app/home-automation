@@ -46,6 +46,7 @@ export default function App() {
 
   const adminTabs = [
     { path: '/admin/guests', label: 'Guests', icon: '🪪', end: false },
+    { path: '/admin/debug', label: 'Debug', icon: '🔧', end: false },
     { path: '/admin/logs', label: 'Logs', icon: '📋', end: false },
   ];
 

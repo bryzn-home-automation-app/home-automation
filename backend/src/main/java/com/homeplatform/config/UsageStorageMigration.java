@@ -28,10 +28,8 @@ public class UsageStorageMigration implements ApplicationRunner {
         if ("table".equals(relationType)) {
             migrateLegacyRows("energy_usage");
             jdbcTemplate.execute("ALTER TABLE energy_usage RENAME TO energy_usage_legacy");
-        }
-
-        if (tableExists("energy_usage_legacy")) {
             migrateLegacyRows("energy_usage_legacy");
+            jdbcTemplate.execute("DROP TABLE IF EXISTS energy_usage_legacy");
         }
 
         resetSequence("electric_usage");
@@ -139,6 +137,22 @@ public class UsageStorageMigration implements ApplicationRunner {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_hourly_usage_timestamp ON hourly_electric_usage (timestamp)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_hourly_usage_batch ON hourly_electric_usage (ingestion_batch_id)");
         jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hourly_usage_unique ON hourly_electric_usage (meter_id, timestamp, source_provider)");
+
+        // Admin debug dashboard — diagnostic event log
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS app_events (
+                id              SERIAL PRIMARY KEY,
+                timestamp       TIMESTAMP      NOT NULL DEFAULT NOW(),
+                category        VARCHAR(50)    NOT NULL,
+                level           VARCHAR(10)    NOT NULL,
+                source          VARCHAR(100)   NOT NULL,
+                message         TEXT           NOT NULL,
+                details         TEXT
+            )
+            """);
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_app_events_timestamp ON app_events (timestamp DESC)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_app_events_category  ON app_events (category)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_app_events_level     ON app_events (level)");
     }
 
     private void createFutureModuleTables() {

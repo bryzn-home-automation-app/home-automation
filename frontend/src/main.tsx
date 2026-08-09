@@ -31,6 +31,7 @@ const MaintenanceDashboard = lazy(() => import('./pages/MaintenanceDashboard'));
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const GuestManagement = lazy(() => import('./pages/admin/GuestManagement'));
 const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
+const DebugDashboard = lazy(() => import('./pages/admin/DebugDashboard'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -88,6 +89,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route element={<AdminRoute />}>
                       <Route path="admin/guests" element={<GuestManagement />} />
                       <Route path="admin/logs" element={<AuditLogs />} />
+                      <Route path="admin/debug" element={<DebugDashboard />} />
                     </Route>
                   </Route>
                 </Route>
