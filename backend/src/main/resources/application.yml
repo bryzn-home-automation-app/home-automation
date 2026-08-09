@@ -24,6 +24,8 @@ spring:
 app:
   kwh-rate: ${KWH_RATE:0.12}
   data-start-date: ${DATA_START_DATE:07/24/2026}
+  property-latitude: ${PROPERTY_LATITUDE}
+  property-longitude: ${PROPERTY_LONGITUDE}
   jwt:
     secret: ${JWT_SECRET:home-platform-default-secret-key-change-in-prod-32chars!}
     expiration-ms: 86400000

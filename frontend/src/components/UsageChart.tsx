@@ -30,6 +30,45 @@ function useRechartsTheme() {
   };
 }
 
+function buildDynamicAxis(
+  values: Array<number | null | undefined>,
+  options?: { points?: number; padRatio?: number; minPad?: number; floorZero?: boolean; integerTicks?: boolean }
+) {
+  const points = options?.points ?? 8;
+  const padRatio = options?.padRatio ?? 0.12;
+  const minPad = options?.minPad ?? 1;
+  const floorZero = options?.floorZero ?? false;
+  const integerTicks = options?.integerTicks ?? false;
+
+  const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  if (!nums.length || points < 2) return { domain: undefined, ticks: undefined };
+
+  let min = Math.min(...nums);
+  let max = Math.max(...nums);
+  if (min === max) {
+    const pad = Math.max(minPad, Math.abs(min) * padRatio, 1);
+    min -= pad; max += pad;
+  } else {
+    const pad = Math.max(minPad, (max - min) * padRatio);
+    min -= pad; max += pad;
+  }
+  if (floorZero) min = Math.max(0, min);
+
+  if (integerTicks) {
+    const step = Math.max(1, Math.ceil((max - min) / (points - 1)));
+    let lo = Math.floor(min);
+    let hi = Math.ceil(max);
+    while (hi - lo < step * (points - 1)) { lo -= 1; hi += 1; }
+    const ticks = Array.from({ length: points }, (_, i) => lo + step * i);
+    return { domain: [ticks[0], ticks[ticks.length - 1]] as [number, number], ticks };
+  }
+
+  const step = (max - min) / (points - 1);
+  const decimals = step >= 10 ? 0 : step >= 1 ? 1 : step >= 0.1 ? 2 : 3;
+  const ticks = Array.from({ length: points }, (_, i) => Number((min + step * i).toFixed(decimals)));
+  return { domain: [ticks[0], ticks[ticks.length - 1]] as [number, number], ticks };
+}
+
 function UsageChart({
   data,
   loading,
@@ -63,17 +102,27 @@ function UsageChart({
     );
   }
 
-  const chartData = useMemo(
-    () =>
-      data.map((d) => ({
-        date: new Date(d.timestamp).toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        }),
-        kWh: Number(d.usageKwh),
-      })),
-    [data]
-  );
+  const chartData = useMemo(() => {
+    // Sum hourly records per date to get daily totals.
+    // Use only hourly_electric_usage records (source = 'CoServ Average Usage')
+    // to avoid mixing granularities with electric_usage daily records.
+    const byDate = new Map<string, number>();
+    for (const d of data) {
+      if (d.source !== 'CoServ Average Usage') continue;
+      const date = d.timestamp.slice(0, 10);
+      byDate.set(date, (byDate.get(date) ?? 0) + Number(d.usageKwh));
+    }
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, total]) => ({
+        date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        kWh: Math.round(total * 100) / 100,
+      }));
+  }, [data]);
+
+  const yAxis = useMemo(() => {
+    return buildDynamicAxis(chartData.map((d) => d.kWh), { points: 8, padRatio: 0.12, minPad: 1, floorZero: true, integerTicks: true });
+  }, [chartData]);
 
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
@@ -101,6 +150,8 @@ function UsageChart({
             axisLine={{ stroke: t.grid }}
             tickLine={false}
             unit={` ${unitLabel}`}
+            domain={yAxis.domain as [number, number]}
+            ticks={yAxis.ticks}
           />
           <Tooltip
             contentStyle={{

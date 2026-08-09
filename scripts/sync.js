@@ -67,11 +67,12 @@ function loadSecrets() {
 
 // ─── Parse args ─────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { dryRun: false, date: null, weekly: false };
+  const args = { dryRun: false, date: null, weekly: false, watch: false };
   const a = argv || process.argv;
   for (let i = 2; i < a.length; i++) {
     if (a[i] === '--dry-run') args.dryRun = true;
     if (a[i] === '--weekly') args.weekly = true;
+    if (a[i] === '--watch') args.watch = true;
     if (a[i] === '--date' && a[i + 1]) {
       args.date = a[i + 1];
     }
@@ -181,6 +182,91 @@ async function checkPostSyncZeros(client) {
   } catch (e) { /* ignore */ }
 }
 
+// ─── Watch mode: poll for today's electric reading ─────────────────
+
+/**
+ * Check if today's electric usage is already in the DB.
+ * Electric data comes in at 5 AM Central from CoServ.
+ */
+async function isTodayPopulated(client) {
+  try {
+    const { rows } = await client.query(
+      `SELECT 1 FROM electric_usage
+       WHERE source_provider = 'coserv'
+         AND timestamp::date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date
+         AND usage_kwh > 0
+       LIMIT 1`
+    );
+    return rows.length > 0;
+  } catch (e) {
+    console.error('   Watch check failed:', e.message);
+    return false;
+  }
+}
+
+/** Return the current hour in America/Chicago (0-23). */
+async function chicagoHour(client) {
+  const { rows } = await client.query(
+    `SELECT EXTRACT(HOUR FROM CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago') AS h`
+  );
+  return parseInt(rows[0].h);
+}
+
+/**
+ * Poll every 30 minutes for today's electric reading.
+ * Only polls if it's after 5 AM Central — before that, CoServ hasn't posted yet.
+ * Exits once today's data is found or if it's past 11 PM Central.
+ */
+async function watchMode(client, secrets) {
+  const POLL_MINUTES = 30;
+
+  console.log('👀  Watch mode — polling every', POLL_MINUTES, 'minutes for today\'s electric reading\n');
+
+  while (true) {
+    const hour = await chicagoHour(client);
+
+    if (hour < 5) {
+      // Too early — CoServ hasn't posted today's data yet
+      const minsUntil5 = (5 - hour) * 60;
+      const waitMin = Math.min(minsUntil5, POLL_MINUTES);
+      console.log(`   ⏰  ${hour}:00 CT — before 5 AM, waiting ${waitMin}min until next check`);
+      await new Promise(r => setTimeout(r, waitMin * 60_000));
+      continue;
+    }
+
+    if (hour >= 23) {
+      console.log('   🌙  Past 11 PM CT — stopping watch (data should be available by now)');
+      break;
+    }
+
+    console.log(`   🔍  Checking for today's electric data (${hour}:00 CT)...`);
+    if (await isTodayPopulated(client)) {
+      console.log('   ✅  Today\'s electric reading is already in the DB — nothing to do\n');
+      break;
+    }
+
+    // Run a daily sync for today
+    console.log('   ⚡  No reading yet — running sync...');
+    const today = new Date();
+    const todayStr = fmtDate(today);
+    await runSync(client, secrets, {
+      startDate: todayStr,
+      endDate: todayStr,
+      mode: 'watch-poll',
+      dryRun: false,
+    });
+
+    // Check again after sync
+    if (await isTodayPopulated(client)) {
+      console.log('   ✅  Today\'s reading synced successfully\n');
+      break;
+    }
+
+    console.log(`   ⏳  Still no reading — will retry in ${POLL_MINUTES} minutes\n`);
+    await new Promise(r => setTimeout(r, POLL_MINUTES * 60_000));
+  }
+}
+
 // ─── DB helpers ─────────────────────────────────────────────────
 async function getOrCreateMeter(client, accountNumber, serviceName) {
   let provider = (await client.query(
@@ -281,31 +367,51 @@ async function fillDateInput(page, inputId, dateStr) {
 }
 
 async function downloadGreenButton(page, serviceValue, startDate, endDate) {
-  await page.waitForTimeout(2000);
+  await page.waitForTimeout(3000);
 
+  // Wait for the download button to appear (not the "What is Green Button?" link)
   let btnFound = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const btn = await page.evaluate(() => {
-      for (const b of document.querySelectorAll('button')) {
-        if (b.textContent?.includes('Green Button')) return true;
-      }
-      return false;
-    });
-    if (btn) { btnFound = true; break; }
-    await page.waitForTimeout(3000);
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      await page.waitForSelector('[data-cy="greenButtonDownloadMyData"]', { timeout: 4000 });
+      btnFound = true;
+      break;
+    } catch {
+      // Not visible yet — wait and retry
+    }
+    await page.waitForTimeout(4000);
   }
   if (!btnFound) {
     const pageText = await page.evaluate(() => document.body.innerText.substring(0, 1500));
     console.error('   Page text:', pageText);
-    throw new Error('Green Button button not found on page');
+    throw new Error('Green Button download button not found on page');
   }
 
+  // Close any lingering dialog first, then wait for backdrop to clear
   await page.evaluate(() => {
-    for (const btn of document.querySelectorAll('button')) {
-      if (btn.textContent?.includes('Green Button')) { btn.click(); return; }
-    }
+    const backdrop = document.querySelector('.cdk-overlay-backdrop');
+    if (backdrop) backdrop.remove();
   });
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(1000);
+
+  // Click the correct Green Button download button (use evaluate to bypass overlay)
+  let clicked = false;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    clicked = await page.evaluate(() => {
+      const btn = document.querySelector('[data-cy="greenButtonDownloadMyData"]');
+      if (btn) { (btn).click(); return true; }
+      return false;
+    });
+    if (clicked) break;
+    await page.waitForTimeout(3000);
+  }
+  if (!clicked) throw new Error('Could not click Green Button download button');
+  await page.waitForTimeout(5000);
+
+  // Wait for the dialog to open
+  await page.waitForSelector('.mat-dialog-container', { timeout: 10000 }).catch(() => {
+    throw new Error('Green Button dialog did not open');
+  });
 
   await page.selectOption('#mat-input-2', serviceValue);
   await page.waitForTimeout(200);
@@ -319,10 +425,13 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
 
+  // Click Download via evaluate to bypass overlay interception
   await page.evaluate(() => {
     const dialog = document.querySelector('.mat-dialog-container');
-    for (const btn of dialog?.querySelectorAll('button') || []) {
-      if (btn.textContent?.trim() === 'Download') { btn.click(); return; }
+    if (!dialog) return;
+    const buttons = dialog.querySelectorAll('button');
+    for (const btn of buttons) {
+      if (btn.textContent?.trim() === 'Download' && !btn.disabled) { btn.click(); return; }
     }
   });
 
@@ -340,9 +449,9 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
 }
 
 // ─── Main ──────────────────────────────────────────────────────
-async function main() {
+async function main(cfg) {
   const secrets = loadSecrets();
-  const args = parseArgs();
+  const args = { ...parseArgs(), ...(cfg || {}) };
 
   // Validate secrets before DB connect
   if (!secrets.COSERV_USERNAME || !secrets.COSERV_PASSWORD) {
@@ -400,13 +509,34 @@ async function main() {
     }
     console.log('✓  Logged into SmartHub');
 
-    // Navigate to Green Button page — use hash change to keep session
-    await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
-    await page.waitForTimeout(8000);
+    // Navigate to Green Button page via hash change
+    for (let navAttempt = 0; navAttempt < 4; navAttempt++) {
+      await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
+      await page.waitForTimeout(8000);
+
+      // Check if page rendered (non-blank body text)
+      const bodyLen = await page.evaluate(() => document.body.innerText.length);
+      if (bodyLen > 50) break;
+      console.log('   Green Button page is blank, retrying navigation...');
+    }
+
+    const bodyLen = await page.evaluate(() => document.body.innerText.length);
+    if (bodyLen < 50) {
+      console.error('❌  Green Button page never rendered after multiple attempts');
+      process.exit(1);
+    }
     console.log('✓  On Green Button page\n');
 
     // ── Download per service ──
     for (const svc of SERVICES) {
+      // Dismiss any lingering dialog/overlay between services
+      await page.evaluate(() => {
+        document.querySelectorAll('.cdk-overlay-backdrop').forEach(b => b.remove());
+        const closeBtn = document.querySelector('.mat-dialog-container button[aria-label="Close"]');
+        if (closeBtn) (closeBtn).click();
+      });
+      await page.waitForTimeout(2000);
+
       console.log(`── ${svc.name} ──`);
 
       const result = await downloadGreenButton(page, svc.value, startDate, endDate);
@@ -498,12 +628,36 @@ async function main() {
   console.log(`║  Status: ${(hadError ? '⚠ Errors' : '✅ Success').padEnd(25)}║`);
   console.log(`╚═══════════════════════════════════╝\n`);
 
-  process.exit(hadError ? 1 : 0);
+  return { hadError, totalRecords, mode };
 }
 
 // Run main() only when invoked directly (not when required as module for tests)
 if (require.main === module) {
-  main();
+  (async () => {
+    const args = parseArgs();
+
+    if (args.watch) {
+      // ── Watch mode: poll every 30 min for today's electric reading ──
+      const secrets = loadSecrets();
+      const client = new Client({
+        host: secrets.POSTGRES_HOST || 'localhost',
+        port: secrets.POSTGRES_PORT || 5432,
+        database: secrets.POSTGRES_DB || 'homeplatform',
+        user: secrets.POSTGRES_USER || 'homeplatform',
+        password: secrets.POSTGRES_PASSWORD || 'changeme',
+      });
+      await client.connect();
+      try {
+        await watchMode(client, secrets);
+      } finally {
+        await client.end();
+      }
+      process.exit(0);
+    }
+
+    const result = await main();
+    process.exit(result.hadError ? 1 : 0);
+  })();
 }
 
 // Export testable functions

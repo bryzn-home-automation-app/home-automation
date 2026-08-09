@@ -23,6 +23,60 @@ docker compose down
 docker compose up --build
 ```
 
+## Important Commands
+
+### Stack Lifecycle
+
+```bash
+# Start all services in background
+docker compose up -d
+
+# Stop and remove stack
+docker compose down
+
+# Rebuild all services
+docker compose up -d --build
+
+# Force no-cache rebuild for web + API (use when UI looks stale)
+docker compose down
+docker compose build --no-cache nginx backend
+docker compose up -d
+
+# Service status
+docker compose ps
+
+# Tail logs
+docker compose logs -f nginx backend postgres redis
+```
+
+### Frontend Workflow
+
+```bash
+cd frontend
+npm install
+npm run dev
+npm run build
+npm run test
+```
+
+### Backend Workflow
+
+```bash
+cd backend
+mvn spring-boot:run
+mvn package -DskipTests -B
+```
+
+### Sync Workflow
+
+```bash
+npx playwright install chromium
+npm run sync
+npm run sync -- --date 08/03/2026
+npm run sync -- --dry-run
+npm test
+```
+
 ## Access URLs
 
 | Service     | URL                              |

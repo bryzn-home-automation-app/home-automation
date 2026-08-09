@@ -9,6 +9,9 @@ interface UsageSummaryGridProps {
     rangeStart: string;
     rangeEnd: string;
     summary: UsageRangeSummary;
+    wxAvg?: number | null;
+    wxHigh?: number | null;
+    wxLow?: number | null;
   }>;
   loading?: boolean;
 }
@@ -29,7 +32,7 @@ export default function UsageSummaryGrid({
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {summaries.map(({ label, rangeStart, rangeEnd, summary }) => (
+        {summaries.map(({ label, rangeStart, rangeEnd, summary, wxAvg, wxHigh, wxLow }) => (
           <div
             key={label}
             className="rounded-[24px] border border-appborder bg-appinset p-4"
@@ -83,6 +86,17 @@ export default function UsageSummaryGrid({
                 </p>
               </div>
             </div>
+
+            {(wxAvg != null || wxHigh != null || wxLow != null) && (
+              <div className="mt-3 rounded-2xl border border-amber-300/10 bg-amber-300/5 p-3">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-amber-100/60">Temperature</p>
+                <p className="mt-1 text-sm text-apptext-soft">
+                  {wxAvg != null && `${wxAvg}° avg`}
+                  {wxHigh != null && ` · ${wxHigh}° high`}
+                  {wxLow != null && ` · ${wxLow}° low`}
+                </p>
+              </div>
+            )}
           </div>
         ))}
       </div>

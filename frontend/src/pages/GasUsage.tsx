@@ -8,6 +8,8 @@ import DeferredRender from '../components/DeferredRender';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { fetchUsageSummary } from '../api/energy';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
+import WeatherContextCard from '../components/WeatherContextCard';
+import Weather24HourCard from '../components/Weather24HourCard';
 
 export default function GasUsage() {
   const { gasUsage, gasTotal, gasMeter, config } = useUsageData();
@@ -43,7 +45,7 @@ export default function GasUsage() {
           ? fetchUsageSummary(gasMeter.id, period.start, period.end)
           : Promise.resolve(createEmptyUsageSummary(0, period.start, period.end)),
       enabled: !!gasMeter,
-      staleTime: 300_000,
+      staleTime: 30_000,
     })),
   });
 
@@ -104,6 +106,15 @@ export default function GasUsage() {
         />
       </section>
 
+      {/* Weather Context */}
+      {periodDefinitions.length > 0 && (
+        <WeatherContextCard
+          startDate={periodDefinitions[0].start}
+          endDate={periodDefinitions[0].end}
+          showHDD
+        />
+      )}
+
       {/* Charts */}
       {hasData ? (
         <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -140,6 +151,14 @@ export default function GasUsage() {
             Data is pulled automatically during each sync.
           </p>
         </section>
+      )}
+
+      {/* 24-Hour Weather Detail */}
+      {periodDefinitions.length > 0 && (
+        <Weather24HourCard
+          startDate={periodDefinitions[0].start}
+          endDate={periodDefinitions[0].end}
+        />
       )}
 
       <UsageSummaryGrid

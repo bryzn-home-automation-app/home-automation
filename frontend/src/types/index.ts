@@ -98,3 +98,48 @@ export interface UsageRangeSummary {
   highest: UsageSummaryPoint | null;
   lowest: UsageSummaryPoint | null;
 }
+
+// ── Weather ───────────────────────────────────────────────
+
+export interface WeatherCurrent {
+  temperature: number;
+  apparentTemperature: number;
+  humidity: number;
+  precipitation: number;
+  weatherCode: number;
+}
+
+export interface WeatherDay {
+  date: string;
+  minTemperature: number;
+  maxTemperature: number;
+  meanTemperature: number;
+  precipitation: number;
+  weatherCode: number;
+}
+
+export interface WeatherHour {
+  time: string;
+  temperature: number;
+  apparentTemperature: number;
+  humidity: number;
+  precipitation: number;
+  weatherCode: number;
+}
+
+export interface WeatherAggregation {
+  averageTemperature: number | null;
+  minTemperature: number | null;
+  maxTemperature: number | null;
+  totalPrecipitation: number | null;
+  heatingDegreeDays: number | null;
+}
+
+export interface WeatherResponse {
+  latitude: number;
+  longitude: number;
+  current: WeatherCurrent | null;
+  daily: WeatherDay[];
+  hourly: WeatherHour[];
+  aggregation: WeatherAggregation | null;
+}

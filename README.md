@@ -89,6 +89,79 @@ npm run sync -- --date 07/24/2026   # use your DATA_START_DATE
 # 6. Open http://localhost
 ```
 
+## Important Commands
+
+### Docker Stack
+
+```bash
+# Start stack in background
+docker compose up -d
+
+# Stop and remove containers/network
+docker compose down
+
+# Rebuild all services after code changes
+docker compose up -d --build
+
+# Force fresh frontend/backend images (fixes stale UI bundles)
+docker compose down
+docker compose build --no-cache nginx backend
+docker compose up -d
+
+# Check running services
+docker compose ps
+
+# Follow service logs
+docker compose logs -f nginx backend postgres redis
+```
+
+### Frontend Commands
+
+```bash
+cd frontend
+
+# Local dev server with HMR
+npm run dev
+
+# Production build validation
+npm run build
+
+# Frontend tests
+npm run test
+```
+
+### Backend Commands
+
+```bash
+cd backend
+
+# Run backend locally
+mvn spring-boot:run
+
+# Build backend jar (skip tests)
+mvn package -DskipTests -B
+```
+
+### Data Sync Commands
+
+```bash
+# Install browser once for sync automation
+npx playwright install chromium
+
+# ── Daily sync (Green Button, once per day) ──
+npm run sync -- --date 08/07/2026       # single date
+npm run sync -- --start 07/24/2026 --end 08/07/2026  # date range
+npm run sync -- --dry-run               # preview without DB writes
+
+# ── Hourly sync (Average Usage API, 24 readings/day) ──
+node scripts/sync-hourly.js --date 08/07/2026
+node scripts/sync-hourly.js --start 07/24/2026 --end 08/07/2026
+node scripts/sync-hourly.js --dry-run    # preview without DB writes
+
+# Local tests for sync logic
+npm test
+```
+
 ### Access URLs
 
 | Service | URL |
@@ -107,9 +180,9 @@ The frontend is a single-page React app served by Nginx.
 
 | Tab | Icon | Description |
 |-----|------|-------------|
-| Home | 🏠 | System snapshot, stat tiles, activity feed, integration panel |
-| Electric | ⚡ | Usage chart, monthly comparison, summary grid, usage log |
-| Gas | 🔥 | Gas usage trend, monthly comparison, period summaries |
+| Home | 🏠 | System snapshot, last daily reading, current weather, activity feed |
+| Electric | ⚡ | Trend chart, monthly comparison, correlation chart (usage vs temperature), summary grid, usage log (daily/hourly) |
+| Gas | 🔥 | Gas usage trend, monthly comparison, period summaries, weather context |
 | Water | 💧 | Mock water usage prototype (Phase 2 integration) |
 | Roomba | 🤖 | Mock device telemetry + floor map (Phase 3 integration) |
 | WiFi | 📶 | QR code guest portal, network details, connected guests |
@@ -117,11 +190,14 @@ The frontend is a single-page React app served by Nginx.
 ### Features
 
 - **Light/Dark theme** — CSS custom properties with `ThemeContext`, persisted to localStorage, follows OS preference. Toggle in the header nav bar.
-- **Stat tiles** — Today's usage (kWh), month total, estimated bill (kWh × rate)
-- **Daily Usage chart** — Recharts line chart with tooltips, theme-aware colors
-- **Monthly Comparison chart** — Recharts bar chart grouped by month
-- **Integration Panel** — Sync status, CLI instructions, credential setup guide
-- **Recent Activity** — virtualized scrollable list of usage records
+- **Stat tiles** — Last daily reading (kWh + date), 60-day total, 7-day/30-day daily averages (kWh/day)
+- **Usage vs Temperature correlation chart** — Dual-axis combo chart with time-range filters (24h, 3 Days, 7 Days, Monthly, All Time). kWh line + temperature line with auto-scaled integer Y-axes. Hourly data granularity for 24h/3d/7d. Completeness filter: only shows data points where both electric AND temperature are available.
+- **Daily Usage trend** — Recharts line chart aggregated from hourly records, dynamic Y-axis
+- **Monthly Comparison** — Recharts bar chart grouped by month
+- **Usage log with filters** — Daily/Hourly toggle. Daily: one row per date with low/avg/high temps. Hourly: color-coded kWh badges (green <2, yellow 2-4, red 5+ kWh) with matching hourly temp.
+- **Weather integration** — Open-Meteo weather data proxied through backend, cached in `weather_observations` table. Home page shows current conditions with day/night-aware emoji (☀️ daytime, 🌙 nighttime). Weather context cards on Gas/Water tabs.
+- **Hourly electric sync** — `npm run sync-hourly` pulls 24 readings/day from CoServ's Average Usage API (`/services/secured/averageUsage`). Stored in dedicated `hourly_electric_usage` table.
+- **Separate storage** — `electric_usage` (daily Green Button) and `hourly_electric_usage` (hourly Average Usage) are separate tables, unioned in the `energy_usage` view. Prevents double-counting in charts.
 - **Loading/empty/error states** on all components
 - Responsive layout (1-col mobile, 2-col/3-col desktop)
 - **Performance** — `content-visibility: auto`, IntersectionObserver deferred rendering, virtualized lists
@@ -291,9 +367,29 @@ GET /api/integrations/coserv
 → { "dbConnected": true, "syncCommand": "npm run sync", ... }
 ```
 
+### Weather
+
+```
+GET /api/weather/current
+→ { latitude, longitude, current: { temperature, humidity, weatherCode, ... }, ... }
+
+GET /api/weather/range?start=2026-08-01&end=2026-08-07
+→ { latitude, longitude, daily: [...], hourly: [...], aggregation: { avgTemp, minTemp, maxTemp, hdd, precip } }
+```
+
+Weather data is fetched from Open-Meteo (no API key), cached in `weather_observations` (PostgreSQL), and enriched with Fahrenheit/inches units and America/Chicago timezone.
+
 ## Data Sync
 
-Sync pulls energy usage data from CoServ SmartHub via the Green Button Download feature. The sync script is a standalone Node.js CLI — it does not run inside Docker.
+Sync pulls energy usage data from CoServ SmartHub. Two sync scripts are available:
+
+### Daily Sync (`sync.js` — Green Button)
+Downloads daily usage totals via the Green Button Download feature (XML format). One record per day per service.
+
+### Hourly Sync (`sync-hourly.js` — Average Usage API)
+Calls `POST /services/secured/averageUsage` with a captured JWT Bearer token, extracting 24 hourly kWh readings per day. Stores in `hourly_electric_usage` table. Requires a single browser login to capture the auth token, then calls the API directly for each date.
+
+Both scripts are standalone Node.js CLIs — they do not run inside Docker.
 
 ### How It Works
 

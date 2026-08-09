@@ -63,10 +63,11 @@ function MonthlyComparison({
     );
   }
 
-  // Group usage by month
+  // Group usage by month — use only hourly records to avoid granularity mixing
   const chartData = useMemo(() => {
     const byMonth = new Map<string, number>();
     data.forEach((d) => {
+      if (d.source !== 'CoServ Average Usage') return;
       const key = new Date(d.timestamp).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',

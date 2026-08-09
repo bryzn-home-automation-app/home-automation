@@ -31,7 +31,8 @@ export function useUsageData() {
         ? fetchRecentUsage(electricMeter.id, 60)
         : Promise.resolve([]),
     enabled: !!electricMeter,
-    staleTime: 300_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   const gasUsage = useQuery<EnergyUsage[]>({
@@ -39,7 +40,8 @@ export function useUsageData() {
     queryFn: () =>
       gasMeter ? fetchRecentUsage(gasMeter.id, 60) : Promise.resolve([]),
     enabled: !!gasMeter,
-    staleTime: 300_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   const electricTotal = useQuery({
@@ -49,7 +51,8 @@ export function useUsageData() {
         ? fetchTotalUsage(electricMeter.id, 60)
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!electricMeter,
-    staleTime: 300_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   const gasTotal = useQuery({
@@ -59,7 +62,8 @@ export function useUsageData() {
         ? fetchTotalUsage(gasMeter.id, 60)
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!gasMeter,
-    staleTime: 300_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   });
 
   return {

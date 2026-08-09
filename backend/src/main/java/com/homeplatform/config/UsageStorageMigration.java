@@ -36,6 +36,7 @@ public class UsageStorageMigration implements ApplicationRunner {
 
         resetSequence("electric_usage");
         resetSequence("gas_usage");
+        resetSequence("hourly_electric_usage");
 
         jdbcTemplate.execute("DROP VIEW IF EXISTS energy_usage");
         jdbcTemplate.execute("""
@@ -65,6 +66,19 @@ public class UsageStorageMigration implements ApplicationRunner {
                 processing_version,
                 created_at
             FROM gas_usage
+            UNION ALL
+            SELECT
+                -(id + 100000000) AS id,
+                meter_id,
+                timestamp,
+                usage_kwh,
+                cost,
+                source,
+                source_provider,
+                ingestion_batch_id,
+                processing_version,
+                created_at
+            FROM hourly_electric_usage
             """);
     }
 
@@ -106,6 +120,25 @@ public class UsageStorageMigration implements ApplicationRunner {
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_gas_usage_timestamp ON gas_usage (timestamp)");
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_gas_usage_batch ON gas_usage (ingestion_batch_id)");
         jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_gas_usage_unique ON gas_usage (meter_id, timestamp, source_provider)");
+
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS hourly_electric_usage (
+                id                  SERIAL PRIMARY KEY,
+                meter_id            INTEGER        NOT NULL REFERENCES meters(id),
+                timestamp           TIMESTAMP      NOT NULL,
+                usage_kwh           NUMERIC(10,3)  NOT NULL,
+                cost                NUMERIC(10,2),
+                source              VARCHAR(100)   NOT NULL,
+                source_provider     VARCHAR(50)    NOT NULL,
+                ingestion_batch_id  UUID           NOT NULL,
+                processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+                created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+            )
+            """);
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_hourly_usage_meter_time ON hourly_electric_usage (meter_id, timestamp)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_hourly_usage_timestamp ON hourly_electric_usage (timestamp)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_hourly_usage_batch ON hourly_electric_usage (ingestion_batch_id)");
+        jdbcTemplate.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_hourly_usage_unique ON hourly_electric_usage (meter_id, timestamp, source_provider)");
     }
 
     private void createFutureModuleTables() {

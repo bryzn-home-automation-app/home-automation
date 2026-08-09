@@ -3,12 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
-import { getUsageLevel } from '../utils/usageColor';
 import VirtualizedList from '../components/VirtualizedList';
 import { fetchMaintenanceAnalytics } from '../api/maintenance';
 import { fetchNotifications } from '../api/notifications';
 import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
+import { fetchCurrentWeather } from '../api/weather';
+import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
 
 export default function HomeSummary() {
   const { electricUsage, gasUsage, electricTotal, gasTotal, config } = useUsageData();
@@ -19,21 +20,40 @@ export default function HomeSummary() {
   const totalKwh = elecKwh + gasKwh;
   const estimatedBill = totalKwh * kwhRate;
 
-  const today = new Date().toISOString().split('T')[0];
-  const todayElec = useMemo(
-    () => electricUsage.data?.filter((d) => d.timestamp.startsWith(today)).reduce((sum, d) => sum + d.usageKwh, 0) ?? 0,
-    [electricUsage.data, today],
-  );
+  // Latest daily usage — sum hourly records per date, take the most recent with ≥ 20 records
+  const latestDaily = useMemo(() => {
+    const byDate = new Map<string, { total: number; count: number }>();
+    for (const d of electricUsage.data ?? []) {
+      if (d.source !== 'CoServ Average Usage') continue;
+      const date = d.timestamp.slice(0, 10);
+      const entry = byDate.get(date) ?? { total: 0, count: 0 };
+      entry.total += Number(d.usageKwh);
+      entry.count++;
+      byDate.set(date, entry);
+    }
+    const complete = Array.from(byDate.entries())
+      .filter(([, v]) => v.count >= 18)
+      .sort(([a], [b]) => b.localeCompare(a));
+    return complete.length > 0 ? { date: complete[0][0], total: complete[0][1].total } : null;
+  }, [electricUsage.data]);
 
-  const recentElectric = useMemo(
-    () =>
-      [...(electricUsage.data ?? [])]
-        .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-        .slice(0, 6),
-    [electricUsage.data],
-  );
-
-  const lastReading = recentElectric[0];
+  // Daily-aggregated usage feed (from hourly records)
+  const recentElectric = useMemo(() => {
+    const byDate = new Map<string, { total: number; count: number; latestTimestamp: string }>();
+    for (const d of electricUsage.data ?? []) {
+      if (d.source !== 'CoServ Average Usage') continue;
+      const date = d.timestamp.slice(0, 10);
+      const entry = byDate.get(date) ?? { total: 0, count: 0, latestTimestamp: d.timestamp };
+      entry.total += Number(d.usageKwh);
+      entry.count++;
+      if (d.timestamp > entry.latestTimestamp) entry.latestTimestamp = d.timestamp;
+      byDate.set(date, entry);
+    }
+    return Array.from(byDate.entries())
+      .map(([date, v]) => ({ date, total: Math.round(v.total * 100) / 100, count: v.count }))
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .slice(0, 6);
+  }, [electricUsage.data]);
 
   // ── Cross-module data ──
   const maintenance = useQuery({
@@ -62,6 +82,18 @@ export default function HomeSummary() {
 
   const m = maintenance.data;
 
+  // ── Current weather (latest hourly reading) ──────────────────
+  const { data: currentWeather } = useQuery({
+    queryKey: ['weather-current'],
+    queryFn: fetchCurrentWeather,
+    staleTime: 300_000,
+  });
+  const currentWx = currentWeather?.current ?? null;
+  const latestTemp = currentWx?.temperature ?? null;
+  const latestHumidity = currentWx?.humidity ?? null;
+  const wxEmoji = currentWx ? getWeatherEmoji(currentWx.weatherCode) : null;
+  const wxDesc = currentWx ? getWeatherCodeDescription(currentWx.weatherCode) : null;
+
   const modules = [
     { label: 'Electric', detail: `${electricUsage.data?.length ?? 0} records`, route: '/electric', icon: '⚡', pill: 'Live' },
     { label: 'Gas', detail: `${gasUsage.data?.length ?? 0} records synced`, route: '/gas', icon: '🔥', pill: 'Tracking' },
@@ -81,20 +113,16 @@ export default function HomeSummary() {
             {totalKwh.toFixed(0)} kWh
           </h2>
           <p className="mt-2 text-sm text-apptext-soft">Combined 60-day usage · ~${estimatedBill.toFixed(0)} estimated bill</p>
-          <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-appborder bg-appinset p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Today</p>
-              <p className="mt-1 text-sm font-semibold text-apptext">{todayElec.toFixed(1)} kWh</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Rate</p>
+              <p className="mt-1 text-sm font-semibold text-apptext">${kwhRate.toFixed(4)}/kWh</p>
             </div>
             <div className="rounded-xl border border-appborder bg-appinset p-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Last Reading</p>
               <p className="mt-1 text-sm font-semibold text-apptext">
-                {lastReading ? new Date(lastReading.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No data'}
+                {latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No data'}
               </p>
-            </div>
-            <div className="rounded-xl border border-appborder bg-appinset p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Rate</p>
-              <p className="mt-1 text-sm font-semibold text-apptext">${kwhRate.toFixed(4)}/kWh</p>
             </div>
           </div>
         </div>
@@ -131,11 +159,41 @@ export default function HomeSummary() {
 
       {/* Stat tiles */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <StatTile label="Today (Elec)" value={todayElec.toFixed(1)} unit="kWh" loading={electricUsage.isLoading} icon={Icons.Bolt} />
+        <StatTile
+          label="Last Daily"
+          value={latestDaily ? latestDaily.total.toFixed(1) : '—'}
+          unit="kWh"
+          loading={electricUsage.isLoading}
+          icon={Icons.Bolt}
+          subtitle={latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined}
+        />
         <StatTile label="Electric (60d)" value={elecKwh.toFixed(0)} unit="kWh" loading={electricTotal.isLoading} icon={Icons.Bolt} />
         <StatTile label="Est. Bill" value={`$${estimatedBill.toFixed(2)}`} unit="" loading={electricTotal.isLoading} icon={Icons.Dollar} />
         <StatTile label="Gas (60d)" value={gasKwh.toFixed(0)} unit="kWh" loading={gasTotal.isLoading} icon={Icons.Calendar} />
       </section>
+
+      {/* Current weather card */}
+      {currentWx && (
+        <section className="rounded-[28px] border border-sky-300/15 bg-sky-300/5 p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <span className="text-4xl">{wxEmoji}</span>
+              <div>
+                <p className="text-sm font-medium text-sky-200/80">{wxDesc}</p>
+                <p className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-apptext">
+                  {Math.round(latestTemp!)}°F
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Humidity</p>
+                <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(latestHumidity!)}%</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* Module cards */}
       <section className="perf-section">
@@ -183,21 +241,19 @@ export default function HomeSummary() {
             <VirtualizedList
               items={recentElectric} height={320} itemHeight={64} overscan={4} className="pr-1" contentClassName="space-y-2"
               renderItem={(d) => {
-                const usageLevel = getUsageLevel(Number(d.usageKwh));
+                const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                 return (
-                  <div key={d.id} className="flex items-center justify-between gap-4 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder">
+                  <div key={d.date} className="flex items-center justify-between gap-4 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder">
                     <div className="flex items-center gap-3">
-                      <span className={`h-2.5 w-2.5 rounded-full ${d.sourceProvider === 'coserv' ? 'bg-appsuccess shadow-[0_0_16px_var(--appsuccess)]' : 'bg-sky-400'}`} />
+                      <span className="h-2.5 w-2.5 rounded-full bg-appsuccess shadow-[0_0_16px_var(--appsuccess)]" />
                       <div>
-                        <p className="text-sm font-medium text-apptext">
-                          {new Date(d.timestamp).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                        </p>
-                        <p className="text-xs text-apptext-dim">{d.sourceProvider}</p>
+                        <p className="text-sm font-medium text-apptext">{label}</p>
+                        <p className="text-xs text-apptext-dim">CoServ · {d.count} hourly records</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`text-sm font-semibold tabular-nums ${usageLevel.textClass}`}>{Number(d.usageKwh).toFixed(2)} kWh</p>
-                      <p className="text-xs text-apptext-dim">${(Number(d.usageKwh) * kwhRate).toFixed(2)} est.</p>
+                      <p className="text-sm font-semibold tabular-nums text-apptext-soft">{d.total.toFixed(2)} kWh</p>
+                      <p className="text-xs text-apptext-dim">${(d.total * kwhRate).toFixed(2)} est.</p>
                     </div>
                   </div>
                 );

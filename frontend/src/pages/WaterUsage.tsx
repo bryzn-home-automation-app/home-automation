@@ -6,6 +6,8 @@ import type { EnergyUsage } from '../types';
 import DeferredRender from '../components/DeferredRender';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { buildUsagePeriods, summarizeUsageRange } from '../utils/usageSummary';
+import WeatherContextCard from '../components/WeatherContextCard';
+import Weather24HourCard from '../components/Weather24HourCard';
 
 /** Generate mock water usage data for the past 30 days. */
 function generateMockWaterData(): EnergyUsage[] {
@@ -112,6 +114,15 @@ export default function WaterUsage() {
         />
       </section>
 
+      {/* Weather Context */}
+      {periodDefinitions.length > 0 && (
+        <WeatherContextCard
+          startDate={periodDefinitions[0].start}
+          endDate={periodDefinitions[0].end}
+          showPrecipitation
+        />
+      )}
+
       <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DeferredRender minHeight={360}>
           <UsageChart
@@ -134,6 +145,14 @@ export default function WaterUsage() {
           />
         </DeferredRender>
       </section>
+
+      {/* 24-Hour Weather Detail */}
+      {periodDefinitions.length > 0 && (
+        <Weather24HourCard
+          startDate={periodDefinitions[0].start}
+          endDate={periodDefinitions[0].end}
+        />
+      )}
 
       <UsageSummaryGrid
         title="Water highs, lows, and rolling period totals"

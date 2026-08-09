@@ -18,11 +18,19 @@ public class ConfigController {
     @Value("${app.data-start-date:07/24/2026}")
     private String dataStartDate;
 
+    @Value("${app.property-latitude}")
+    private double propertyLatitude;
+
+    @Value("${app.property-longitude}")
+    private double propertyLongitude;
+
     @GetMapping("/config")
     public ResponseEntity<Map<String, Object>> getConfig() {
         return ResponseEntity.ok(Map.of(
                 "kwhRate", kwhRate,
-                "dataStartDate", dataStartDate
+                "dataStartDate", dataStartDate,
+                "propertyLatitude", propertyLatitude,
+                "propertyLongitude", propertyLongitude
         ));
     }
 }

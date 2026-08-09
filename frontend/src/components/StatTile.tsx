@@ -7,6 +7,7 @@ interface StatTileProps {
   trend?: { direction: 'up' | 'down'; pct: number };
   loading?: boolean;
   icon: React.ReactNode;
+  subtitle?: string;
 }
 
 function StatTile({
@@ -16,6 +17,7 @@ function StatTile({
   trend,
   loading,
   icon,
+  subtitle,
 }: StatTileProps) {
   if (loading) {
     return (
@@ -44,6 +46,9 @@ function StatTile({
         </span>
         <span className="text-sm text-apptext-muted">{unit}</span>
       </div>
+      {subtitle && (
+        <p className="text-xs text-apptext-dim">{subtitle}</p>
+      )}
       {trend && (
         <span
           className={`text-xs font-medium ${
