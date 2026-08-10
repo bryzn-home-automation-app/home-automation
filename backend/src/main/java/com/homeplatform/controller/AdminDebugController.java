@@ -97,6 +97,19 @@ public class AdminDebugController {
 
         health.put("threads", ManagementFactory.getThreadMXBean().getThreadCount());
 
+        // Last sync check timestamp
+        try (Connection conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                 "SELECT timestamp, message FROM app_events WHERE category = 'sync' AND source = 'HourlySyncScheduler' ORDER BY timestamp DESC LIMIT 1")) {
+            var rs = stmt.executeQuery();
+            if (rs.next()) {
+                health.put("lastSyncCheck", Map.of(
+                    "timestamp", rs.getTimestamp(1).toString(),
+                    "message", rs.getString(2)
+                ));
+            }
+        } catch (Exception ignored) {}
+
         return ResponseEntity.ok(health);
     }
 

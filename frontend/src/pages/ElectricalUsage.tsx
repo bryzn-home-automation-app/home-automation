@@ -206,7 +206,7 @@ export default function ElectricalUsage() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
               <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Rate</p>
               <p className="mt-2 text-lg font-semibold text-apptext">
@@ -223,6 +223,21 @@ export default function ElectricalUsage() {
               <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Active Readings</p>
               <p className="mt-2 text-lg font-semibold text-apptext">{realData.length}</p>
             </div>
+            {(config.data?.lastSyncCheck || config.data?.lastElectricReading) && (
+              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 p-4">
+                <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/60">Last Updated</p>
+                {config.data?.lastElectricReading && (
+                  <p className="mt-1 text-xs text-apptext-dim">
+                    Data: {new Date(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                )}
+                {config.data?.lastSyncCheck && (
+                  <p className="text-xs text-apptext-dim">
+                    Checked: {new Date(config.data.lastSyncCheck).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>

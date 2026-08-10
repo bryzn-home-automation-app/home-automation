@@ -6,6 +6,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import javax.sql.DataSource;
+import java.sql.Timestamp;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -24,13 +27,42 @@ public class ConfigController {
     @Value("${app.property-longitude}")
     private double propertyLongitude;
 
+    private final DataSource dataSource;
+
+    public ConfigController(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
     @GetMapping("/config")
     public ResponseEntity<Map<String, Object>> getConfig() {
-        return ResponseEntity.ok(Map.of(
-                "kwhRate", kwhRate,
-                "dataStartDate", dataStartDate,
-                "propertyLatitude", propertyLatitude,
-                "propertyLongitude", propertyLongitude
-        ));
+        Map<String, Object> config = new LinkedHashMap<>();
+        config.put("kwhRate", kwhRate);
+        config.put("dataStartDate", dataStartDate);
+        config.put("propertyLatitude", propertyLatitude);
+        config.put("propertyLongitude", propertyLongitude);
+
+        // Most recent electric reading timestamp
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                 "SELECT MAX(timestamp) FROM hourly_electric_usage WHERE timestamp::date < CURRENT_DATE")) {
+            var rs = stmt.executeQuery();
+            if (rs.next()) {
+                Timestamp ts = rs.getTimestamp(1);
+                config.put("lastElectricReading", ts != null ? ts.toString() : null);
+            }
+        } catch (Exception ignored) {}
+
+        // Most recent hourly sync check
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(
+                 "SELECT MAX(timestamp) FROM app_events WHERE category = 'sync' AND source = 'HourlySyncScheduler'")) {
+            var rs = stmt.executeQuery();
+            if (rs.next()) {
+                Timestamp ts = rs.getTimestamp(1);
+                config.put("lastSyncCheck", ts != null ? ts.toString() : null);
+            }
+        } catch (Exception ignored) {}
+
+        return ResponseEntity.ok(config);
     }
 }

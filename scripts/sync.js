@@ -185,15 +185,15 @@ async function checkPostSyncZeros(client) {
 // ─── Watch mode: poll for today's electric reading ─────────────────
 
 /**
- * Check if today's electric usage is already in the DB.
- * Electric data comes in at 5 AM Central from CoServ.
+ * Check if yesterday's electric usage is already in the DB.
+ * CoServ posts the previous day's reading at ~5 AM Central.
  */
-async function isTodayPopulated(client) {
+async function isYesterdayPopulated(client) {
   try {
     const { rows } = await client.query(
       `SELECT 1 FROM electric_usage
        WHERE source_provider = 'coserv'
-         AND timestamp::date = (CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date
+         AND timestamp::date = ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date - 1)
          AND usage_kwh > 0
        LIMIT 1`
     );
@@ -239,30 +239,31 @@ async function watchMode(client, secrets) {
       break;
     }
 
-    console.log(`   🔍  Checking for today's electric data (${hour}:00 CT)...`);
-    if (await isTodayPopulated(client)) {
-      console.log('   ✅  Today\'s electric reading is already in the DB — nothing to do\n');
-      break;
-    }
+      const yesterday = (await client.query(
+        `SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date - 1 AS d`
+      )).rows[0].d;
+      // CoServ posts the previous day's reading at ~5 AM Central.
+      // We poll for yesterday's data, not today's.
+      if (!(await isYesterdayPopulated(client))) {
+        console.log(`   ⚡  No reading for ${yesterday} yet — running sync...`);
+        const [y, m, d] = yesterday.split('-').map(Number);
+        const yesterdayStr = `${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}/${y}`;
+        await runSync(client, secrets, {
+          startDate: yesterdayStr,
+          endDate: yesterdayStr,
+          mode: 'watch-poll',
+          dryRun: false,
+        });
 
-    // Run a daily sync for today
-    console.log('   ⚡  No reading yet — running sync...');
-    const today = new Date();
-    const todayStr = fmtDate(today);
-    await runSync(client, secrets, {
-      startDate: todayStr,
-      endDate: todayStr,
-      mode: 'watch-poll',
-      dryRun: false,
-    });
-
-    // Check again after sync
-    if (await isTodayPopulated(client)) {
-      console.log('   ✅  Today\'s reading synced successfully\n');
-      break;
-    }
-
-    console.log(`   ⏳  Still no reading — will retry in ${POLL_MINUTES} minutes\n`);
+        if (await isYesterdayPopulated(client)) {
+          console.log(`   ✅  ${yesterday} synced successfully\n`);
+          break;
+        }
+        console.log(`   ⏳  Still no reading for ${yesterday} — retrying in ${POLL_MINUTES} minutes\n`);
+      } else {
+        console.log(`   ✅  ${yesterday} already populated — nothing to do\n`);
+        break;
+      }
     await new Promise(r => setTimeout(r, POLL_MINUTES * 60_000));
   }
 }

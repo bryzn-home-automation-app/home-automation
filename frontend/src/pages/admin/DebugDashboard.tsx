@@ -18,6 +18,7 @@ interface HealthInfo {
   database: { status: string; url: string } | { status: string; error: string };
   jvm: { uptimeMinutes: number; heapUsedMB: number; heapMaxMB: number; startTime: string };
   threads: number;
+  lastSyncCheck?: { timestamp: string; message: string };
 }
 
 interface EventSummary {
@@ -167,6 +168,20 @@ export default function DebugDashboard() {
           )}
         </div>
       </section>
+
+      {/* Last sync check box */}
+      {health?.lastSyncCheck && (
+        <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-sky-200/60">Last Sync Check</p>
+          <p className="mt-1 text-sm text-apptext-soft">
+            {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
+              month: 'short', day: 'numeric',
+              hour: 'numeric', minute: '2-digit',
+            })}
+          </p>
+          <p className="mt-1 text-xs text-apptext-dim truncate">{health.lastSyncCheck.message}</p>
+        </div>
+      )}
 
       {/* Event summary badges */}
       {summary && (
