@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet, Link } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
@@ -7,7 +8,7 @@ import { fetchUnreadCount } from './api/notifications';
 import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
 
-export default function App() {
+export default memo(function App() {
   const { toggleTheme, isDark } = useTheme();
   const { user, isAdmin, logout } = useAuth();
 
@@ -70,7 +71,7 @@ export default function App() {
         />
 
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]">
-          <aside className="rounded-2xl border border-appborder bg-appsurface-raised p-3 shadow-[0_12px_36px_var(--appshadow)] backdrop-blur sm:p-4 lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5">
+          <aside className="rounded-2xl border border-appborder bg-appsurface-raised p-3 shadow-[0_12px_36px_var(--appshadow)] sm:p-4 lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5">
             <div className="flex items-center justify-between gap-3 border-b border-appborder pb-4">
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-appwarning/90">
@@ -243,4 +244,4 @@ export default function App() {
       </div>
     </div>
   );
-}
+});
