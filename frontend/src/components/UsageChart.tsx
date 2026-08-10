@@ -104,8 +104,6 @@ function UsageChart({
 
   const chartData = useMemo(() => {
     // Sum hourly records per date to get daily totals.
-    // Use only hourly_electric_usage records (source = 'CoServ Average Usage')
-    // to avoid mixing granularities with electric_usage daily records.
     const byDate = new Map<string, number>();
     for (const d of data) {
       if (d.source !== 'CoServ Average Usage') continue;

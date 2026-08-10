@@ -307,12 +307,14 @@ export default memo(function ElectricalUsage() {
       </section>
 
       {periodDefinitions.length > 0 && (
-        <UsageWeatherChart
-          usageData={realData}
-          loading={loading}
-          startDate={periodDefinitions[periodDefinitions.length - 1].start}
-          endDate={periodDefinitions[periodDefinitions.length - 1].end}
-        />
+        <DeferredRender minHeight={380}>
+          <UsageWeatherChart
+            usageData={realData}
+            loading={loading}
+            startDate={periodDefinitions[periodDefinitions.length - 1].start}
+            endDate={periodDefinitions[periodDefinitions.length - 1].end}
+          />
+        </DeferredRender>
       )}
 
       <UsageSummaryGrid
