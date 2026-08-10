@@ -150,45 +150,47 @@ function UsageWeatherChart({
     refetchInterval: 3_600_000,
   });
 
-  // Build merged chart data — hourly for 24h/3d/week/month, daily for All Time
-  const { chartData, hourlyData, useHourly } = useMemo(() => {
-    const weatherByDate = new Map<string, { mean: number; high: number; low: number }>();
+  // ── Weather lookup maps ──
+  const weatherByDate = useMemo(() => {
+    const map = new Map<string, { mean: number; high: number; low: number }>();
     if (weather?.daily) {
       for (const w of weather.daily) {
         if (typeof w.date !== 'string' || !w.date) continue;
         if (typeof w.meanTemperature !== 'number' || Number.isNaN(w.meanTemperature)) continue;
-        weatherByDate.set(w.date, {
+        map.set(w.date, {
           mean: w.meanTemperature,
           high: typeof w.maxTemperature === 'number' ? w.maxTemperature : w.meanTemperature,
           low: typeof w.minTemperature === 'number' ? w.minTemperature : w.meanTemperature,
         });
       }
     }
+    return map;
+  }, [weather]);
 
-    // Aggregate electric by date AND by hour for the kWh line
-    const byDate = new Map<string, number>();
-    const byHour = new Map<string, number>(); // key: "2026-08-07T14" to match weather format
-    const isHourlySource = (d: EnergyUsage) =>
-      d.source === 'CoServ Average Usage'; // only these have per-hour granularity
+  // ── Electric usage aggregation maps ──
+  const { byDate, byHour } = useMemo(() => {
+    const dateMap = new Map<string, number>();
+    const hourMap = new Map<string, number>();
     for (const d of usageData) {
       if (typeof d.timestamp !== 'string' || d.timestamp.length < 10) continue;
-      const date = d.timestamp.slice(0, 10);
       const usage = Number(d.usageKwh);
       if (Number.isNaN(usage)) continue;
-      byDate.set(date, (byDate.get(date) ?? 0) + usage);
-      // Only map hourly-source records to hour buckets — daily records
-      // (Green Button) would put 50+ kWh at midnight, skewing the chart.
-      if (isHourlySource(d)) {
-        // Normalize "2026-08-07 14:00:00" → "2026-08-07T14" to match weather format
+      const date = d.timestamp.slice(0, 10);
+      dateMap.set(date, (dateMap.get(date) ?? 0) + usage);
+      if (d.source === 'CoServ Average Usage') {
         const normalized = d.timestamp.replace(' ', 'T');
         if (normalized.length >= 13) {
           const hourKey = normalized.substring(0, 13);
-          byHour.set(hourKey, (byHour.get(hourKey) ?? 0) + usage);
+          hourMap.set(hourKey, (hourMap.get(hourKey) ?? 0) + usage);
         }
       }
     }
+    return { byDate: dateMap, byHour: hourMap };
+  }, [usageData]);
 
-    const daily = Array.from(byDate.entries())
+  // ── Daily chart data ──
+  const chartData = useMemo(() => {
+    return Array.from(byDate.entries())
       .map(([date, kWh]) => {
         const w = weatherByDate.get(date);
         return {
@@ -201,43 +203,40 @@ function UsageWeatherChart({
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
+  }, [byDate, weatherByDate]);
 
-    // Hourly data — pull enough for the widest hourly-capable filter (weekly = 7d)
-    let hourly: any[] = [];
-    if (weather?.hourly) {
-      const now = new Date();
-      const cutoffDate = new Date(now.getTime() - 192 * 60 * 60 * 1000); // 8 days
-      const cutoffLocal = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}T00:00`;
-      hourly = weather.hourly
-        .filter((h: any) => h.time >= cutoffLocal && h.temperature > 0)
-        .map((h: any) => {
-          const d = new Date(h.time);
-          const hour = d.getHours();
-          const ampm = hour >= 12 ? 'PM' : 'AM';
-          const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-          // 24h: show hour labels. Multi-day hourly: show date at midnight, empty otherwise.
-          const dateLabel = hour === 0 ? formatDateLabel(h.time) : '';
-          const isMultiDay = range === '3d' || range === 'week';
-          return {
-            time: h.time,
-            label: isMultiDay && hour !== 0 ? '' : isMultiDay ? dateLabel : `${h12}${ampm}`,
-            date: h.time.slice(0, 10),
-            temp: h.temperature,
-            highTemp: h.temperature,
-            lowTemp: h.temperature,
-            avgTemp: h.temperature,
-            apparentTemp: h.apparentTemperature,
-            humidity: h.humidity,
-            // Prefer per-hour kWh, fall back to daily total
-            kWh: byHour.get(h.time.substring(0, 13)) ?? byDate.get(h.time.slice(0, 10)) ?? null,
-          };
-        });
-    }
+  // ── Hourly data ──
+  const hourlyData = useMemo(() => {
+    if (!weather?.hourly) return [];
+    const now = new Date();
+    const cutoffDate = new Date(now.getTime() - 192 * 60 * 60 * 1000); // 8 days
+    const cutoffLocal = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}T00:00`;
+    return weather.hourly
+      .filter((h: any) => h.time >= cutoffLocal && h.temperature > 0)
+      .map((h: any) => {
+        const d = new Date(h.time);
+        const hour = d.getHours();
+        const ampm = hour >= 12 ? 'PM' : 'AM';
+        const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+        const dateLabel = hour === 0 ? formatDateLabel(h.time) : '';
+        const isMultiDay = range === '3d' || range === 'week';
+        return {
+          time: h.time,
+          label: isMultiDay && hour !== 0 ? '' : isMultiDay ? dateLabel : `${h12}${ampm}`,
+          date: h.time.slice(0, 10),
+          temp: h.temperature,
+          highTemp: h.temperature,
+          lowTemp: h.temperature,
+          avgTemp: h.temperature,
+          apparentTemp: h.apparentTemperature,
+          humidity: h.humidity,
+          kWh: byHour.get(h.time.substring(0, 13)) ?? byDate.get(h.time.slice(0, 10)) ?? null,
+        };
+      });
+  }, [weather, byDate, byHour, range]);
 
-    const rangeConfig = TIME_RANGES.find((r) => r.key === range);
-    const useH = (rangeConfig?.useHourly ?? false) && hourly.length >= 2;
-    return { chartData: daily, hourlyData: hourly, useHourly: useH };
-  }, [usageData, weather, range]);
+  const rangeConfig = TIME_RANGES.find((r) => r.key === range);
+  const useHourly = (rangeConfig?.useHourly ?? false) && hourlyData.length >= 2;
 
   // Client-side time-range filter
   const filteredData = useMemo(() => {
@@ -423,10 +422,6 @@ function UsageWeatherChart({
 
           {/* Temperature — amber dashed line */}
           {hasWeather && <Line yAxisId="right" type="monotone" dataKey={useHourly ? 'temp' : 'avgTemp'} stroke="#f59e0b" strokeWidth={2} dot={useHourly ? false : (showDots ? { fill: '#f59e0b', r: 4 } : false)} isAnimationActive={false} connectNulls strokeDasharray="8 3" />}
-
-          {/* High / Low — only for daily (All Time) view where we have distinct min/max aggregates */}
-          {hasWeather && !useHourly && <Line yAxisId="right" type="monotone" dataKey="highTemp" stroke="#f87171" strokeWidth={1.5} dot={showDots ? { fill: '#f87171', r: 3 } : false} isAnimationActive={false} connectNulls strokeDasharray="2 4" />}
-          {hasWeather && !useHourly && <Line yAxisId="right" type="monotone" dataKey="lowTemp" stroke="#38bdf8" strokeWidth={1.5} dot={showDots ? { fill: '#38bdf8', r: 3 } : false} isAnimationActive={false} connectNulls strokeDasharray="2 4" />}
         </LineChart>
       </ResponsiveContainer>
     </div>
