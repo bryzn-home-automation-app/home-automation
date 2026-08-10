@@ -25,11 +25,19 @@ echo "── 3. Starting stack ──"
 docker compose up -d 2>&1
 echo ""
 
-# 4. Quick health check
-echo "── 4. Health check ──"
-sleep 5
-STATUS=$(curl -s http://localhost/api/health 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('status','DOWN'))" 2>/dev/null || echo "DOWN")
-echo "   Backend: $STATUS"
+# 4. Wait for backend to be healthy (up to 60s)
+echo "── 4. Waiting for backend ──"
+for i in $(seq 1 12); do
+  STATUS=$(curl -s http://localhost/api/health 2>/dev/null | grep -o '"UP"' || true)
+  if [ "$STATUS" = '"UP"' ]; then
+    echo "   Backend: UP (after ${i}0s)"
+    break
+  fi
+  sleep 10
+done
+if [ "$STATUS" != '"UP"' ]; then
+  echo "   Backend: still starting — check logs: docker compose logs backend"
+fi
 echo "   URL:     http://localhost"
 echo ""
 
