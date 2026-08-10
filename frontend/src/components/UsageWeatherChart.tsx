@@ -146,8 +146,8 @@ function UsageWeatherChart({
     queryKey: ['weather', dateStart, dateEnd],
     queryFn: () => fetchWeatherForRange(dateStart, dateEnd),
     enabled: weatherEnabled,
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 3_600_000,
+    refetchInterval: 3_600_000,
   });
 
   // Build merged chart data — hourly for 24h/3d/week/month, daily for All Time

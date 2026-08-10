@@ -39,10 +39,13 @@ export default memo(function ElectricalUsage() {
     return Number.isNaN(ms) ? 0 : ms;
   };
 
-  const chartData = useMemo(
-    () => [...realData].sort((a, b) => timestampMs(a.timestamp) - timestampMs(b.timestamp)),
-    [realData]
-  );
+  const MAX_CHART_POINTS = 500;
+  const chartData = useMemo(() => {
+    const sorted = [...realData].sort((a, b) => timestampMs(a.timestamp) - timestampMs(b.timestamp));
+    if (sorted.length <= MAX_CHART_POINTS) return sorted;
+    const step = (sorted.length - 1) / (MAX_CHART_POINTS - 1);
+    return Array.from({ length: MAX_CHART_POINTS }, (_, i) => sorted[Math.round(i * step)]);
+  }, [realData]);
 
   // ── Daily aggregates from hourly data ──────────────────────────
   const dailyFromHourly = useMemo(() => {
@@ -57,16 +60,24 @@ export default memo(function ElectricalUsage() {
       .sort((a, b) => b.date.localeCompare(a.date)); // newest first
   }, [realData]);
 
+  // ── Hourly record counts per date (single scan, reused by latestDaily + dailyLogData) ──
+  const hourlyCountByDate = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of realData) {
+      if (r.source !== 'CoServ Average Usage') continue;
+      const date = r.timestamp.slice(0, 10);
+      counts.set(date, (counts.get(date) ?? 0) + 1);
+    }
+    return counts;
+  }, [realData]);
+
   // Last reading = most recent day that has 24 complete hourly records
   const latestDaily = useMemo(() => {
     for (const d of dailyFromHourly) {
-      const hourCount = realData.filter(
-        (r) => r.source === 'CoServ Average Usage' && r.timestamp.startsWith(d.date)
-      ).length;
-      if (hourCount >= 20) return d; // near-complete day
+      if ((hourlyCountByDate.get(d.date) ?? 0) >= 20) return d;
     }
     return dailyFromHourly.length > 0 ? dailyFromHourly[0] : null;
-  }, [dailyFromHourly, realData]);
+  }, [dailyFromHourly, hourlyCountByDate]);
 
   // ── 7-day and 30-day averages ──────────────────────────────────
   const computeDailyAvg = (days: number): number => {
@@ -97,8 +108,8 @@ export default memo(function ElectricalUsage() {
     queryKey: ['weather', weatherStart, weatherEnd],
     queryFn: () => fetchWeatherForRange(weatherStart, weatherEnd),
     enabled: weatherStart !== '' && weatherEnd !== '',
-    staleTime: 120_000,
-    refetchInterval: 120_000,
+    staleTime: 3_600_000,
+    refetchInterval: 3_600_000,
   });
 
   const weatherByDate = useMemo(() => {
@@ -166,14 +177,10 @@ export default memo(function ElectricalUsage() {
   // ── Usage log table ────────────────────────────────────────────
   // Daily filter: one row per date (sum of hourly), newest first
   const dailyLogData = useMemo(() => {
-    return dailyFromHourly.filter((d) => {
-      // Only include days with near-complete data
-      const hourCount = realData.filter(
-        (r) => r.source === 'CoServ Average Usage' && r.timestamp.startsWith(d.date)
-      ).length;
-      return hourCount >= 18;
-    }).slice(0, 30);
-  }, [dailyFromHourly, realData]);
+    return dailyFromHourly
+      .filter((d) => (hourlyCountByDate.get(d.date) ?? 0) >= 18)
+      .slice(0, 30);
+  }, [dailyFromHourly, hourlyCountByDate]);
 
   // Hourly filter: raw records, newest first
   const hourlyLogData = useMemo(() => {
