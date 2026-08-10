@@ -21,10 +21,10 @@ public class ConfigController {
     @Value("${app.data-start-date:07/24/2026}")
     private String dataStartDate;
 
-    @Value("${app.property-latitude}")
+    @Value("${app.property-latitude:0}")
     private double propertyLatitude;
 
-    @Value("${app.property-longitude}")
+    @Value("${app.property-longitude:0}")
     private double propertyLongitude;
 
     private final DataSource dataSource;
