@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
@@ -14,7 +14,7 @@ import UsageWeatherChart from '../components/UsageWeatherChart';
 
 type LogFilter = 'daily' | 'hourly';
 
-export default function ElectricalUsage() {
+export default memo(function ElectricalUsage() {
   const { electricUsage, electricTotal, electricMeter, config } = useUsageData();
   const [logFilter, setLogFilter] = useState<LogFilter>('daily');
 
@@ -97,8 +97,8 @@ export default function ElectricalUsage() {
     queryKey: ['weather', weatherStart, weatherEnd],
     queryFn: () => fetchWeatherForRange(weatherStart, weatherEnd),
     enabled: weatherStart !== '' && weatherEnd !== '',
-    staleTime: 60_000,
-    refetchInterval: 30_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
   });
 
   const weatherByDate = useMemo(() => {
@@ -440,4 +440,4 @@ export default function ElectricalUsage() {
       </section>
     </div>
   );
-}
+});

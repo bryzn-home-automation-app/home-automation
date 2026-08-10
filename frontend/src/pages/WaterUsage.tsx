@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
 import MonthlyComparison from '../components/MonthlyComparison';
@@ -43,7 +43,7 @@ function generateMockWaterData(): EnergyUsage[] {
   return records;
 }
 
-export default function WaterUsage() {
+export default memo(function WaterUsage() {
   const data = useMemo(() => generateMockWaterData(), []);
 
   const totalGal = data.reduce((s, d) => s + d.usageKwh, 0);
@@ -174,4 +174,4 @@ export default function WaterUsage() {
       </section>
     </div>
   );
-}
+});

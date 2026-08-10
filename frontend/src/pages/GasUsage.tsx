@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
 import { useQueries } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
@@ -11,7 +11,7 @@ import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummar
 import WeatherContextCard from '../components/WeatherContextCard';
 import Weather24HourCard from '../components/Weather24HourCard';
 
-export default function GasUsage() {
+export default memo(function GasUsage() {
   const { gasUsage, gasTotal, gasMeter, config } = useUsageData();
 
   const data = gasUsage.data ?? [];
@@ -169,4 +169,4 @@ export default function GasUsage() {
       />
     </div>
   );
-}
+});

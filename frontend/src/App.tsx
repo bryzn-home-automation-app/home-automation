@@ -22,8 +22,8 @@ export default memo(function App() {
   const unread = useQuery({
     queryKey: ['notifications-unread-count'],
     queryFn: fetchUnreadCount,
-    staleTime: 30_000,
-    refetchInterval: 30_000,
+    staleTime: 120_000,
+    refetchInterval: 120_000,
     enabled: !!user,
   });
 
