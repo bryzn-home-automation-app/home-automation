@@ -39,6 +39,7 @@ services:
       dockerfile: Dockerfile
     container_name: homeplatform-backend
     environment:
+      TZ: America/Chicago
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-homeplatform}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-homeplatform}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
