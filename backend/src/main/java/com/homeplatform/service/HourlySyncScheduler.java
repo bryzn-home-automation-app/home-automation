@@ -31,7 +31,7 @@ public class HourlySyncScheduler {
     }
 
     /** Every 30 minutes on the half-hour from 5 AM to 11 PM CT. */
-    @Scheduled(cron = "0 0,30 5-23 * * *", zone = "America/Chicago")
+    @Scheduled(cron = "0 0,15,30,45 5-23 * * *", zone = "America/Chicago")
     public void checkAndSync() {
         String yesterday = LocalDate.now(CHICAGO).minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
         log.info("HourlySyncScheduler: checking for {}…", yesterday);
