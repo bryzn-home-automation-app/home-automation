@@ -47,6 +47,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       SPRING_REDIS_HOST: redis
       SPRING_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      GIT_COMMIT: ${GIT_COMMIT:-unknown}
       JWT_SECRET: ${JWT_SECRET}
       KWH_RATE: ${KWH_RATE:-0.12}
       DATA_START_DATE: ${DATA_START_DATE:-07/24/2026}
@@ -72,6 +73,7 @@ services:
     volumes:
       - uploads_data:/app/uploads
       - ./scripts:/scripts:ro
+      - ./.git-commit:/app/.git-commit:ro
 
   nginx:
     build:

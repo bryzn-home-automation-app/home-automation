@@ -10,14 +10,26 @@ echo "  $(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
 echo ""
 
-# 1. Git pull
+# 1. Git pull (skip if no .git — e.g. NUC file copy)
 echo "── 1. Pulling latest ──"
-git pull origin master 2>&1 | sed 's/^/   /'
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  git pull origin master 2>&1 | sed 's/^/   /'
+else
+  echo "   (no .git — skipping pull, using .git-commit file)"
+fi
 echo ""
 
-# 2. Rebuild images (backend + nginx — postgres/redis don't change)
+# 2. Resolve commit hash (git → .git-commit file → unknown)
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  GIT_COMMIT=$(git rev-parse --short HEAD)
+  echo "$GIT_COMMIT" > .git-commit
+else
+  GIT_COMMIT=$(cat .git-commit 2>/dev/null || echo "unknown")
+fi
+export GIT_COMMIT
+
+# 3. Rebuild images (backend + nginx — postgres/redis don't change)
 echo "── 2. Rebuilding Docker images ──"
-export GIT_COMMIT=$(git rev-parse --short HEAD)
 echo "   Commit: $GIT_COMMIT"
 docker compose build --no-cache backend nginx 2>&1 | tail -10
 echo ""

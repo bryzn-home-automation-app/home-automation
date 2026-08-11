@@ -40,11 +40,21 @@ public class DataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        // Read git commit hash baked at build time
-        String commit = "unknown";
-        try {
-            commit = Files.readString(Path.of("/app/git-commit.txt")).trim();
-        } catch (IOException ignored) {}
+        // Read git commit hash — env var (runtime) > committed file > build-time file
+        String commit = System.getenv().getOrDefault("GIT_COMMIT", "");
+        if (commit.isBlank()) {
+            try {
+                commit = Files.readString(Path.of("/app/.git-commit")).trim();
+            } catch (IOException ignored) {}
+        }
+        if (commit.isBlank()) {
+            try {
+                commit = Files.readString(Path.of("/app/git-commit.txt")).trim();
+            } catch (IOException ignored) {}
+        }
+        if (commit.isBlank()) {
+            commit = "unknown";
+        }
 
         appEventService.info("system", "DataSeeder",
                 "Backend starting up — commit=" + commit);

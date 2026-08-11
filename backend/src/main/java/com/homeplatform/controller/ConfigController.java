@@ -44,13 +44,19 @@ public class ConfigController {
         config.put("propertyLatitude", propertyLatitude);
         config.put("propertyLongitude", propertyLongitude);
 
-        // Git commit hash baked at Docker build time
-        try {
-            String commit = Files.readString(Path.of("/app/git-commit.txt")).trim();
-            config.put("version", commit);
-        } catch (IOException e) {
-            config.put("version", "unknown");
+        // Git commit hash — env var (runtime) > committed file > build-time file
+        String commit = System.getenv().getOrDefault("GIT_COMMIT", "");
+        if (commit.isBlank()) {
+            try {
+                commit = Files.readString(Path.of("/app/.git-commit")).trim();
+            } catch (IOException e) {}
         }
+        if (commit.isBlank()) {
+            try {
+                commit = Files.readString(Path.of("/app/git-commit.txt")).trim();
+            } catch (IOException e) {}
+        }
+        config.put("version", commit.isBlank() ? "unknown" : commit);
 
         // Most recent electric reading timestamp
         try (var conn = dataSource.getConnection();
