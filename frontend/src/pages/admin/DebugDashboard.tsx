@@ -3,6 +3,9 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../api/client';
 import VirtualizedList from '../../components/VirtualizedList';
 
+// Fetch config (includes version/commit hash) — shared key with useUsageData
+const fetchConfig = () => api.get('/config').then((r) => r.data);
+
 interface AppEvent {
   id: number;
   timestamp: string;
@@ -100,6 +103,14 @@ export default function DebugDashboard() {
     refetchInterval: 60_000,
   });
 
+  // Version / commit hash
+  const { data: config } = useQuery({
+    queryKey: ['config'],
+    queryFn: fetchConfig,
+    staleTime: 3_600_000,
+  });
+  const version = config?.version || 'unknown';
+
   // Sync-specific events
   const syncEvents = useMemo(
     () => (events ?? []).filter((e) => e.category === 'sync'),
@@ -113,7 +124,7 @@ export default function DebugDashboard() {
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-2xl">🔧</span>
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-amber-200/70">Admin</p>
-            <h2 className="text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">Debug Dashboard</h2>
+            <h2 className="text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">Debug Dashboard <span className="text-xs font-mono text-apptext-dim ml-2">{version}</span></h2>
           </div>
         </div>
       </section>
