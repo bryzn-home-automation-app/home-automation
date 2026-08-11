@@ -1,6 +1,7 @@
 package com.homeplatform.controller;
 
 import com.homeplatform.model.Notification;
+import com.homeplatform.service.AlertEngine;
 import com.homeplatform.service.NotificationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -14,9 +15,11 @@ import java.util.Map;
 public class NotificationController {
 
     private final NotificationService service;
+    private final AlertEngine alertEngine;
 
-    public NotificationController(NotificationService service) {
+    public NotificationController(NotificationService service, AlertEngine alertEngine) {
         this.service = service;
+        this.alertEngine = alertEngine;
     }
 
     @GetMapping
@@ -53,9 +56,9 @@ public class NotificationController {
     }
 
     @PostMapping("/seed")
-    public ResponseEntity<Map<String, String>> seed(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> seed(HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("userId");
-        service.seedSampleNotifications(userId);
-        return ResponseEntity.ok(Map.of("status", "seeded"));
+        alertEngine.generateElectricAlerts(userId);
+        return ResponseEntity.ok(Map.of("status", "generated", "unread", service.getUnreadCount(userId)));
     }
 }

@@ -28,18 +28,18 @@ public class UserService {
     private final UserRepository userRepo;
     private final GuestSessionRepository sessionRepo;
     private final JwtUtil jwtUtil;
-    private final NotificationService notificationService;
+    private final AlertEngine alertEngine;
     private final MaintenanceService maintenanceService;
 
     public UserService(UserRepository userRepo,
                        GuestSessionRepository sessionRepo,
                        JwtUtil jwtUtil,
-                       NotificationService notificationService,
+                       AlertEngine alertEngine,
                        MaintenanceService maintenanceService) {
         this.userRepo = userRepo;
         this.sessionRepo = sessionRepo;
         this.jwtUtil = jwtUtil;
-        this.notificationService = notificationService;
+        this.alertEngine = alertEngine;
         this.maintenanceService = maintenanceService;
     }
 
@@ -100,8 +100,8 @@ public class UserService {
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole().name());
 
-        // Seed sample data on first login for demo
-        notificationService.seedSampleNotifications(user.getId());
+        // Generate real electric alerts from live usage data
+        alertEngine.generateElectricAlerts(user.getId());
         maintenanceService.seedSampleRecords(user.getId());
 
         // Only create guest sessions for GUEST users

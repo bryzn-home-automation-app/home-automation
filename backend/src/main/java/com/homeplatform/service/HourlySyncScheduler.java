@@ -24,10 +24,13 @@ public class HourlySyncScheduler {
 
     private final DataSource dataSource;
     private final AppEventService appEventService;
+    private final AlertEngine alertEngine;
 
-    public HourlySyncScheduler(DataSource dataSource, AppEventService appEventService) {
+    public HourlySyncScheduler(DataSource dataSource, AppEventService appEventService,
+                               AlertEngine alertEngine) {
         this.dataSource = dataSource;
         this.appEventService = appEventService;
+        this.alertEngine = alertEngine;
     }
 
     /** Every 30 minutes on the half-hour from 5 AM to 11 PM CT. */
@@ -75,6 +78,8 @@ public class HourlySyncScheduler {
                         "Sync completed for " + yesterday + " — " + lastLines.lines()
                                 .filter(l -> l.contains("records, total"))
                                 .findFirst().orElse("ok"));
+                // Generate alerts from fresh data
+                alertEngine.generateForAllUsers();
             } else {
                 appEventService.warn("sync", "HourlySyncScheduler",
                         "Sync exited " + exitCode + " for " + yesterday);
