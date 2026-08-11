@@ -8,6 +8,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.stereotype.Component;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 @Component
 @org.springframework.context.annotation.Profile("!test")
 public class DataSeeder implements CommandLineRunner {
@@ -36,9 +40,16 @@ public class DataSeeder implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        appEventService.info("system", "DataSeeder", "Backend starting up — checking admin seed");
-        log.info("Checking for admin user seed...");
+        // Read git commit hash baked at build time
+        String commit = "unknown";
+        try {
+            commit = Files.readString(Path.of("/app/git-commit.txt")).trim();
+        } catch (IOException ignored) {}
+
+        appEventService.info("system", "DataSeeder",
+                "Backend starting up — commit=" + commit);
+        log.info("Starting up (commit={}) — checking admin seed...", commit);
         userService.seedAdminIfNeeded(adminEmail, adminUsername, adminPassword, adminDisplayName);
-        appEventService.info("system", "DataSeeder", "Backend startup complete");
+        appEventService.info("system", "DataSeeder", "Backend startup complete (commit=" + commit + ")");
     }
 }
