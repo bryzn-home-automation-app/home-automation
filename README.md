@@ -1,6 +1,6 @@
 # Home Automation Platform
 
-Self-hosted home intelligence platform running on Docker Compose. Phase 1 integrates with CoServ SmartHub to track energy usage, visualize consumption patterns, and estimate bills. Includes role-based access control (RBAC), WiFi guest portal with QR codes, light/dark theming, and admin dashboards.
+Self-hosted home intelligence platform running on Docker Compose. Phase 1 integrates with CoServ SmartHub to track energy usage, visualize consumption patterns, and estimate bills. Includes role-based access control (RBAC), WiFi guest portal with QR codes, light/dark theming, admin dashboards, an in-process hourly sync scheduler, and diagnostic event logging.
 
 Built and maintained under the bryzncode mark.
 
@@ -39,7 +39,10 @@ Built and maintained under the bryzncode mark.
 - **Sync runs as a standalone CLI** (`node scripts/sync.js`), not in Docker. No browser dependencies in the backend image.
 - **Database is append-only.** Usage rows are never updated or deleted. Every record carries batch UUIDs for traceability.
 - **Tab storage is isolated.** Electric, gas, water, and Roomba data live in separate tables. Weather is the only shared enrichment dataset.
-- **Compatibility view** `energy_usage` keeps the current API contract stable while electric and gas persist into dedicated tables underneath.
+- **Compatibility view** `energy_usage` keeps the current API contract stable while electric, gas, and hourly electric persist into dedicated tables underneath.
+- **Deploy scripts** handle git pull, commit hash injection, Docker rebuild, and health checks — via `deploy.sh` (bash) or `deploy-nuc.cmd` (Windows cmd).
+- **Hourly sync scheduler** runs in-process (Spring `@Scheduled`), polling every 15 minutes between 5 AM–11 PM CT to backfill yesterday's hourly electric data if missing.
+- **Diagnostic event feed** logs startup, sync, weather, and migration events to the `app_events` table, visible in the Debug Dashboard for operational visibility.
 
 ## Tech Stack
 
@@ -89,11 +92,66 @@ npm run sync -- --date 07/24/2026   # use your DATA_START_DATE
 # 6. Open http://localhost
 ```
 
+## Deployment
+
+Two deploy scripts are provided — one for Linux/Mac/Git Bash, one for Windows cmd.exe. Both automate the full deploy cycle: pull → resolve commit hash → rebuild images → restart stack → health check.
+
+### Linux / Mac / Git Bash (`deploy.sh`)
+
+```bash
+./deploy.sh
+```
+
+Does the following:
+1. `git pull origin master` (skipped if no `.git` directory — falls back to `.git-commit` file)
+2. Resolves the current commit hash via `git rev-parse --short HEAD` (or reads `.git-commit`)
+3. Exports `GIT_COMMIT` so `docker compose` picks it up as a build arg + runtime env var
+4. Runs `docker compose build --no-cache backend nginx`
+5. Runs `docker compose up -d`
+6. Polls `/api/health` for up to 2 minutes, reports UP/not
+
+### Windows cmd.exe (`deploy-nuc.cmd`)
+
+```cmd
+deploy-nuc.cmd
+```
+
+Same flow as `deploy.sh`, adapted for cmd.exe:
+1. `git pull origin master`
+2. `for /f … git rev-parse --short HEAD` → `GIT_COMMIT` env var
+3. `docker compose build backend nginx`
+4. `docker compose up -d`
+5. `docker compose ps`
+
+### Git Commit Tracking
+
+The deployed version is tracked end-to-end:
+
+| Layer | Mechanism |
+|-------|-----------|
+| Shell | `GIT_COMMIT` env var (set by deploy script) |
+| Docker build | `docker-compose.yml` build `args: GIT_COMMIT: ${GIT_COMMIT:-unknown}` |
+| Docker runtime | `docker-compose.yml` environment `GIT_COMMIT: ${GIT_COMMIT:-unknown}` |
+| Build-time file | Dockerfile writes `$GIT_COMMIT` → `/app/git-commit.txt` |
+| Committed file | `.git-commit` file in repo root — fallback when `.git` is absent |
+| Java fallback | `GIT_COMMIT` env → `/app/.git-commit` → `/app/git-commit.txt` → `"unknown"` |
+
+The commit hash appears in:
+- `GET /api/config` → `"version": "7828631"`
+- Debug Dashboard header
+- Backend startup log events (`AppEventService`)
+- Java log output (`Starting up (commit=7828631)`)
+
+**Deployments without a `.git` directory** (file-copy setups like the NUC): the `.git-commit` file committed to the repo acts as the source of truth. Run `scripts/update-commit.sh` on a dev machine before committing to keep it in sync.
+
 ## Important Commands
 
 ### Docker Stack
 
 ```bash
+# One-command deploy (Linux/Mac/Git Bash) — pull + rebuild + restart
+./deploy.sh
+
 # Start stack in background
 docker compose up -d
 
@@ -113,6 +171,11 @@ docker compose ps
 
 # Follow service logs
 docker compose logs -f nginx backend postgres redis
+```
+
+On Windows cmd.exe:
+```cmd
+deploy-nuc.cmd
 ```
 
 ### Frontend Commands
@@ -303,6 +366,18 @@ POST  /api/admin/db/query  { "query": "SELECT ..." }     # Read-only SQL console
 
 Admin tabs appear in the nav bar only for ADMIN users, with amber accent styling to visually distinguish them.
 
+### App Events System
+
+A diagnostic event log (`app_events` table) records system operations for operational visibility:
+
+| Category | Sources | Examples |
+|----------|---------|----------|
+| `system` | `DataSeeder`, `UsageStorageMigration` | Backend startup, commit version, table migrations |
+| `sync` | `HourlySyncScheduler` | Sync started/completed/failed, output summary |
+| `weather` | `WeatherService` | API fetches, cache hits, temperature data stored |
+
+Each event has a level (INFO/WARN/ERROR), timestamp, message, and optional details. The Debug Dashboard event feed queries `GET /api/admin/events` with filters for category, level, and time range. A 24-hour summary (`GET /api/admin/events/summary`) shows counts by level.
+
 ### Security
 
 - **JWT-based** — HMAC-SHA256, 24-hour expiry. Token stored in localStorage.
@@ -329,6 +404,9 @@ All configuration lives in `.env` (gitignored). Copy `.env.example` as a startin
 | `ADMIN_PASSWORD` | `bryzncode` | Seed admin password |
 | `ADMIN_EMAIL` | `bryznnguyen@gmail.com` | Seed admin email |
 | `ADMIN_DISPLAY_NAME` | `Bryan` | Seed admin display name |
+| `PROPERTY_LATITUDE` | — | Latitude for weather (Open-Meteo location) |
+| `PROPERTY_LONGITUDE` | — | Longitude for weather (Open-Meteo location) |
+| `GIT_COMMIT` | `unknown` | Git commit hash — set automatically by deploy scripts, injected at build + runtime |
 
 ## API Endpoints
 
@@ -343,8 +421,10 @@ GET /api/health
 
 ```
 GET /api/config
-→ { "kwhRate": 0.1171, "dataStartDate": "07/24/2026" }
+→ { "kwhRate": 0.1171, "dataStartDate": "07/24/2026", "version": "7828631", "propertyLatitude": 33.0566, "propertyLongitude": -96.9033, "lastElectricReading": "2026-08-09T23:00:00-05:00", "lastSyncCheck": "2026-08-10T21:15:00-05:00" }
 ```
+
+The `version` field is the deployed git commit hash (short SHA). `lastElectricReading` and `lastSyncCheck` are the most recent timestamps from the database, useful for verifying data freshness.
 
 ### Energy Usage
 
@@ -450,6 +530,16 @@ The script handles Sunday/weekday logic automatically. Zero-guard escalation hap
 
 **Note:** Utility data typically lags 1–2 days. A sync for "yesterday" may return `0 kWh` if CoServ hasn't posted the data yet. Re-running `--date` for that day later will populate the actual values.
 
+### Hourly Sync Scheduler (In-Process)
+
+The backend runs a built-in scheduler (`HourlySyncScheduler`) that automatically backfills yesterday's hourly electric data. No external cron needed.
+
+- **Schedule**: Every 15 minutes between 5 AM–11 PM CT (`@Scheduled(cron = "0 0,15,30,45 5-23 * * *", zone = "America/Chicago")`)
+- **Behavior**: Checks if yesterday has populated hourly data (non-zero kWh rows in `hourly_electric_usage`). If not, spawns `node /scripts/sync-hourly.js --date <yesterday>` as a child process.
+- **Idempotent**: If data already exists, the check returns immediately — no redundant sync.
+- **Visibility**: All runs log to `app_events` (category: `sync`, source: `HourlySyncScheduler`) with level INFO/WARN/ERROR. The Debug Dashboard event feed and `/api/config` (`lastSyncCheck`) show the most recent run.
+- **Prerequisites**: The `./scripts` directory is mounted read-only into the backend container (`:/scripts:ro`). Node.js and Playwright are installed in the backend Docker image.
+
 ## Database Schema
 
 Module-oriented data model designed for long-term retention without mixing tab data.
@@ -512,9 +602,11 @@ home-automation/
 ├── README.md
 ├── .env.example                     # Template — copy to .env and fill in
 ├── .env                             # Your secrets (gitignored)
+├── .git-commit                      # Deployed git commit hash (fallback when .git absent)
 ├── docker-compose.yml               # 4 services: postgres, redis, backend, nginx
+├── deploy.sh                        # Linux/Mac/Git Bash deploy script
+├── deploy-nuc.cmd                   # Windows cmd.exe deploy script
 ├── package.json                     # Node deps + scripts (sync, test:live)
-│
 ├── backend/                         # Spring Boot REST API
 │   ├── Dockerfile                   # Lightweight JRE image (~300MB)
 │   ├── pom.xml                      # spring-boot-web, jpa, postgresql, redis, jjwt, h2
@@ -575,7 +667,10 @@ home-automation/
 │       └── test/                    # Vitest + Testing Library tests
 │
 ├── scripts/
-│   └── sync.js                      # Standalone sync CLI (all modes)
+│   ├── sync.js                      # Standalone daily sync CLI (all modes)
+│   ├── sync-hourly.js               # Hourly electric sync (Average Usage API)
+│   ├── update-commit.sh             # Refresh .git-commit from git rev-parse
+│   └── extract-guest-animals.js     # Guest analytics utility
 │
 ├── test/
 │   ├── coserv-live-test.js          # Live SmartHub smoke test
