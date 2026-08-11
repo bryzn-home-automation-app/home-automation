@@ -17,6 +17,8 @@ echo ""
 
 # 2. Rebuild images (backend + nginx — postgres/redis don't change)
 echo "── 2. Rebuilding Docker images ──"
+export GIT_COMMIT=$(git rev-parse --short HEAD)
+echo "   Commit: $GIT_COMMIT"
 docker compose build --no-cache backend nginx 2>&1 | tail -10
 echo ""
 

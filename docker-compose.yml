@@ -37,6 +37,8 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-unknown}
     container_name: homeplatform-backend
     environment:
       TZ: America/Chicago
