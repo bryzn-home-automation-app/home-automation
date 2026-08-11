@@ -7,6 +7,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.sql.DataSource;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -40,6 +43,14 @@ public class ConfigController {
         config.put("dataStartDate", dataStartDate);
         config.put("propertyLatitude", propertyLatitude);
         config.put("propertyLongitude", propertyLongitude);
+
+        // Git commit hash baked at Docker build time
+        try {
+            String commit = Files.readString(Path.of("/app/git-commit.txt")).trim();
+            config.put("version", commit);
+        } catch (IOException e) {
+            config.put("version", "unknown");
+        }
 
         // Most recent electric reading timestamp
         try (var conn = dataSource.getConnection();

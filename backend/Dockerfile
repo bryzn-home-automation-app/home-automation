@@ -19,5 +19,10 @@ RUN apt-get update && apt-get install -y curl gnupg \
 ENV NODE_PATH=/usr/lib/node_modules
 
 COPY --from=build /app/target/*.jar app.jar
+
+# Git commit hash baked at build time — exposed via /api/config
+ARG GIT_COMMIT=unknown
+RUN echo "$GIT_COMMIT" > /app/git-commit.txt
+
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "app.jar"]
