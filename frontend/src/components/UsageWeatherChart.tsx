@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import type { EnergyUsage } from '../types';
 import { fetchWeatherForRange } from '../api/weather';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
 
 interface UsageWeatherChartProps {
   usageData: EnergyUsage[];
@@ -147,7 +148,8 @@ function UsageWeatherChart({
     queryFn: () => fetchWeatherForRange(dateStart, dateEnd),
     enabled: weatherEnabled,
     staleTime: 3_600_000,
-    refetchInterval: 3_600_000,
+    refetchInterval: jitteredInterval(3_600_000, 60_000),
+    refetchIntervalInBackground: false,
   });
 
   // ── Weather lookup maps ──
@@ -293,7 +295,7 @@ function UsageWeatherChart({
     return (
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Correlation</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
           <h3 className="mt-2 text-lg font-semibold text-apptext">Usage vs Temperature</h3>
         </div>
         <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
@@ -307,7 +309,7 @@ function UsageWeatherChart({
     return (
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Correlation</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
           <h3 className="mt-2 text-lg font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
@@ -322,7 +324,7 @@ function UsageWeatherChart({
     <>
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Correlation</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
           <h3 className="mt-2 text-lg font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex items-center gap-2">

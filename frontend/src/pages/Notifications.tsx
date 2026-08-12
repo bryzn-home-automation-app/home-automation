@@ -6,6 +6,7 @@ import {
   markAllRead,
   type Notification,
 } from '../api/notifications';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
 
 const CATEGORIES = [
   { key: '', label: 'All', icon: '📋' },
@@ -118,7 +119,8 @@ export default function NotificationsPage() {
   const notifications = useQuery({
     queryKey: ['notifications', params],
     queryFn: () => fetchNotifications(params),
-    refetchInterval: 30_000,
+    refetchInterval: jitteredInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 
   const markAllMut = useMutation({

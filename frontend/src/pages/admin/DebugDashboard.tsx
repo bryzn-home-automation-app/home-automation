@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import api from '../../api/client';
 import VirtualizedList from '../../components/VirtualizedList';
+import { jitteredInterval } from '../../hooks/useJitteredInterval';
 
 // Fetch config (includes version/commit hash) — shared key with useUsageData
 const fetchConfig = () => api.get('/config').then((r) => r.data);
@@ -80,7 +81,8 @@ export default function DebugDashboard() {
       return data;
     },
     staleTime: 10_000,
-    refetchInterval: 30_000,
+    refetchInterval: jitteredInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 
   const { data: summary } = useQuery<EventSummary>({
@@ -90,7 +92,8 @@ export default function DebugDashboard() {
       return data;
     },
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    refetchInterval: jitteredInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 
   const { data: health, isLoading: healthLoading } = useQuery<HealthInfo>({
@@ -100,7 +103,8 @@ export default function DebugDashboard() {
       return data;
     },
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
   });
 
   // Version / commit hash
