@@ -34,16 +34,12 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [4/4] Checking services + showing fresh logs... >> "%LOG%"
+echo [4/4] Checking services... >> "%LOG%"
 docker compose ps >> "%LOG%" 2>&1
 
-:: Wait for backend to be healthy, then show only new logs
-echo Waiting for backend...
-for /l %%i in (1,1,12) do (
-    curl -s http://localhost/api/health 2>nul | findstr /c:"UP" >nul && goto :healthy
-    timeout /t 5 /nobreak >nul
-)
-:healthy
+:: Wait for backend to start, then show fresh logs
+echo Waiting 20s for backend to start...
+timeout /t 20 /nobreak >nul
 
 echo.
 echo ========================================
