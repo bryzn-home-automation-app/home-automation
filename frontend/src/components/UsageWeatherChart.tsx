@@ -96,7 +96,7 @@ function buildDynamicAxis(
 
     // Guarantee enough room for the requested number of evenly spaced integer ticks.
     while (hi - lo < step * (points - 1)) {
-      lo -= 1;
+      if (!floorZero || lo > 0) lo -= 1;
       hi += 1;
     }
 

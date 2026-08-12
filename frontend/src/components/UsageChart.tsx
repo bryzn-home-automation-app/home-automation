@@ -58,7 +58,7 @@ function buildDynamicAxis(
     const step = Math.max(1, Math.ceil((max - min) / (points - 1)));
     let lo = Math.floor(min);
     let hi = Math.ceil(max);
-    while (hi - lo < step * (points - 1)) { lo -= 1; hi += 1; }
+    while (hi - lo < step * (points - 1)) { if (!floorZero || lo > 0) lo -= 1; hi += 1; }
     const ticks = Array.from({ length: points }, (_, i) => lo + step * i);
     return { domain: [ticks[0], ticks[ticks.length - 1]] as [number, number], ticks };
   }
