@@ -141,7 +141,10 @@ function UsageChart({
             tick={{ fill: t.tick, fontSize: 11 }}
             axisLine={{ stroke: t.grid }}
             tickLine={false}
-            interval="preserveStartEnd"
+            interval={0}
+            angle={-35}
+            textAnchor="end"
+            height={50}
           />
           <YAxis
             tick={{ fill: t.tick, fontSize: 11 }}

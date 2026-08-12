@@ -386,7 +386,10 @@ function UsageWeatherChart({
             tick={{ fill: chartTheme.tick, fontSize: 11 }}
             axisLine={{ stroke: chartTheme.grid }}
             tickLine={false}
-            interval={useHourly ? (range === '24h' ? 3 : range === '3d' ? 11 : range === 'week' ? 23 : 0) : 'preserveStartEnd'}
+            interval={useHourly ? (range === '24h' ? 3 : range === '3d' ? 11 : range === 'week' ? 23 : 0) : 0}
+            angle={useHourly ? 0 : -35}
+            textAnchor={useHourly ? 'middle' : 'end'}
+            height={useHourly ? 30 : 50}
           />
 
           <YAxis yAxisId="left" tick={{ fill: chartTheme.tick, fontSize: 11 }} axisLine={{ stroke: chartTheme.grid }} tickLine={false} unit=" kWh" domain={kwhDomain as [number, number]} ticks={kwhTicks} />
