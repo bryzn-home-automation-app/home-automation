@@ -50,20 +50,7 @@ public class UsageStorageMigration implements ApplicationRunner {
                 ingestion_batch_id,
                 processing_version,
                 created_at
-            FROM electric_usage
-            UNION ALL
-            SELECT
-                -id AS id,
-                meter_id,
-                timestamp,
-                usage_kwh,
-                cost,
-                source,
-                source_provider,
-                ingestion_batch_id,
-                processing_version,
-                created_at
-            FROM gas_usage
+            FROM hourly_electric_usage
             UNION ALL
             SELECT
                 -(id + 100000000) AS id,
@@ -76,8 +63,11 @@ public class UsageStorageMigration implements ApplicationRunner {
                 ingestion_batch_id,
                 processing_version,
                 created_at
-            FROM hourly_electric_usage
+            FROM gas_usage
             """);
+        // NOTE: electric_usage (daily Green Button) is kept as a standalone table
+        // for reconciliation. It is NOT in the energy_usage view — only the hourly
+        // table feeds consumption charts to avoid double-counting.
     }
 
     private void createDedicatedTables() {
