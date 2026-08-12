@@ -18,7 +18,10 @@ export default function HomeSummary() {
   const elecKwh = electricTotal.data?.totalKwh ?? 0;
   const gasKwh = gasTotal.data?.totalKwh ?? 0;
   const totalKwh = elecKwh + gasKwh;
-  const estimatedBill = totalKwh * kwhRate;
+  // The 60-day moving-window total * the kWh rate. This is "60-day spend",
+  // not a monthly bill — re-labeled honestly per improvements.md §7.
+  const sixtyDaySpend = totalKwh * kwhRate;
+  const monthlyEstimate = sixtyDaySpend * 0.5;
 
   // Latest daily usage — sum hourly records per date, take the most recent with ≥ 20 records
   const latestDaily = useMemo(() => {
@@ -112,7 +115,7 @@ export default function HomeSummary() {
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
             {totalKwh.toFixed(0)} kWh
           </h2>
-          <p className="mt-2 text-sm text-apptext-soft">Combined 60-day usage · ~${estimatedBill.toFixed(0)} estimated bill</p>
+          <p className="mt-2 text-sm text-apptext-soft">Combined 60-day usage · ~${monthlyEstimate.toFixed(0)}/mo estimate</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-appborder bg-appinset p-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Rate</p>
@@ -168,7 +171,7 @@ export default function HomeSummary() {
           subtitle={latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined}
         />
         <StatTile label="Electric (60d)" value={elecKwh.toFixed(0)} unit="kWh" loading={electricTotal.isLoading} icon={Icons.Bolt} />
-        <StatTile label="Est. Bill" value={`$${estimatedBill.toFixed(2)}`} unit="" loading={electricTotal.isLoading} icon={Icons.Dollar} />
+        <StatTile label="Monthly Est." value={`$${monthlyEstimate.toFixed(2)}`} unit="/mo" loading={electricTotal.isLoading} icon={Icons.Dollar} />
         <StatTile label="Gas (60d)" value={gasKwh.toFixed(0)} unit="kWh" loading={gasTotal.isLoading} icon={Icons.Calendar} />
       </section>
 
@@ -253,7 +256,7 @@ export default function HomeSummary() {
                     </div>
                     <div className="text-right">
                       <p className="text-sm font-semibold tabular-nums text-apptext-soft">{d.total.toFixed(2)} kWh</p>
-                      <p className="text-xs text-apptext-dim">${(d.total * kwhRate).toFixed(2)} est.</p>
+                      <p className="text-xs text-apptext-dim">${(d.total * kwhRate).toFixed(2)}</p>
                     </div>
                   </div>
                 );

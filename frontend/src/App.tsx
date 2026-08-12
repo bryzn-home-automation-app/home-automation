@@ -1,4 +1,4 @@
-import { memo, useCallback, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet, Link } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
@@ -6,13 +6,26 @@ import { useAuth } from './context/AuthContext';
 import api from './api/client';
 import { fetchUnreadCount } from './api/notifications';
 import { jitteredInterval } from './hooks/useJitteredInterval';
+import { useFocusTrap } from './hooks/useFocusTrap';
+import { useDocumentTitle } from './hooks/useDocumentTitle';
 import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
+import { PageHeader } from './components/PageHeader';
 
 export default memo(function App() {
   const { toggleTheme, isDark } = useTheme();
   const { user, isAdmin, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSidebarRef = useRef<HTMLElement | null>(null);
+
+  // Default document title; per-page pages should override with their own useDocumentTitle call.
+  useDocumentTitle('Home');
+
+  // Mobile sidebar focus trap + Escape-to-close + focus return.
+  useFocusTrap(mobileMenuOpen, mobileSidebarRef, hamburgerButtonRef, () => {
+    setMobileMenuOpen(false);
+  });
 
   const health = useQuery({
     queryKey: ['health'],
@@ -246,7 +259,14 @@ export default memo(function App() {
                 onClick={closeMenu}
               />
               {/* Slide-in panel */}
-              <aside className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto rounded-r-2xl border-r border-appborder bg-appsurface p-4 shadow-2xl lg:hidden">
+              <aside
+                id="mobile-sidebar"
+                ref={mobileSidebarRef}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Main navigation"
+                className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto rounded-r-2xl border-r border-appborder bg-appsurface p-4 shadow-2xl lg:hidden"
+              >
                 {sidebarContent}
               </aside>
             </>
@@ -254,44 +274,42 @@ export default memo(function App() {
 
           <div className="min-w-0">
             <header className="rounded-2xl border border-appborder bg-appsurface-raised px-3 py-3 shadow-[0_10px_30px_var(--appshadow)] sm:px-6 sm:py-5 lg:rounded-[28px] lg:px-7 lg:py-6">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div className="flex items-center gap-3">
-                  {/* Hamburger — mobile only */}
-                  <button
-                    type="button"
-                    onClick={() => setMobileMenuOpen(true)}
-                    className="rounded-xl border border-appborder bg-appinset p-2 text-apptext hover:border-appborder-hover lg:hidden"
-                    aria-label="Open menu"
-                  >
-                    <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                    </svg>
-                  </button>
-                  <div>
-                    <p className="inline-flex items-center rounded-full border border-appaccent-border bg-appaccent-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-appaccent-text">
-                      Operations Console
-                    </p>
-                    <h2 className="mt-3 max-w-3xl text-xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl xl:text-4xl">
-                      Utilities, alerts, and automations in one left-rail workspace.
-                    </h2>
-                    <p className="mt-3 max-w-2xl text-sm leading-6 text-apptext-soft sm:text-base">
-                      Fast navigation, focused pages, and real-time signals for your home operations stack.
-                    </p>
-                  </div>
-                </div>
-                <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
-                  <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Backend</p>
-                    <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
-                  </div>
-                  <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Unread</p>
-                    <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
-                  </div>
-                  <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Access</p>
-                    <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
-                  </div>
+              <div className="flex items-center gap-3">
+                {/* Hamburger — mobile only */}
+                <button
+                  ref={hamburgerButtonRef}
+                  type="button"
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="rounded-xl border border-appborder bg-appinset p-2 text-apptext hover:border-appborder-hover lg:hidden"
+                  aria-label="Open menu"
+                  aria-expanded={mobileMenuOpen}
+                  aria-controls="mobile-sidebar"
+                >
+                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                <div className="flex-1">
+                  <PageHeader
+                    title="Home"
+                    eyebrow="Operations Console"
+                    actions={
+                      <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
+                        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Backend</p>
+                          <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
+                        </div>
+                        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Unread</p>
+                          <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
+                        </div>
+                        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Access</p>
+                          <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
+                        </div>
+                      </div>
+                    }
+                  />
                 </div>
               </div>
             </header>

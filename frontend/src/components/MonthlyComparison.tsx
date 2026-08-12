@@ -69,7 +69,7 @@ function MonthlyComparison({
     return (
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Comparison</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Month-over-month</p>
           <h3 className="mt-2 text-lg font-semibold text-apptext">{title}</h3>
         </div>
         <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
@@ -101,7 +101,7 @@ function MonthlyComparison({
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Comparison</p>
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Month-over-month</p>
           <h3 className="mt-2 text-lg font-semibold text-apptext">{title}</h3>
         </div>
         <span className="rounded-full border border-appborder bg-appinset px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-apptext-soft">

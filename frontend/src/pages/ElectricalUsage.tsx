@@ -223,7 +223,7 @@ export default memo(function ElectricalUsage() {
               </p>
             </div>
             <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">Estimated 60-Day Cost</p>
+              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">60-Day Spend</p>
               <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
                 ${(monthKwh * kwhRate).toFixed(2)}
               </p>

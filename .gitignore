@@ -39,3 +39,4 @@ green-button-downloads/
 
 # Build
 frontend/build/
+*.tsbuildinfo
