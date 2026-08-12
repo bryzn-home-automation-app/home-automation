@@ -1,5 +1,6 @@
 import api from './client';
 import type {
+  DailyUsagePoint,
   EnergyUsage,
   IntegrationAdapter,
   IntegrationResult,
@@ -47,6 +48,14 @@ export async function fetchIntegrationStatus(
   providerKey: string
 ): Promise<IntegrationResult | { providerKey: string; status: string }> {
   const { data } = await api.get(`/integrations/${providerKey}`);
+  return data;
+}
+
+/** Pre-aggregated daily kWh — ~60 rows instead of 1,440 hourly records. */
+export async function fetchDailyUsage(meterId: number, days = 60): Promise<DailyUsagePoint[]> {
+  const { data } = await api.get(`/energy-usage/meter/${meterId}/daily`, {
+    params: { days },
+  });
   return data;
 }
 

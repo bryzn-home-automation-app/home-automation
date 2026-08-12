@@ -99,6 +99,14 @@ export interface UsageRangeSummary {
   lowest: UsageSummaryPoint | null;
 }
 
+/** Pre-aggregated daily kWh from server — one row per date. */
+export interface DailyUsagePoint {
+  date: string;
+  totalKwh: number;
+  readingCount: number;
+  sourceProvider: string;
+}
+
 // ── Weather ───────────────────────────────────────────────
 
 export interface WeatherCurrent {

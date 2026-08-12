@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchRecentUsage, fetchTotalUsage } from '../api/energy';
+import { fetchDailyUsage, fetchRecentUsage, fetchTotalUsage } from '../api/energy';
 import { fetchMeters } from '../api/meters';
 import api from '../api/client';
 import { jitteredInterval } from './useJitteredInterval';
-import type { EnergyUsage, Meter } from '../types';
+import type { DailyUsagePoint, EnergyUsage, Meter } from '../types';
 
 /** Shared hook — all pages use this, React Query cache deduplicates. */
 export function useUsageData() {
@@ -59,6 +59,19 @@ export function useUsageData() {
     refetchIntervalInBackground: false,
   });
 
+  // Pre-aggregated daily data — ~60 rows instead of 1,440 hourly records
+  const electricDaily = useQuery<DailyUsagePoint[]>({
+    queryKey: ['energy-daily', electricMeter?.id],
+    queryFn: () =>
+      electricMeter
+        ? fetchDailyUsage(electricMeter.id, 60)
+        : Promise.resolve([]),
+    enabled: !!electricMeter,
+    staleTime: 120_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
+  });
+
   const gasTotal = useQuery({
     queryKey: ['total-usage', gasMeter?.id],
     queryFn: () =>
@@ -78,6 +91,7 @@ export function useUsageData() {
     gasMeter,
     electricUsage,
     gasUsage,
+    electricDaily,
     electricTotal,
     gasTotal,
   };
