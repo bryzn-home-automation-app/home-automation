@@ -1,5 +1,6 @@
 package com.homeplatform.controller;
 
+import com.homeplatform.dto.DailyUsagePoint;
 import com.homeplatform.dto.UsageRangeSummaryResponse;
 import com.homeplatform.model.EnergyUsage;
 import com.homeplatform.service.EnergyUsageService;
@@ -66,5 +67,13 @@ public class EnergyUsageController {
                 "days", days,
                 "totalKwh", totalKwh
         ));
+    }
+
+    /** Pre-aggregated daily kWh from hourly records — ~60 rows instead of 1,440. */
+    @GetMapping("/meter/{meterId}/daily")
+    public ResponseEntity<List<DailyUsagePoint>> getDaily(
+            @PathVariable Long meterId,
+            @RequestParam(defaultValue = "60") int days) {
+        return ResponseEntity.ok(service.getDailyAggregates(meterId, days));
     }
 }

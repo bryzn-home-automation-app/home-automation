@@ -29,6 +29,12 @@ const chartTheme = {
   tick: 'var(--appchart-tick)',
 };
 
+// Stable object references — avoid new literals every render
+const CHART_MARGIN = { top: 5, right: 20, left: 0, bottom: 5 } as const;
+const TICK_PROPS = { fontSize: 11 } as const;
+const TICK_LINE_FALSE = false;
+const CARTESIAN_GRID_DASH = '3 3';
+
 function formatDateLabel(iso: string): string {
   const dateOnly = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (dateOnly) {
@@ -379,21 +385,21 @@ function UsageWeatherChart({
       {header}
 
       <ResponsiveContainer width="100%" height={320} debounce={80}>
-        <LineChart data={filteredData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+        <LineChart data={filteredData} margin={CHART_MARGIN}>
+          <CartesianGrid strokeDasharray={CARTESIAN_GRID_DASH} stroke={chartTheme.grid} />
           <XAxis
             dataKey="label"
-            tick={{ fill: chartTheme.tick, fontSize: 11 }}
+            tick={{ fill: chartTheme.tick, ...TICK_PROPS }}
             axisLine={{ stroke: chartTheme.grid }}
-            tickLine={false}
+            tickLine={TICK_LINE_FALSE}
             interval={useHourly ? (range === '24h' ? 3 : range === '3d' ? 11 : range === 'week' ? 23 : 0) : 0}
             angle={useHourly ? 0 : -35}
             textAnchor={useHourly ? 'middle' : 'end'}
             height={useHourly ? 30 : 50}
           />
 
-          <YAxis yAxisId="left" tick={{ fill: chartTheme.tick, fontSize: 11 }} axisLine={{ stroke: chartTheme.grid }} tickLine={false} unit=" kWh" domain={kwhDomain as [number, number]} ticks={kwhTicks} />
-          {hasWeather && <YAxis yAxisId="right" orientation="right" tick={{ fill: '#f59e0b', fontSize: 11 }} axisLine={{ stroke: chartTheme.grid }} tickLine={false} unit="°" domain={tempDomain as [number, number]} ticks={tempTicks} tickFormatter={(value) => `${Math.round(Number(value))}`} />}
+          <YAxis yAxisId="left" tick={{ fill: chartTheme.tick, ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit=" kWh" domain={kwhDomain as [number, number]} ticks={kwhTicks} />
+          {hasWeather && <YAxis yAxisId="right" orientation="right" tick={{ fill: '#f59e0b', ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit="°" domain={tempDomain as [number, number]} ticks={tempTicks} tickFormatter={(value) => `${Math.round(Number(value))}`} />}
 
           <Tooltip
             contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: `1px solid ${chartTheme.tooltipBorder}`, borderRadius: '16px', fontSize: '13px', color: chartTheme.text, boxShadow: '0 20px 50px var(--appshadow-lg)' }}

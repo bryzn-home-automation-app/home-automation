@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
+import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -22,11 +23,13 @@ class EnergyUsageServiceTest {
 
     private EnergyUsageService energyUsageService;
     private EnergyUsageRepository repo;
+    private JdbcTemplate jdbc;
 
     @BeforeEach
     void setUp() {
         repo = mock(EnergyUsageRepository.class);
-        energyUsageService = new EnergyUsageService(repo);
+        jdbc = mock(JdbcTemplate.class);
+        energyUsageService = new EnergyUsageService(repo, jdbc);
     }
 
     private EnergyUsage usage(Long id, double kwh) {

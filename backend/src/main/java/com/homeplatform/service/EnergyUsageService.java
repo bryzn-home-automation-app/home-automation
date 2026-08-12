@@ -1,10 +1,13 @@
 package com.homeplatform.service;
 
+import com.homeplatform.dto.DailyUsagePoint;
 import com.homeplatform.dto.UsageRangeSummaryResponse;
 import com.homeplatform.model.EnergyUsage;
 import com.homeplatform.repository.EnergyUsageRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -12,9 +15,11 @@ import java.util.List;
 public class EnergyUsageService {
 
     private final EnergyUsageRepository repository;
+    private final JdbcTemplate jdbc;
 
-    public EnergyUsageService(EnergyUsageRepository repository) {
+    public EnergyUsageService(EnergyUsageRepository repository, JdbcTemplate jdbc) {
         this.repository = repository;
+        this.jdbc = jdbc;
     }
 
     public List<EnergyUsage> getAll() {
@@ -45,7 +50,31 @@ public class EnergyUsageService {
         return repository.sumUsageSince(meterId, since);
     }
 
-        public UsageRangeSummaryResponse getSummary(Long meterId, LocalDateTime start, LocalDateTime end) {
+    /** Pre-aggregated daily kWh from hourly records — one row per date instead of 24 per date. */
+    public List<DailyUsagePoint> getDailyAggregates(Long meterId, int days) {
+        String sql = """
+            SELECT
+                timestamp::date                             AS day,
+                COALESCE(SUM(usage_kwh), 0)                AS total_kwh,
+                COUNT(*)                                   AS reading_count,
+                MAX(source_provider)                       AS source_provider
+            FROM hourly_electric_usage
+            WHERE meter_id = ?
+              AND timestamp >= CURRENT_DATE - ?
+            GROUP BY ts::date
+            ORDER BY day
+            """;
+        return jdbc.query(sql,
+                (rs, rowNum) -> new DailyUsagePoint(
+                        rs.getObject("day", LocalDate.class),
+                        rs.getDouble("total_kwh"),
+                        rs.getInt("reading_count"),
+                        rs.getString("source_provider")
+                ),
+                meterId, days);
+    }
+
+    public UsageRangeSummaryResponse getSummary(Long meterId, LocalDateTime start, LocalDateTime end) {
         double totalKwh = repository.sumUsageBetween(meterId, start, end);
         double averageKwh = repository.avgUsageBetween(meterId, start, end);
         long readingCount = repository.countByMeterIdAndTimestampBetween(meterId, start, end);

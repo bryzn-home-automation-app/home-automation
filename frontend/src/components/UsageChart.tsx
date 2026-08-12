@@ -10,6 +10,14 @@ import {
 } from 'recharts';
 import type { EnergyUsage } from '../types';
 
+// ── Stable object references (avoid new literals every render) ──
+const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
+const TICK_PROPS = { fontSize: 11 } as const;
+const TICK_LINE_FALSE = false;
+const DOT_PROPS = { r: 3, strokeWidth: 0 } as const;
+const ACTIVE_DOT_PROPS = { r: 5, strokeWidth: 0 } as const;
+const CARTESIAN_GRID_DASH = '3 3';
+
 interface UsageChartProps {
   data: EnergyUsage[];
   loading?: boolean;
@@ -29,6 +37,26 @@ function useRechartsTheme() {
     tick: 'var(--appchart-tick)',
   };
 }
+
+// Memoized tooltip content wrapper — avoids remounting on theme toggle
+const ChartTooltip = memo(function ChartTooltip({ t, unitLabel }: { t: ReturnType<typeof useRechartsTheme>; unitLabel: string }) {
+  const style = useMemo(() => ({
+    backgroundColor: t.tooltipBg,
+    border: `1px solid ${t.tooltipBorder}`,
+    borderRadius: '16px',
+    fontSize: '13px',
+    color: t.text,
+    boxShadow: '0 20px 50px var(--appshadow-lg)',
+  }), [t]);
+  const labelStyle = useMemo(() => ({ color: t.muted, marginBottom: 4 }), [t]);
+  return (
+    <Tooltip
+      contentStyle={style}
+      formatter={(value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Usage']}
+      labelStyle={labelStyle}
+    />
+  );
+});
 
 function buildDynamicAxis(
   values: Array<number | null | undefined>,
@@ -134,46 +162,35 @@ function UsageChart({
         </span>
       </div>
       <ResponsiveContainer width="100%" height={280} debounce={80}>
-        <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={t.grid} />
+        <LineChart data={chartData} margin={CHART_MARGIN}>
+          <CartesianGrid strokeDasharray={CARTESIAN_GRID_DASH} stroke={t.grid} />
           <XAxis
             dataKey="date"
-            tick={{ fill: t.tick, fontSize: 11 }}
+            tick={{ fill: t.tick, ...TICK_PROPS }}
             axisLine={{ stroke: t.grid }}
-            tickLine={false}
+            tickLine={TICK_LINE_FALSE}
             interval={0}
             angle={-35}
             textAnchor="end"
             height={50}
           />
           <YAxis
-            tick={{ fill: t.tick, fontSize: 11 }}
+            tick={{ fill: t.tick, ...TICK_PROPS }}
             axisLine={{ stroke: t.grid }}
-            tickLine={false}
+            tickLine={TICK_LINE_FALSE}
             unit={` ${unitLabel}`}
             domain={yAxis.domain as [number, number]}
             ticks={yAxis.ticks}
           />
-          <Tooltip
-            contentStyle={{
-              backgroundColor: t.tooltipBg,
-              border: `1px solid ${t.tooltipBorder}`,
-              borderRadius: '16px',
-              fontSize: '13px',
-              color: t.text,
-              boxShadow: '0 20px 50px var(--appshadow-lg)',
-            }}
-            formatter={(value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Usage']}
-            labelStyle={{ color: t.muted, marginBottom: 4 }}
-          />
+          <ChartTooltip t={t} unitLabel={unitLabel} />
           <Line
             type="monotone"
             dataKey="kWh"
             isAnimationActive={false}
             stroke={accentColor}
             strokeWidth={2.5}
-            dot={{ fill: accentColor, r: 3, strokeWidth: 0 }}
-            activeDot={{ fill: accentColor, r: 5, strokeWidth: 0 }}
+            dot={{ fill: accentColor, ...DOT_PROPS }}
+            activeDot={{ fill: accentColor, ...ACTIVE_DOT_PROPS }}
           />
         </LineChart>
       </ResponsiveContainer>
