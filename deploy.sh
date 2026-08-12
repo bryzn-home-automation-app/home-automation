@@ -28,10 +28,11 @@ else
 fi
 export GIT_COMMIT
 
-# 3. Rebuild images (backend + nginx — postgres/redis don't change)
+# 3. Rebuild application layers only (base images already cached)
+# --pull=never avoids Docker Hub auth error over SSH (Windows credsStore)
 echo "── 2. Rebuilding Docker images ──"
 echo "   Commit: $GIT_COMMIT"
-docker compose build --no-cache backend nginx 2>&1 | tail -10
+docker compose build --no-cache --pull=never backend nginx 2>&1 | tail -10
 echo ""
 
 # 3. Start everything
