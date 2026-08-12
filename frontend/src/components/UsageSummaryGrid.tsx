@@ -31,7 +31,7 @@ export default function UsageSummaryGrid({
         <h3 className="mt-2 text-lg font-semibold text-apptext">{title}</h3>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {summaries.map(({ label, rangeStart, rangeEnd, summary, wxAvg, wxHigh, wxLow }) => (
           <div
             key={label}

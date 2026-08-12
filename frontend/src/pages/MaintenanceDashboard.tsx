@@ -154,9 +154,47 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
       className="cursor-pointer rounded-2xl border border-appborder bg-appinset transition-all hover:border-appborder-hover hover:bg-appinset-strong"
       onClick={() => onSelect(r)}
     >
-      <div className="grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] items-center gap-3 px-5 py-4">
-        {/* Title + Category */}
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] lg:items-center lg:gap-3 px-4 py-3 lg:px-5 lg:py-4">
+        {/* Row 1 — mobile: title/status badge + priority; lg: Title + Category */}
+        <div className="flex items-center gap-3 min-w-0 lg:hidden">
+          <span className="text-lg shrink-0">{STATUS_ICONS[r.status] || '📋'}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="truncate text-sm font-semibold text-apptext">{r.title}</p>
+            </div>
+            <p className="mt-0.5 text-xs text-apptext-muted">
+              {CAT_ICONS[r.category] || '🔨'} {r.category}{r.area ? ` · ${r.area}` : ''}
+              {r.cost != null && r.cost > 0 && (
+                <span className="ml-2 font-semibold tabular-nums text-appaccent-text">{formatCurrency(r.cost)}</span>
+              )}
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_COLORS[r.priority]}`}>
+              {r.priority}
+            </span>
+            <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${STATUS_COLORS[r.status]}`}>
+              {r.status.replace('_', ' ')}
+            </span>
+          </div>
+        </div>
+        {/* Row 2 — mobile: dates + people */}
+        <div className="grid grid-cols-3 gap-2 text-xs lg:hidden">
+          <div>
+            {r.startedDate && <span className="text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>}
+            {r.scheduledDate && <span className="text-sky-300">📅 {formatDate(r.scheduledDate)}</span>}
+            {!r.startedDate && !r.scheduledDate && <span className="text-apptext-dim">—</span>}
+          </div>
+          <div>
+            {r.completedDate && <span className="text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
+          </div>
+          <div className="flex items-center gap-1">
+            {r.requestedBy ? <span className="rounded-full border border-slate-300/20 bg-slate-300/10 px-2 py-0.5 text-slate-300 truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
+            {r.completedBy ? <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300 truncate">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span> : null}
+          </div>
+        </div>
+        {/* Desktop: original 5-column layout */}
+        <div className="hidden lg:flex items-center gap-3 min-w-0">
           <span className="text-lg shrink-0">{STATUS_ICONS[r.status] || '📋'}</span>
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -175,7 +213,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Dates column */}
-        <div className="flex flex-col gap-0.5 text-[12px]">
+        <div className="hidden flex-col gap-0.5 text-[12px] lg:flex">
           {r.startedDate ? (
             <span className="text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>
           ) : r.scheduledDate ? (
@@ -191,7 +229,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Requested by */}
-        <div className="text-[12px] truncate">
+        <div className="hidden text-[12px] truncate lg:block">
           {r.requestedBy ? (
             <span className="rounded-full border border-slate-300/20 bg-slate-300/10 px-2 py-0.5 text-slate-300">👤 {r.requestedBy}</span>
           ) : (
@@ -200,7 +238,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Completed by */}
-        <div className="text-[12px] truncate">
+        <div className="hidden text-[12px] truncate lg:block">
           {r.completedBy ? (
             <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span>
           ) : (
@@ -209,7 +247,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Priority */}
-        <div className="text-right">
+        <div className="hidden text-right lg:block">
           <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_COLORS[r.priority]}`}>
             {r.priority}
           </span>

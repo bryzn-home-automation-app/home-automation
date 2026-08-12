@@ -21,9 +21,9 @@ function StatTile({
 }: StatTileProps) {
   if (loading) {
     return (
-      <div className="animate-pulse rounded-[24px] border border-appborder bg-appsurface-raised p-5">
+      <div className="animate-pulse rounded-[20px] border border-appborder bg-appsurface-raised p-4 sm:rounded-[24px] sm:p-5">
         <div className="mb-4 flex items-center gap-3">
-          <div className="h-11 w-11 rounded-2xl bg-appinset" />
+          <div className="h-9 w-9 rounded-xl bg-appinset sm:h-11 sm:w-11 sm:rounded-2xl" />
           <div className="h-4 w-24 rounded bg-appinset" />
         </div>
         <div className="mb-2 h-8 w-28 rounded bg-appinset" />
@@ -33,15 +33,15 @@ function StatTile({
   }
 
   return (
-    <div className="rounded-[24px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover hover:bg-appinset-strong">
+    <div className="rounded-[20px] border border-appborder bg-appsurface-raised p-4 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover hover:bg-appinset-strong sm:rounded-[24px] sm:p-5">
       <div className="mb-4 flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-appaccent-border bg-appaccent-soft sm:h-11 sm:w-11 sm:rounded-2xl">
           {icon}
         </div>
         <span className="text-sm font-medium text-apptext-soft">{label}</span>
       </div>
       <div className="mb-1 flex items-baseline gap-1.5">
-        <span className="text-3xl font-semibold tracking-[-0.04em] text-apptext">
+        <span className="text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
           {value}
         </span>
         <span className="text-sm text-apptext-muted">{unit}</span>

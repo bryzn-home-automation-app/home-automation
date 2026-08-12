@@ -106,7 +106,7 @@ export default function HomeSummary() {
   return (
     <div className="space-y-6 sm:space-y-7">
       {/* Hero row */}
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.8fr)]">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.8fr)]">
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">Home</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">

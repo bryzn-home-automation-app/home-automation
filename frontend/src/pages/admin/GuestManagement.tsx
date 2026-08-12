@@ -96,35 +96,38 @@ export default function GuestManagement() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <div className="min-w-[42rem] text-sm">
-              <div className="grid grid-cols-[1fr_1fr_1fr_0.9fr_0.8fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
+            <div className="text-sm">
+              {/* 3 cols mobile, 6 cols md+ */}
+              <div className="grid grid-cols-[1.5fr_0.8fr_0.8fr] md:grid-cols-[1fr_1fr_1fr_0.9fr_0.8fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
                 <div className="font-medium">Guest</div>
-                <div className="font-medium">IP Address</div>
-                <div className="font-medium">Device</div>
+                <div className="hidden font-medium md:block">IP / Device</div>
                 <div className="text-right font-medium">Connected</div>
-                <div className="text-right font-medium">Last Seen</div>
+                <div className="hidden text-right font-medium md:block">Last Seen</div>
                 <div className="text-right font-medium">Expires</div>
+                <div className="hidden" />
               </div>
 
               {data.map((s) => (
                 <div
                   key={s.id}
-                  className="grid grid-cols-[1fr_1fr_1fr_0.9fr_0.8fr_0.8fr] items-center border-b border-appborder-light py-3 transition-colors hover:bg-appinset"
+                  className="grid grid-cols-[1.5fr_0.8fr_0.8fr] md:grid-cols-[1fr_1fr_1fr_0.9fr_0.8fr_0.8fr] items-center border-b border-appborder-light py-3 transition-colors hover:bg-appinset"
                 >
                   <div className="flex items-center gap-3">
                     {s.status === 'ACTIVE' && (
                       <span className="inline-flex h-2 w-2 rounded-full bg-appsuccess shadow-[0_0_10px_var(--appsuccess)]" />
                     )}
-                    <span className="font-medium text-apptext">{s.guestName}</span>
+                    <span className="font-medium text-apptext truncate">{s.guestName}</span>
                   </div>
-                  <div className="font-mono text-xs text-apptext-muted">{s.ipAddress}</div>
-                  <div className="text-apptext-soft text-xs truncate max-w-[10rem]" title={s.userAgent}>
-                    {s.userAgent || 'Unknown'}
+                  <div className="hidden md:block">
+                    <div className="font-mono text-xs text-apptext-muted">{s.ipAddress}</div>
+                    <div className="text-apptext-soft text-xs truncate max-w-[10rem]" title={s.userAgent}>
+                      {s.userAgent || 'Unknown'}
+                    </div>
                   </div>
-                  <div className="text-right tabular-nums text-apptext-soft">
+                  <div className="text-right tabular-nums text-apptext-soft text-xs">
                     {formatDate(s.connectedAt)}
                   </div>
-                  <div className="text-right tabular-nums text-apptext-muted">
+                  <div className="hidden text-right tabular-nums text-apptext-muted md:block">
                     {timeAgo(s.lastSeenAt)}
                   </div>
                   <div className="text-right">
@@ -138,6 +141,7 @@ export default function GuestManagement() {
                         : s.status}
                     </span>
                   </div>
+                  <div className="hidden md:block" />
                 </div>
               ))}
             </div>

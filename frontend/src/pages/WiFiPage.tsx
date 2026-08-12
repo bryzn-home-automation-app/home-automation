@@ -134,7 +134,7 @@ export default function WiFiPage() {
       </section>
 
       {/* QR Code + Network Details */}
-      <section className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)] lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
         {/* QR Code */}
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-8">
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">

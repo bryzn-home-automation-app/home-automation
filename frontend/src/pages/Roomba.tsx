@@ -329,12 +329,12 @@ export default function Roomba() {
           Recent Runs
         </h3>
         <div className="overflow-x-auto">
-          <div className="min-w-[44rem] text-sm">
-            <div className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] border-b border-appborder pb-2 text-left text-apptext-dim">
+          <div className="text-sm">
+            <div className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] border-b border-appborder pb-2 text-left text-apptext-dim">
               <div className="font-medium">Date</div>
               <div className="text-right font-medium">Duration</div>
-              <div className="text-right font-medium">Dirt Events</div>
-              <div className="text-right font-medium">Sq Ft</div>
+              <div className="hidden text-right font-medium md:block">Dirt Events</div>
+              <div className="hidden text-right font-medium md:block">Sq Ft</div>
               <div className="text-right font-medium">Status</div>
             </div>
             <VirtualizedList
@@ -346,16 +346,16 @@ export default function Roomba() {
               renderItem={(r, index) => (
                 <div
                   key={`${r.date}-${index}`}
-                  className="grid grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                  className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
                 >
                   <div className="py-3 text-apptext-soft">{r.date}</div>
                   <div className="py-3 text-right tabular-nums text-apptext">
                     {r.duration} min
                   </div>
-                  <div className="py-3 text-right tabular-nums text-apptext">
+                  <div className="hidden py-3 text-right tabular-nums text-apptext md:block">
                     {r.dirtEvents}
                   </div>
-                  <div className="py-3 text-right text-apptext-muted">{r.sqft}</div>
+                  <div className="hidden py-3 text-right text-apptext-muted md:block">{r.sqft}</div>
                   <div className="py-3 text-right">
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs ${

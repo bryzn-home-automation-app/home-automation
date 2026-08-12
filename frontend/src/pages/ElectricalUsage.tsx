@@ -213,26 +213,26 @@ export default memo(function ElectricalUsage() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Rate</p>
-              <p className="mt-2 text-lg font-semibold text-apptext">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">Rate</p>
+              <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
                 ${kwhRate.toFixed(4)}<span className="text-sm text-apptext-muted">/kWh</span>
               </p>
             </div>
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Estimated 60-Day Cost</p>
-              <p className="mt-2 text-lg font-semibold text-apptext">
+            <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">Estimated 60-Day Cost</p>
+              <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
                 ${(monthKwh * kwhRate).toFixed(2)}
               </p>
             </div>
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Active Readings</p>
-              <p className="mt-2 text-lg font-semibold text-apptext">{realData.length}</p>
+            <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">Active Readings</p>
+              <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">{realData.length}</p>
             </div>
             {(config.data?.lastSyncCheck || config.data?.lastElectricReading) && (
-              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 p-4">
-                <p className="text-[11px] uppercase tracking-[0.16em] text-sky-200/60">Last Updated</p>
+              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 p-3 sm:p-4">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-sky-200/60 sm:text-[11px]">Last Updated</p>
                 {config.data?.lastElectricReading && (
                   <p className="mt-1 text-xs text-apptext-dim">
                     Data: {new Date(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -355,12 +355,13 @@ export default memo(function ElectricalUsage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <div className="min-w-[42rem] text-sm">
-              <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
+            <div className="text-sm">
+              {/* Table header: 3 cols on mobile, 5 cols on md+ */}
+              <div className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
                 <div className="font-medium">Date</div>
                 <div className="text-right font-medium">kWh</div>
-                <div className="text-right font-medium">Est. Cost</div>
-                <div className="text-right font-medium">Temp</div>
+                <div className="hidden text-right font-medium md:block">Est. Cost</div>
+                <div className="hidden text-right font-medium md:block">Temp</div>
                 <div className="text-right font-medium">Source</div>
               </div>
               {logFilter === 'daily' ? (
@@ -373,23 +374,23 @@ export default memo(function ElectricalUsage() {
                   renderItem={(d) => {
                     const wx = weatherByDate.get(d.date);
                     const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric',
+                      month: 'short', day: 'numeric',
                     });
                     return (
                       <div
                         key={d.date}
-                        className="grid grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                        className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
                       >
                         <div className="py-3 text-apptext-soft">{label}</div>
                         <div className="py-3 text-right tabular-nums">
-                          <span className="inline-flex min-w-[5.5rem] items-center justify-end rounded-full border px-2.5 py-1 text-sm font-semibold bg-emerald-300/10 border-emerald-300/20 text-emerald-300">
+                          <span className="inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold bg-emerald-300/10 border-emerald-300/20 text-emerald-300">
                             {d.total.toFixed(2)}
                           </span>
                         </div>
-                        <div className="py-3 text-right tabular-nums text-apptext-soft">
+                        <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
                           ${(d.total * kwhRate).toFixed(2)}
                         </div>
-                        <div className="py-3 text-right tabular-nums text-[11px] leading-tight text-apptext-muted">
+                        <div className="hidden py-3 text-right tabular-nums text-[11px] leading-tight text-apptext-muted md:block">
                           {wx ? (
                             <span>
                               <span className="text-sky-300/70">{Math.round(wx.low)}°</span>{' '}
@@ -421,18 +422,18 @@ export default memo(function ElectricalUsage() {
                     return (
                       <div
                         key={d.id}
-                        className="grid grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                        className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
                       >
-                        <div className="py-3 text-apptext-soft">{label}</div>
+                        <div className="py-3 text-apptext-soft truncate">{label}</div>
                         <div className="py-3 text-right tabular-nums">
-                          <span className={`inline-flex min-w-[5.5rem] items-center justify-end rounded-full border px-2.5 py-1 text-sm font-semibold ${level.badgeClass}`}>
+                          <span className={`inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold ${level.badgeClass}`}>
                             {Number(d.usageKwh).toFixed(2)}
                           </span>
                         </div>
-                        <div className="py-3 text-right tabular-nums text-apptext-soft">
+                        <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
                           ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
                         </div>
-                        <div className="py-3 text-right text-[11px] text-apptext-muted">
+                        <div className="hidden py-3 text-right text-[11px] text-apptext-muted md:block">
                           {temp != null ? `${Math.round(temp)}°` : '—'}
                         </div>
                         <div className="py-3 text-right text-apptext-dim">
