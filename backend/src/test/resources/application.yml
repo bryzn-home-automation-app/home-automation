@@ -19,6 +19,8 @@ spring:
 app:
   kwh-rate: 0.1171
   data-start-date: 07/24/2026
+  property-latitude: 33.2150
+  property-longitude: -97.1330
   jwt:
     secret: test-secret-key-that-is-at-least-32-bytes-long!!
     expiration-ms: 3600000

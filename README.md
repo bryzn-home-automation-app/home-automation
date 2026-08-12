@@ -41,8 +41,11 @@ Built and maintained under the bryzncode mark.
 - **Tab storage is isolated.** Electric, gas, water, and Roomba data live in separate tables. Weather is the only shared enrichment dataset.
 - **Compatibility view** `energy_usage` keeps the current API contract stable while electric, gas, and hourly electric persist into dedicated tables underneath.
 - **Deploy scripts** handle git pull, commit hash injection, Docker rebuild, and health checks — via `deploy.sh` (bash) or `deploy-nuc.cmd` (Windows cmd).
-- **Hourly sync scheduler** runs in-process (Spring `@Scheduled`), polling every 15 minutes between 5 AM–11 PM CT to backfill yesterday's hourly electric data if missing.
-- **Diagnostic event feed** logs startup, sync, weather, and migration events to the `app_events` table, visible in the Debug Dashboard for operational visibility.
+- **Hourly sync scheduler** (`HourlySyncScheduler`) runs in-process (Spring `@Scheduled`), syncing yesterday's hourly data at 6:15 AM and 12:15 PM CT. Always syncs — `ON CONFLICT DO UPDATE` handles idempotency.
+- **Daily sync scheduler** (`DailySyncScheduler`) runs Green Button daily sync at 5:15 AM CT, writing to `electric_usage` for reconciliation against the hourly table.
+- **Alert engine** (`AlertEngine`) scans live usage data after each sync to generate real ELECTRICAL notifications (daily report, usage spike, peak hour, monthly bill estimate) with deduplication.
+- **Diagnostic event feed** (`AppEventService`) logs startup, sync, weather, and migration events to the `app_events` table, visible in the Debug Dashboard for operational visibility.
+- **Responsive mobile layout** — hamburger sidebar overlay, fixed bottom nav bar, adaptive data tables (3 cols mobile / 5 cols desktop), and responsive text sizing from 375px to 1536px+.
 
 ## Tech Stack
 
@@ -571,11 +574,16 @@ See `backend/src/main/resources/schema.sql` for the full DDL.
 cd backend && mvn test
 ```
 
-**36 tests** across 2 test files:
-- `JwtUtilTest` — 12 tests: token generation, validation, expiry, claims extraction, tamper detection
-- `UserServiceTest` — 24 tests: registration, login (success/failure/pending/disabled), guest login (find-or-reuse, connection count, session creation, expiry, reactivation), approval workflow (approve/deny/list), disable/reactivate, role management, guest session management
+**83 tests** across 7 test files:
+- `AlertEngineTest` — 8 tests: daily report generation, usage spike detection (30% threshold), peak hour detection (≥5 kWh), dedup logic, error handling, empty data skipping
+- `AppEventServiceTest` — 11 tests: logging at all levels (INFO/WARN/ERROR), getRecent with category/level filters, cleanup
+- `EnergyUsageServiceTest` — 5 tests: getSummary aggregation with high/low points, empty data fallbacks, date ranges
+- `NotificationServiceTest` — 11 tests: CRUD, filtering by category/severity/unread, mark read/all, limit capping
+- `JwtUtilTest` — 9 tests: token generation, validation, expiry, claims extraction, tamper detection
+- `UserServiceTest` — 24 tests: registration, login, guest login, approval, disable/reactivate, role management, guest sessions
+- `WeatherServiceTest` — 15 tests: forecast fetch, archive, error handling, aggregation, current weather
 
-Runs against H2 in-memory database. PostgreSQL-specific migrations are excluded via `@Profile("!test")`.
+Backend tests use JUnit 5 + Mockito (unit) or `@SpringBootTest` with H2 in-memory database (integration). PostgreSQL-specific migrations and schedulers are excluded via `@Profile("!test")`.
 
 ### Frontend Tests
 

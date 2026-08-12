@@ -140,7 +140,7 @@ public class AlertEngine {
     // Data queries
     // ──────────────────────────────────────────
 
-    private Long findElectricMeter(Long userId) {
+    Long findElectricMeter(Long userId) {
         try {
             return jdbc.queryForObject("""
                 SELECT m.id FROM meters m
@@ -153,7 +153,8 @@ public class AlertEngine {
         }
     }
 
-    private DailyMetrics queryDay(Long meterId, String date) {
+    // package-private for testability
+    DailyMetrics queryDay(Long meterId, String date) {
         try {
             Map<String, Object> row = jdbc.queryForMap("""
                 SELECT
@@ -186,7 +187,7 @@ public class AlertEngine {
         }
     }
 
-    private double queryAvgLastNDays(Long meterId, String beforeDate, int days) {
+    double queryAvgLastNDays(Long meterId, String beforeDate, int days) {
         try {
             Number avg = jdbc.queryForObject("""
                 SELECT COALESCE(AVG(daily_total), 0)
@@ -206,7 +207,7 @@ public class AlertEngine {
         }
     }
 
-    private double queryMonthToDate(Long meterId) {
+    double queryMonthToDate(Long meterId) {
         try {
             Number sum = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(usage_kwh), 0)
@@ -228,7 +229,7 @@ public class AlertEngine {
      * Returns true if no notification with the given title prefix exists
      * for this user today.
      */
-    private boolean isNew(Long userId, String titlePrefix) {
+    boolean isNew(Long userId, String titlePrefix) {
         try {
             Long count = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM notifications
@@ -243,7 +244,7 @@ public class AlertEngine {
         }
     }
 
-    private void create(Long userId, Severity severity, String title, String message, String sourceKey) {
+    void create(Long userId, Severity severity, String title, String message, String sourceKey) {
         log.info("AlertEngine: {} — {}", severity, title);
         notificationService.create(userId, Category.ELECTRICAL, severity, title, message);
     }
@@ -252,7 +253,7 @@ public class AlertEngine {
     // Value object
     // ──────────────────────────────────────────
 
-    private record DailyMetrics(
+    record DailyMetrics(
             double totalKwh,
             int readingCount,
             int maxHour,
