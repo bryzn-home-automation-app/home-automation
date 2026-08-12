@@ -53,10 +53,7 @@ echo.
 docker logs homeplatform-backend --tail 20
 
 echo.
-echo ========================================
-echo   Deploy complete. Live log tail:
-echo ========================================
-echo.
-docker logs homeplatform-backend --tail 0 -f
+echo DEPLOY SUCCESSFUL >> "%LOG%"
+echo Completed: %date% %time% >> "%LOG%"
 
 exit /b 0

@@ -61,6 +61,3 @@ echo ""
 # 5. Show fresh logs from the new container
 echo "── Recent backend logs ──"
 docker logs homeplatform-backend --tail 20 2>&1
-echo ""
-echo "── Live log tail (Ctrl+C to exit) ──"
-docker logs homeplatform-backend --tail 0 -f 2>&1
