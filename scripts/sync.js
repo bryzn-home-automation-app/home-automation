@@ -95,6 +95,11 @@ async function decideSyncMode(client, args, secrets, now) {
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = fmtDate(yesterday);
 
+  // Explicit --start/--end: custom date range
+  if (args.startDate && args.endDate) {
+    return { startDate: args.startDate, endDate: args.endDate, mode: 'range' };
+  }
+
   // Explicit --date: single day range
   if (args.date) {
     return { startDate: args.date, endDate: args.date, mode: 'single' };
@@ -511,9 +516,16 @@ async function main(cfg) {
     }
     console.log('✓  Logged into SmartHub');
 
-    // Navigate to Green Button page via hash change
+    // Navigate to Green Button page — try full goto first, then hash fallback
     for (let navAttempt = 0; navAttempt < 4; navAttempt++) {
-      await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
+      try {
+        await page.goto('https://coserv.smarthub.coop/ui/#/usageManagement/greenButton', {
+          waitUntil: 'networkidle', timeout: 15000,
+        });
+      } catch {
+        // Full goto failed, try hash change
+        await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
+      }
       await page.waitForTimeout(8000);
 
       // Check if page rendered (non-blank body text)
