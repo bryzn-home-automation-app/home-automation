@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import VirtualizedList from '../../components/VirtualizedList';
 import { jitteredInterval } from '../../hooks/useJitteredInterval';
@@ -215,6 +215,19 @@ export default function DebugDashboard() {
           </div>
         </section>
       )}
+
+      {/* Manual Sync Triggers */}
+      <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+        <div className="mb-4">
+          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
+          <h3 className="mt-2 text-lg font-semibold text-apptext">Run Sync Jobs</h3>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <SyncButton label="⚡ Daily Sync (Green Button)" endpoint="/admin/sync/daily" />
+          <SyncButton label="🕐 Hourly Sync (Avg Usage API)" endpoint="/admin/sync/hourly" />
+          <SyncButton label="🔔 Generate Alerts" endpoint="/admin/sync/alerts" />
+        </div>
+      </section>
 
       {/* Event Feed */}
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
@@ -480,5 +493,31 @@ LIMIT 50`);
         </div>
       )}
     </section>
+  );
+}
+
+/** Manual trigger button — POSTs to a sync endpoint, shows pending/success state. */
+function SyncButton({ label, endpoint }: { label: string; endpoint: string }) {
+  const queryClient = useQueryClient();
+  const trigger = useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post(endpoint);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-events'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-events-summary'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-health'] });
+    },
+  });
+  return (
+    <button
+      type="button"
+      onClick={() => trigger.mutate()}
+      disabled={trigger.isPending}
+      className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-medium text-emerald-200 transition-all hover:border-emerald-300/40 hover:bg-emerald-300/20 disabled:opacity-50"
+    >
+      {trigger.isPending ? '⏳ Running...' : label}
+    </button>
   );
 }

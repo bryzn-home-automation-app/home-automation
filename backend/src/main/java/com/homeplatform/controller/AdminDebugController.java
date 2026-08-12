@@ -1,7 +1,10 @@
 package com.homeplatform.controller;
 
 import com.homeplatform.model.AppEvent;
+import com.homeplatform.service.AlertEngine;
 import com.homeplatform.service.AppEventService;
+import com.homeplatform.service.DailySyncScheduler;
+import com.homeplatform.service.HourlySyncScheduler;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,14 +24,23 @@ public class AdminDebugController {
 
     private final AppEventService appEventService;
     private final DataSource dataSource;
+    private final DailySyncScheduler dailySyncScheduler;
+    private final HourlySyncScheduler hourlySyncScheduler;
+    private final AlertEngine alertEngine;
     private static final Set<String> SENSITIVE_COLUMNS = Set.of(
             "password_hash", "password", "token", "secret", "jwt_secret",
             "salt", "api_key", "access_token", "refresh_token"
     );
 
-    public AdminDebugController(AppEventService appEventService, DataSource dataSource) {
+    public AdminDebugController(AppEventService appEventService, DataSource dataSource,
+                                DailySyncScheduler dailySyncScheduler,
+                                HourlySyncScheduler hourlySyncScheduler,
+                                AlertEngine alertEngine) {
         this.appEventService = appEventService;
         this.dataSource = dataSource;
+        this.dailySyncScheduler = dailySyncScheduler;
+        this.hourlySyncScheduler = hourlySyncScheduler;
+        this.alertEngine = alertEngine;
     }
 
     /** Require ADMIN role — mirrors AdminController pattern. */
@@ -261,6 +273,45 @@ public class AdminDebugController {
                 result.put("rowCount", 1);
                 return ResponseEntity.ok(result);
             }
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Manually trigger the daily Green Button sync for yesterday. */
+    @PostMapping("/sync/daily")
+    public ResponseEntity<Map<String, Object>> triggerDailySync(HttpServletRequest request) {
+        requireAdmin(request);
+        try {
+            dailySyncScheduler.runDailySync();
+            return ResponseEntity.ok(Map.of("status", "triggered", "type", "daily"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Manually trigger the hourly average-usage sync for yesterday. */
+    @PostMapping("/sync/hourly")
+    public ResponseEntity<Map<String, Object>> triggerHourlySync(HttpServletRequest request) {
+        requireAdmin(request);
+        try {
+            hourlySyncScheduler.checkAndSync();
+            return ResponseEntity.ok(Map.of("status", "triggered", "type", "hourly"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Manually generate alerts from current usage data. */
+    @PostMapping("/sync/alerts")
+    public ResponseEntity<Map<String, Object>> triggerAlerts(HttpServletRequest request) {
+        requireAdmin(request);
+        try {
+            alertEngine.generateForAllUsers();
+            return ResponseEntity.ok(Map.of("status", "triggered", "type", "alerts"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", e.getMessage()));
