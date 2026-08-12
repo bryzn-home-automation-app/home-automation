@@ -38,25 +38,20 @@ function useRechartsTheme() {
   };
 }
 
-// Memoized tooltip content wrapper — avoids remounting on theme toggle
-const ChartTooltip = memo(function ChartTooltip({ t, unitLabel }: { t: ReturnType<typeof useRechartsTheme>; unitLabel: string }) {
-  const style = useMemo(() => ({
-    backgroundColor: t.tooltipBg,
-    border: `1px solid ${t.tooltipBorder}`,
-    borderRadius: '16px',
-    fontSize: '13px',
-    color: t.text,
-    boxShadow: '0 20px 50px var(--appshadow-lg)',
+// Memoized tooltip style — avoids object literals on every chart render
+function useTooltipStyle(t: ReturnType<typeof useRechartsTheme>) {
+  return useMemo(() => ({
+    content: {
+      backgroundColor: t.tooltipBg,
+      border: `1px solid ${t.tooltipBorder}`,
+      borderRadius: '16px',
+      fontSize: '13px',
+      color: t.text,
+      boxShadow: '0 20px 50px var(--appshadow-lg)',
+    },
+    label: { color: t.muted, marginBottom: 4 },
   }), [t]);
-  const labelStyle = useMemo(() => ({ color: t.muted, marginBottom: 4 }), [t]);
-  return (
-    <Tooltip
-      contentStyle={style}
-      formatter={(value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Usage']}
-      labelStyle={labelStyle}
-    />
-  );
-});
+}
 
 function buildDynamicAxis(
   values: Array<number | null | undefined>,
@@ -150,6 +145,8 @@ function UsageChart({
     return buildDynamicAxis(chartData.map((d) => d.kWh), { points: 8, padRatio: 0.12, minPad: 1, floorZero: true, integerTicks: true });
   }, [chartData]);
 
+  const tooltipStyle = useTooltipStyle(t);
+
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -182,7 +179,11 @@ function UsageChart({
             domain={yAxis.domain as [number, number]}
             ticks={yAxis.ticks}
           />
-          <ChartTooltip t={t} unitLabel={unitLabel} />
+          <Tooltip
+            contentStyle={tooltipStyle.content}
+            formatter={(value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Usage']}
+            labelStyle={tooltipStyle.label}
+          />
           <Line
             type="monotone"
             dataKey="kWh"
