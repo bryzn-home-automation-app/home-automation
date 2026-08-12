@@ -13,6 +13,8 @@ echo ""
 # 1. Git pull (skip if no .git — e.g. NUC file copy)
 echo "── 1. Pulling latest ──"
 if git rev-parse --git-dir >/dev/null 2>&1; then
+  # Reset .git-commit (regenerated each build from git) to avoid merge conflicts
+  git checkout -- .git-commit 2>/dev/null || true
   git pull origin master 2>&1 | sed 's/^/   /'
 else
   echo "   (no .git — skipping pull, using .git-commit file)"
@@ -28,11 +30,10 @@ else
 fi
 export GIT_COMMIT
 
-# 3. Rebuild application layers only (base images already cached)
-# --pull=never avoids Docker Hub auth error over SSH (Windows credsStore)
+# 3. Rebuild images (no --no-cache — source changes invalidate layers naturally)
 echo "── 2. Rebuilding Docker images ──"
 echo "   Commit: $GIT_COMMIT"
-docker compose build --no-cache --pull=never backend nginx 2>&1 | tail -10
+docker compose build backend nginx 2>&1 | tail -10
 echo ""
 
 # 3. Start everything
