@@ -36,9 +36,9 @@ public class DailySyncScheduler {
         this.alertEngine = alertEngine;
     }
 
-    /** Every 30 min from 8:15 AM to 11:45 PM CT. Starts later than hourly because
-     *  CoServ daily data typically posts after the hourly data is available. */
-    @Scheduled(cron = "0 15,45 8-23 * * *", zone = "America/Chicago")
+    /** Every 30 min from 6:30 AM to 11:45 PM CT. Same window as hourly but
+     *  offset by 15 min to avoid both browser logins at the exact same second. */
+    @Scheduled(cron = "0 0,30 6-23 * * *", zone = "America/Chicago")
     public void runDailySync() {
         String yesterday = LocalDate.now(CHICAGO).minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
         log.info("DailySyncScheduler: checking for {}…", yesterday);
