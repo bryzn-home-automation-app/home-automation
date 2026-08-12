@@ -34,11 +34,29 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [4/4] Checking services... >> "%LOG%"
+echo [4/4] Checking services + showing fresh logs... >> "%LOG%"
 docker compose ps >> "%LOG%" 2>&1
 
-echo. >> "%LOG%"
-echo DEPLOY SUCCESSFUL >> "%LOG%"
-echo Completed: %date% %time% >> "%LOG%"
+:: Wait for backend to be healthy, then show only new logs
+echo Waiting for backend...
+for /l %%i in (1,1,12) do (
+    curl -s http://localhost/api/health 2>nul | findstr /c:"UP" >nul && goto :healthy
+    timeout /t 5 /nobreak >nul
+)
+:healthy
+
+echo.
+echo ========================================
+echo   Recent backend logs (last 20 lines)
+echo ========================================
+echo.
+docker logs homeplatform-backend --tail 20
+
+echo.
+echo ========================================
+echo   Deploy complete. Live log tail:
+echo ========================================
+echo.
+docker logs homeplatform-backend --tail 0 -f
 
 exit /b 0
