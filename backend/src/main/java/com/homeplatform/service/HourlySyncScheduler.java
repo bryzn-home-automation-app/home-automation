@@ -32,8 +32,8 @@ public class HourlySyncScheduler {
         this.alertEngine = alertEngine;
     }
 
-    /** Twice daily: 6:15 AM CT (primary — all 24 hours should be posted) and 12:15 PM CT (safety net). */
-    @Scheduled(cron = "0 15 6,12 * * *", zone = "America/Chicago")
+    /** Every 30 min from 6:15 AM to 11:45 PM CT — late enough for CoServ data, frequent enough to fill gaps. */
+    @Scheduled(cron = "0 15,45 6-23 * * *", zone = "America/Chicago")
     public void checkAndSync() {
         String yesterday = LocalDate.now(CHICAGO).minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
         log.info("HourlySyncScheduler: syncing hourly data for {}…", yesterday);
