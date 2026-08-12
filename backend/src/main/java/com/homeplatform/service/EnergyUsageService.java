@@ -61,7 +61,7 @@ public class EnergyUsageService {
             FROM hourly_electric_usage
             WHERE meter_id = ?
               AND timestamp >= CURRENT_DATE - ?
-            GROUP BY ts::date
+            GROUP BY timestamp::date
             ORDER BY day
             """;
         return jdbc.query(sql,
@@ -72,6 +72,15 @@ public class EnergyUsageService {
                         rs.getString("source_provider")
                 ),
                 meterId, days);
+    }
+
+    /** Batch summaries: one HTTP call instead of 4. Loops getSummary in a single DB connection. */
+    public List<UsageRangeSummaryResponse> getBatchSummaries(
+            Long meterId,
+            List<LocalDateTime[]> periods) {
+        return periods.stream()
+                .map(p -> getSummary(meterId, p[0], p[1]))
+                .toList();
     }
 
     public UsageRangeSummaryResponse getSummary(Long meterId, LocalDateTime start, LocalDateTime end) {

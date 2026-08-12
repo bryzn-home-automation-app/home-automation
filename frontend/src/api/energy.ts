@@ -59,6 +59,18 @@ export async function fetchDailyUsage(meterId: number, days = 60): Promise<Daily
   return data;
 }
 
+/** Batch fetch N period summaries in one HTTP call. */
+export async function fetchBatchSummaries(
+  meterId: number,
+  periods: Array<{ start: string; end: string }>,
+): Promise<UsageRangeSummary[]> {
+  const periodStr = periods.map((p) => `${p.start},${p.end}`).join(';');
+  const { data } = await api.get(`/energy-usage/meter/${meterId}/summaries`, {
+    params: { periods: periodStr },
+  });
+  return data;
+}
+
 /** Trigger a sync for a provider. */
 export async function triggerSync(
   providerKey: string

@@ -76,4 +76,25 @@ public class EnergyUsageController {
             @RequestParam(defaultValue = "60") int days) {
         return ResponseEntity.ok(service.getDailyAggregates(meterId, days));
     }
+
+    /**
+     * Batch summary — one HTTP call for N date ranges instead of N calls.
+     * Accepts a comma-separated list: ?periods=start1,end1;start2,end2;...
+     */
+    @GetMapping("/meter/{meterId}/summaries")
+    public ResponseEntity<List<UsageRangeSummaryResponse>> getBatchSummaries(
+            @PathVariable Long meterId,
+            @RequestParam String periods) {
+        var periodList = new java.util.ArrayList<LocalDateTime[]>();
+        for (String pair : periods.split(";")) {
+            String[] parts = pair.split(",");
+            if (parts.length == 2) {
+                periodList.add(new LocalDateTime[]{
+                        LocalDateTime.parse(parts[0]),
+                        LocalDateTime.parse(parts[1])
+                });
+            }
+        }
+        return ResponseEntity.ok(service.getBatchSummaries(meterId, periodList));
+    }
 }
