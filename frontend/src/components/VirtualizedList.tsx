@@ -22,7 +22,7 @@ function VirtualizedListComponent<T>({
 }: VirtualizedListProps<T>) {
   const [scrollTop, setScrollTop] = useState(0);
 
-  const { startIndex, endIndex, visibleItems, offsetTop, totalHeight } = useMemo(() => {
+  const { startIndex, endIndex, offsetTop, totalHeight } = useMemo(() => {
     const visibleCount = Math.ceil(height / itemHeight);
     const start = Math.max(0, Math.floor(scrollTop / itemHeight) - overscan);
     const end = Math.min(items.length, start + visibleCount + overscan * 2);
@@ -30,11 +30,15 @@ function VirtualizedListComponent<T>({
     return {
       startIndex: start,
       endIndex: end,
-      visibleItems: items.slice(start, end),
       offsetTop: start * itemHeight,
       totalHeight: items.length * itemHeight,
     };
-  }, [height, itemHeight, items, overscan, scrollTop]);
+  }, [height, itemHeight, items.length, overscan, scrollTop]);
+
+  const visibleItems = useMemo(
+    () => items.slice(startIndex, endIndex),
+    [items, startIndex, endIndex],
+  );
 
   const onScroll = (event: UIEvent<HTMLDivElement>) => {
     setScrollTop(event.currentTarget.scrollTop);
@@ -55,7 +59,6 @@ function VirtualizedListComponent<T>({
           {visibleItems.map((item, index) => renderItem(item, startIndex + index))}
         </div>
       </div>
-      {endIndex === 0 ? null : null}
     </div>
   );
 }

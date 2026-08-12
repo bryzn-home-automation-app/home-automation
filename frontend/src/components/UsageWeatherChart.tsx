@@ -11,6 +11,7 @@ import {
 } from 'recharts';
 import type { EnergyUsage } from '../types';
 import { fetchWeatherForRange } from '../api/weather';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
 
 interface UsageWeatherChartProps {
   usageData: EnergyUsage[];
@@ -147,7 +148,8 @@ function UsageWeatherChart({
     queryFn: () => fetchWeatherForRange(dateStart, dateEnd),
     enabled: weatherEnabled,
     staleTime: 3_600_000,
-    refetchInterval: 3_600_000,
+    refetchInterval: jitteredInterval(3_600_000, 60_000),
+    refetchIntervalInBackground: false,
   });
 
   // ── Weather lookup maps ──

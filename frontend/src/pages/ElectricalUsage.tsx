@@ -9,6 +9,7 @@ import VirtualizedList from '../components/VirtualizedList';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { fetchUsageSummary } from '../api/energy';
 import { fetchWeatherForRange } from '../api/weather';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 import UsageWeatherChart from '../components/UsageWeatherChart';
 
@@ -109,7 +110,8 @@ export default memo(function ElectricalUsage() {
     queryFn: () => fetchWeatherForRange(weatherStart, weatherEnd),
     enabled: weatherStart !== '' && weatherEnd !== '',
     staleTime: 3_600_000,
-    refetchInterval: 3_600_000,
+    refetchInterval: jitteredInterval(3_600_000, 60_000),
+    refetchIntervalInBackground: false,
   });
 
   const weatherByDate = useMemo(() => {

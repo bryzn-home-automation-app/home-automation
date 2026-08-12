@@ -5,6 +5,7 @@ import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 import api from './api/client';
 import { fetchUnreadCount } from './api/notifications';
+import { jitteredInterval } from './hooks/useJitteredInterval';
 import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
 
@@ -17,14 +18,16 @@ export default memo(function App() {
     queryKey: ['health'],
     queryFn: () => api.get('/health').then((r) => r.data),
     staleTime: 120_000,
-    refetchInterval: 120_000,
+    refetchInterval: jitteredInterval(120_000),
+    refetchIntervalInBackground: false,
   });
 
   const unread = useQuery({
     queryKey: ['notifications-unread-count'],
     queryFn: fetchUnreadCount,
     staleTime: 120_000,
-    refetchInterval: 120_000,
+    refetchInterval: jitteredInterval(120_000),
+    refetchIntervalInBackground: false,
     enabled: !!user,
   });
 

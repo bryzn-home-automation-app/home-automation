@@ -30,6 +30,22 @@ function useRechartsTheme() {
   };
 }
 
+// ── Module-scope constants ────────────────────────────────────
+// These are passed to Recharts as props on every render. Hoisting them
+// out of JSX keeps the references stable so memoized chart children
+// don't re-render on unrelated parent updates (e.g. theme toggle).
+const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
+const TICK_PROPS = { fontSize: 11 } as const;
+const AXIS_LINE_PROPS = { stroke: 'var(--appchart-grid)' } as const;
+const TICK_LINE_FALSE = false as const;
+const CARTESIAN_GRID_DASH = '3 3' as const;
+const TOOLTIP_CONTENT_STYLE_BASE = {
+  borderRadius: '16px',
+  fontSize: '13px',
+  boxShadow: '0 20px 50px var(--appshadow-lg)',
+} as const;
+const TOOLTIP_LABEL_STYLE_BASE = { marginBottom: 4 } as const;
+
 function MonthlyComparison({
   data,
   loading,
@@ -93,31 +109,29 @@ function MonthlyComparison({
         </span>
       </div>
       <ResponsiveContainer width="100%" height={280} debounce={80}>
-        <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke={t.grid} />
+        <BarChart data={chartData} margin={CHART_MARGIN}>
+          <CartesianGrid strokeDasharray={CARTESIAN_GRID_DASH} stroke={t.grid} />
           <XAxis
             dataKey="month"
-            tick={{ fill: t.tick, fontSize: 11 }}
-            axisLine={{ stroke: t.grid }}
-            tickLine={false}
+            tick={{ fill: t.tick, ...TICK_PROPS }}
+            axisLine={{ ...AXIS_LINE_PROPS, stroke: t.grid }}
+            tickLine={TICK_LINE_FALSE}
           />
           <YAxis
-            tick={{ fill: t.tick, fontSize: 11 }}
-            axisLine={{ stroke: t.grid }}
-            tickLine={false}
+            tick={{ fill: t.tick, ...TICK_PROPS }}
+            axisLine={{ ...AXIS_LINE_PROPS, stroke: t.grid }}
+            tickLine={TICK_LINE_FALSE}
             unit={` ${unitLabel}`}
           />
           <Tooltip
             contentStyle={{
               backgroundColor: t.tooltipBg,
               border: `1px solid ${t.tooltipBorder}`,
-              borderRadius: '16px',
-              fontSize: '13px',
               color: t.text,
-              boxShadow: '0 20px 50px var(--appshadow-lg)',
+              ...TOOLTIP_CONTENT_STYLE_BASE,
             }}
             formatter={(value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Total']}
-            labelStyle={{ color: t.muted, marginBottom: 4 }}
+            labelStyle={{ color: t.muted, ...TOOLTIP_LABEL_STYLE_BASE }}
           />
           <Bar
             dataKey="kWh"

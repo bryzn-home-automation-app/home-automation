@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchIntegrations } from '../api/energy';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
 
 export default function IntegrationPanel() {
   const integrations = useQuery({
     queryKey: ['integrations'],
     queryFn: fetchIntegrations,
     staleTime: 120_000,
-    refetchInterval: 120_000,
+    refetchInterval: jitteredInterval(120_000),
+    refetchIntervalInBackground: false,
   });
 
   const adapter = integrations.data?.[0];

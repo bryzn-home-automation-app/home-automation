@@ -3,6 +3,7 @@ import {
   fetchGuestSessions,
   expireGuestSessions,
 } from '../../api/auth';
+import { jitteredInterval } from '../../hooks/useJitteredInterval';
 
 function timeAgo(iso: string): string {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -24,7 +25,8 @@ export default function GuestManagement() {
   const sessions = useQuery({
     queryKey: ['admin-guest-sessions'],
     queryFn: fetchGuestSessions,
-    refetchInterval: 30_000,
+    refetchInterval: jitteredInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 
   const expireMut = useMutation({

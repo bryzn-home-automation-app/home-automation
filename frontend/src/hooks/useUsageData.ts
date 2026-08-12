@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchRecentUsage, fetchTotalUsage } from '../api/energy';
 import { fetchMeters } from '../api/meters';
 import api from '../api/client';
+import { jitteredInterval } from './useJitteredInterval';
 import type { EnergyUsage, Meter } from '../types';
 
 /** Shared hook — all pages use this, React Query cache deduplicates. */
@@ -32,7 +33,8 @@ export function useUsageData() {
         : Promise.resolve([]),
     enabled: !!electricMeter,
     staleTime: 120_000,
-    refetchInterval: 60_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
   });
 
   const gasUsage = useQuery<EnergyUsage[]>({
@@ -41,7 +43,8 @@ export function useUsageData() {
       gasMeter ? fetchRecentUsage(gasMeter.id, 60) : Promise.resolve([]),
     enabled: !!gasMeter,
     staleTime: 120_000,
-    refetchInterval: 60_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
   });
 
   const electricTotal = useQuery({
@@ -52,7 +55,8 @@ export function useUsageData() {
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!electricMeter,
     staleTime: 120_000,
-    refetchInterval: 60_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
   });
 
   const gasTotal = useQuery({
@@ -63,7 +67,8 @@ export function useUsageData() {
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!gasMeter,
     staleTime: 120_000,
-    refetchInterval: 60_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
   });
 
   return {

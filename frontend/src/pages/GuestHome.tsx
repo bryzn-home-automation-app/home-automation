@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import { fetchAllUsers, type AdminUser } from '../api/auth';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
 import webBackgroundImage from '../../images/web_guest_bg.png';
 import mobileBackgroundImage from '../../images/mobile_guest_bg.png';
 import chickenPng from '../../images/animals/chicken.png';
@@ -494,7 +495,8 @@ export default function GuestHome() {
     queryKey: ['all-users-guest-lobby'],
     queryFn: fetchAllUsers,
     staleTime: 25_000,
-    refetchInterval: 30_000,
+    refetchInterval: jitteredInterval(30_000),
+    refetchIntervalInBackground: false,
   });
 
   useEffect(() => {
