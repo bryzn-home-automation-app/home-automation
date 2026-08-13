@@ -362,15 +362,18 @@ function parseGreenButtonXml(xmlText, kwhRate) {
 
 // ─── SmartHub interaction ──────────────────────────────────────
 async function fillDateInput(page, inputId, dateStr) {
-  // The date fields are mat-datepicker-input elements with stable ids:
-  //   mat-input-4 = Start Date (aria-labelledby start-date-label)
-  //   mat-input-5 = End Date   (aria-labelledby end-date-label)
-  // A cdk-global-overlay-wrapper (calendar popup) can intercept clicks,
-  // so use force: true. Clear the default value first.
-  const input = page.locator(`#${inputId}`).first();
-  await input.waitFor({ state: 'visible', timeout: 10000 }).catch((e) => {
-    throw new Error(`date input #${inputId} not found: ${e.message?.split('\n')[0]}`);
-  });
+  // The date fields are mat-datepicker-input elements. There may be multiple
+  // dialogs in the DOM (a lingering closed one), so target the VISIBLE input
+  // with this id. If it does not appear, wait and retry a few times.
+  let input = null;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    input = page.locator(`input#${inputId}`).filter({ visible: true }).last();
+    if (await input.count() > 0) break;
+    await page.waitForTimeout(2000);
+  }
+  if (!input || (await input.count()) === 0) {
+    throw new Error(`date input #${inputId} not found (visible) after retries`);
+  }
   await input.click({ force: true }).catch(() => {});
   await page.keyboard.press('Control+a').catch(() => {});
   await page.keyboard.press('Delete').catch(() => {});
