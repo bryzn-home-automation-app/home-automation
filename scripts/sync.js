@@ -383,8 +383,10 @@ async function fillDateInput(page, ariaLabelledby, dateStr) {
     await input.press('Control+a');
     await input.type(dateStr, { delay: 20 });
   });
-  await page.keyboard.press('Escape').catch(() => {}); // close calendar popup
-  await page.waitForTimeout(300);
+  // Dismiss the calendar popup by pressing Enter (accepts the date) rather
+  // than Escape, which can close the whole dialog or blur the next field.
+  await page.keyboard.press('Enter').catch(() => {});
+  await page.waitForTimeout(400);
 }
 
 async function downloadGreenButton(page, serviceValue, startDate, endDate) {
