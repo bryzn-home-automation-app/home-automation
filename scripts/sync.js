@@ -375,7 +375,7 @@ async function selectMatOption(page, triggerId, optionText) {
   });
   await page.waitForTimeout(600);
 
-  // Click the matching option in the overlay panel
+  // Click the matching option in the overlay panel (first open)
   const clicked = await page.evaluate((text) => {
     const options = document.querySelectorAll('.mat-select-panel mat-option, .mat-select-panel .mat-option');
     for (const opt of options) {
@@ -402,7 +402,12 @@ async function selectMatOption(page, triggerId, optionText) {
       return false;
     }, optionText);
     if (!retry) {
-      throw new Error(`mat-select option "${optionText}" not found in dropdown`);
+      // Dump available option labels for diagnosis
+      const available = await page.evaluate(() => {
+        const opts = document.querySelectorAll('mat-option, .mat-option');
+        return Array.from(opts).map((o) => (o.textContent || '').trim()).filter(Boolean);
+      });
+      throw new Error(`mat-select option "${optionText}" not found. Available: [${available.join(' | ')}]`);
     }
   }
   await page.waitForTimeout(300);
@@ -610,7 +615,7 @@ async function main(cfg) {
 
       console.log(`── ${svc.name} ──`);
 
-      const result = await downloadGreenButton(page, svc.value, startDate, endDate);
+      const result = await downloadGreenButton(page, svc.name, startDate, endDate);
 
       if (!result) {
         console.log(`   ✗  Download failed\n`);
