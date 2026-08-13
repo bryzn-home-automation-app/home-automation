@@ -125,19 +125,29 @@ The initial schema is in `backend/src/main/resources/schema.sql`. It is mounted 
 
 ## Data Sync (CoServ SmartHub)
 
-Sync pulls energy usage data from CoServ via Green Button Download and stores it in PostgreSQL. The sync is a standalone Node.js script — it runs outside Docker.
+Sync pulls energy usage data from CoServ and stores it in PostgreSQL. There are two data sources:
+
+| Script | Source | Granularity | Table |
+|--------|--------|-------------|-------|
+| `scripts/sync.js` | Green Button Download (XML ZIP) | 1 record/day | `electric_usage` |
+| `scripts/sync-hourly.js` | Average Usage API (Bearer token) | 24 records/day | `hourly_electric_usage` |
+
+Both are standalone Node.js CLIs. In production they're driven by in-process schedulers (`DailySyncScheduler` / `HourlySyncScheduler`) that retry every 30 min until CoServ posts the data.
 
 ```bash
 # Install Playwright browser (one-time)
 npx playwright install chromium
 
-# Sync yesterday's usage
-npm run sync
+# Daily sync (Green Button)
+npm run sync                          # yesterday
+npm run sync -- --date 08/03/2026     # specific date
+npm run sync -- --start 07/24/2026 --end 08/10/2026
 
-# Sync a specific date
-npm run sync -- --date 08/03/2026
+# Hourly sync (Average Usage API)
+node scripts/sync-hourly.js --date 08/03/2026
+node scripts/sync-hourly.js --start 07/24/2026 --end 08/10/2026
 
-# Preview without writing to the database
+# Dry run (no DB writes)
 npm run sync -- --dry-run
 
 # Verify SmartHub selectors still work (smoke test)
@@ -145,3 +155,15 @@ npm run test:live
 ```
 
 Credentials are loaded from the `.env` file at the project root (same file used by Docker Compose, gitignored).
+
+### Green Button Form Automation
+
+The CoServ Green Button download dialog uses Angular Material components with specific automation quirks (see README for full details):
+
+- Service / Interval / File Format are **native `<select>`** targeted by `select[aria-label="..."]`.
+- Date fields are `mat-datepicker-input` targeted by stable `aria-labelledby` (`start-date-label` / `end-date-label`), NOT by their dynamically-generated `mat-input-N` id.
+- Press **Enter** (not Escape) after typing a date to accept it.
+
+### Manual Sync (Debug Dashboard)
+
+The Debug Dashboard has manual trigger buttons that POST to `/api/admin/sync/daily`, `/api/admin/sync/hourly`, and `/api/admin/sync/alerts` — useful for backfilling or testing without waiting for the scheduler.

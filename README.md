@@ -41,8 +41,8 @@ Built and maintained under the bryzncode mark.
 - **Tab storage is isolated.** Electric, gas, water, and Roomba data live in separate tables. Weather is the only shared enrichment dataset.
 - **Compatibility view** `energy_usage` keeps the current API contract stable while electric, gas, and hourly electric persist into dedicated tables underneath.
 - **Deploy scripts** handle git pull, commit hash injection, Docker rebuild, and health checks — via `deploy.sh` (bash) or `deploy-nuc.cmd` (Windows cmd).
-- **Hourly sync scheduler** (`HourlySyncScheduler`) runs in-process (Spring `@Scheduled`), syncing yesterday's hourly data at 6:15 AM and 12:15 PM CT. Always syncs — `ON CONFLICT DO UPDATE` handles idempotency.
-- **Daily sync scheduler** (`DailySyncScheduler`) runs Green Button daily sync at 5:15 AM CT, writing to `electric_usage` for reconciliation against the hourly table.
+- **Hourly sync scheduler** (`HourlySyncScheduler`) runs in-process (Spring `@Scheduled`) every 30 min from 6:15–11:45 PM CT, backfilling yesterday's hourly data until it reaches 24 records.
+- **Daily sync scheduler** (`DailySyncScheduler`) runs Green Button daily sync every 30 min from 6:30–11:30 PM CT, writing to `electric_usage` for reconciliation against the hourly table, retrying until the daily reading posts.
 - **Alert engine** (`AlertEngine`) scans live usage data after each sync to generate real ELECTRICAL notifications (daily report, usage spike, peak hour, monthly bill estimate) with deduplication.
 - **Diagnostic event feed** (`AppEventService`) logs startup, sync, weather, and migration events to the `app_events` table, visible in the Debug Dashboard for operational visibility.
 - **Responsive mobile layout** — hamburger sidebar overlay, fixed bottom nav bar, adaptive data tables (3 cols mobile / 5 cols desktop), and responsive text sizing from 375px to 1536px+.
@@ -522,26 +522,40 @@ npm run test:live                 # verify SmartHub selectors still work
 
 ### Scheduling
 
-Set up a daily cron/task scheduler job:
+Two in-process schedulers run automatically — no external cron needed.
 
-```bash
-# Example crontab — runs every day at 2:07 AM
-7 2 * * * cd /path/to/home-automation && npm run sync >> logs/sync.log 2>&1
-```
+| Scheduler | Cron | Purpose | Retry |
+|-----------|------|---------|-------|
+| `DailySyncScheduler` | Every 30 min on `:00`/`:30`, 6:30 AM–11:30 PM CT | Green Button daily totals → `electric_usage` | Skips once yesterday has a non-zero daily reading |
+| `HourlySyncScheduler` | Every 30 min on `:15`/`:45`, 6:15 AM–11:45 PM CT | Average Usage API hourly → `hourly_electric_usage` | Skips once yesterday has 24 records |
 
-The script handles Sunday/weekday logic automatically. Zero-guard escalation happens inline. No special scheduling needed.
+Both run via Spring `@Scheduled` (see `DailySyncScheduler.java` and `HourlySyncScheduler.java`).
 
-**Note:** Utility data typically lags 1–2 days. A sync for "yesterday" may return `0 kWh` if CoServ hasn't posted the data yet. Re-running `--date` for that day later will populate the actual values.
+**Idempotency & retry:**
+- The **daily** sync checks `electric_usage` for yesterday. If a non-zero reading already exists, it skips. CoServ posts daily data slower than hourly, so it retries every 30 min from 6:30 AM until the reading arrives.
+- The **hourly** sync counts records in `hourly_electric_usage` for yesterday. It only skips when there are **24 records**. Partial days (e.g. 5 records at 6:15 AM) log a WARNING and retry 30 min later until all 24 hours are posted.
 
-### Hourly Sync Scheduler (In-Process)
+**Note:** Utility data typically lags. A "partial" sync result is not a failure — it means CoServ hasn't finished posting the day's data yet; the 30-min retry loop picks up the rest.
 
-The backend runs a built-in scheduler (`HourlySyncScheduler`) that automatically backfills yesterday's hourly electric data. No external cron needed.
+### Manual Sync (Debug Dashboard)
 
-- **Schedule**: Every 15 minutes between 5 AM–11 PM CT (`@Scheduled(cron = "0 0,15,30,45 5-23 * * *", zone = "America/Chicago")`)
-- **Behavior**: Checks if yesterday has populated hourly data (non-zero kWh rows in `hourly_electric_usage`). If not, spawns `node /scripts/sync-hourly.js --date <yesterday>` as a child process.
-- **Idempotent**: If data already exists, the check returns immediately — no redundant sync.
-- **Visibility**: All runs log to `app_events` (category: `sync`, source: `HourlySyncScheduler`) with level INFO/WARN/ERROR. The Debug Dashboard event feed and `/api/config` (`lastSyncCheck`) show the most recent run.
-- **Prerequisites**: The `./scripts` directory is mounted read-only into the backend container (`:/scripts:ro`). Node.js and Playwright are installed in the backend Docker image.
+The Debug Dashboard (`/admin/debug`) has a **Manual Triggers** section with three buttons:
+
+- **⚡ Daily Sync** — triggers `DailySyncScheduler` immediately
+- **🕐 Hourly Sync** — triggers `HourlySyncScheduler` immediately
+- **🔔 Generate Alerts** — runs `AlertEngine` against current data
+
+These POST to `/api/admin/sync/daily`, `/api/admin/sync/hourly`, and `/api/admin/sync/alerts` respectively.
+
+### Green Button Form Automation (important for maintainers)
+
+The CoServ Green Button download dialog uses **Angular Material** components that are non-obvious to automate:
+
+- **Service / Interval / File Format** dropdowns are **native `<select>` elements** (not mat-select divs). They are targeted by `select[aria-label="..."]` with `{ label: ... }`.
+- **Start/End Date** fields are `mat-datepicker-input` elements. Their `id` (`mat-input-N`) is **dynamically generated** and shifts between sessions — target by the **stable `aria-labelledby`** (`start-date-label` / `end-date-label`) instead.
+- After typing a date, press **Enter** (not Escape) to accept the value — Escape can close the dialog.
+
+The `adm-zip` Node module (for parsing the downloaded ZIP) is baked into the backend Docker image via the Dockerfile.
 
 ## Database Schema
 
