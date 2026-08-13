@@ -516,48 +516,34 @@ async function main(cfg) {
     }
     console.log('✓  Logged into SmartHub');
 
-    // Navigate to Green Button page.
-    // Strategy: login already succeeded, so we're on a post-login Angular page.
-    // Direct hash changes are unreliable in headless Chrome — Angular's zone.js
-    // sometimes misses them. Instead we page.goto with domcontentloaded and
-    // then poll the body content.
+    // Navigate to Green Button page — same reliable pattern as sync-hourly.js:
+    // go through #/home first to bootstrap the Angular SPA, then client-side
+    // hash-navigate to the Green Button route. A full page.goto() to the deep
+    // route races with Angular's bootstrap and intermittently renders blank.
     for (let navAttempt = 0; navAttempt < 5; navAttempt++) {
-      try {
-        await page.goto('https://coserv.smarthub.coop/ui/#/usageManagement/greenButton', {
-          waitUntil: 'domcontentloaded', timeout: 20000,
-        });
-      } catch {
-        // If goto throws, try a reload — Angular may already be bootstrapped
-        await page.evaluate(() => window.location.reload());
-        await page.waitForTimeout(3000);
-        await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
-      }
+      // Step 1: bootstrap the SPA on the home route
+      await page.evaluate(() => { window.location.hash = '#/home'; });
+      await page.waitForTimeout(3000);
 
-      // Poll for the Green Button download button or meaningful content
+      // Step 2: client-side navigate to Green Button
+      await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
+
+      // Step 3: poll for the download button (distinctive Green Button element)
       let hasContent = false;
       for (let poll = 0; poll < 15; poll++) {
         const text = await page.evaluate(() => document.body.innerText || '');
-        // The Green Button page has a distinctive heading
         if (text.includes('Green Button Download') || text.includes('Download My Data')) {
           hasContent = true;
-          break;
-        }
-        if (text.length > 80) {
-          // If we have a decent amount of text but not the heading, the page
-          // may have partially rendered — give it another second
-          await page.waitForTimeout(1000);
-          const retry = await page.evaluate(() => document.body.innerText || '');
-          if (retry.includes('Green Button Download') || retry.includes('Download My Data')) {
-            hasContent = true;
-            break;
-          }
-          // Not the right page — blank/navigation failed
           break;
         }
         await page.waitForTimeout(2000);
       }
       if (hasContent) break;
+
+      // If still blank, do a full reload and try again next iteration
       console.log('   Green Button page is blank, retrying navigation...');
+      await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
+      await page.waitForTimeout(3000);
     }
 
     const bodyLen = await page.evaluate(() => document.body.innerText.length);
