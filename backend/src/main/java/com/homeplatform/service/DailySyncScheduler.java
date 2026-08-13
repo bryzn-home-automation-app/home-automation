@@ -73,8 +73,10 @@ public class DailySyncScheduler {
 
             int exitCode = process.waitFor();
             String lastLines = output.toString();
-            if (lastLines.length() > 500) {
-                lastLines = "…\n" + lastLines.substring(lastLines.length() - 500);
+            // Keep the last 2000 chars — enough to see the actual error line,
+            // not just a truncated "waiting for element..." fragment.
+            if (lastLines.length() > 2000) {
+                lastLines = "…\n" + lastLines.substring(lastLines.length() - 2000);
             }
 
             if (exitCode == 0) {

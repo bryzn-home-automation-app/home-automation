@@ -420,12 +420,16 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
     throw new Error('Green Button dialog did not open');
   });
 
-  await page.selectOption('#mat-input-2', serviceValue);
-  await page.waitForTimeout(200);
-  await page.selectOption('#mat-input-3', 'DAILY');
-  await page.waitForTimeout(200);
-  await page.selectOption('#mat-input-6', 'GREEN_BUTTON');
-  await page.waitForTimeout(200);
+  // These are Angular Material mat-select fields — they render as custom
+  // elements, not native <select>. selectOption() works when Playwright can
+  // map the aria/label to the underlying value, but it's fragile. Wrap each
+  // in try/catch so one flaky field doesn't kill the whole sync.
+  try { await page.selectOption('#mat-input-2', serviceValue); } catch (e) { console.log('   ⚠ service select failed:', e.message?.split('\n')[0]); }
+  await page.waitForTimeout(300);
+  try { await page.selectOption('#mat-input-3', 'DAILY'); } catch (e) { console.log('   ⚠ interval select failed:', e.message?.split('\n')[0]); }
+  await page.waitForTimeout(300);
+  try { await page.selectOption('#mat-input-6', 'GREEN_BUTTON'); } catch (e) { console.log('   ⚠ format select failed:', e.message?.split('\n')[0]); }
+  await page.waitForTimeout(300);
   await fillDateInput(page, 'mat-input-4', startDate);
   await fillDateInput(page, 'mat-input-5', endDate);
   await page.waitForTimeout(300);
