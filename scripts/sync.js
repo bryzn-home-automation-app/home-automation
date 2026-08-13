@@ -598,26 +598,11 @@ async function main(cfg) {
       }
 
       if (result.noData) {
-        console.log(`   ○  No usage data in range — storing 0 kWh for each day`);
-        if (client) {
-          const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
-          const usageTable = getUsageTable(svc.meterType);
-          const [sm, sd, sy] = startDate.split('/').map(Number);
-          const [em, ed, ey] = endDate.split('/').map(Number);
-          const cursor = new Date(sy, sm - 1, sd);
-          const end = new Date(ey, em - 1, ed);
-          while (cursor <= end) {
-            const ds = `${cursor.getFullYear()}-${String(cursor.getMonth()+1).padStart(2,'0')}-${String(cursor.getDate()).padStart(2,'0')} 00:00:00`;
-            await client.query(
-              `INSERT INTO ${usageTable} (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
-               VALUES ($1, $2, 0, 0, $3, $4, $5, $6)
-               ON CONFLICT DO NOTHING`,
-              [meterId, ds, SOURCE_LABEL, 'coserv', batchId, PROCESSING_VERSION]
-            );
-            cursor.setDate(cursor.getDate() + 1);
-            totalRecords++;
-          }
-        }
+        // CoServ hasn't posted the daily total yet. DO NOT write a 0-kWh
+        // placeholder — the 30-min retry loop will pick up the real value
+        // when it posts. Writing a placeholder creates a duplicate 0.000 row
+        // that pollutes the daily table and shows up as "no data".
+        console.log(`   ○  No usage data yet for this range — skipping (will retry)`);
         console.log('');
         continue;
       }
