@@ -361,17 +361,20 @@ function parseGreenButtonXml(xmlText, kwhRate) {
 }
 
 // ─── SmartHub interaction ──────────────────────────────────────
-async function fillDateInput(page, position, dateStr) {
-  // The date fields are text input boxes inside custom cml-date-time-picker
-  // components. The "Start Date" / "End Date" labels live on the wrapping
-  // mat-form-field, NOT on the input itself. Target the inputs inside the
-  // date picker components by position (0 = Start Date, 1 = End Date).
-  const input = page.locator('cml-date-time-picker input, [class*="date-time-picker"] input').nth(position);
+async function fillDateInput(page, ariaLabelledby, dateStr) {
+  // The date fields are mat-datepicker-input elements with aria-labelledby
+  // "start-date-label" / "end-date-label". A cdk-global-overlay-wrapper can
+  // intercept pointer events, so use force: true.
+  const input = page.locator(`input[aria-labelledby="${ariaLabelledby}"]`).first();
   await input.waitFor({ state: 'visible', timeout: 10000 }).catch((e) => {
-    throw new Error(`date input #${position} not found: ${e.message?.split('\n')[0]}`);
+    throw new Error(`date input "${ariaLabelledby}" not found: ${e.message?.split('\n')[0]}`);
   });
-  await input.click();
-  await input.fill(dateStr);
+  await input.click({ force: true }).catch(() => {});
+  await input.fill(dateStr, { force: true }).catch(async () => {
+    await input.press('Control+a');
+    await input.type(dateStr, { delay: 20 });
+  });
+  await page.keyboard.press('Escape').catch(() => {}); // close calendar popup
   await page.waitForTimeout(300);
 }
 
@@ -436,8 +439,8 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
   await page.waitForTimeout(300);
   await page.selectOption('select[aria-label="File Format"]', { label: 'Green Button (XML)' });
   await page.waitForTimeout(300);
-  await fillDateInput(page, 0, startDate);
-  await fillDateInput(page, 1, endDate);
+  await fillDateInput(page, 'start-date-label', startDate);
+  await fillDateInput(page, 'end-date-label', endDate);
   await page.waitForTimeout(300);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
