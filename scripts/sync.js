@@ -361,58 +361,6 @@ function parseGreenButtonXml(xmlText, kwhRate) {
 }
 
 // ─── SmartHub interaction ──────────────────────────────────────
-
-/**
- * Select an option in an Angular Material <mat-select>.
- * mat-select is NOT a native <select> — Playwright's selectOption() throws
- * "Element is not a <select> element". Instead we click the trigger, wait for
- * the overlay panel, and click the mat-option whose text matches.
- */
-async function selectMatOption(page, triggerId, optionText) {
-  // Click the mat-select trigger to open the dropdown
-  await page.click(`#${triggerId}`, { timeout: 10000 }).catch((e) => {
-    throw new Error(`mat-select ${triggerId} not found: ${e.message?.split('\n')[0]}`);
-  });
-  await page.waitForTimeout(600);
-
-  // Click the matching option in the overlay panel (first open)
-  const clicked = await page.evaluate((text) => {
-    const options = document.querySelectorAll('.mat-select-panel mat-option, .mat-select-panel .mat-option');
-    for (const opt of options) {
-      const label = opt.textContent?.trim();
-      if (label && label.toLowerCase().includes(text.toLowerCase())) {
-        (opt).click();
-        return true;
-      }
-    }
-    return false;
-  }, optionText);
-
-  if (!clicked) {
-    // Try a broader match — sometimes text has extra whitespace/arrows
-    const retry = await page.evaluate((text) => {
-      const options = document.querySelectorAll('.cdk-overlay-container mat-option, .cdk-overlay-pane mat-option');
-      for (const opt of options) {
-        const label = opt.textContent?.trim();
-        if (label && label.toLowerCase().includes(text.toLowerCase())) {
-          (opt).click();
-          return true;
-        }
-      }
-      return false;
-    }, optionText);
-    if (!retry) {
-      // Dump available option labels for diagnosis
-      const available = await page.evaluate(() => {
-        const opts = document.querySelectorAll('mat-option, .mat-option');
-        return Array.from(opts).map((o) => (o.textContent || '').trim()).filter(Boolean);
-      });
-      throw new Error(`mat-select option "${optionText}" not found. Available: [${available.join(' | ')}]`);
-    }
-  }
-  await page.waitForTimeout(300);
-}
-
 async function fillDateInput(page, inputId, dateStr) {
   await page.evaluate(({ inputId, dateStr }) => {
     const el = document.querySelector(`#${inputId}`);
@@ -472,10 +420,20 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
     throw new Error('Green Button dialog did not open');
   });
 
-  // Angular Material mat-select fields — interact via the overlay panel.
-  await selectMatOption(page, 'mat-input-2', serviceValue);
-  await selectMatOption(page, 'mat-input-3', 'Daily');
-  await selectMatOption(page, 'mat-input-6', 'Green Button');
+  // These are NATIVE <select> elements (Angular Material mat-native-select).
+  // The parent mat-form-field shares the SAME id as the inner select, so a
+  // bare `#mat-input-N` selector matched the wrapper div and threw
+  // "Element is not a <select> element". Target the <select> via aria-label.
+  // Values (per CoServ UI):
+  //   Service    → Electric / Natural Gas
+  //   Interval   → MONTHLY / DAILY / INTERVAL
+  //   File Format → Green Button (XML) / CSV
+  await page.selectOption('select[aria-label="Service"]', { label: serviceValue });
+  await page.waitForTimeout(300);
+  await page.selectOption('select[aria-label="Interval"]', { label: 'MONTHLY' });
+  await page.waitForTimeout(300);
+  await page.selectOption('select[aria-label="File Format"]', { label: 'Green Button (XML)' });
+  await page.waitForTimeout(300);
   await fillDateInput(page, 'mat-input-4', startDate);
   await fillDateInput(page, 'mat-input-5', endDate);
   await page.waitForTimeout(300);
