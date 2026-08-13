@@ -361,15 +361,19 @@ function parseGreenButtonXml(xmlText, kwhRate) {
 }
 
 // ─── SmartHub interaction ──────────────────────────────────────
-async function fillDateInput(page, ariaLabelledby, dateStr) {
-  // The date fields are mat-datepicker-input elements with aria-labelledby
-  // "start-date-label" / "end-date-label". A cdk-global-overlay-wrapper can
-  // intercept pointer events, so use force: true.
-  const input = page.locator(`input[aria-labelledby="${ariaLabelledby}"]`).first();
+async function fillDateInput(page, inputId, dateStr) {
+  // The date fields are mat-datepicker-input elements with stable ids:
+  //   mat-input-4 = Start Date (aria-labelledby start-date-label)
+  //   mat-input-5 = End Date   (aria-labelledby end-date-label)
+  // A cdk-global-overlay-wrapper (calendar popup) can intercept clicks,
+  // so use force: true. Clear the default value first.
+  const input = page.locator(`#${inputId}`).first();
   await input.waitFor({ state: 'visible', timeout: 10000 }).catch((e) => {
-    throw new Error(`date input "${ariaLabelledby}" not found: ${e.message?.split('\n')[0]}`);
+    throw new Error(`date input #${inputId} not found: ${e.message?.split('\n')[0]}`);
   });
   await input.click({ force: true }).catch(() => {});
+  await page.keyboard.press('Control+a').catch(() => {});
+  await page.keyboard.press('Delete').catch(() => {});
   await input.fill(dateStr, { force: true }).catch(async () => {
     await input.press('Control+a');
     await input.type(dateStr, { delay: 20 });
@@ -439,8 +443,8 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
   await page.waitForTimeout(300);
   await page.selectOption('select[aria-label="File Format"]', { label: 'Green Button (XML)' });
   await page.waitForTimeout(300);
-  await fillDateInput(page, 'start-date-label', startDate);
-  await fillDateInput(page, 'end-date-label', endDate);
+  await fillDateInput(page, 'mat-input-4', startDate);
+  await fillDateInput(page, 'mat-input-5', endDate);
   await page.waitForTimeout(300);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
