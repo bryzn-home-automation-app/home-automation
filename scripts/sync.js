@@ -361,6 +361,53 @@ function parseGreenButtonXml(xmlText, kwhRate) {
 }
 
 // ─── SmartHub interaction ──────────────────────────────────────
+
+/**
+ * Select an option in an Angular Material <mat-select>.
+ * mat-select is NOT a native <select> — Playwright's selectOption() throws
+ * "Element is not a <select> element". Instead we click the trigger, wait for
+ * the overlay panel, and click the mat-option whose text matches.
+ */
+async function selectMatOption(page, triggerId, optionText) {
+  // Click the mat-select trigger to open the dropdown
+  await page.click(`#${triggerId}`, { timeout: 10000 }).catch((e) => {
+    throw new Error(`mat-select ${triggerId} not found: ${e.message?.split('\n')[0]}`);
+  });
+  await page.waitForTimeout(600);
+
+  // Click the matching option in the overlay panel
+  const clicked = await page.evaluate((text) => {
+    const options = document.querySelectorAll('.mat-select-panel mat-option, .mat-select-panel .mat-option');
+    for (const opt of options) {
+      const label = opt.textContent?.trim();
+      if (label && label.toLowerCase().includes(text.toLowerCase())) {
+        (opt).click();
+        return true;
+      }
+    }
+    return false;
+  }, optionText);
+
+  if (!clicked) {
+    // Try a broader match — sometimes text has extra whitespace/arrows
+    const retry = await page.evaluate((text) => {
+      const options = document.querySelectorAll('.cdk-overlay-container mat-option, .cdk-overlay-pane mat-option');
+      for (const opt of options) {
+        const label = opt.textContent?.trim();
+        if (label && label.toLowerCase().includes(text.toLowerCase())) {
+          (opt).click();
+          return true;
+        }
+      }
+      return false;
+    }, optionText);
+    if (!retry) {
+      throw new Error(`mat-select option "${optionText}" not found in dropdown`);
+    }
+  }
+  await page.waitForTimeout(300);
+}
+
 async function fillDateInput(page, inputId, dateStr) {
   await page.evaluate(({ inputId, dateStr }) => {
     const el = document.querySelector(`#${inputId}`);
@@ -420,16 +467,10 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
     throw new Error('Green Button dialog did not open');
   });
 
-  // These are Angular Material mat-select fields — they render as custom
-  // elements, not native <select>. selectOption() works when Playwright can
-  // map the aria/label to the underlying value, but it's fragile. Wrap each
-  // in try/catch so one flaky field doesn't kill the whole sync.
-  try { await page.selectOption('#mat-input-2', serviceValue); } catch (e) { console.log('   ⚠ service select failed:', e.message?.split('\n')[0]); }
-  await page.waitForTimeout(300);
-  try { await page.selectOption('#mat-input-3', 'DAILY'); } catch (e) { console.log('   ⚠ interval select failed:', e.message?.split('\n')[0]); }
-  await page.waitForTimeout(300);
-  try { await page.selectOption('#mat-input-6', 'GREEN_BUTTON'); } catch (e) { console.log('   ⚠ format select failed:', e.message?.split('\n')[0]); }
-  await page.waitForTimeout(300);
+  // Angular Material mat-select fields — interact via the overlay panel.
+  await selectMatOption(page, 'mat-input-2', serviceValue);
+  await selectMatOption(page, 'mat-input-3', 'Daily');
+  await selectMatOption(page, 'mat-input-6', 'Green Button');
   await fillDateInput(page, 'mat-input-4', startDate);
   await fillDateInput(page, 'mat-input-5', endDate);
   await page.waitForTimeout(300);
