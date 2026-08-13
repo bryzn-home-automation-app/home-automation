@@ -361,13 +361,14 @@ function parseGreenButtonXml(xmlText, kwhRate) {
 }
 
 // ─── SmartHub interaction ──────────────────────────────────────
-async function fillDateInput(page, ariaLabel, dateStr) {
-  // The date fields are custom cml-date-time-picker components, not native
-  // <input>. Target the underlying input by aria-label and use Playwright's
-  // fill() which dispatches proper input/change events for the component.
-  const input = page.locator(`input[aria-label="${ariaLabel}"]`).first();
+async function fillDateInput(page, position, dateStr) {
+  // The date fields are text input boxes inside custom cml-date-time-picker
+  // components. The "Start Date" / "End Date" labels live on the wrapping
+  // mat-form-field, NOT on the input itself. Target the inputs inside the
+  // date picker components by position (0 = Start Date, 1 = End Date).
+  const input = page.locator('cml-date-time-picker input, [class*="date-time-picker"] input').nth(position);
   await input.waitFor({ state: 'visible', timeout: 10000 }).catch((e) => {
-    throw new Error(`date input "${ariaLabel}" not found: ${e.message?.split('\n')[0]}`);
+    throw new Error(`date input #${position} not found: ${e.message?.split('\n')[0]}`);
   });
   await input.click();
   await input.fill(dateStr);
@@ -435,8 +436,8 @@ async function downloadGreenButton(page, serviceValue, startDate, endDate) {
   await page.waitForTimeout(300);
   await page.selectOption('select[aria-label="File Format"]', { label: 'Green Button (XML)' });
   await page.waitForTimeout(300);
-  await fillDateInput(page, 'Start Date', startDate);
-  await fillDateInput(page, 'End Date', endDate);
+  await fillDateInput(page, 0, startDate);
+  await fillDateInput(page, 1, endDate);
   await page.waitForTimeout(300);
 
   const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
