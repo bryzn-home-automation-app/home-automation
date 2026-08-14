@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
-import VirtualizedList from '../../components/VirtualizedList';
 import { jitteredInterval } from '../../hooks/useJitteredInterval';
 
 // Fetch config (includes version/commit hash) — shared key with useUsageData
@@ -263,35 +262,33 @@ export default function DebugDashboard() {
             No events yet. Run a sync or restart to populate.
           </div>
         ) : (
-          <VirtualizedList
-            items={events}
-            height={480}
-            itemHeight={64}
-            overscan={8}
-            renderItem={(e) => (
-              <div key={e.id} className="flex items-center gap-3 border-b border-appborder-light py-2 pr-1 transition-colors hover:bg-appinset">
-                <div className="shrink-0 w-36 text-xs text-apptext-muted">
-                  {new Date(e.timestamp).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric',
-                    hour: 'numeric', minute: '2-digit', second: '2-digit',
-                  })}
-                </div>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${levelBadge(e.level)}`}>
-                  {e.level}
-                </span>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${categoryBadge(e.category)}`}>
-                  {e.category}
-                </span>
-                <span className="text-[11px] text-apptext-dim shrink-0 w-32 truncate">{e.source}</span>
-                <span className="text-xs text-apptext-soft flex-1 truncate">{e.message}</span>
-                {e.details && (
-                  <span className="text-[10px] text-apptext-dim shrink-0 w-28 truncate" title={e.details}>
-                    {e.details}
+          <div className="max-h-[520px] overflow-y-auto pr-1">
+            {events.map((e) => (
+              <div key={e.id} className="border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="text-[11px] tabular-nums text-apptext-muted whitespace-nowrap">
+                    {new Date(e.timestamp).toLocaleString('en-US', {
+                      month: 'short', day: 'numeric',
+                      hour: 'numeric', minute: '2-digit', second: '2-digit',
+                    })}
                   </span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${levelBadge(e.level)}`}>
+                    {e.level}
+                  </span>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${categoryBadge(e.category)}`}>
+                    {e.category}
+                  </span>
+                  <span className="text-[10px] text-apptext-dim">{e.source}</span>
+                </div>
+                <p className="mt-1 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
+                {e.details && (
+                  <p className="mt-0.5 text-[10px] leading-snug text-apptext-dim truncate" title={e.details}>
+                    {e.details}
+                  </p>
                 )}
               </div>
-            )}
-          />
+            ))}
+          </div>
         )}
       </section>
 
