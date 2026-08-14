@@ -108,39 +108,39 @@
 [data-theme="light"] {
   --appbg:              #f8fafc;
   --appsurface:         #ffffff;
-  --appsurface-raised:  rgba(255, 255, 255, 0.92);
-  --appinset:           rgba(241, 245, 249, 0.7);
-  --appinset-strong:    rgba(226, 232, 240, 0.8);
+  --appsurface-raised:  rgba(255, 255, 255, 0.94);
+  --appinset:           #eef2f7;
+  --appinset-strong:    #e2e8f0;
 
   --apptext:            #0f172a;
-  --apptext-soft:       #334155;
-  --apptext-muted:      #475569;
-  --apptext-dim:        #64748b;
+  --apptext-soft:       #1e293b;
+  --apptext-muted:      #334155;
+  --apptext-dim:        #475569;
 
-  --appborder:          rgba(0, 0, 0, 0.08);
-  --appborder-light:    rgba(0, 0, 0, 0.04);
-  --appborder-hover:    rgba(0, 0, 0, 0.15);
+  --appborder:          rgba(15, 23, 42, 0.14);
+  --appborder-light:    rgba(15, 23, 42, 0.08);
+  --appborder-hover:    rgba(15, 23, 42, 0.24);
 
-  --appaccent:          #059669;
-  --appaccent-soft:     rgba(5, 150, 105, 0.1);
-  --appaccent-border:   rgba(5, 150, 105, 0.3);
+  --appaccent:          #047857;
+  --appaccent-soft:     rgba(5, 150, 105, 0.14);
+  --appaccent-border:   rgba(4, 120, 87, 0.4);
   --appaccent-text:     #065f46;
 
-  --appsuccess:         #16a34a;
-  --appwarning:         #d97706;
-  --appdanger:          #e11d48;
+  --appsuccess:         #15803d;
+  --appwarning:         #b45309;
+  --appdanger:          #be123c;
 
-  --appglow:            rgba(56, 189, 248, 0.08);
-  --appglow-accent:     rgba(5, 150, 105, 0.08);
-  --appglow-header:     rgba(0, 0, 0, 0.02);
+  --appglow:            rgba(56, 189, 248, 0.1);
+  --appglow-accent:     rgba(5, 150, 105, 0.1);
+  --appglow-header:     rgba(0, 0, 0, 0.03);
 
   --appchart-bg:        #ffffff;
-  --appchart-grid:      rgba(0, 0, 0, 0.08);
-  --appchart-tick:      #64748b;
-  --appchart-border:    rgba(0, 0, 0, 0.1);
+  --appchart-grid:      rgba(15, 23, 42, 0.1);
+  --appchart-tick:      #475569;
+  --appchart-border:    rgba(15, 23, 42, 0.14);
 
-  --appshadow:          rgba(0, 0, 0, 0.06);
-  --appshadow-lg:       rgba(0, 0, 0, 0.12);
+  --appshadow:          rgba(15, 23, 42, 0.08);
+  --appshadow-lg:       rgba(15, 23, 42, 0.16);
 
   color-scheme: light;
 }
