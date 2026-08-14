@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { jitteredInterval } from '../../hooks/useJitteredInterval';
+import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 // Fetch config (includes version/commit hash) — shared key with useUsageData
 const fetchConfig = () => api.get('/config').then((r) => r.data);
@@ -69,6 +70,7 @@ const categoryBadge = (cat: string) => {
 export default function DebugDashboard() {
   const [category, setCategory] = useState<string>('all');
   const [level, setLevel] = useState<string>('all');
+  const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
 
   const { data: events, isLoading: eventsLoading } = useQuery<AppEvent[]>({
     queryKey: ['admin-events', category, level],
@@ -264,7 +266,19 @@ export default function DebugDashboard() {
         ) : (
           <div className="max-h-[520px] overflow-y-auto pr-1">
             {events.map((e) => (
-              <div key={e.id} className="border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset">
+              <div
+                key={e.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setSelectedEvent(e)}
+                onKeyDown={(ev) => {
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault();
+                    setSelectedEvent(e);
+                  }
+                }}
+                className="group cursor-pointer border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-appaccent/40"
+              >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="text-[11px] tabular-nums text-apptext-muted whitespace-nowrap">
                     {new Date(e.timestamp).toLocaleString('en-US', {
@@ -279,6 +293,9 @@ export default function DebugDashboard() {
                     {e.category}
                   </span>
                   <span className="text-[10px] text-apptext-dim">{e.source}</span>
+                  <span className="ml-auto text-[10px] text-apptext-dim opacity-0 transition-opacity group-hover:opacity-100">
+                    View details →
+                  </span>
                 </div>
                 <p className="mt-1 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
                 {e.details && (
@@ -319,6 +336,11 @@ export default function DebugDashboard() {
       )}
       {/* DB Explorer */}
       <DbExplorer />
+
+      {/* Event detail modal */}
+      {selectedEvent && (
+        <EventDetailModal event={selectedEvent} onClose={() => setSelectedEvent(null)} />
+      )}
     </div>
   );
 }
@@ -490,6 +512,75 @@ LIMIT 50`);
         </div>
       )}
     </section>
+  );
+}
+
+/** Full-detail modal for a single diagnostic event. Shows message + details at full width. */
+function EventDetailModal({ event, onClose }: { event: AppEvent; onClose: () => void }) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useFocusTrap(true, panelRef, undefined, onClose);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Event details"
+        className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] border border-appborder bg-appsurface shadow-[0_20px_60px_var(--appshadow-lg)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3 border-b border-appborder px-6 py-5">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${levelBadge(event.level)}`}>
+                {event.level}
+              </span>
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${categoryBadge(event.category)}`}>
+                {event.category}
+              </span>
+              <span className="text-xs text-apptext-muted">{event.source}</span>
+            </div>
+            <p className="mt-2 text-[11px] tabular-nums text-apptext-dim">
+              {new Date(event.timestamp).toLocaleString('en-US', {
+                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+                hour: 'numeric', minute: '2-digit', second: '2-digit',
+              })}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-appborder text-apptext-muted transition-colors hover:bg-appinset"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="overflow-y-auto px-6 py-5">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-apptext-dim">Message</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-apptext-soft break-words">{event.message}</p>
+          </div>
+
+          <div className="mt-5">
+            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-apptext-dim">Details</p>
+            {event.details ? (
+              <pre className="mt-1.5 whitespace-pre-wrap break-words rounded-2xl border border-appborder bg-appinset p-4 text-[11px] leading-relaxed text-apptext-soft font-mono">
+                {event.details}
+              </pre>
+            ) : (
+              <p className="mt-1.5 text-xs text-apptext-muted">No additional details for this event.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
