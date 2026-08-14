@@ -39,17 +39,17 @@ const CAT_ICONS: Record<string, string> = {
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  LOW: 'border-appinfo-border bg-appinfo-soft text-appinfo',
-  MEDIUM: 'border-appwarning-border bg-appwarning-soft text-appwarning',
-  HIGH: 'border-appdanger-border bg-appdanger-soft text-appdanger',
-  EMERGENCY: 'border-appdanger-border bg-appdanger-soft text-appdanger',
+  LOW: 'border-sky-300/20 bg-sky-300/10 text-sky-300',
+  MEDIUM: 'border-amber-300/20 bg-amber-300/10 text-amber-300',
+  HIGH: 'border-orange-300/20 bg-orange-300/10 text-orange-300',
+  EMERGENCY: 'border-red-400/30 bg-red-400/10 text-red-400',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  SCHEDULED: 'border-appinfo-border bg-appinfo-soft text-appinfo',
-  IN_PROGRESS: 'border-appwarning-border bg-appwarning-soft text-appwarning',
-  COMPLETED: 'border-appaccent-border bg-appaccent-soft text-appaccent',
-  CANCELLED: 'border-appneutral-border bg-appneutral-soft text-apptext-soft',
+  SCHEDULED: 'border-sky-400/30 bg-sky-400/10 text-sky-300',
+  IN_PROGRESS: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
+  COMPLETED: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+  CANCELLED: 'border-slate-400/30 bg-slate-400/10 text-slate-400',
 };
 
 function isBusiness(name: string): boolean {
@@ -79,12 +79,12 @@ function formatDate(d: string | null): string {
 
 function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
   const cards = [
-    { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', accent: 'border-appwarning-border bg-appwarning-soft' },
-    { label: 'Upcoming', value: a?.scheduledCount ?? '...', icon: '📅', accent: 'border-appinfo-border bg-appinfo-soft' },
-    { label: 'Completed', value: a?.completedCount ?? '...', icon: '✅', accent: 'border-appaccent-border bg-appaccent-soft' },
-    { label: 'Lifetime Cost', value: formatCurrency(a?.totalLifetimeCost ?? 0), icon: '💰', accent: 'border-appwarning-border bg-appwarning-soft' },
-    { label: 'This Year', value: formatCurrency(a?.thisYearCost ?? 0), icon: '📆', accent: 'border-appinfo-border bg-appinfo-soft' },
-    { label: 'Monthly Avg', value: formatCurrency(a?.averageMonthlyCost ?? 0), icon: '📊', accent: 'border-appneutral-border bg-appneutral-soft' },
+    { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', accent: 'border-amber-300/30 bg-amber-300/10' },
+    { label: 'Upcoming', value: a?.scheduledCount ?? '...', icon: '📅', accent: 'border-sky-300/30 bg-sky-300/10' },
+    { label: 'Completed', value: a?.completedCount ?? '...', icon: '✅', accent: 'border-emerald-300/30 bg-emerald-300/10' },
+    { label: 'Lifetime Cost', value: formatCurrency(a?.totalLifetimeCost ?? 0), icon: '💰', accent: 'border-amber-300/20 bg-amber-300/5' },
+    { label: 'This Year', value: formatCurrency(a?.thisYearCost ?? 0), icon: '📆', accent: 'border-sky-300/20 bg-sky-300/5' },
+    { label: 'Monthly Avg', value: formatCurrency(a?.averageMonthlyCost ?? 0), icon: '📊', accent: 'border-purple-300/20 bg-purple-300/5' },
   ];
 
   return (
@@ -120,9 +120,9 @@ function Timeline({ records, onSelect }: { records: MaintenanceRecord[]; onSelec
       {completed.map((r) => (
         <div key={r.id} className="relative mb-4 flex items-start gap-4 pl-10 last:mb-0 cursor-pointer group" onClick={() => onSelect(r)}>
           <div className={`absolute left-2 flex h-5 w-5 items-center justify-center rounded-full border-2 mt-0.5 ${
-            r.priority === 'EMERGENCY' ? 'border-appdanger bg-appdanger-soft' :
-            r.priority === 'HIGH' ? 'border-appwarning bg-appwarning-soft' :
-            'border-appaccent bg-appaccent-soft'
+            r.priority === 'EMERGENCY' ? 'border-red-400 bg-red-400/20' :
+            r.priority === 'HIGH' ? 'border-orange-400 bg-orange-400/20' :
+            'border-emerald-400 bg-emerald-400/20'
           }`}>
             <span className="text-[10px]">{STATUS_ICONS.COMPLETED}</span>
           </div>
@@ -182,15 +182,15 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         <div className="grid grid-cols-3 gap-2 text-xs lg:hidden">
           <div>
             {r.startedDate && <span className="text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>}
-            {r.scheduledDate && <span className="text-appinfo">📅 {formatDate(r.scheduledDate)}</span>}
+            {r.scheduledDate && <span className="text-sky-300">📅 {formatDate(r.scheduledDate)}</span>}
             {!r.startedDate && !r.scheduledDate && <span className="text-apptext-dim">—</span>}
           </div>
           <div>
-            {r.completedDate && <span className="text-appaccent">✅ {formatDate(r.completedDate)}</span>}
+            {r.completedDate && <span className="text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
           </div>
           <div className="flex items-center gap-1">
-            {r.requestedBy ? <span className="rounded-full border border-appneutral-border bg-appneutral-soft px-2 py-0.5 text-apptext-soft truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
-            {r.completedBy ? <span className="rounded-full border border-appinfo-border bg-appinfo-soft px-2 py-0.5 text-appinfo truncate">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span> : null}
+            {r.requestedBy ? <span className="rounded-full border border-slate-300/20 bg-slate-300/10 px-2 py-0.5 text-slate-300 truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
+            {r.completedBy ? <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300 truncate">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span> : null}
           </div>
         </div>
         {/* Desktop: original 5-column layout */}
@@ -217,12 +217,12 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
           {r.startedDate ? (
             <span className="text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>
           ) : r.scheduledDate ? (
-            <span className="text-appinfo">📅 {formatDate(r.scheduledDate)}</span>
+            <span className="text-sky-300">📅 {formatDate(r.scheduledDate)}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
           {r.completedDate ? (
-            <span className="text-appaccent">✅ {formatDate(r.completedDate)}</span>
+            <span className="text-emerald-300">✅ {formatDate(r.completedDate)}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
@@ -231,7 +231,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         {/* Requested by */}
         <div className="hidden text-[12px] truncate lg:block">
           {r.requestedBy ? (
-            <span className="rounded-full border border-appneutral-border bg-appneutral-soft px-2 py-0.5 text-apptext-soft">👤 {r.requestedBy}</span>
+            <span className="rounded-full border border-slate-300/20 bg-slate-300/10 px-2 py-0.5 text-slate-300">👤 {r.requestedBy}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
@@ -240,7 +240,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         {/* Completed by */}
         <div className="hidden text-[12px] truncate lg:block">
           {r.completedBy ? (
-            <span className="rounded-full border border-appinfo-border bg-appinfo-soft px-2 py-0.5 text-appinfo">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span>
+            <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
@@ -333,9 +333,9 @@ function DetailModal({ r, onClose, onEdit }: {
 
         {/* Cost */}
         {r.cost != null && r.cost > 0 && (
-          <div className="mb-4 rounded-xl border border-appwarning-border bg-appwarning-soft p-4">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-appinfo-text/70">Cost</p>
-            <p className="mt-1 text-lg font-semibold text-appwarning">{formatCurrency(r.cost)}</p>
+          <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-amber-100/70">Cost</p>
+            <p className="mt-1 text-lg font-semibold text-amber-200">{formatCurrency(r.cost)}</p>
           </div>
         )}
 
@@ -364,9 +364,9 @@ function DetailModal({ r, onClose, onEdit }: {
         )}
 
         {r.warrantyExpiration && (
-          <div className="mb-4 rounded-xl border border-appwarning-border bg-appwarning-soft p-3">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-appinfo-text/70">Warranty Expires</p>
-            <p className="mt-1 text-sm font-medium text-appwarning">{formatDate(r.warrantyExpiration)}</p>
+          <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3">
+            <p className="text-[10px] uppercase tracking-[0.12em] text-amber-100/70">Warranty Expires</p>
+            <p className="mt-1 text-sm font-medium text-amber-200">{formatDate(r.warrantyExpiration)}</p>
           </div>
         )}
 

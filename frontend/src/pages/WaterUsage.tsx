@@ -72,8 +72,8 @@ export default memo(function WaterUsage() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <div className="rounded-[28px] border border-appinfo-border bg-appinfo-soft p-4">
-        <p className="text-xs text-appinfo-text">
+      <div className="rounded-[28px] border border-cyan-300/15 bg-cyan-300/8 p-4">
+        <p className="text-xs text-cyan-100/80">
           🚰 Mock data — water utility integration coming in Phase 2
         </p>
       </div>

@@ -34,10 +34,10 @@ const categoryLabels: Record<string, string> = {
 };
 
 const severityColors: Record<string, string> = {
-  CRITICAL: 'border-appdanger-border bg-appdanger-soft text-appdanger',
-  WARNING:  'border-appwarning-border bg-appwarning-soft text-appwarning',
-  INFO:     'border-appinfo-border bg-appinfo-soft text-appinfo',
-  SUCCESS:  'border-appaccent-border bg-appaccent-soft text-appaccent',
+  CRITICAL: 'border-red-400/30 bg-red-400/10 text-red-300',
+  WARNING:  'border-amber-400/30 bg-amber-400/10 text-amber-300',
+  INFO:     'border-sky-400/30 bg-sky-400/10 text-sky-300',
+  SUCCESS:  'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
 };
 
 const severityDots: Record<string, string> = {

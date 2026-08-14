@@ -69,8 +69,8 @@ export default function Roomba() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <div className="rounded-[28px] border border-appwarning-border bg-appwarning-soft p-4">
-        <p className="text-xs text-appwarning">
+      <div className="rounded-[28px] border border-amber-300/15 bg-amber-300/8 p-4">
+        <p className="text-xs text-amber-100/80">
           🤖 Mock data — Roomba/smart device integration coming in Phase 3
         </p>
       </div>
@@ -131,7 +131,7 @@ export default function Roomba() {
               Placeholder map for future room-aware cleaning history, no-go zones, and per-room run analytics.
             </p>
           </div>
-          <span className="rounded-full border border-appwarning-border bg-appwarning-soft px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-appwarning">
+          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100">
             Mock Layout
           </span>
         </div>
@@ -360,8 +360,8 @@ export default function Roomba() {
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs ${
                         r.completed
-                          ? 'border border-appaccent-border bg-appaccent-soft text-appaccent'
-                          : 'border border-appdanger-border bg-appdanger-soft text-appdanger'
+                          ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
+                          : 'border border-rose-300/20 bg-rose-300/10 text-rose-200'
                       }`}
                     >
                       {r.completed ? 'Done' : 'Stuck'}

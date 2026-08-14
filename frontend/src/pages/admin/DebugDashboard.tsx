@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { jitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
-import { levelBadge as levelBadgeClass, categoryBadge as categoryBadgeClass } from '../../utils/usageColor';
 
 // Fetch config (includes version/commit hash) — shared key with useUsageData
 const fetchConfig = () => api.get('/config').then((r) => r.data);
@@ -48,13 +47,24 @@ const LEVELS = [
   { key: 'INFO', label: 'Info' },
 ] as const;
 
-const levelBadge = (level: string) => levelBadgeClass(level);
+const levelBadge = (level: string) => {
+  switch (level) {
+    case 'ERROR': return 'bg-rose-300/10 border-rose-300/20 text-rose-300';
+    case 'WARN': return 'bg-amber-300/10 border-amber-300/20 text-amber-300';
+    default: return 'bg-sky-300/10 border-sky-300/20 text-sky-300';
+  }
+};
 
 const categoryBadge = (cat: string) => {
-  // DB category keeps a warning color (aligns with Maintenance dashboard's
-  // db = amber convention). Everything else uses the shared neutral token.
-  if (cat === 'db') return 'border-appwarning-border bg-appwarning-soft text-appwarning';
-  return categoryBadgeClass();
+  const colors: Record<string, string> = {
+    sync: 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300',
+    system: 'bg-violet-300/10 border-violet-300/20 text-violet-300',
+    db: 'bg-amber-300/10 border-amber-300/20 text-amber-300',
+    api: 'bg-sky-300/10 border-sky-300/20 text-sky-300',
+    weather: 'bg-cyan-300/10 border-cyan-300/20 text-cyan-300',
+    auth: 'bg-pink-300/10 border-pink-300/20 text-pink-300',
+  };
+  return colors[cat] ?? 'bg-appinset border-appborder text-apptext-muted';
 };
 
 // ── Date helpers (manual sync range) ────────────────────────────
@@ -147,11 +157,11 @@ export default function DebugDashboard() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <section className="rounded-[30px] border border-appwarning-border bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
+      <section className="rounded-[30px] border border-amber-300/20 bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex items-center gap-3">
-          <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-appwarning-border bg-appwarning-soft text-2xl">🔧</span>
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-2xl">🔧</span>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-appinfo-text/70">Admin</p>
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-amber-200/70">Admin</p>
             <h2 className="text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">Debug Dashboard <span className="text-xs font-mono text-apptext-dim ml-2">{version}</span></h2>
           </div>
         </div>
@@ -165,7 +175,7 @@ export default function DebugDashboard() {
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
             <>
-              <p className={`mt-2 text-lg font-semibold ${health?.database?.status === 'UP' ? 'text-appaccent' : 'text-appdanger'}`}>
+              <p className={`mt-2 text-lg font-semibold ${health?.database?.status === 'UP' ? 'text-emerald-300' : 'text-rose-300'}`}>
                 {health?.database?.status ?? '?'}
               </p>
               <p className="text-xs text-apptext-dim truncate">
@@ -210,8 +220,8 @@ export default function DebugDashboard() {
 
       {/* Last sync check box */}
       {health?.lastSyncCheck && (
-        <div className="rounded-2xl border border-appinfo-border bg-appinfo-soft px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-appinfo-text">Last Sync Check</p>
+        <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 px-4 py-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-sky-200/60">Last Sync Check</p>
           <p className="mt-1 text-sm text-apptext-soft">
             {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
               month: 'short', day: 'numeric',
@@ -229,13 +239,13 @@ export default function DebugDashboard() {
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">24h Events</p>
             <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
           </div>
-          <div className="rounded-2xl border border-appdanger-border bg-appdanger-soft p-4 text-center">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-appinfo-text/60">Errors</p>
-            <p className="mt-1 text-2xl font-semibold text-appdanger">{summary.errors24h}</p>
+          <div className="rounded-2xl border border-rose-300/10 bg-rose-300/5 p-4 text-center">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-rose-200/60">Errors</p>
+            <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
           </div>
-          <div className="rounded-2xl border border-appwarning-border bg-appwarning-soft p-4 text-center">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-appinfo-text/60">Warnings</p>
-            <p className="mt-1 text-2xl font-semibold text-appwarning">{summary.warns24h}</p>
+          <div className="rounded-2xl border border-amber-300/10 bg-amber-300/5 p-4 text-center">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-amber-200/60">Warnings</p>
+            <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
           </div>
         </section>
       )}
@@ -421,7 +431,7 @@ export default function DebugDashboard() {
             {syncEvents.slice(0, 6).map((e) => (
               <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-appdanger-soft border-appdanger-border text-appdanger' : 'bg-appaccent-soft border-appaccent-border text-appaccent'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
                     {e.level === 'ERROR' ? 'Failed' : 'OK'}
                   </span>
                   <span className="text-xs text-apptext-dim">
@@ -526,9 +536,9 @@ LIMIT 50`);
 
       {/* DB Size / Row Counts */}
       {dbStats && (
-        <div className="mb-4 rounded-2xl border border-appaccent-border bg-appaccent-soft p-3">
-          <p className="text-xs text-appinfo-text/70">
-            DB size: <span className="font-semibold text-appaccent">{dbStats.dbSizePretty}</span>
+        <div className="mb-4 rounded-2xl border border-emerald-300/10 bg-emerald-300/5 p-3">
+          <p className="text-xs text-emerald-200/70">
+            DB size: <span className="font-semibold text-emerald-200">{dbStats.dbSizePretty}</span>
             {' · '}
             {Object.entries(dbStats.rowCounts).filter(([, v]) => v > 0).map(([k, v]) => (
               <span key={k} className="ml-2 text-apptext-dim">{k}: <span className="text-apptext-soft">{v}</span></span>
@@ -544,7 +554,7 @@ LIMIT 50`);
             <button
               key={p.label}
               onClick={() => setQuery(p.query)}
-              className="rounded-full border border-appinfo-border bg-appinfo-soft px-2.5 py-1 text-[10px] font-medium text-appinfo transition-colors hover:border-appinfo-border hover:bg-appinfo-soft/80"
+              className="rounded-full border border-sky-300/10 bg-sky-300/5 px-2.5 py-1 text-[10px] font-medium text-sky-200/80 transition-colors hover:border-sky-300/25 hover:bg-sky-300/10"
               title={`${tables.find(t => t.name === p.label)?.size ?? ''} · ${tables.find(t => t.name === p.label)?.columns ?? ''} cols`}
             >
               {p.label}
@@ -579,7 +589,7 @@ LIMIT 50`);
 
       {/* Error */}
       {results?.error && (
-        <div className="mb-3 rounded-2xl border border-appdanger-border bg-appdanger-soft p-3 text-sm text-appdanger">
+        <div className="mb-3 rounded-2xl border border-rose-300/20 bg-rose-300/5 p-3 text-sm text-rose-300">
           {results.error}
         </div>
       )}

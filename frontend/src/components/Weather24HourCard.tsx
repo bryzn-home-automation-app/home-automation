@@ -133,16 +133,16 @@ export default function Weather24HourCard({
           )}
         </div>
 
-        <div className="rounded-2xl border border-appinfo-border bg-appinfo-soft p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-appinfo-text/60">High</p>
-          <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-appinfo">
+        <div className="rounded-2xl border border-sky-300/10 bg-sky-300/8 p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-sky-100/60">High</p>
+          <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-sky-200">
             {formatTemp(hi)}
           </p>
         </div>
 
-        <div className="rounded-2xl border border-appsuccess-soft bg-appsuccess-soft p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-appinfo-text/60">Low</p>
-          <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-appsuccess">
+        <div className="rounded-2xl border border-emerald-300/10 bg-emerald-300/8 p-3">
+          <p className="text-[10px] uppercase tracking-[0.14em] text-emerald-100/60">Low</p>
+          <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-emerald-200">
             {formatTemp(lo)}
           </p>
         </div>

@@ -195,9 +195,9 @@ export default memo(function ElectricalUsage() {
 
   // Hourly color bands: green < 2, yellow 2-4, red 5+
   const getHourlyLevel = (kwh: number) => {
-    if (kwh >= 5) return { badgeClass: 'border border-appdanger-border bg-appdanger-soft text-appdanger' };
-    if (kwh >= 2) return { badgeClass: 'border border-appwarning-border bg-appwarning-soft text-appwarning' };
-    return { badgeClass: 'border border-appaccent-border bg-appaccent-soft text-appaccent' };
+    if (kwh >= 5) return { badgeClass: 'border border-rose-300/20 bg-rose-300/10 text-rose-300' };
+    if (kwh >= 2) return { badgeClass: 'border border-amber-300/20 bg-amber-300/10 text-amber-300' };
+    return { badgeClass: 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
   };
 
   return (
@@ -234,8 +234,8 @@ export default memo(function ElectricalUsage() {
               <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">{realData.length}</p>
             </div>
             {(config.data?.lastSyncCheck || config.data?.lastElectricReading) && (
-              <div className="rounded-2xl border border-appinfo-border bg-appinfo-soft p-3 sm:p-4">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-appinfo-text sm:text-[11px]">Last Updated</p>
+              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 p-3 sm:p-4">
+                <p className="text-[10px] uppercase tracking-[0.16em] text-sky-200/60 sm:text-[11px]">Last Updated</p>
                 {config.data?.lastElectricReading && (
                   <p className="mt-1 text-xs text-apptext-dim">
                     Data: {new Date(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -386,7 +386,7 @@ export default memo(function ElectricalUsage() {
                       >
                         <div className="py-3 text-apptext-soft">{label}</div>
                         <div className="py-3 text-right tabular-nums">
-                          <span className="inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold bg-appaccent-soft border-appaccent-border text-appaccent">
+                          <span className="inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold bg-emerald-300/10 border-emerald-300/20 text-emerald-300">
                             {d.total.toFixed(2)}
                           </span>
                         </div>
@@ -396,9 +396,9 @@ export default memo(function ElectricalUsage() {
                         <div className="hidden py-3 text-right tabular-nums text-[11px] leading-tight text-apptext-muted md:block">
                           {wx ? (
                             <span>
-                              <span className="text-appinfo/70">{Math.round(wx.low)}°</span>{' '}
-                              <span className="text-appwarning/70">{Math.round(wx.mean)}°</span>{' '}
-                              <span className="text-appdanger/70">{Math.round(wx.high)}°</span>
+                              <span className="text-sky-300/70">{Math.round(wx.low)}°</span>{' '}
+                              <span className="text-amber-300/70">{Math.round(wx.mean)}°</span>{' '}
+                              <span className="text-rose-300/70">{Math.round(wx.high)}°</span>
                             </span>
                           ) : '—'}
                         </div>

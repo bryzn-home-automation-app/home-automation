@@ -54,14 +54,14 @@ function useActivityLog() {
 }
 
 const typeColors: Record<string, string> = {
-  login: 'border-appinfo-border bg-appinfo-soft text-appinfo',
-  register: 'border-appwarning-border bg-appwarning-soft text-appwarning',
-  approved: 'border-appaccent-border bg-appaccent-soft text-appaccent',
-  denied: 'border-appdanger-border bg-appdanger-soft text-appdanger',
-  disabled: 'border-appdanger-border bg-appdanger-soft text-appdanger',
-  role_change: 'border-appneutral-border bg-appneutral-soft text-apptext-soft',
-  guest_connect: 'border-appinfo-border bg-appinfo-soft text-appinfo',
-  guest_expire: 'border-appneutral-border bg-appneutral-soft text-apptext-soft',
+  login: 'border-sky-300/20 bg-sky-300/10 text-sky-200',
+  register: 'border-yellow-300/20 bg-yellow-300/10 text-yellow-200',
+  approved: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200',
+  denied: 'border-rose-300/20 bg-rose-300/10 text-rose-200',
+  disabled: 'border-rose-300/20 bg-rose-300/10 text-rose-200',
+  role_change: 'border-purple-300/20 bg-purple-300/10 text-purple-200',
+  guest_connect: 'border-cyan-300/20 bg-cyan-300/10 text-cyan-200',
+  guest_expire: 'border-slate-300/20 bg-slate-300/10 text-slate-300',
 };
 
 const typeLabels: Record<string, string> = {
