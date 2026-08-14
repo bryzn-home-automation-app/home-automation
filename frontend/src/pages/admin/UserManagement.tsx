@@ -23,16 +23,16 @@ function timeAgo(iso: string | null): string {
 }
 
 const roleBadgeColors: Record<string, string> = {
-  ADMIN: 'border-amber-300/30 bg-amber-300/10 text-amber-200',
-  USER: 'border-sky-300/30 bg-sky-300/10 text-sky-200',
-  GUEST: 'border-purple-300/30 bg-purple-300/10 text-purple-200',
+  ADMIN: 'border-appwarning-border bg-appwarning-soft text-appwarning',
+  USER: 'border-appinfo-border bg-appinfo-soft text-appinfo',
+  GUEST: 'border-appneutral-border bg-appneutral-soft text-apptext-soft',
 };
 
 const statusBadgeColors: Record<string, string> = {
-  PENDING_APPROVAL: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-200',
-  ACTIVE: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200',
-  DISABLED: 'border-rose-300/30 bg-rose-300/10 text-rose-200',
-  EXPIRED: 'border-slate-300/30 bg-slate-300/10 text-slate-300',
+  PENDING_APPROVAL: 'border-appwarning-border bg-appwarning-soft text-appwarning',
+  ACTIVE: 'border-appaccent-border bg-appaccent-soft text-appaccent',
+  DISABLED: 'border-appdanger-border bg-appdanger-soft text-appdanger',
+  EXPIRED: 'border-appneutral-border bg-appneutral-soft text-apptext-soft',
 };
 
 function roleAccent(role: string): string {
@@ -128,12 +128,12 @@ export default function UserManagement() {
               <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Members</p>
               <p className="mt-2 text-lg font-semibold text-apptext">{allUsers.data?.length ?? '...'}</p>
             </div>
-            <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100/70">Online</p>
-              <p className="mt-2 text-lg font-semibold text-emerald-200">{onlineCount}</p>
+            <div className="rounded-2xl border border-appaccent-border bg-appaccent-soft p-4">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-appinfo-text/70">Online</p>
+              <p className="mt-2 text-lg font-semibold text-appaccent">{onlineCount}</p>
             </div>
             {isAdmin && (
-              <div className={`rounded-2xl border p-4 ${pendingCount > 0 ? 'border-amber-300/30 bg-amber-300/10' : 'border-appborder bg-appinset'}`}>
+              <div className={`rounded-2xl border p-4 ${pendingCount > 0 ? 'border-appwarning-border bg-appwarning-soft' : 'border-appborder bg-appinset'}`}>
                 <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Pending</p>
                 <p className={`mt-2 text-lg font-semibold ${pendingCount > 0 ? 'text-appwarning' : 'text-apptext'}`}>
                   {pendingCount}
@@ -313,7 +313,7 @@ function UserCard({
                 <div className="flex items-center gap-2">
                   <p className="truncate text-sm font-semibold text-apptext sm:text-base">{displayName}</p>
                   {user.isOnline && (
-                    <span className="hidden rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2 py-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-emerald-300 sm:inline-flex">
+                    <span className="hidden rounded-full border border-appaccent-border bg-appaccent-soft px-2 py-0 text-[9px] font-semibold uppercase tracking-[0.12em] text-appaccent sm:inline-flex">
                       Online
                     </span>
                   )}

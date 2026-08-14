@@ -335,8 +335,8 @@ function UsageWeatherChart({
           <h3 className="mt-2 text-lg font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">kWh</span>
-          {hasWeather && <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300">°F</span>}
+          <span className="rounded-full border border-appaccent-border bg-appaccent-soft px-2.5 py-1 text-[10px] font-semibold text-appaccent">kWh</span>
+          {hasWeather && <span className="rounded-full border border-appwarning-border bg-appwarning-soft px-2.5 py-1 text-[10px] font-semibold text-appwarning">°F</span>}
         </div>
       </div>
       {useHourly && (() => {
@@ -347,7 +347,7 @@ function UsageWeatherChart({
           ? `${dates[0]} — ${dates[dates.length - 1]}`
           : '';
         return (
-          <div className="mb-3 rounded-2xl border border-amber-300/10 bg-amber-300/5 px-3 py-2 text-xs text-amber-200/70">
+          <div className="mb-3 rounded-2xl border border-appwarning-border bg-appwarning-soft px-3 py-2 text-xs text-appwarning">
             ⚡ Showing {filteredData.length} complete data points{rangeText && ` for ${rangeText}`}. Meter updates once daily — today's readings may not be available yet.
           </div>
         );

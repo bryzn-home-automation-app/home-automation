@@ -63,10 +63,10 @@ export default function GuestManagement() {
               type="button"
               onClick={() => expireMut.mutate()}
               disabled={expireMut.isPending}
-              className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-left transition-colors hover:bg-amber-300/20"
+              className="rounded-2xl border border-appwarning-border bg-appwarning-soft p-4 text-left transition-colors hover:bg-appwarning-soft/80"
             >
-              <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/70">Maintenance</p>
-              <p className="mt-2 text-sm font-semibold text-amber-100">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-appinfo-text/70">Maintenance</p>
+              <p className="mt-2 text-sm font-semibold text-appwarning">
                 {expireMut.isPending ? 'Expiring...' : 'Expire All'}
               </p>
             </button>
@@ -135,8 +135,8 @@ export default function GuestManagement() {
                   <div className="text-right">
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                       s.status === 'ACTIVE'
-                        ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
-                        : 'border-slate-300/20 bg-slate-300/10 text-slate-300'
+                        ? 'border-appaccent-border bg-appaccent-soft text-appaccent'
+                        : 'border-appneutral-border bg-appneutral-soft text-apptext-soft'
                     }`}>
                       {s.status === 'ACTIVE'
                         ? formatDate(s.expiresAt)

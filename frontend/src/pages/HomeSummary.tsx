@@ -178,19 +178,19 @@ export default function HomeSummary() {
 
       {/* Current weather card */}
       {currentWx && (
-        <section className="rounded-[28px] border border-sky-300/15 bg-sky-300/5 p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
+        <section className="rounded-[28px] border border-appinfo-border bg-appinfo-soft p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <span className="text-4xl">{wxEmoji}</span>
               <div>
-                <p className="text-sm font-medium text-sky-200/80">{wxDesc}</p>
+                <p className="text-sm font-medium text-appinfo">{wxDesc}</p>
                 <p className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-apptext">
                   {Math.round(latestTemp!)}°F
                 </p>
               </div>
             </div>
             <div className="text-right">
-              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 px-4 py-3">
+              <div className="rounded-2xl border border-appinfo-border bg-appinfo-soft px-4 py-3">
                 <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Humidity</p>
                 <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(latestHumidity!)}%</p>
               </div>
