@@ -67,10 +67,43 @@ const categoryBadge = (cat: string) => {
   return colors[cat] ?? 'bg-appinset border-appborder text-apptext-muted';
 };
 
+// ── Date helpers (manual sync range) ────────────────────────────
+const toIsoLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const addDays = (d: Date, n: number) => {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+};
+
+/** CoServ only keeps ~2 weeks of interval data. */
+const MAX_RANGE_DAYS = 14;
+
 export default function DebugDashboard() {
   const [category, setCategory] = useState<string>('all');
   const [level, setLevel] = useState<string>('all');
   const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
+
+  // Manual sync date range
+  const [preset, setPreset] = useState<'yesterday' | 'range'>('yesterday');
+  const [startDate, setStartDate] = useState(() => toIsoLocal(addDays(new Date(), -1)));
+  const [endDate, setEndDate] = useState(() => toIsoLocal(addDays(new Date(), -1)));
+
+  const todayIso = toIsoLocal(new Date());
+  const earliestIso = toIsoLocal(addDays(new Date(), -MAX_RANGE_DAYS));
+
+  const rangeError = useMemo(() => {
+    if (preset !== 'range') return '';
+    if (!startDate || !endDate) return 'Choose start and end dates.';
+    if (startDate > endDate) return 'Start date must be on or before end date.';
+    if (endDate > todayIso) return 'End date cannot be in the future.';
+    if (startDate < earliestIso) return `Start date is more than ${MAX_RANGE_DAYS} days ago (CoServ keeps ~2 weeks).`;
+    return '';
+  }, [preset, startDate, endDate, todayIso, earliestIso]);
+
+  // Body sent to the sync endpoints; undefined = "yesterday".
+  const syncBody = preset === 'range' ? { startDate, endDate } : undefined;
 
   const { data: events, isLoading: eventsLoading } = useQuery<AppEvent[]>({
     queryKey: ['admin-events', category, level],
@@ -223,11 +256,89 @@ export default function DebugDashboard() {
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
           <h3 className="mt-2 text-lg font-semibold text-apptext">Run Sync Jobs</h3>
         </div>
+
+        {/* Date range selector */}
+        <div className="mb-4 rounded-2xl border border-appborder bg-appinset p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-dim">Range</span>
+            <button
+              type="button"
+              onClick={() => setPreset('yesterday')}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                preset === 'yesterday'
+                  ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
+                  : 'border-appborder text-apptext-muted hover:bg-appinset-strong'
+              }`}
+            >
+              Yesterday
+            </button>
+            <button
+              type="button"
+              onClick={() => setPreset('range')}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                preset === 'range'
+                  ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
+                  : 'border-appborder text-apptext-muted hover:bg-appinset-strong'
+              }`}
+            >
+              Custom range
+            </button>
+          </div>
+
+          {preset === 'range' && (
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-apptext-dim">
+                  Start date
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  min={earliestIso}
+                  max={todayIso}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="w-full rounded-xl border border-appborder bg-appsurface px-3 py-2 text-sm text-apptext-soft outline-none focus:border-appaccent-border [color-scheme:dark]"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-apptext-dim">
+                  End date
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  min={earliestIso}
+                  max={todayIso}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full rounded-xl border border-appborder bg-appsurface px-3 py-2 text-sm text-apptext-soft outline-none focus:border-appaccent-border [color-scheme:dark]"
+                />
+              </div>
+            </div>
+          )}
+
+          {rangeError && (
+            <p className="mt-2 text-xs text-rose-300">{rangeError}</p>
+          )}
+        </div>
+
         <div className="flex flex-wrap gap-3">
-          <SyncButton label="⚡ Daily Sync (Green Button)" endpoint="/admin/sync/daily" />
-          <SyncButton label="🕐 Hourly Sync (Avg Usage API)" endpoint="/admin/sync/hourly" />
+          <SyncButton
+            label="⚡ Daily Sync (Green Button)"
+            endpoint="/admin/sync/daily"
+            body={syncBody}
+            disabled={preset === 'range' && !!rangeError}
+          />
+          <SyncButton
+            label="🕐 Hourly Sync (Avg Usage API)"
+            endpoint="/admin/sync/hourly"
+            body={syncBody}
+            disabled={preset === 'range' && !!rangeError}
+          />
           <SyncButton label="🔔 Generate Alerts" endpoint="/admin/sync/alerts" />
         </div>
+        <p className="mt-2 text-[10px] text-apptext-dim">
+          Syncs run in the background — watch the Diagnostic Log for results.
+        </p>
       </section>
 
       {/* Event Feed */}
@@ -585,12 +696,22 @@ function EventDetailModal({ event, onClose }: { event: AppEvent; onClose: () => 
 }
 
 /** Manual trigger button — POSTs to a sync endpoint, shows pending/success state. */
-function SyncButton({ label, endpoint }: { label: string; endpoint: string }) {
+function SyncButton({
+  label,
+  endpoint,
+  body,
+  disabled,
+}: {
+  label: string;
+  endpoint: string;
+  body?: { startDate: string; endDate: string };
+  disabled?: boolean;
+}) {
   const queryClient = useQueryClient();
   const trigger = useMutation({
     mutationFn: async () => {
-      const { data } = await api.post(endpoint);
-      return data;
+      const { data } = await api.post(endpoint, body);
+      return data as { status: string };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-events'] });
@@ -602,10 +723,10 @@ function SyncButton({ label, endpoint }: { label: string; endpoint: string }) {
     <button
       type="button"
       onClick={() => trigger.mutate()}
-      disabled={trigger.isPending}
-      className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-medium text-emerald-200 transition-all hover:border-emerald-300/40 hover:bg-emerald-300/20 disabled:opacity-50"
+      disabled={disabled || trigger.isPending}
+      className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-medium text-emerald-200 transition-all hover:border-emerald-300/40 hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-40"
     >
-      {trigger.isPending ? '⏳ Running...' : label}
+      {trigger.isPending ? '⏳ Triggering…' : trigger.isSuccess ? `✓ ${label}` : label}
     </button>
   );
 }

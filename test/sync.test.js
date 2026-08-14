@@ -43,7 +43,7 @@ const FRIDAY = new Date(2026, 7, 14);   // Aug 14 = Friday
 describe('parseArgs()', () => {
   it('returns defaults with no arguments', () => {
     const result = sync.parseArgs(['node', 'sync.js']);
-    assert.deepEqual(result, { dryRun: false, date: null, weekly: false, watch: false });
+    assert.deepEqual(result, { dryRun: false, date: null, weekly: false, watch: false, startDate: null, endDate: null });
   });
 
   it('detects --dry-run', () => {
@@ -63,7 +63,13 @@ describe('parseArgs()', () => {
 
   it('detects all flags at once', () => {
     const result = sync.parseArgs(['node', 'sync.js', '--weekly', '--dry-run', '--date', '07/24/2026']);
-    assert.deepEqual(result, { dryRun: true, date: '07/24/2026', weekly: true, watch: false });
+    assert.deepEqual(result, { dryRun: true, date: '07/24/2026', weekly: true, watch: false, startDate: null, endDate: null });
+  });
+
+  it('detects --start and --end for a custom range', () => {
+    const result = sync.parseArgs(['node', 'sync.js', '--start', '07/24/2026', '--end', '08/07/2026']);
+    assert.equal(result.startDate, '07/24/2026');
+    assert.equal(result.endDate, '08/07/2026');
   });
 
   it('ignores --date without a value', () => {

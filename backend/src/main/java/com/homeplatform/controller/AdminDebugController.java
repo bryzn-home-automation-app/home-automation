@@ -1,11 +1,14 @@
 package com.homeplatform.controller;
 
+import com.homeplatform.dto.SyncRangeRequest;
 import com.homeplatform.model.AppEvent;
 import com.homeplatform.service.AlertEngine;
 import com.homeplatform.service.AppEventService;
 import com.homeplatform.service.DailySyncScheduler;
 import com.homeplatform.service.HourlySyncScheduler;
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,18 +18,30 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @RestController
 @RequestMapping("/api/admin")
 public class AdminDebugController {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminDebugController.class);
+    private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+    /** CoServ only retains ~2 weeks of interval data. */
+    private static final int MAX_RANGE_DAYS = 14;
 
     private final AppEventService appEventService;
     private final DataSource dataSource;
     private final DailySyncScheduler dailySyncScheduler;
     private final HourlySyncScheduler hourlySyncScheduler;
     private final AlertEngine alertEngine;
+    /** Single-threaded so manual daily + hourly syncs serialize (no overlapping browser logins). */
+    private final ExecutorService syncExecutor = Executors.newSingleThreadExecutor();
     private static final Set<String> SENSITIVE_COLUMNS = Set.of(
             "password_hash", "password", "token", "secret", "jwt_secret",
             "salt", "api_key", "access_token", "refresh_token"
@@ -279,29 +294,47 @@ public class AdminDebugController {
         }
     }
 
-    /** Manually trigger the daily Green Button sync for yesterday. */
+    /** Manually trigger the daily Green Button sync. Optional body carries a date range. */
     @PostMapping("/sync/daily")
-    public ResponseEntity<Map<String, Object>> triggerDailySync(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> triggerDailySync(
+            HttpServletRequest request,
+            @RequestBody(required = false) SyncRangeRequest body) {
         requireAdmin(request);
         try {
-            dailySyncScheduler.runDailySync();
-            return ResponseEntity.ok(Map.of("status", "triggered", "type", "daily"));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
+            SyncRange range = resolveRange(body);
+            syncExecutor.submit(() -> {
+                try {
+                    if (range == null) dailySyncScheduler.runDailySync();
+                    else dailySyncScheduler.runSyncForRange(range.start(), range.end());
+                } catch (Exception e) {
+                    log.error("Manual daily sync failed", e);
+                }
+            });
+            return ResponseEntity.ok(triggered("daily", range));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
-    /** Manually trigger the hourly average-usage sync for yesterday. */
+    /** Manually trigger the hourly average-usage sync. Optional body carries a date range. */
     @PostMapping("/sync/hourly")
-    public ResponseEntity<Map<String, Object>> triggerHourlySync(HttpServletRequest request) {
+    public ResponseEntity<Map<String, Object>> triggerHourlySync(
+            HttpServletRequest request,
+            @RequestBody(required = false) SyncRangeRequest body) {
         requireAdmin(request);
         try {
-            hourlySyncScheduler.checkAndSync();
-            return ResponseEntity.ok(Map.of("status", "triggered", "type", "hourly"));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError()
-                    .body(Map.of("error", e.getMessage()));
+            SyncRange range = resolveRange(body);
+            syncExecutor.submit(() -> {
+                try {
+                    if (range == null) hourlySyncScheduler.checkAndSync();
+                    else hourlySyncScheduler.runSyncForRange(range.start(), range.end());
+                } catch (Exception e) {
+                    log.error("Manual hourly sync failed", e);
+                }
+            });
+            return ResponseEntity.ok(triggered("hourly", range));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 
@@ -317,4 +350,48 @@ public class AdminDebugController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    private Map<String, Object> triggered(String type, SyncRange range) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("status", "triggered");
+        m.put("type", type);
+        m.put("startDate", range == null ? "yesterday" : range.start());
+        m.put("endDate", range == null ? "yesterday" : range.end());
+        return m;
+    }
+
+    /**
+     * Resolve an optional body into a validated date range, or {@code null}
+     * for the default "yesterday". Throws {@link IllegalArgumentException} with
+     * a user-facing message when the range is invalid.
+     */
+    private SyncRange resolveRange(SyncRangeRequest body) {
+        if (body == null || (isBlank(body.getStartDate()) && isBlank(body.getEndDate()))) {
+            return null;
+        }
+        String start = body.getStartDate();
+        String end = body.getEndDate();
+        if (isBlank(start) || isBlank(end)) {
+            throw new IllegalArgumentException("Both startDate and endDate are required for a custom range");
+        }
+        LocalDate today = LocalDate.now(CHICAGO);
+        LocalDate earliest = today.minusDays(MAX_RANGE_DAYS);
+        LocalDate s, e;
+        try {
+            s = LocalDate.parse(start);
+            e = LocalDate.parse(end);
+        } catch (DateTimeParseException ex) {
+            throw new IllegalArgumentException("Dates must be yyyy-MM-dd");
+        }
+        if (s.isAfter(e)) throw new IllegalArgumentException("startDate must be on or before endDate");
+        if (e.isAfter(today)) throw new IllegalArgumentException("endDate cannot be in the future");
+        if (s.isBefore(earliest)) throw new IllegalArgumentException(
+                "startDate is more than " + MAX_RANGE_DAYS + " days ago — CoServ only keeps ~2 weeks");
+        return new SyncRange(start, end);
+    }
+
+    private static boolean isBlank(String s) { return s == null || s.isBlank(); }
+
+    /** Validated ISO date range. */
+    private record SyncRange(String start, String end) {}
 }

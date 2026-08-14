@@ -11,6 +11,7 @@ import java.io.InputStreamReader;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
  * Syncs yesterday's hourly electric data from the CoServ Average Usage API.
@@ -29,6 +30,7 @@ public class HourlySyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(HourlySyncScheduler.class);
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+    private static final DateTimeFormatter US_DATE = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
     /** A single meter+provider should never produce more than this many hourly rows per day. */
     private static final int EXPECTED_ROWS_PER_DAY = 24;
@@ -80,22 +82,8 @@ public class HourlySyncScheduler {
             String dateArg = LocalDate.now(CHICAGO).minusDays(1)
                     .format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
 
-            ProcessBuilder pb = new ProcessBuilder(
-                    "node", "/scripts/sync-hourly.js",
-                    "--date", dateArg
-            );
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
             StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
-
-            int exitCode = process.waitFor();
+            int exitCode = spawn(List.of("node", "/scripts/sync-hourly.js", "--date", dateArg), output);
             String fullOutput = output.toString().trim();
             // Keep a short tail for the container log, the full text for the event details column.
             String tail = fullOutput.length() > 500
@@ -121,6 +109,64 @@ public class HourlySyncScheduler {
             appEventService.error("sync", "HourlySyncScheduler",
                     "Hourly sync failed for " + yesterday, e.getMessage());
         }
+    }
+
+    /**
+     * Manually sync an explicit date range (force — no completeness skip).
+     * Dates are ISO {@code yyyy-MM-dd}; a single day runs {@code --date}, a
+     * range runs {@code --start}/{@code --end}.
+     */
+    public void runSyncForRange(String startIso, String endIso) {
+        String start = toUsDate(startIso);
+        String end = toUsDate(endIso);
+        String label = start.equals(end) ? start : start + " → " + end;
+
+        appEventService.info("sync", "HourlySyncScheduler",
+                "Hourly sync " + label + ": starting (manual)");
+
+        List<String> command = start.equals(end)
+                ? List.of("node", "/scripts/sync-hourly.js", "--date", start)
+                : List.of("node", "/scripts/sync-hourly.js", "--start", start, "--end", end);
+
+        try {
+            StringBuilder output = new StringBuilder();
+            int exitCode = spawn(command, output);
+            String full = output.toString().trim();
+            String details = full.length() > 4000
+                    ? "…\n" + full.substring(full.length() - 4000) : full;
+
+            if (exitCode == 0) {
+                appEventService.log("sync", "INFO", "HourlySyncScheduler",
+                        "Hourly sync " + label + ": completed ✓", details);
+            } else {
+                appEventService.log("sync", "WARN", "HourlySyncScheduler",
+                        "Hourly sync " + label + ": exited " + exitCode, details);
+                log.warn("HourlySyncScheduler manual stderr: {}", details);
+            }
+            alertEngine.generateForAllUsers();
+        } catch (Exception e) {
+            log.error("HourlySyncScheduler manual sync failed", e);
+            appEventService.error("sync", "HourlySyncScheduler",
+                    "Hourly sync " + label + " failed", e.getMessage());
+        }
+    }
+
+    /** Spawn a child process, capturing merged stdout+stderr into {@code output}. Returns exit code. */
+    private int spawn(List<String> command, StringBuilder output) throws Exception {
+        ProcessBuilder pb = new ProcessBuilder(command);
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+        }
+        return process.waitFor();
+    }
+
+    private static String toUsDate(String iso) {
+        return LocalDate.parse(iso).format(US_DATE);
     }
 
     /** Read a day's row count, non-zero reading count, and total kWh in one query. */

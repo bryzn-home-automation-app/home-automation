@@ -67,7 +67,7 @@ function loadSecrets() {
 
 // ─── Parse args ─────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { dryRun: false, date: null, weekly: false, watch: false };
+  const args = { dryRun: false, date: null, weekly: false, watch: false, startDate: null, endDate: null };
   const a = argv || process.argv;
   for (let i = 2; i < a.length; i++) {
     if (a[i] === '--dry-run') args.dryRun = true;
@@ -75,6 +75,12 @@ function parseArgs(argv) {
     if (a[i] === '--watch') args.watch = true;
     if (a[i] === '--date' && a[i + 1]) {
       args.date = a[i + 1];
+    }
+    if (a[i] === '--start' && a[i + 1]) {
+      args.startDate = a[i + 1];
+    }
+    if (a[i] === '--end' && a[i + 1]) {
+      args.endDate = a[i + 1];
     }
   }
   return args;

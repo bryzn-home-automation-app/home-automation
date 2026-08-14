@@ -11,9 +11,10 @@ import java.io.InputStreamReader;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
 
 /**
- * Runs the daily sync every 30 min from 8:15 AM to 11:45 PM CT.
+ * Runs the daily sync every 30 min from 6:30 AM to 11:45 PM CT.
  * Downloads Green Button daily data from CoServ and writes to electric_usage.
  * Skips if yesterday's daily reading is already populated (idempotent).
  *
@@ -25,6 +26,7 @@ public class DailySyncScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(DailySyncScheduler.class);
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+    private static final DateTimeFormatter US_DATE = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
     private final DataSource dataSource;
     private final AppEventService appEventService;
@@ -52,14 +54,34 @@ public class DailySyncScheduler {
         appEventService.info("sync", "DailySyncScheduler",
                 "Starting daily sync (Green Button) for " + yesterday);
 
-        try {
-            String dateArg = LocalDate.now(CHICAGO).minusDays(1)
-                    .format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
+        String dateArg = LocalDate.now(CHICAGO).minusDays(1).format(US_DATE);
+        runSync(List.of("node", "/scripts/sync.js", "--date", dateArg), yesterday);
+    }
 
-            ProcessBuilder pb = new ProcessBuilder(
-                    "node", "/scripts/sync.js",
-                    "--date", dateArg
-            );
+    /**
+     * Manually sync an explicit date range (force — no idempotency skip).
+     * Dates are ISO {@code yyyy-MM-dd}; a single day runs {@code --date}, a
+     * range runs {@code --start}/{@code --end}.
+     */
+    public void runSyncForRange(String startIso, String endIso) {
+        String start = toUsDate(startIso);
+        String end = toUsDate(endIso);
+        String label = start.equals(end) ? start : start + " → " + end;
+
+        appEventService.info("sync", "DailySyncScheduler",
+                "Starting manual daily sync (Green Button) for " + label);
+
+        List<String> command = start.equals(end)
+                ? List.of("node", "/scripts/sync.js", "--date", start)
+                : List.of("node", "/scripts/sync.js", "--start", start, "--end", end);
+
+        runSync(command, label);
+    }
+
+    /** Spawn sync.js and record the result as an app event (with full output in details). */
+    private void runSync(List<String> command, String label) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
 
             Process process = pb.start();
@@ -72,30 +94,49 @@ public class DailySyncScheduler {
             }
 
             int exitCode = process.waitFor();
-            String lastLines = output.toString();
-            // Keep the last 2000 chars — enough to see the actual error line,
-            // not just a truncated "waiting for element..." fragment.
-            if (lastLines.length() > 2000) {
-                lastLines = "…\n" + lastLines.substring(lastLines.length() - 2000);
-            }
+            String full = output.toString();
+            String tail = full.length() > 2000
+                    ? "…\n" + full.substring(full.length() - 2000) : full;
+            String details = full.length() > 4000
+                    ? "…\n" + full.substring(full.length() - 4000) : full;
+            String summary = summarize(full);
 
             if (exitCode == 0) {
-                appEventService.info("sync", "DailySyncScheduler",
-                        "Daily sync completed for " + yesterday + " — " + lastLines.lines()
-                                .filter(l -> l.contains("records, total"))
-                                .findFirst().orElse("ok"));
+                appEventService.log("sync", "INFO", "DailySyncScheduler",
+                        "Daily sync completed for " + label + " — " + summary, details);
             } else {
-                appEventService.warn("sync", "DailySyncScheduler",
-                        "Daily sync exited " + exitCode + " for " + yesterday);
-                log.warn("DailySyncScheduler stderr: {}", lastLines);
+                appEventService.log("sync", "WARN", "DailySyncScheduler",
+                        "Daily sync exited " + exitCode + " for " + label + " — " + summary, details);
+                log.warn("DailySyncScheduler stderr: {}", tail);
             }
 
-            log.info("DailySyncScheduler output: {}", lastLines);
+            log.info("DailySyncScheduler output: {}", tail);
         } catch (Exception e) {
             log.error("DailySyncScheduler failed", e);
             appEventService.error("sync", "DailySyncScheduler",
-                    "Daily sync failed for " + yesterday, e.getMessage());
+                    "Daily sync failed for " + label, e.getMessage());
         }
+    }
+
+    /** Extract a human-readable summary line (per-service record counts / no-data) from script output. */
+    private String summarize(String output) {
+        String summary = output.lines()
+                .map(String::trim)
+                .filter(l -> l.contains("records written") || l.contains("No usage data") || l.contains("records (dry-run)"))
+                .reduce((a, b) -> a + " | " + b)
+                .orElse("");
+
+        if (!summary.isBlank()) return summary;
+
+        return output.lines()
+                .map(String::trim)
+                .filter(l -> l.contains("Total:") && l.contains("records"))
+                .findFirst()
+                .orElse("ok");
+    }
+
+    private static String toUsDate(String iso) {
+        return LocalDate.parse(iso).format(US_DATE);
     }
 
     private boolean isYesterdayPopulated(String date) {
