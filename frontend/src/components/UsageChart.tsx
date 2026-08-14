@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { EnergyUsage } from '../types';
+import { isHourlySource } from '../utils/usageSource';
 
 // ── Stable object references (avoid new literals every render) ──
 const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
@@ -129,7 +130,7 @@ function UsageChart({
     // Sum hourly records per date to get daily totals.
     const byDate = new Map<string, number>();
     for (const d of data) {
-      if (d.source !== 'CoServ Average Usage') continue;
+      if (!isHourlySource(d.source)) continue;
       const date = d.timestamp.slice(0, 10);
       byDate.set(date, (byDate.get(date) ?? 0) + Number(d.usageKwh));
     }

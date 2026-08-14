@@ -40,7 +40,9 @@ const METER_ACCOUNT = '9002001851-ELECTRIC';
 const METER_NUMBER = '9002001851-ELECTRIC-ELECTRIC';
 
 const SOURCE_DAILY = 'CoServ Usage Explorer';
-const SOURCE_HOURLY = 'CoServ Usage Explorer';
+// Distinct from the daily source — the frontend identifies hourly rows by this
+// label, and the energy_usage view unions both tables into one result set.
+const SOURCE_HOURLY = 'CoServ Usage Explorer Hourly';
 const SOURCE_PROVIDER = 'coserv';
 const PROCESSING_VERSION = '2.0';
 

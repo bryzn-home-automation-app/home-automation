@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import type { EnergyUsage } from '../types';
+import { isHourlySource } from '../utils/usageSource';
 
 // ── Module-level constants (stable refs, no re-mount on parent renders) ──
 const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
@@ -72,7 +73,7 @@ function MonthlyComparison({
   const chartData = useMemo(() => {
     const byMonth = new Map<string, number>();
     data.forEach((d) => {
-      if (d.source !== 'CoServ Average Usage') return;
+      if (!isHourlySource(d.source)) return;
       const key = new Date(d.timestamp).toLocaleDateString('en-US', {
         year: 'numeric',
         month: 'short',

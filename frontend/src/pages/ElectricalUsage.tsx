@@ -11,6 +11,7 @@ import { fetchUsageSummary } from '../api/energy';
 import { fetchWeatherForRange } from '../api/weather';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
+import { isHourlySource } from '../utils/usageSource';
 import UsageWeatherChart from '../components/UsageWeatherChart';
 
 type LogFilter = 'daily' | 'hourly';
@@ -52,7 +53,7 @@ export default memo(function ElectricalUsage() {
   const dailyFromHourly = useMemo(() => {
     const byDate = new Map<string, number>();
     for (const d of realData) {
-      if (d.source !== 'CoServ Average Usage') continue;
+      if (!isHourlySource(d.source)) continue;
       const date = d.timestamp.slice(0, 10);
       byDate.set(date, (byDate.get(date) ?? 0) + Number(d.usageKwh));
     }
@@ -65,7 +66,7 @@ export default memo(function ElectricalUsage() {
   const hourlyCountByDate = useMemo(() => {
     const counts = new Map<string, number>();
     for (const r of realData) {
-      if (r.source !== 'CoServ Average Usage') continue;
+      if (!isHourlySource(r.source)) continue;
       const date = r.timestamp.slice(0, 10);
       counts.set(date, (counts.get(date) ?? 0) + 1);
     }
@@ -187,7 +188,7 @@ export default memo(function ElectricalUsage() {
   // Hourly filter: raw records, newest first
   const hourlyLogData = useMemo(() => {
     return realData
-      .filter((d) => d.source === 'CoServ Average Usage')
+      .filter((d) => isHourlySource(d.source))
       .sort((a, b) => timestampMs(b.timestamp) - timestampMs(a.timestamp))
       .slice(0, 48);
   }, [realData]);

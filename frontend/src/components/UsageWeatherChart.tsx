@@ -12,6 +12,7 @@ import {
 import type { EnergyUsage } from '../types';
 import { fetchWeatherForRange } from '../api/weather';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { isHourlySource } from '../utils/usageSource';
 
 interface UsageWeatherChartProps {
   usageData: EnergyUsage[];
@@ -185,7 +186,7 @@ function UsageWeatherChart({
       if (Number.isNaN(usage)) continue;
       const date = d.timestamp.slice(0, 10);
       dateMap.set(date, (dateMap.get(date) ?? 0) + usage);
-      if (d.source === 'CoServ Average Usage') {
+      if (isHourlySource(d.source)) {
         const normalized = d.timestamp.replace(' ', 'T');
         if (normalized.length >= 13) {
           const hourKey = normalized.substring(0, 13);

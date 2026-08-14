@@ -10,6 +10,7 @@ import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
 import { fetchCurrentWeather } from '../api/weather';
 import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
+import { isHourlySource } from '../utils/usageSource';
 
 export default function HomeSummary() {
   const { electricUsage, gasUsage, electricTotal, gasTotal, config } = useUsageData();
@@ -27,7 +28,7 @@ export default function HomeSummary() {
   const latestDaily = useMemo(() => {
     const byDate = new Map<string, { total: number; count: number }>();
     for (const d of electricUsage.data ?? []) {
-      if (d.source !== 'CoServ Average Usage') continue;
+      if (!isHourlySource(d.source)) continue;
       const date = d.timestamp.slice(0, 10);
       const entry = byDate.get(date) ?? { total: 0, count: 0 };
       entry.total += Number(d.usageKwh);
@@ -44,7 +45,7 @@ export default function HomeSummary() {
   const recentElectric = useMemo(() => {
     const byDate = new Map<string, { total: number; count: number; latestTimestamp: string }>();
     for (const d of electricUsage.data ?? []) {
-      if (d.source !== 'CoServ Average Usage') continue;
+      if (!isHourlySource(d.source)) continue;
       const date = d.timestamp.slice(0, 10);
       const entry = byDate.get(date) ?? { total: 0, count: 0, latestTimestamp: d.timestamp };
       entry.total += Number(d.usageKwh);
