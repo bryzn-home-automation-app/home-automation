@@ -161,7 +161,7 @@ export default memo(function App() {
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-colors w-full ${
                       isActive
-                        ? 'border-amber-300/40 bg-amber-300/15 text-apptext'
+                        ? 'border-appwarning-border bg-appwarning-soft text-apptext'
                         : 'border-transparent text-apptext-soft hover:border-appborder hover:bg-appinset hover:text-apptext'
                     }`
                   }
