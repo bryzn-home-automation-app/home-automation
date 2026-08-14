@@ -14,7 +14,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
- * Syncs yesterday's hourly electric data from the CoServ Average Usage API.
+ * Syncs yesterday's hourly electric data from the CoServ Usage Explorer API.
  * Every 30 min from 6:15 AM to 11:45 PM CT — late enough for data, frequent
  * enough to fill gaps.
  *
@@ -83,7 +83,7 @@ public class HourlySyncScheduler {
                     .format(DateTimeFormatter.ofPattern("MM/dd/yyyy"));
 
             StringBuilder output = new StringBuilder();
-            int exitCode = spawn(List.of("node", "/scripts/sync-hourly.js", "--date", dateArg), output);
+            int exitCode = spawn(List.of("node", "/scripts/sync.js", "--granularity", "hourly", "--date", dateArg), output);
             String fullOutput = output.toString().trim();
             // Keep a short tail for the container log, the full text for the event details column.
             String tail = fullOutput.length() > 500
@@ -125,8 +125,8 @@ public class HourlySyncScheduler {
                 "Hourly sync " + label + ": starting (manual)");
 
         List<String> command = start.equals(end)
-                ? List.of("node", "/scripts/sync-hourly.js", "--date", start)
-                : List.of("node", "/scripts/sync-hourly.js", "--start", start, "--end", end);
+                ? List.of("node", "/scripts/sync.js", "--granularity", "hourly", "--date", start)
+                : List.of("node", "/scripts/sync.js", "--granularity", "hourly", "--start", start, "--end", end);
 
         try {
             StringBuilder output = new StringBuilder();

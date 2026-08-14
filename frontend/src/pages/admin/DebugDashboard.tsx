@@ -323,13 +323,13 @@ export default function DebugDashboard() {
 
         <div className="flex flex-wrap gap-3">
           <SyncButton
-            label="⚡ Daily Sync (Green Button)"
+            label="Daily Sync"
             endpoint="/admin/sync/daily"
             body={syncBody}
             disabled={preset === 'range' && !!rangeError}
           />
           <SyncButton
-            label="🕐 Hourly Sync (Avg Usage API)"
+            label="Hourly Sync"
             endpoint="/admin/sync/hourly"
             body={syncBody}
             disabled={preset === 'range' && !!rangeError}

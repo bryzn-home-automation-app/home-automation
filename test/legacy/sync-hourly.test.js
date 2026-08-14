@@ -13,7 +13,7 @@ const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 
-const hourly = require(path.join(__dirname, '..', 'scripts', 'sync-hourly.js'));
+const hourly = require(path.join(__dirname, '..', '..', 'scripts', 'legacy', 'sync-hourly.js'));
 
 // ─── tzOffsetMs ──────────────────────────────────────────────────
 

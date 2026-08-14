@@ -294,7 +294,7 @@ public class AdminDebugController {
         }
     }
 
-    /** Manually trigger the daily Green Button sync. Optional body carries a date range. */
+    /** Manually trigger the daily sync. Optional body carries a date range. */
     @PostMapping("/sync/daily")
     public ResponseEntity<Map<String, Object>> triggerDailySync(
             HttpServletRequest request,

@@ -1,512 +1,231 @@
 /**
- * Unit tests for sync.js — covers all sync modes and logic branches.
+ * Unit tests for scripts/sync.js — the Usage Explorer (poll API) sync.
  *
- * These tests exercise the pure functions (parseArgs, decideSyncMode,
- * parseGreenButtonXml, checkZeroGap) without hitting SmartHub or the DB.
+ * Covers the pure logic (arg parsing, date range, timezone day bounds, and
+ * record mapping for daily + 15-min→hourly aggregation) without hitting
+ * SmartHub, the DB, or the network.
  *
  * Usage:
  *   node --test test/sync.test.js
- *   node --test --test-reporter spec test/sync.test.js   # verbose
  */
 'use strict';
 
-const { describe, it, beforeEach, afterEach } = require('node:test');
+const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
 const path = require('path');
 
-// Load sync module
 const sync = require(path.join(__dirname, '..', 'scripts', 'sync.js'));
-
-// ─── Helpers ────────────────────────────────────────────────────
-
-/** Create a mock PG client with canned query results. */
-function mockClient(responses) {
-  return {
-    queryCalls: [],
-    query(sql, params) {
-      this.queryCalls.push({ sql: sql.substring(0, 80), params });
-      const key = params?.[0] ?? '__default__';
-      const result = responses[key] || responses.__default__ || { rows: [] };
-      return Promise.resolve(result);
-    },
-  };
-}
-
-/** Fixed dates for deterministic tests. Sunday = Aug 9, 2026 (a Sunday) */
-const SUNDAY = new Date(2026, 7, 9);   // Aug 9, 2026 = Sunday
-const MONDAY = new Date(2026, 7, 10);   // Aug 10 = Monday
-const WEDNESDAY = new Date(2026, 7, 12); // Aug 12 = Wednesday
-const FRIDAY = new Date(2026, 7, 14);   // Aug 14 = Friday
 
 // ─── parseArgs ──────────────────────────────────────────────────
 
 describe('parseArgs()', () => {
   it('returns defaults with no arguments', () => {
-    const result = sync.parseArgs(['node', 'sync.js']);
-    assert.deepEqual(result, { dryRun: false, date: null, weekly: false, watch: false, startDate: null, endDate: null });
+    assert.deepEqual(sync.parseArgs(['node', 'sync.js']), {
+      dryRun: false, date: null, startDate: null, endDate: null, granularity: 'both',
+    });
   });
 
   it('detects --dry-run', () => {
-    const result = sync.parseArgs(['node', 'sync.js', '--dry-run']);
-    assert.equal(result.dryRun, true);
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--dry-run']).dryRun, true);
   });
 
-  it('detects --weekly', () => {
-    const result = sync.parseArgs(['node', 'sync.js', '--weekly']);
-    assert.equal(result.weekly, true);
+  it('--granularity hourly', () => {
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--granularity', 'hourly']).granularity, 'hourly');
   });
 
-  it('detects --date with value', () => {
-    const result = sync.parseArgs(['node', 'sync.js', '--date', '08/03/2026']);
-    assert.equal(result.date, '08/03/2026');
+  it('--granularity daily', () => {
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--granularity', 'daily']).granularity, 'daily');
   });
 
-  it('detects all flags at once', () => {
-    const result = sync.parseArgs(['node', 'sync.js', '--weekly', '--dry-run', '--date', '07/24/2026']);
-    assert.deepEqual(result, { dryRun: true, date: '07/24/2026', weekly: true, watch: false, startDate: null, endDate: null });
+  it('--granularity both', () => {
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--granularity', 'both']).granularity, 'both');
   });
 
-  it('detects --start and --end for a custom range', () => {
-    const result = sync.parseArgs(['node', 'sync.js', '--start', '07/24/2026', '--end', '08/07/2026']);
-    assert.equal(result.startDate, '07/24/2026');
-    assert.equal(result.endDate, '08/07/2026');
+  it('--granularity falls back to both for unknown values', () => {
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--granularity', 'weekly']).granularity, 'both');
   });
 
-  it('ignores --date without a value', () => {
-    const result = sync.parseArgs(['node', 'sync.js', '--date']);
-    assert.equal(result.date, null);
-  });
-});
-
-// ─── isSunday ───────────────────────────────────────────────────
-
-describe('isSunday()', () => {
-  it('returns true for Sunday', () => {
-    assert.equal(sync.isSunday(SUNDAY), true);
+  it('--daily and --hourly shorthands', () => {
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--daily']).granularity, 'daily');
+    assert.equal(sync.parseArgs(['node', 'sync.js', '--hourly']).granularity, 'hourly');
   });
 
-  it('returns false for Monday', () => {
-    assert.equal(sync.isSunday(MONDAY), false);
+  it('--date sets start and end to the same day', () => {
+    const r = sync.parseArgs(['node', 'sync.js', '--date', '08/01/2026']);
+    assert.equal(r.date, '08/01/2026');
+    assert.equal(r.startDate, '08/01/2026');
+    assert.equal(r.endDate, '08/01/2026');
   });
 
-  it('returns false for Wednesday', () => {
-    assert.equal(sync.isSunday(WEDNESDAY), false);
-  });
-
-  it('returns false for Friday', () => {
-    assert.equal(sync.isSunday(FRIDAY), false);
+  it('--start/--end custom range', () => {
+    const r = sync.parseArgs(['node', 'sync.js', '--start', '07/24/2026', '--end', '08/01/2026']);
+    assert.equal(r.startDate, '07/24/2026');
+    assert.equal(r.endDate, '08/01/2026');
   });
 });
 
-// ─── fmtDate / parseDate ────────────────────────────────────────
+// ─── resolveDateRange / fmtDate ─────────────────────────────────
+
+describe('resolveDateRange()', () => {
+  it('returns an explicit range unchanged', () => {
+    assert.deepEqual(sync.resolveDateRange({ startDate: '08/01/2026', endDate: '08/02/2026' }), {
+      startDate: '08/01/2026', endDate: '08/02/2026',
+    });
+  });
+
+  it('defaults to yesterday', () => {
+    // Aug 10, 2026 → yesterday = Aug 9
+    assert.deepEqual(sync.resolveDateRange({ startDate: null, endDate: null }, new Date(2026, 7, 10)), {
+      startDate: '08/09/2026', endDate: '08/09/2026',
+    });
+  });
+});
 
 describe('fmtDate()', () => {
-  it('formats a date as MM/DD/YYYY', () => {
+  it('formats as MM/DD/YYYY with padding', () => {
     assert.equal(sync.fmtDate(new Date(2026, 7, 3)), '08/03/2026');
-  });
-
-  it('pads single digit months and days', () => {
     assert.equal(sync.fmtDate(new Date(2026, 0, 5)), '01/05/2026');
     assert.equal(sync.fmtDate(new Date(2026, 11, 25)), '12/25/2026');
   });
 });
 
-describe('parseDate()', () => {
-  it('parses MM/DD/YYYY strings', () => {
-    const d = sync.parseDate('07/24/2026');
-    assert.equal(d.getFullYear(), 2026);
-    assert.equal(d.getMonth(), 6); // 0-indexed
-    assert.equal(d.getDate(), 24);
+// ─── tzOffsetMs / ctDayBounds ───────────────────────────────────
+
+describe('tzOffsetMs()', () => {
+  it('returns -5h (CDT) for a summer instant', () => {
+    assert.equal(sync.tzOffsetMs(Date.UTC(2026, 7, 7, 12, 0, 0), 'America/Chicago'), -5 * 60 * 60 * 1000);
+  });
+
+  it('returns -6h (CST) for a winter instant', () => {
+    assert.equal(sync.tzOffsetMs(Date.UTC(2026, 0, 15, 12, 0, 0), 'America/Chicago'), -6 * 60 * 60 * 1000);
   });
 });
 
-// ─── decideSyncMode ─────────────────────────────────────────────
-
-describe('decideSyncMode()', () => {
-  it('single: --date returns that date as single day range', async () => {
-    const result = await sync.decideSyncMode(
-      null,
-      { date: '08/03/2026', weekly: false, dryRun: false },
-      {},
-      FRIDAY
-    );
-    assert.equal(result.mode, 'single');
-    assert.equal(result.startDate, '08/03/2026');
-    assert.equal(result.endDate, '08/03/2026');
+describe('ctDayBounds()', () => {
+  it('maps a CDT day to UTC boundaries (05:00 → next 04:59)', () => {
+    const { startMs, endMs } = sync.ctDayBounds(8, 7, 2026);
+    assert.equal(startMs, Date.UTC(2026, 7, 7, 5, 0, 0));
+    assert.equal(endMs, Date.UTC(2026, 7, 8, 5, 0, 0) - 1);
   });
 
-  it('weekly: --weekly flag returns last 7 days', async () => {
-    const result = await sync.decideSyncMode(
-      null,
-      { date: null, weekly: true, dryRun: false },
-      {},
-      FRIDAY  // Aug 14 — yesterday = Aug 13
-    );
-    assert.ok(result.mode.includes('weekly'), `Expected weekly mode, got: ${result.mode}`);
-    assert.equal(result.endDate, '08/13/2026');
-    assert.equal(result.startDate, '08/07/2026'); // 7 days: 8/7 - 8/13
-  });
-
-  it('weekly: Sunday triggers automatic weekly sync', async () => {
-    const result = await sync.decideSyncMode(
-      null,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      SUNDAY  // Aug 9 — yesterday = Aug 8
-    );
-    assert.equal(result.mode, 'weekly (Sunday)');
-    assert.equal(result.endDate, '08/08/2026');
-    assert.equal(result.startDate, '08/02/2026'); // 7 days back
-  });
-
-  it('daily: Monday returns yesterday only', async () => {
-    const today = new Date(2026, 7, 10);
-    const d1 = new Date(today); d1.setDate(d1.getDate() - 1);
-    const d2 = new Date(today); d2.setDate(d2.getDate() - 2);
-    const d3 = new Date(today); d3.setDate(d3.getDate() - 3);
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '50.85', d: d1 },
-        { usage_kwh: '57.66', d: d2 },
-        { usage_kwh: '53.54', d: d3 },
-      ]},
-    });
-
-    const result = await sync.decideSyncMode(
-      client,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      MONDAY  // Aug 10 — yesterday = Aug 9
-    );
-    assert.equal(result.mode, 'daily');
-    assert.equal(result.startDate, '08/09/2026');
-    assert.equal(result.endDate, '08/09/2026');
-  });
-
-  it('daily: Wednesday with normal data returns daily', async () => {
-    const today = new Date(2026, 7, 12);
-    const d1 = new Date(today); d1.setDate(d1.getDate() - 1);
-    const d2 = new Date(today); d2.setDate(d2.getDate() - 2);
-    const d3 = new Date(today); d3.setDate(d3.getDate() - 3);
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '31.00', d: d1 },
-        { usage_kwh: '30.00', d: d2 },
-        { usage_kwh: '37.30', d: d3 },
-      ]},
-    });
-
-    const result = await sync.decideSyncMode(
-      client,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      WEDNESDAY
-    );
-    assert.equal(result.mode, 'daily');
-  });
-
-  it('zero-guard: 3+ consecutive zeros in Electric triggers zero-guard', async () => {
-    // Note: mock rows need to include 'd' for console.log in checkZeroGap
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '0.000', d: new Date(2026, 7, 10) },
-        { usage_kwh: '0.000', d: new Date(2026, 7, 9) },
-        { usage_kwh: '0.000', d: new Date(2026, 7, 8) },
-      ]},
-    });
-
-    const result = await sync.decideSyncMode(
-      client,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      WEDNESDAY  // Aug 12 — yesterday = Aug 11
-    );
-    assert.equal(result.mode, 'zero-guard');
-    // zero-guard retries the last 3 days
-    assert.equal(result.startDate, '08/09/2026');
-    assert.equal(result.endDate, '08/11/2026');
-  });
-
-  it('zero-guard: not triggered with less than ZERO_GUARD_DAYS rows', async () => {
-    const client = mockClient({
-      3: { rows: [] },  // empty DB
-    });
-
-    const result = await sync.decideSyncMode(
-      client,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      FRIDAY
-    );
-    assert.equal(result.mode, 'daily');
-  });
-
-  it('zero-guard: not triggered with mixed data (some non-zero)', async () => {
-    const today = new Date(2026, 7, 14);
-    const d1 = new Date(today); d1.setDate(d1.getDate() - 1);
-    const d2 = new Date(today); d2.setDate(d2.getDate() - 2);
-    const d3 = new Date(today); d3.setDate(d3.getDate() - 3);
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '50.85', d: d1 },
-        { usage_kwh: '0.000', d: d2 },
-        { usage_kwh: '0.000', d: d3 },
-      ]},
-    });
-
-    const result = await sync.decideSyncMode(
-      client,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      FRIDAY
-    );
-    assert.equal(result.mode, 'daily');
-  });
-
-  it('zero-guard: not triggered when only 2 rows (not enough data)', async () => {
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '0.000', d: new Date(2026, 7, 13) },
-        { usage_kwh: '0.000', d: new Date(2026, 7, 12) },
-      ]},
-    });
-
-    const result = await sync.decideSyncMode(
-      client,
-      { date: null, weekly: false, dryRun: false },
-      {},
-      FRIDAY
-    );
-    assert.equal(result.mode, 'daily');
-  });
-
-  it('daily without DB client (dry-run mode) returns daily', async () => {
-    const result = await sync.decideSyncMode(
-      null,  // no client
-      { date: null, weekly: false, dryRun: true },
-      {},
-      FRIDAY
-    );
-    assert.equal(result.mode, 'daily');
-    assert.equal(result.startDate, result.endDate);
+  it('maps a CST day to UTC boundaries (06:00 → next 05:59)', () => {
+    const { startMs, endMs } = sync.ctDayBounds(1, 15, 2026);
+    assert.equal(startMs, Date.UTC(2026, 0, 15, 6, 0, 0));
+    assert.equal(endMs, Date.UTC(2026, 0, 16, 6, 0, 0) - 1);
   });
 });
 
-// ─── parseGreenButtonXml ─────────────────────────────────────────
+// ─── recordsFromDailyData ───────────────────────────────────────
 
-describe('parseGreenButtonXml()', () => {
-  it('parses a single IntervalReading', () => {
-    const xml = `<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry><content>
-    <IntervalBlock xmlns="http://naesb.org/espi">
-      <interval><duration>172800</duration><start>1785733200</start><uom>72</uom><currency>840</currency></interval>
-      <IntervalReading>
-        <powerOfTenMultiplier>3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration><start>1785733200</start></timePeriod>
-        <value>31000</value>
-      </IntervalReading>
-    </IntervalBlock>
-  </content></entry>
-</feed>`;
+describe('recordsFromDailyData()', () => {
+  const rate = 0.1171;
 
-    const results = sync.parseGreenButtonXml(xml);
-    assert.equal(results.length, 1);
-    assert.equal(results[0].usageKwh, 31);  // 31000 / 10^3
-    assert.equal(results[0].sourceProvider, 'coserv');
-    assert.equal(results[0].source, 'CoServ Green Button');
-    assert.ok(results[0].timestamp.includes('2026-08-03')); // epoch 1785733200 = Aug 3, 2026
+  it('maps a single daily point to one record', () => {
+    // x = local Aug 1 00:00 encoded as UTC
+    const records = sync.recordsFromDailyData([{ x: 1785542400000, y: 37.3, enableDrilldown: true }], rate);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].timestamp, '2026-08-01 00:00:00');
+    assert.equal(records[0].usageKwh, 37.3);
+    assert.equal(records[0].cost, 4.37); // 37.3 * 0.1171 ≈ 4.3678 → 4.37
+    assert.equal(records[0].sourceProvider, 'coserv');
   });
 
-  it('skips demand readings (uom 38 = kW)', () => {
-    const xml = `<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry><content>
-    <IntervalBlock xmlns="http://naesb.org/espi">
-      <interval><duration>172800</duration><start>1785733200</start><uom>38</uom><currency>840</currency></interval>
-      <IntervalReading>
-        <powerOfTenMultiplier>3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration><start>1785733200</start></timePeriod>
-        <value>5000</value>
-      </IntervalReading>
-    </IntervalBlock>
-  </content></entry>
-</feed>`;
-
-    const results = sync.parseGreenButtonXml(xml);
-    assert.equal(results.length, 0, 'Demand (kW) readings should be skipped');
+  it('skips null/missing points', () => {
+    const records = sync.recordsFromDailyData(
+      [{ x: 1785542400000, y: null }, { y: 1 }, { x: 1785542400000 }, null],
+      rate
+    );
+    assert.equal(records.length, 0);
   });
 
-  it('parses multiple readings from one IntervalBlock', () => {
-    const xml = `<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry><content>
-    <IntervalBlock xmlns="http://naesb.org/espi">
-      <interval><duration>259200</duration><start>1785733200</start><uom>72</uom><currency>840</currency></interval>
-      <IntervalReading>
-        <powerOfTenMultiplier>3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration><start>1785733200</start></timePeriod>
-        <value>31000</value>
-      </IntervalReading>
-      <IntervalReading>
-        <powerOfTenMultiplier>3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration><start>1785819600</start></timePeriod>
-        <value>29000</value>
-      </IntervalReading>
-    </IntervalBlock>
-  </content></entry>
-</feed>`;
-
-    const results = sync.parseGreenButtonXml(xml);
-    assert.equal(results.length, 2);
-    assert.equal(results[0].usageKwh, 31);
-    assert.equal(results[1].usageKwh, 29);
-  });
-
-  it('handles negative powerOfTenMultiplier', () => {
-    const xml = `<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry><content>
-    <IntervalBlock xmlns="http://naesb.org/espi">
-      <interval><duration>86400</duration><start>1785733200</start><uom>72</uom><currency>840</currency></interval>
-      <IntervalReading>
-        <powerOfTenMultiplier>-3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration><start>1785733200</start></timePeriod>
-        <value>12345</value>
-      </IntervalReading>
-    </IntervalBlock>
-  </content></entry>
-</feed>`;
-
-    const results = sync.parseGreenButtonXml(xml);
-    assert.equal(results.length, 1);
-    // 12345 * 10^(-(-3)) = 12345 * 10^3 = 12,345,000
-    // Wait, the formula is rawValue / 10^multiplier.
-    // multiplier = -3, so 10^(-3) = 0.001, so 12345 / 0.001 = 12,345,000
-    // That seems wrong for real data but validates the math
-    assert.equal(results[0].usageKwh, 12345000);
-  });
-
-  it('uses default timezone offset (-21600) when missing', () => {
-    const xml = `<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry><content>
-    <IntervalBlock xmlns="http://naesb.org/espi">
-      <interval><duration>86400</duration><start>1785733200</start><uom>72</uom></interval>
-      <IntervalReading>
-        <powerOfTenMultiplier>3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration><start>1785733200</start></timePeriod>
-        <value>31000</value>
-      </IntervalReading>
-    </IntervalBlock>
-  </content></entry>
-</feed>`;
-
-    const results = sync.parseGreenButtonXml(xml);
-    assert.equal(results.length, 1); // Should still parse fine
-  });
-
-  it('skips readings with missing value or start', () => {
-    const xml = `<?xml version="1.0"?>
-<feed xmlns="http://www.w3.org/2005/Atom">
-  <entry><content>
-    <IntervalBlock xmlns="http://naesb.org/espi">
-      <interval><duration>86400</duration><start>1785733200</start><uom>72</uom></interval>
-      <IntervalReading>
-        <powerOfTenMultiplier>3</powerOfTenMultiplier>
-        <timePeriod><duration>86400</duration></timePeriod>
-        <value>31000</value>
-      </IntervalReading>
-    </IntervalBlock>
-  </content></entry>
-</feed>`;
-
-    const results = sync.parseGreenButtonXml(xml);
-    assert.equal(results.length, 0, 'Missing start should skip reading');
-  });
-
-  it('returns empty array for non-Green-Button XML', () => {
-    const results = sync.parseGreenButtonXml('<root>not green button</root>');
-    assert.equal(results.length, 0);
-  });
-
-  it('returns empty array for empty string', () => {
-    const results = sync.parseGreenButtonXml('');
-    assert.equal(results.length, 0);
+  it('returns [] for empty input', () => {
+    assert.deepEqual(sync.recordsFromDailyData([], rate), []);
+    assert.deepEqual(sync.recordsFromDailyData(null, rate), []);
   });
 });
 
-// ─── checkZeroGap ───────────────────────────────────────────────
+// ─── recordsFromIntervalData (15-min → 1 hour) ──────────────────
 
-describe('checkZeroGap()', () => {
-  it('returns true when last 3 rows are all zero', async () => {
-    const today = new Date();
-    const d1 = new Date(today); d1.setDate(d1.getDate() - 1);
-    const d2 = new Date(today); d2.setDate(d2.getDate() - 2);
-    const d3 = new Date(today); d3.setDate(d3.getDate() - 3);
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '0.000', d: d1 },
-        { usage_kwh: '0.000', d: d2 },
-        { usage_kwh: '0.000', d: d3 },
-      ]},
+describe('recordsFromIntervalData()', () => {
+  const rate = 0.1171;
+  const HOUR = 3600000;
+  const Q = 15 * 60 * 1000; // 15 minutes
+
+  it('sums the four 15-min points of an hour into one record', () => {
+    const base = 1785542400000; // local Aug 1 00:00
+    const points = [0, 1, 2, 3].map((i) => ({ x: base + i * Q, y: 0.1 * (i + 1) }));
+    const records = sync.recordsFromIntervalData(points, rate);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].timestamp, '2026-08-01 00:00:00');
+    assert.equal(records[0].usageKwh, 1.0); // 0.1 + 0.2 + 0.3 + 0.4
+  });
+
+  it('maps 96 points to 24 hourly records', () => {
+    const base = 1785542400000;
+    const points = [];
+    for (let i = 0; i < 96; i++) points.push({ x: base + i * Q, y: 1 });
+    const records = sync.recordsFromIntervalData(points, rate);
+    assert.equal(records.length, 24);
+    assert.equal(records[0].timestamp, '2026-08-01 00:00:00');
+    assert.equal(records[23].timestamp, '2026-08-01 23:00:00');
+    assert.equal(records[0].usageKwh, 4); // 4 points × 1
+    assert.equal(records.reduce((s, r) => s + r.usageKwh, 0), 96);
+  });
+
+  it('groups points into correct hour buckets across the day', () => {
+    const base = 1785542400000;
+    // one point at 00:45 and one point at 01:00 (different hours)
+    const points = [
+      { x: base + 3 * Q, y: 0.5 },       // 00:45
+      { x: base + 4 * Q, y: 1.5 },       // 01:00
+    ];
+    const records = sync.recordsFromIntervalData(points, rate);
+    assert.equal(records.length, 2);
+    assert.equal(records[0].timestamp, '2026-08-01 00:00:00');
+    assert.equal(records[0].usageKwh, 0.5);
+    assert.equal(records[1].timestamp, '2026-08-01 01:00:00');
+    assert.equal(records[1].usageKwh, 1.5);
+  });
+
+  it('skips null y but keeps explicit zero', () => {
+    const base = 1785542400000;
+    const points = [
+      { x: base, y: 0 },        // explicit zero
+      { x: base + Q, y: null }, // null → skip
+      { x: base + 2 * Q, y: 0.5 },
+    ];
+    const records = sync.recordsFromIntervalData(points, rate);
+    assert.equal(records.length, 1);
+    assert.equal(records[0].usageKwh, 0.5);
+  });
+
+  it('returns [] for empty input', () => {
+    assert.deepEqual(sync.recordsFromIntervalData([], rate), []);
+    assert.deepEqual(sync.recordsFromIntervalData(null, rate), []);
+  });
+});
+
+// ─── buildPayload ───────────────────────────────────────────────
+
+describe('buildPayload()', () => {
+  it('builds the HOURLY poll payload', () => {
+    const p = sync.buildPayload('HOURLY', { COSERV_USERNAME: 'user@example.com' }, 1785560400000, 1785645900001);
+    assert.deepEqual(p, {
+      timeFrame: 'HOURLY',
+      userId: 'user@example.com',
+      screen: 'USAGE_EXPLORER',
+      includeDemand: false,
+      serviceLocationNumber: '1059153',
+      accountNumber: '9002001851',
+      industries: ['GAS', 'ELECTRIC'],
+      startDateTime: 1785560400000,
+      endDateTime: 1785645900001,
+      selectedIndustry: 'ELECTRIC',
     });
-    const result = await sync.checkZeroGap(client);
-    assert.equal(result, true);
   });
 
-  it('returns false when last 3 rows include non-zero', async () => {
-    const today = new Date();
-    const d1 = new Date(today); d1.setDate(d1.getDate() - 1);
-    const d2 = new Date(today); d2.setDate(d2.getDate() - 2);
-    const d3 = new Date(today); d3.setDate(d3.getDate() - 3);
-    const client = mockClient({
-      3: { rows: [
-        { usage_kwh: '0.000', d: d1 },
-        { usage_kwh: '57.660', d: d2 },
-        { usage_kwh: '0.000', d: d3 },
-      ]},
-    });
-    const result = await sync.checkZeroGap(client);
-    assert.equal(result, false);
+  it('builds the DAILY poll payload', () => {
+    const p = sync.buildPayload('DAILY', { COSERV_USERNAME: 'user@example.com' }, 1, 2);
+    assert.equal(p.timeFrame, 'DAILY');
   });
-
-  it('returns false when fewer than 3 rows exist', async () => {
-    const client = mockClient({
-      3: { rows: [{ usage_kwh: '0.000', d: new Date() }] },
-    });
-    const result = await sync.checkZeroGap(client);
-    assert.equal(result, false);
-  });
-
-  it('returns false on DB error (network failure)', async () => {
-    const client = {
-      query() { throw new Error('connection refused'); },
-    };
-    const result = await sync.checkZeroGap(client);
-    assert.equal(result, false, 'Should return false on error, not throw');
-  });
-});
-
-// ─── ZERO_GUARD_DAYS constant ───────────────────────────────────
-
-describe('ZERO_GUARD_DAYS', () => {
-  it('is set to 3', () => {
-    assert.equal(sync.ZERO_GUARD_DAYS, 3);
-  });
-});
-
-// ─── SERVICES constant ──────────────────────────────────────────
-
-describe('SERVICES', () => {
-  it('contains Electric and Natural Gas', () => {
-    assert.equal(sync.SERVICES.length, 2);
-    assert.equal(sync.SERVICES[0].value, 'ELECTRIC');
-    assert.equal(sync.SERVICES[1].value, 'GAS');
-  });
-});
-
-// ─── Summary ────────────────────────────────────────────────────
-process.on('exit', () => {
-  console.log('\n📋  All sync unit tests completed.\n');
 });

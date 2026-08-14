@@ -15,7 +15,7 @@ import java.util.List;
 
 /**
  * Runs the daily sync every 30 min from 6:30 AM to 11:45 PM CT.
- * Downloads Green Button daily data from CoServ and writes to electric_usage.
+ * Downloads daily data from the CoServ Usage Explorer API and writes to electric_usage.
  * Skips if yesterday's daily reading is already populated (idempotent).
  *
  * Complements the {@link HourlySyncScheduler} which writes to hourly_electric_usage —
@@ -52,10 +52,10 @@ public class DailySyncScheduler {
         }
 
         appEventService.info("sync", "DailySyncScheduler",
-                "Starting daily sync (Green Button) for " + yesterday);
+                "Starting daily sync for " + yesterday);
 
         String dateArg = LocalDate.now(CHICAGO).minusDays(1).format(US_DATE);
-        runSync(List.of("node", "/scripts/sync.js", "--date", dateArg), yesterday);
+        runSync(List.of("node", "/scripts/sync.js", "--granularity", "daily", "--date", dateArg), yesterday);
     }
 
     /**
@@ -69,11 +69,11 @@ public class DailySyncScheduler {
         String label = start.equals(end) ? start : start + " → " + end;
 
         appEventService.info("sync", "DailySyncScheduler",
-                "Starting manual daily sync (Green Button) for " + label);
+                "Starting manual daily sync for " + label);
 
         List<String> command = start.equals(end)
-                ? List.of("node", "/scripts/sync.js", "--date", start)
-                : List.of("node", "/scripts/sync.js", "--start", start, "--end", end);
+                ? List.of("node", "/scripts/sync.js", "--granularity", "daily", "--date", start)
+                : List.of("node", "/scripts/sync.js", "--granularity", "daily", "--start", start, "--end", end);
 
         runSync(command, label);
     }
@@ -118,11 +118,12 @@ public class DailySyncScheduler {
         }
     }
 
-    /** Extract a human-readable summary line (per-service record counts / no-data) from script output. */
+    /** Extract a human-readable summary line from script output, e.g.
+     *  "── 08/12/2026 (daily) — 1 record(s) · 37.30 kWh · 1 written". */
     private String summarize(String output) {
         String summary = output.lines()
                 .map(String::trim)
-                .filter(l -> l.contains("records written") || l.contains("No usage data") || l.contains("records (dry-run)"))
+                .filter(l -> l.contains("(daily)"))
                 .reduce((a, b) -> a + " | " + b)
                 .orElse("");
 

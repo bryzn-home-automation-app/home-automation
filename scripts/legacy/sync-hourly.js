@@ -2,6 +2,10 @@
 /**
  * CoServ SmartHub — Hourly Electric Usage Sync
  *
+ * ⚠ DEPRECATED — moved to scripts/legacy/. Superseded by scripts/sync.js,
+ * which uses the Usage Explorer `utility-usage/poll` API (timeFrame=HOURLY,
+ * 4×15-min points aggregated to 1 hour). Kept for reference; do not extend.
+ *
  * Logs into SmartHub, captures the API bearer token, then calls the
  * /services/secured/averageUsage endpoint directly for each date.
  *
@@ -31,7 +35,7 @@ const PROCESSING_VERSION = '1.1';
 // ─── Secrets ────────────────────────────────────────────────────
 function loadSecrets() {
   const s = {};
-  const envPath = path.join(__dirname, '..', '.env');
+  const envPath = path.join(__dirname, '..', '..', '.env');
   if (fs.existsSync(envPath)) {
     fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
       const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT))\s*=\s*(.+)/);

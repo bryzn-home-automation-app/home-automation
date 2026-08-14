@@ -1,18 +1,23 @@
 #!/usr/bin/env node
 /**
- * CoServ SmartHub → PostgreSQL Energy Usage Sync
+ * CoServ SmartHub → PostgreSQL Usage Sync (Usage Explorer API)
  *
- * Sync modes (automatic):
- *   Daily (Mon-Sat):  sync just yesterday — fast append
- *   Weekly (Sunday):  sync full range from DATA_START_DATE — catches gaps
- *   Zero-guard:       if last 3 Electric days are all 0.00 kWh,
- *                     escalate to weekly sync. If still zeros → warn.
+ * Supersedes the legacy Green Button daily sync and Average Usage hourly sync
+ * (now in scripts/legacy/). Uses the Usage Explorer `utility-usage/poll`
+ * endpoint, which is the same API the portal drives for its charts.
+ *
+ * Two granularities:
+ *   daily  — 1 record/day (the day's total kWh)     → electric_usage
+ *   hourly — 24 records/day; each hour is the sum of the four 15-min
+ *            interval points returned by the API      → hourly_electric_usage
  *
  * Usage:
- *   node scripts/sync.js                    # auto (daily or weekly based on day)
- *   node scripts/sync.js --weekly           # force full-range sync
- *   node scripts/sync.js --date 08/03/2026  # sync a specific single date
- *   node scripts/sync.js --dry-run          # preview only, no DB writes
+ *   node scripts/sync.js                              # both, yesterday
+ *   node scripts/sync.js --granularity daily          # daily only
+ *   node scripts/sync.js --granularity hourly         # hourly only
+ *   node scripts/sync.js --date 08/01/2026            # single date, both
+ *   node scripts/sync.js --start 07/24/2026 --end 08/10/2026
+ *   node scripts/sync.js --dry-run                    # preview, no DB writes
  *
  * Exit: 0 = success, 1 = errors occurred
  */
@@ -25,464 +30,274 @@ const path = require('path');
 const crypto = require('crypto');
 
 // ─── Config ────────────────────────────────────────────────────
-const COSERV = {
-  loginUrl: 'https://coserv.smarthub.coop/ui/#/login',
-  greenButtonPath: '#/usageManagement/greenButton',
-};
+const LOGIN_URL = 'https://coserv.smarthub.coop/ui/#/login';
+const USAGE_EXPLORER_HASH = '#/usageExplorer';
+const POLL_URL = 'https://coserv.smarthub.coop/services/secured/utility-usage/poll';
 
-const SERVICES = [
-  { value: 'ELECTRIC', name: 'Electric', meterType: 'ELECTRIC' },
-  { value: 'GAS', name: 'Natural Gas', meterType: 'GAS' },
-];
+const ACCOUNT_NUMBER = '9002001851';      // string — matches what the portal sends
+const SERVICE_LOCATION = '1059153';       // string
+const METER_ACCOUNT = '9002001851-ELECTRIC';
+const METER_NUMBER = '9002001851-ELECTRIC-ELECTRIC';
 
-const PROCESSING_VERSION = '1.0';
-const SOURCE_LABEL = 'CoServ Green Button';
-const ZERO_GUARD_DAYS = 3; // consecutive zero days triggers weekly sync
-
-function getUsageTable(meterType) {
-  return meterType === 'GAS' ? 'gas_usage' : 'electric_usage';
-}
-
-// ─── Helpers ───────────────────────────────────────────────────
-const fmtDate = (d) => `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}/${d.getFullYear()}`;
-const parseDate = (str) => { const [m,d,y] = str.split('/').map(Number); return new Date(y, m-1, d); };
+const SOURCE_DAILY = 'CoServ Usage Explorer';
+const SOURCE_HOURLY = 'CoServ Usage Explorer';
+const SOURCE_PROVIDER = 'coserv';
+const PROCESSING_VERSION = '2.0';
 
 // ─── Secrets (.env or env vars) ────────────────────────────────
 function loadSecrets() {
-  const secrets = {};
+  const s = {};
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
     fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD|PORTAL_URL)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|DATA_START_DATE|KWH_RATE)\s*=\s*(.+)/);
-      if (m) secrets[m[1]] = m[2].trim();
+      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|KWH_RATE)\s*=\s*(.+)/);
+      if (m) s[m[1]] = m[2].trim();
     });
   }
-  for (const k of ['COSERV_USERNAME','COSERV_PASSWORD','COSERV_PORTAL_URL',
-                   'POSTGRES_DB','POSTGRES_USER','POSTGRES_PASSWORD',
-                   'POSTGRES_HOST','POSTGRES_PORT','DATA_START_DATE','KWH_RATE']) {
-    if (process.env[k]) secrets[k] = process.env[k];
+  for (const k of ['COSERV_USERNAME', 'COSERV_PASSWORD',
+                   'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
+                   'POSTGRES_HOST', 'POSTGRES_PORT', 'KWH_RATE']) {
+    if (process.env[k]) s[k] = process.env[k];
   }
-  return secrets;
+  return s;
 }
 
-// ─── Parse args ─────────────────────────────────────────────────
+// ─── Args ───────────────────────────────────────────────────────
 function parseArgs(argv) {
-  const args = { dryRun: false, date: null, weekly: false, watch: false, startDate: null, endDate: null };
+  const args = { dryRun: false, date: null, startDate: null, endDate: null, granularity: 'both' };
   const a = argv || process.argv;
   for (let i = 2; i < a.length; i++) {
     if (a[i] === '--dry-run') args.dryRun = true;
-    if (a[i] === '--weekly') args.weekly = true;
-    if (a[i] === '--watch') args.watch = true;
-    if (a[i] === '--date' && a[i + 1]) {
-      args.date = a[i + 1];
+    if (a[i] === '--daily') args.granularity = 'daily';
+    if (a[i] === '--hourly') args.granularity = 'hourly';
+    if (a[i] === '--granularity' && a[i + 1]) {
+      const g = a[i + 1].toLowerCase();
+      args.granularity = ['daily', 'hourly', 'both'].includes(g) ? g : 'both';
     }
-    if (a[i] === '--start' && a[i + 1]) {
-      args.startDate = a[i + 1];
-    }
-    if (a[i] === '--end' && a[i + 1]) {
-      args.endDate = a[i + 1];
-    }
+    if (a[i] === '--date' && a[i + 1]) { args.date = a[i + 1]; args.startDate = a[i + 1]; args.endDate = a[i + 1]; }
+    if (a[i] === '--start' && a[i + 1]) args.startDate = a[i + 1];
+    if (a[i] === '--end' && a[i + 1]) args.endDate = a[i + 1];
   }
   return args;
 }
 
-// ─── Sync decision logic ────────────────────────────────────────
-
-/** Is today Sunday? (0 = Sun, 1-6 = Mon-Sat). Accepts optional Date override for testing. */
-function isSunday(now) { return (now || new Date()).getDay() === 0; }
+const fmtDate = (d) =>
+  `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
 
 /**
- * Decide what to sync and in what mode.
- * Returns { startDate, endDate, mode } where mode is 'daily' | 'weekly' | 'zero-guard'.
- * Accepts optional `now` Date for testing.
+ * Resolve the date range to sync. Defaults to yesterday (CoServ posts the
+ * previous day's reading ~5 AM Central). Returns { startDate, endDate }.
  */
-async function decideSyncMode(client, args, secrets, now) {
-  const yesterday = now ? new Date(now) : new Date();
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = fmtDate(yesterday);
-
-  // Explicit --start/--end: custom date range
+function resolveDateRange(args, now) {
   if (args.startDate && args.endDate) {
-    return { startDate: args.startDate, endDate: args.endDate, mode: 'range' };
+    return { startDate: args.startDate, endDate: args.endDate };
   }
+  const y = now ? new Date(now) : new Date();
+  y.setDate(y.getDate() - 1);
+  const yesterday = fmtDate(y);
+  return { startDate: yesterday, endDate: yesterday };
+}
 
-  // Explicit --date: single day range
-  if (args.date) {
-    return { startDate: args.date, endDate: args.date, mode: 'single' };
-  }
+// ─── Timezone helpers (America/Chicago) ────────────────────────
 
-  // Explicit --weekly or Sunday: last 7 days
-  if (args.weekly || isSunday(now)) {
-    const start = new Date(yesterday);
-    start.setDate(start.getDate() - 6); // last 7 days
-    return { startDate: fmtDate(start), endDate: yesterdayStr, mode: args.weekly ? 'weekly (forced)' : 'weekly (Sunday)' };
-  }
-
-  // Daily mode: check for zero gap
-  if (client) {
-    const zeroGap = await checkZeroGap(client);
-    if (zeroGap) {
-      console.log(`⚠  Last ${ZERO_GUARD_DAYS} Electric days all 0 kWh — retrying last 3 days`);
-      const start = new Date(yesterday);
-      start.setDate(start.getDate() - (ZERO_GUARD_DAYS - 1)); // just the last N days
-      return { startDate: fmtDate(start), endDate: yesterdayStr, mode: 'zero-guard' };
-    }
-  }
-
-  // Default: daily — just yesterday
-  return { startDate: yesterdayStr, endDate: yesterdayStr, mode: 'daily' };
+/** Offset (ms east of UTC) for a time zone at a given instant, e.g. -18000000 for CDT. */
+function tzOffsetMs(instant, timeZone) {
+  const dtf = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' });
+  const name = dtf.formatToParts(instant).find((p) => p.type === 'timeZoneName').value;
+  const m = name.match(/GMT([+-])(\d{2}):?(\d{2})?/);
+  if (!m) return 0;
+  const sign = m[1] === '-' ? -1 : 1;
+  const hours = parseInt(m[2], 10);
+  const minutes = parseInt(m[3] || '0', 10);
+  return sign * (hours * 60 + minutes) * 60_000;
 }
 
 /**
- * Check if the last N Electric days in the DB are all 0.00 kWh.
- * Returns true if a zero gap is detected (trigger weekly sync).
+ * Epoch-ms start/end of a calendar day in America/Chicago (CoServ's territory).
+ * These are TRUE UTC instants — exactly what the poll endpoint expects for
+ * startDateTime/endDateTime. Iterates so the offset is correct across DST.
  */
-async function checkZeroGap(client) {
-  try {
-    const { rows } = await client.query(
-      `SELECT usage_kwh, timestamp::date as d
-       FROM electric_usage
-       WHERE source_provider = 'coserv'
-         AND timestamp::date < CURRENT_DATE
-       ORDER BY timestamp::date DESC
-       LIMIT $1`, [ZERO_GUARD_DAYS]
-    );
-    if (rows.length < ZERO_GUARD_DAYS) return false; // not enough data yet
-    const allZero = rows.every(r => parseFloat(r.usage_kwh) === 0);
-    if (allZero) {
-      rows.forEach(r => {
-        const d = r.d instanceof Date ? r.d.toISOString().substring(0,10) : String(r.d || '?');
-        console.log(`   DB: ${d} = ${r.usage_kwh} kWh`);
-      });
-    }
-    return allZero;
-  } catch (e) {
-    console.error('   Zero-gap check failed:', e.message);
-    return false;
+function ctDayBounds(m, d, y) {
+  const utcMidnight = Date.UTC(y, m - 1, d, 0, 0, 0);
+  let start = utcMidnight;
+  for (let i = 0; i < 3; i++) start = utcMidnight - tzOffsetMs(start, 'America/Chicago');
+
+  const nextUtcMidnight = Date.UTC(y, m - 1, d + 1, 0, 0, 0);
+  let end = nextUtcMidnight;
+  for (let i = 0; i < 3; i++) end = nextUtcMidnight - tzOffsetMs(end, 'America/Chicago');
+
+  return { startMs: start, endMs: end - 1 };
+}
+
+// ─── Record mapping (pure, unit-tested) ─────────────────────────
+
+/**
+ * Map a DAILY poll series [{x, y}, …] (1 point per day) to DB records.
+ * `x` is the local wall-clock day encoded as UTC midnight (e.g. local Aug 1
+ * 00:00 → 2026-08-01T00:00:00Z), so formatting it as UTC yields the correct
+ * local calendar-day timestamp.
+ */
+function recordsFromDailyData(data, kwhRate) {
+  if (!Array.isArray(data) || !data.length) return [];
+  const rate = parseFloat(kwhRate) || 0.1171;
+  const records = [];
+  for (const pt of data) {
+    if (pt == null || pt.x == null || pt.y == null) continue;
+    const usageKwh = Math.round(Number(pt.y) * 1000) / 1000;
+    if (!Number.isFinite(usageKwh)) continue;
+    const timestamp = new Date(pt.x).toISOString().replace('T', ' ').substring(0, 19);
+    records.push({
+      timestamp,
+      usageKwh,
+      cost: Math.round(usageKwh * rate * 100) / 100,
+      source: SOURCE_DAILY,
+      sourceProvider: SOURCE_PROVIDER,
+      processingVersion: PROCESSING_VERSION,
+    });
   }
+  return records;
 }
 
 /**
- * After a weekly/zero-guard sync, check if Electric still has 3+ zeros.
- * If so, CoServ may have an outage / portal issue — notify user.
+ * Map a HOURLY ("Interval") poll series to DB records, aggregating the four
+ * 15-minute points of each hour into a single hourly total. `x` is the local
+ * wall-clock time encoded as UTC, so `Math.floor(x / 3600000)` yields the
+ * local hour bucket. Null points are skipped; zero points are kept.
  */
-async function checkPostSyncZeros(client) {
-  try {
-    const { rows } = await client.query(
-      `SELECT usage_kwh, timestamp::date as d
-       FROM electric_usage
-       WHERE source_provider = 'coserv'
-         AND timestamp::date < CURRENT_DATE
-       ORDER BY timestamp::date DESC
-       LIMIT $1`, [ZERO_GUARD_DAYS]
-    );
-    if (rows.length >= ZERO_GUARD_DAYS && rows.every(r => parseFloat(r.usage_kwh) === 0)) {
-      console.log('');
-      console.log('┌─────────────────────────────────────────┐');
-      console.log('│  ⚠  WARNING: Zero usage detected        │');
-      console.log('│                                         │');
-      console.log(`│  Last ${ZERO_GUARD_DAYS} Electric days are all 0.00 kWh. │`);
-      console.log('│  CoServ portal may have changed or      │');
-      console.log('│  there may be a data issue.             │');
-      console.log('│                                         │');
-      console.log('│  Run: npm run test:live                 │');
-      console.log('│  to verify SmartHub selectors still work │');
-      console.log('└─────────────────────────────────────────┘');
-      console.log('');
-    }
-  } catch (e) { /* ignore */ }
-}
-
-// ─── Watch mode: poll for today's electric reading ─────────────────
-
-/**
- * Check if yesterday's electric usage is already in the DB.
- * CoServ posts the previous day's reading at ~5 AM Central.
- */
-async function isYesterdayPopulated(client) {
-  try {
-    const { rows } = await client.query(
-      `SELECT 1 FROM electric_usage
-       WHERE source_provider = 'coserv'
-         AND timestamp::date = ((CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date - 1)
-         AND usage_kwh > 0
-       LIMIT 1`
-    );
-    return rows.length > 0;
-  } catch (e) {
-    console.error('   Watch check failed:', e.message);
-    return false;
+function recordsFromIntervalData(data, kwhRate) {
+  if (!Array.isArray(data) || !data.length) return [];
+  const rate = parseFloat(kwhRate) || 0.1171;
+  const buckets = new Map(); // hourMs -> { sum, n }
+  for (const pt of data) {
+    if (pt == null || pt.x == null || pt.y == null) continue;
+    const y = Number(pt.y);
+    if (!Number.isFinite(y)) continue;
+    const hourMs = Math.floor(pt.x / 3600000) * 3600000;
+    const b = buckets.get(hourMs) || { sum: 0, n: 0 };
+    b.sum += y;
+    b.n += 1;
+    buckets.set(hourMs, b);
   }
-}
-
-/** Return the current hour in America/Chicago (0-23). */
-async function chicagoHour(client) {
-  const { rows } = await client.query(
-    `SELECT EXTRACT(HOUR FROM CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago') AS h`
-  );
-  return parseInt(rows[0].h);
-}
-
-/**
- * Poll every 30 minutes for today's electric reading.
- * Only polls if it's after 5 AM Central — before that, CoServ hasn't posted yet.
- * Exits once today's data is found or if it's past 11 PM Central.
- */
-async function watchMode(client, secrets) {
-  const POLL_MINUTES = 30;
-
-  console.log('👀  Watch mode — polling every', POLL_MINUTES, 'minutes for today\'s electric reading\n');
-
-  while (true) {
-    const hour = await chicagoHour(client);
-
-    if (hour < 5) {
-      // Too early — CoServ hasn't posted today's data yet
-      const minsUntil5 = (5 - hour) * 60;
-      const waitMin = Math.min(minsUntil5, POLL_MINUTES);
-      console.log(`   ⏰  ${hour}:00 CT — before 5 AM, waiting ${waitMin}min until next check`);
-      await new Promise(r => setTimeout(r, waitMin * 60_000));
-      continue;
-    }
-
-    if (hour >= 23) {
-      console.log('   🌙  Past 11 PM CT — stopping watch (data should be available by now)');
-      break;
-    }
-
-      const yesterday = (await client.query(
-        `SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'America/Chicago')::date - 1 AS d`
-      )).rows[0].d;
-      // CoServ posts the previous day's reading at ~5 AM Central.
-      // We poll for yesterday's data, not today's.
-      if (!(await isYesterdayPopulated(client))) {
-        console.log(`   ⚡  No reading for ${yesterday} yet — running sync...`);
-        const [y, m, d] = yesterday.split('-').map(Number);
-        const yesterdayStr = `${String(m).padStart(2,'0')}/${String(d).padStart(2,'0')}/${y}`;
-        await runSync(client, secrets, {
-          startDate: yesterdayStr,
-          endDate: yesterdayStr,
-          mode: 'watch-poll',
-          dryRun: false,
-        });
-
-        if (await isYesterdayPopulated(client)) {
-          console.log(`   ✅  ${yesterday} synced successfully\n`);
-          break;
-        }
-        console.log(`   ⏳  Still no reading for ${yesterday} — retrying in ${POLL_MINUTES} minutes\n`);
-      } else {
-        console.log(`   ✅  ${yesterday} already populated — nothing to do\n`);
-        break;
-      }
-    await new Promise(r => setTimeout(r, POLL_MINUTES * 60_000));
+  const records = [];
+  for (const hourMs of [...buckets.keys()].sort((a, b) => a - b)) {
+    const b = buckets.get(hourMs);
+    const usageKwh = Math.round(b.sum * 1000) / 1000;
+    const timestamp = new Date(hourMs).toISOString().replace('T', ' ').substring(0, 19);
+    records.push({
+      timestamp,
+      usageKwh,
+      cost: Math.round(usageKwh * rate * 100) / 100,
+      source: SOURCE_HOURLY,
+      sourceProvider: SOURCE_PROVIDER,
+      processingVersion: PROCESSING_VERSION,
+    });
   }
+  return records;
 }
 
 // ─── DB helpers ─────────────────────────────────────────────────
-async function getOrCreateMeter(client, accountNumber, serviceName) {
-  let provider = (await client.query(
-    `SELECT id FROM utility_providers WHERE name = 'CoServ'`
-  )).rows[0];
-  if (!provider) {
-    provider = (await client.query(
-      `INSERT INTO utility_providers (name, type) VALUES ('CoServ', 'ELECTRIC') RETURNING id`
-    )).rows[0];
-  }
+async function getOrCreateMeter(client) {
+  let p = (await client.query(`SELECT id FROM utility_providers WHERE name = 'CoServ'`)).rows[0];
+  if (!p) p = (await client.query(`INSERT INTO utility_providers (name, type) VALUES ('CoServ', 'ELECTRIC') RETURNING id`)).rows[0];
 
-  const fullAcct = `${accountNumber}-${serviceName.toUpperCase()}`;
-  let account = (await client.query(
-    `SELECT id FROM utility_accounts WHERE account_number = $1`, [fullAcct]
-  )).rows[0];
-  if (!account) {
-    account = (await client.query(
-      `INSERT INTO utility_accounts (provider_id, account_number, status) VALUES ($1, $2, 'ACTIVE') RETURNING id`,
-      [provider.id, fullAcct]
-    )).rows[0];
-  }
+  let a = (await client.query(`SELECT id FROM utility_accounts WHERE account_number = $1`, [METER_ACCOUNT])).rows[0];
+  if (!a) a = (await client.query(`INSERT INTO utility_accounts (provider_id, account_number, status) VALUES ($1, $2, 'ACTIVE') RETURNING id`, [p.id, METER_ACCOUNT])).rows[0];
 
-  const meterNum = `${fullAcct}-${serviceName.toUpperCase()}`;
-  let meter = (await client.query(
-    `SELECT id FROM meters WHERE meter_number = $1`, [meterNum]
-  )).rows[0];
-  if (!meter) {
-    meter = (await client.query(
-      `INSERT INTO meters (account_id, meter_number, type) VALUES ($1, $2, $3) RETURNING id`,
-      [account.id, meterNum, serviceName === 'Natural Gas' ? 'GAS' : 'ELECTRIC']
-    )).rows[0];
-  }
-
-  return meter.id;
+  let m = (await client.query(`SELECT id FROM meters WHERE meter_number = $1`, [METER_NUMBER])).rows[0];
+  if (!m) m = (await client.query(`INSERT INTO meters (account_id, meter_number, type) VALUES ($1, $2, 'ELECTRIC') RETURNING id`, [a.id, METER_NUMBER])).rows[0];
+  return m.id;
 }
 
-// ─── Green Button XML parser ────────────────────────────────────
-function parseGreenButtonXml(xmlText, kwhRate) {
-  const results = [];
-  const rate = parseFloat(kwhRate) || 0.1171;
+// ─── Login + capture auth token ─────────────────────────────────
+async function captureAuthToken(secrets) {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({ locale: 'en-US' });
+  const page = await context.newPage();
 
-  let tzOffset = -21600;
-  const ltpMatch = xmlText.match(/<LocalTimeParameters[^>]*>[\s\S]*?<\/LocalTimeParameters>/);
-  if (ltpMatch) {
-    const tzMatch = ltpMatch[0].match(/<tzOffset>(-?\d+)<\/tzOffset>/);
-    if (tzMatch) tzOffset = parseInt(tzMatch[1]);
-  }
+  let apiHeaders = null;
 
-  const blockRegex = /<IntervalBlock[^>]*>([\s\S]*?)<\/IntervalBlock>/g;
-  let blockMatch;
-  while ((blockMatch = blockRegex.exec(xmlText)) !== null) {
-    const block = blockMatch[1];
-
-    const uomMatch = block.match(/<uom>(\d+)<\/uom>/);
-    if (uomMatch && parseInt(uomMatch[1]) === 38) continue; // skip demand (kW)
-
-    const readingRegex = /<IntervalReading>([\s\S]*?)<\/IntervalReading>/g;
-    let readingMatch;
-    while ((readingMatch = readingRegex.exec(block)) !== null) {
-      const reading = readingMatch[1];
-      const startMatch = reading.match(/<start>(\d+)<\/start>/);
-      const valueMatch = reading.match(/<value>(\d+)<\/value>/);
-      const multMatch = reading.match(/<powerOfTenMultiplier>(-?\d+)<\/powerOfTenMultiplier>/);
-      if (!startMatch || !valueMatch) continue;
-
-      const epoch = parseInt(startMatch[1]);
-      const rawValue = parseInt(valueMatch[1]);
-      const multiplier = multMatch ? parseInt(multMatch[1]) : 0;
-      const usageKwh = rawValue / Math.pow(10, multiplier);
-
-      const date = new Date(epoch * 1000);
-      const timestamp = date.toISOString().replace('T', ' ').substring(0, 19);
-
-      results.push({
-        timestamp,
-        usageKwh: Math.round(usageKwh * 1000) / 1000,
-        cost: Math.round(usageKwh * rate * 100) / 100,
-        source: SOURCE_LABEL,
-        sourceProvider: 'coserv',
-        processingVersion: PROCESSING_VERSION,
-      });
-    }
-  }
-
-  return results;
-}
-
-// ─── SmartHub interaction ──────────────────────────────────────
-async function fillDateInput(page, ariaLabelledby, dateStr) {
-  // The date inputs have STABLE aria-labelledby attributes:
-  //   start-date-label = Start Date, end-date-label = End Date
-  // Their id (mat-input-N) is dynamically generated by Angular Material and
-  // shifts between sessions — do NOT rely on id. Target by aria-labelledby,
-  // scope to visible inputs, and retry for the calendar popup to settle.
-  let input = null;
-  for (let attempt = 0; attempt < 6; attempt++) {
-    input = page.locator(`input[aria-labelledby="${ariaLabelledby}"]`).filter({ visible: true }).last();
-    if (await input.count() > 0) break;
-    await page.waitForTimeout(2000);
-  }
-  if (!input || (await input.count()) === 0) {
-    throw new Error(`date input "${ariaLabelledby}" not found (visible) after retries`);
-  }
-  await input.click({ force: true }).catch(() => {});
-  await page.keyboard.press('Control+a').catch(() => {});
-  await page.keyboard.press('Delete').catch(() => {});
-  await input.fill(dateStr, { force: true }).catch(async () => {
-    await input.press('Control+a');
-    await input.type(dateStr, { delay: 20 });
+  // Capture the bearer token + x-nisc-* headers from the first secured call.
+  // Attach BEFORE navigation.
+  page.on('request', (req) => {
+    if (apiHeaders) return;
+    if (!req.url().includes('/services/secured/')) return;
+    const auth = req.headers()['authorization'];
+    if (!auth || !auth.startsWith('Bearer ')) return;
+    apiHeaders = {
+      authorization: auth,
+      'x-nisc-smarthub-username': req.headers()['x-nisc-smarthub-username'] || '',
+      'x-nisc-smarthub-customernumber': req.headers()['x-nisc-smarthub-customernumber'] || '',
+      'content-type': 'application/json',
+      accept: 'application/json',
+      referer: 'https://coserv.smarthub.coop/ui/',
+      cassandracacheable: 'USE_CACHE',
+    };
   });
-  // Dismiss the calendar popup by pressing Enter (accepts the date) rather
-  // than Escape, which can close the whole dialog or blur the next field.
-  await page.keyboard.press('Enter').catch(() => {});
-  await page.waitForTimeout(400);
-}
 
-async function downloadGreenButton(page, serviceValue, startDate, endDate) {
+  await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
   await page.waitForTimeout(3000);
+  await page.locator('input[aria-label="Email"]').fill(secrets.COSERV_USERNAME);
+  await page.locator('input[aria-label="Password"]').fill(secrets.COSERV_PASSWORD);
+  await page.locator('button:has-text("Sign In")').click();
+  await page.waitForTimeout(6000);
 
-  // Wait for the download button to appear (not the "What is Green Button?" link)
-  let btnFound = false;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    try {
-      await page.waitForSelector('[data-cy="greenButtonDownloadMyData"]', { timeout: 4000 });
-      btnFound = true;
-      break;
-    } catch {
-      // Not visible yet — wait and retry
-    }
-    await page.waitForTimeout(4000);
-  }
-  if (!btnFound) {
-    const pageText = await page.evaluate(() => document.body.innerText.substring(0, 1500));
-    console.error('   Page text:', pageText);
-    throw new Error('Green Button download button not found on page');
+  if (page.url().includes('/login') || page.url().includes('#/login')) {
+    await browser.close();
+    throw new Error('Login failed');
   }
 
-  // Close any lingering dialog first, then wait for backdrop to clear
-  await page.evaluate(() => {
-    const backdrop = document.querySelector('.cdk-overlay-backdrop');
-    if (backdrop) backdrop.remove();
-  });
-  await page.waitForTimeout(1000);
+  // Navigate to Usage Explorer to force secured requests (accounts/settings
+  // fire immediately and carry the bearer token + x-nisc headers).
+  await page.evaluate((h) => { window.location.hash = h; }, USAGE_EXPLORER_HASH);
+  await page.waitForTimeout(8000);
 
-  // Click the correct Green Button download button (use evaluate to bypass overlay)
-  let clicked = false;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    clicked = await page.evaluate(() => {
-      const btn = document.querySelector('[data-cy="greenButtonDownloadMyData"]');
-      if (btn) { (btn).click(); return true; }
-      return false;
+  await browser.close();
+
+  if (!apiHeaders) {
+    throw new Error('Could not capture API auth token — no secured request fired');
+  }
+  return apiHeaders;
+}
+
+// ─── Fetch usage for a date via the poll API ─────────────────────
+async function pollUntilComplete(apiHeaders, payload) {
+  let json = null;
+  for (let attempt = 1; attempt <= 6; attempt++) {
+    const resp = await fetch(POLL_URL, {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify(payload),
     });
-    if (clicked) break;
-    await page.waitForTimeout(3000);
-  }
-  if (!clicked) throw new Error('Could not click Green Button download button');
-  await page.waitForTimeout(5000);
-
-  // Wait for the dialog to open
-  await page.waitForSelector('.mat-dialog-container', { timeout: 10000 }).catch(() => {
-    throw new Error('Green Button dialog did not open');
-  });
-
-  // These are NATIVE <select> elements (Angular Material mat-native-select).
-  // The parent mat-form-field shares the SAME id as the inner select, so a
-  // bare `#mat-input-N` selector matched the wrapper div and threw
-  // "Element is not a <select> element". Target the <select> via aria-label.
-  // Values (per CoServ UI):
-  //   Service    → Electric / Natural Gas
-  //   Interval   → MONTHLY / DAILY / INTERVAL
-  //   File Format → Green Button (XML) / CSV
-  await page.selectOption('select[aria-label="Service"]', { label: serviceValue });
-  await page.waitForTimeout(300);
-  await page.selectOption('select[aria-label="Interval"]', { label: 'MONTHLY' });
-  await page.waitForTimeout(300);
-  await page.selectOption('select[aria-label="File Format"]', { label: 'Green Button (XML)' });
-  await page.waitForTimeout(300);
-  await fillDateInput(page, 'start-date-label', startDate);
-  await fillDateInput(page, 'end-date-label', endDate);
-  await page.waitForTimeout(300);
-
-  const downloadPromise = page.waitForEvent('download', { timeout: 30000 }).catch(() => null);
-
-  // Click Download via evaluate to bypass overlay interception
-  await page.evaluate(() => {
-    const dialog = document.querySelector('.mat-dialog-container');
-    if (!dialog) return;
-    const buttons = dialog.querySelectorAll('button');
-    for (const btn of buttons) {
-      if (btn.textContent?.trim() === 'Download' && !btn.disabled) { btn.click(); return; }
+    if (!resp.ok) {
+      throw new Error(`API error ${resp.status}: ${resp.statusText}`);
     }
-  });
-
-  const download = await downloadPromise;
-  if (!download) {
-    const bodyText = await page.evaluate(() => document.body.innerText || '');
-    if (bodyText.includes('No usage data')) return { noData: true };
-    return null;
+    json = await resp.json();
+    if (json.status === 'COMPLETE') return json;
+    // PENDING — CoServ is computing; poll again (portal interval is ~5s).
+    await new Promise((r) => setTimeout(r, 5000));
   }
+  throw new Error('Poll did not reach COMPLETE within 6 attempts');
+}
 
-  const stream = await download.createReadStream();
-  const chunks = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  return { data: Buffer.concat(chunks), filename: download.suggestedFilename() };
+function electricSeries(json) {
+  const electric = json && json.data && json.data.ELECTRIC;
+  if (!electric || !electric.length) return [];
+  return (electric[0].series && electric[0].series[0] && electric[0].series[0].data) || [];
+}
+
+function buildPayload(timeFrame, secrets, startMs, endMs) {
+  return {
+    timeFrame, // 'DAILY' | 'HOURLY'
+    userId: secrets.COSERV_USERNAME,
+    screen: 'USAGE_EXPLORER',
+    includeDemand: false,
+    serviceLocationNumber: SERVICE_LOCATION,
+    accountNumber: ACCOUNT_NUMBER,
+    industries: ['GAS', 'ELECTRIC'],
+    startDateTime: startMs,
+    endDateTime: endMs,
+    selectedIndustry: 'ELECTRIC',
+  };
 }
 
 // ─── Main ──────────────────────────────────────────────────────
@@ -490,13 +305,24 @@ async function main(cfg) {
   const secrets = loadSecrets();
   const args = { ...parseArgs(), ...(cfg || {}) };
 
-  // Validate secrets before DB connect
   if (!secrets.COSERV_USERNAME || !secrets.COSERV_PASSWORD) {
     console.error('❌  Missing COSERV_USERNAME or COSERV_PASSWORD in .env');
     process.exit(1);
   }
 
-  // Connect to DB (unless dry-run) — needed for sync decision
+  const { startDate, endDate } = resolveDateRange(args);
+  const batchId = crypto.randomUUID();
+  const kwhRate = secrets.KWH_RATE || '0.1171';
+
+  const doDaily = args.granularity === 'both' || args.granularity === 'daily';
+  const doHourly = args.granularity === 'both' || args.granularity === 'hourly';
+
+  console.log('⚡  CoServ Sync (Usage Explorer API)');
+  console.log(`   Granularity: ${args.granularity}  |  Range: ${startDate} → ${endDate}`);
+  console.log(`   Batch: ${batchId}`);
+  if (args.dryRun) console.log('   DRY RUN (no DB writes)');
+  console.log('');
+
   let client;
   if (!args.dryRun) {
     client = new Client({
@@ -509,208 +335,137 @@ async function main(cfg) {
     await client.connect();
   }
 
-  // Decide sync mode
-  const { startDate, endDate, mode } = await decideSyncMode(client, args, secrets);
-  const batchId = crypto.randomUUID();
+  let meterId = null;
+  if (!args.dryRun && client) meterId = await getOrCreateMeter(client);
 
-  console.log('⚡  CoServ Sync');
-  console.log(`   Mode: ${mode}  |  Range: ${startDate} → ${endDate}`);
-  console.log(`   Batch: ${batchId}`);
-  if (args.dryRun) console.log('   Mode: DRY RUN (no DB writes)');
-  if (!client) console.log('   DB: skipped (dry-run)');
-  console.log('');
+  // Step 1: capture auth token
+  let apiHeaders;
+  try {
+    apiHeaders = await captureAuthToken(secrets);
+    console.log('✓  Logged into SmartHub and captured auth token\n');
+  } catch (e) {
+    console.error('❌  Login/auth capture failed:', e.message);
+    if (client) await client.end();
+    process.exit(1);
+  }
 
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ locale: 'en-US', acceptDownloads: true });
-  const page = await context.newPage();
+  // Step 2: iterate dates
+  const [sm, sd, sy] = startDate.split('/').map(Number);
+  const [em, ed, ey] = endDate.split('/').map(Number);
+  const cursor = new Date(sy, sm - 1, sd);
+  const end = new Date(ey, em - 1, ed);
 
   let totalRecords = 0;
   let hadError = false;
 
-  try {
-    // ── Login ──
-    console.log('── Login ──');
-    await page.goto(COSERV.loginUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await page.waitForTimeout(3000);
+  while (cursor <= end) {
+    const dateStr = fmtDate(cursor);
+    const [m, d, y] = dateStr.split('/').map(Number);
+    const { startMs, endMs } = ctDayBounds(m, d, y);
 
-    await page.locator('input[aria-label="Email"]').fill(secrets.COSERV_USERNAME);
-    await page.locator('input[aria-label="Password"]').fill(secrets.COSERV_PASSWORD);
-    await page.waitForTimeout(200);
-    await page.locator('button:has-text("Sign In")').click();
-    await page.waitForTimeout(6000);
-
-    if (page.url().includes('/login') || page.url().includes('#/login')) {
-      const hasError = await page.locator('text=Invalid Login').count() > 0;
-      console.error(hasError ? '❌  Login failed: Invalid credentials' : '❌  Login failed: still on login page');
-      process.exit(1);
-    }
-    console.log('✓  Logged into SmartHub');
-
-    // Navigate to Green Button page — same reliable pattern as sync-hourly.js:
-    // go through #/home first to bootstrap the Angular SPA, then client-side
-    // hash-navigate to the Green Button route. A full page.goto() to the deep
-    // route races with Angular's bootstrap and intermittently renders blank.
-    for (let navAttempt = 0; navAttempt < 5; navAttempt++) {
-      // Step 1: bootstrap the SPA on the home route
-      await page.evaluate(() => { window.location.hash = '#/home'; });
-      await page.waitForTimeout(3000);
-
-      // Step 2: client-side navigate to Green Button
-      await page.evaluate(() => { window.location.hash = '#/usageManagement/greenButton'; });
-
-      // Step 3: poll for the download button (distinctive Green Button element)
-      let hasContent = false;
-      for (let poll = 0; poll < 15; poll++) {
-        const text = await page.evaluate(() => document.body.innerText || '');
-        if (text.includes('Green Button Download') || text.includes('Download My Data')) {
-          hasContent = true;
-          break;
-        }
-        await page.waitForTimeout(2000);
-      }
-      if (hasContent) break;
-
-      // If still blank, do a full reload and try again next iteration
-      console.log('   Green Button page is blank, retrying navigation...');
-      await page.reload({ waitUntil: 'domcontentloaded', timeout: 20000 }).catch(() => {});
-      await page.waitForTimeout(3000);
-    }
-
-    const bodyLen = await page.evaluate(() => document.body.innerText.length);
-    if (bodyLen < 50) {
-      console.error('❌  Green Button page never rendered after multiple attempts');
-      process.exit(1);
-    }
-    console.log('✓  On Green Button page\n');
-
-    // ── Download per service ──
-    for (const svc of SERVICES) {
-      // Dismiss any lingering dialog/overlay between services
-      await page.evaluate(() => {
-        document.querySelectorAll('.cdk-overlay-backdrop').forEach(b => b.remove());
-        const closeBtn = document.querySelector('.mat-dialog-container button[aria-label="Close"]');
-        if (closeBtn) (closeBtn).click();
-      });
-      await page.waitForTimeout(2000);
-
-      console.log(`── ${svc.name} ──`);
-
-      const result = await downloadGreenButton(page, svc.name, startDate, endDate);
-
-      if (!result) {
-        console.log(`   ✗  Download failed\n`);
-        hadError = true;
-        continue;
-      }
-
-      if (result.noData) {
-        // CoServ hasn't posted the daily total yet. DO NOT write a 0-kWh
-        // placeholder — the 30-min retry loop will pick up the real value
-        // when it posts. Writing a placeholder creates a duplicate 0.000 row
-        // that pollutes the daily table and shows up as "no data".
-        console.log(`   ○  No usage data yet for this range — skipping (will retry)`);
-        console.log('');
-        continue;
-      }
-
-      console.log(`   ✓  Downloaded: ${result.filename} (${result.data.length} bytes)`);
-
-      const AdmZip = require('adm-zip');
-      const zip = new AdmZip(result.data);
-      const xmlEntries = zip.getEntries().filter(e => e.entryName.endsWith('.xml'));
-
-      let svcRecords = 0;
-      for (const entry of xmlEntries) {
-        const xmlText = entry.getData().toString('utf8');
-        const records = parseGreenButtonXml(xmlText, secrets.KWH_RATE || '0.1171');
-        console.log(`   Parsed ${records.length} readings from ${entry.entryName}`);
-
-        if (records.length > 0 && client) {
-          const meterId = await getOrCreateMeter(client, '9002001851', svc.name);
-          const usageTable = getUsageTable(svc.meterType);
-          for (const rec of records) {
+    // ── Daily ──
+    if (doDaily) {
+      try {
+        const json = await pollUntilComplete(apiHeaders, buildPayload('DAILY', secrets, startMs, endMs));
+        const records = recordsFromDailyData(electricSeries(json), kwhRate);
+        if (args.dryRun) {
+          console.log(`── ${dateStr} (daily) — ${records.length} record(s)`);
+          for (const r of records) console.log(`   ${r.timestamp} | ${r.usageKwh} kWh`);
+        } else if (records.length > 0 && client) {
+          let inserted = 0;
+          for (const r of records) {
             await client.query(
-              `INSERT INTO ${usageTable} (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
+              `INSERT INTO electric_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT DO NOTHING`,
-              [meterId, rec.timestamp, rec.usageKwh, rec.cost || 0,
-               rec.source, rec.sourceProvider, batchId, rec.processingVersion]
+              [meterId, r.timestamp, r.usageKwh, r.cost, r.source, r.sourceProvider, batchId, r.processingVersion]
             );
+            inserted++;
           }
-        } else if (records.length > 0 && args.dryRun) {
-          for (const rec of records) {
-            console.log(`      [dry-run] ${rec.timestamp} | ${rec.usageKwh} kWh`);
-          }
+          const dayTotal = records.reduce((s, r) => s + r.usageKwh, 0).toFixed(2);
+          console.log(`── ${dateStr} (daily) — ${records.length} record(s) · ${dayTotal} kWh · ${inserted} written`);
+        } else {
+          console.log(`── ${dateStr} (daily) — 0 records (no data posted yet)`);
         }
-        svcRecords += records.length;
+        totalRecords += records.length;
+      } catch (e) {
+        console.error(`── ${dateStr} (daily) — error: ${e.message}`);
+        hadError = true;
       }
-
-      console.log(`   ${svc.name}: ${svcRecords} records ${args.dryRun ? '(dry-run)' : 'written'}\n`);
-      totalRecords += svcRecords;
     }
 
-    // Post-sync: if zero-guard still has zeros → warn the user
-    if (client && mode === 'zero-guard') {
-      await checkPostSyncZeros(client);
+    // ── Hourly (4×15-min → 1 hour) ──
+    if (doHourly) {
+      try {
+        const json = await pollUntilComplete(apiHeaders, buildPayload('HOURLY', secrets, startMs, endMs));
+        const records = recordsFromIntervalData(electricSeries(json), kwhRate);
+        const dayTotal = records.reduce((s, r) => s + r.usageKwh, 0);
+        const nonZero = records.filter((r) => r.usageKwh > 0).length;
+
+        if (args.dryRun) {
+          console.log(`── ${dateStr} (hourly) — ${records.length} hour(s) · ${nonZero} non-zero · ${dayTotal.toFixed(2)} kWh`);
+          for (const r of records.slice(0, 3)) console.log(`   ${r.timestamp} | ${r.usageKwh} kWh`);
+          if (records.length > 3) console.log(`   ... and ${records.length - 3} more`);
+        } else if (records.length > 0 && client) {
+          if (nonZero === 0) {
+            // CoServ hasn't posted this day's interval data yet. Don't write
+            // 0-kWh placeholders — a later retry fills the real values.
+            console.log(`── ${dateStr} (hourly) — 0 kWh total · skipping (not posted yet)`);
+          } else {
+            let inserted = 0;
+            for (const r of records) {
+              await client.query(
+                `INSERT INTO hourly_electric_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 ON CONFLICT (meter_id, timestamp, source_provider) DO UPDATE SET
+                   usage_kwh = EXCLUDED.usage_kwh, cost = EXCLUDED.cost, source = EXCLUDED.source,
+                   ingestion_batch_id = EXCLUDED.ingestion_batch_id, processing_version = EXCLUDED.processing_version`,
+                [meterId, r.timestamp, r.usageKwh, r.cost, r.source, r.sourceProvider, batchId, r.processingVersion]
+              );
+              inserted++;
+            }
+            console.log(`── ${dateStr} (hourly) — ${records.length} hour(s) · ${dayTotal.toFixed(2)} kWh · ${inserted} written`);
+          }
+        } else {
+          console.log(`── ${dateStr} (hourly) — 0 records (no data)`);
+        }
+        totalRecords += records.length;
+      } catch (e) {
+        console.error(`── ${dateStr} (hourly) — error: ${e.message}`);
+        hadError = true;
+      }
     }
 
-  } catch (e) {
-    console.error('\n❌  Fatal error:', e.message);
-    hadError = true;
-  } finally {
-    await browser.close();
-    if (client) await client.end();
+    cursor.setDate(cursor.getDate() + 1);
   }
 
+  if (client) await client.end();
+
   // ── Summary ──
-  console.log(`╔═══════════════════════════════════╗`);
-  console.log(`║  Mode: ${mode.padEnd(26)}║`);
+  console.log('');
+  console.log('╔═══════════════════════════════════╗');
+  console.log(`║  Range: ${startDate} → ${endDate}${' '.repeat(Math.max(0, 26 - (startDate.length + 5 + endDate.length)))}║`);
   console.log(`║  Total: ${String(totalRecords).padStart(3)} records${' '.repeat(12)}║`);
   console.log(`║  Status: ${(hadError ? '⚠ Errors' : '✅ Success').padEnd(25)}║`);
-  console.log(`╚═══════════════════════════════════╝\n`);
+  console.log('╚═══════════════════════════════════╝\n');
 
-  return { hadError, totalRecords, mode };
+  return { hadError, totalRecords };
 }
 
-// Run main() only when invoked directly (not when required as module for tests)
 if (require.main === module) {
   (async () => {
-    const args = parseArgs();
-
-    if (args.watch) {
-      // ── Watch mode: poll every 30 min for today's electric reading ──
-      const secrets = loadSecrets();
-      const client = new Client({
-        host: secrets.POSTGRES_HOST || 'localhost',
-        port: secrets.POSTGRES_PORT || 5432,
-        database: secrets.POSTGRES_DB || 'homeplatform',
-        user: secrets.POSTGRES_USER || 'homeplatform',
-        password: secrets.POSTGRES_PASSWORD || 'changeme',
-      });
-      await client.connect();
-      try {
-        await watchMode(client, secrets);
-      } finally {
-        await client.end();
-      }
-      process.exit(0);
-    }
-
     const result = await main();
     process.exit(result.hadError ? 1 : 0);
   })();
 }
 
-// Export testable functions
 module.exports = {
   parseArgs,
-  decideSyncMode,
-  checkZeroGap,
-  checkPostSyncZeros,
-  parseGreenButtonXml,
+  resolveDateRange,
   fmtDate,
-  parseDate,
-  isSunday,
-  SERVICES,
-  ZERO_GUARD_DAYS,
+  tzOffsetMs,
+  ctDayBounds,
+  recordsFromDailyData,
+  recordsFromIntervalData,
+  buildPayload,
 };
