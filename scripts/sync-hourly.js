@@ -151,21 +151,87 @@ async function captureAuthToken(secrets) {
   return { bearerToken, apiHeaders };
 }
 
+// ─── Timezone helpers ───────────────────────────────────────────
+
+/** Offset (ms east of UTC) for a time zone at a given instant, e.g. -18000000 for CDT. */
+function tzOffsetMs(instant, timeZone) {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    timeZoneName: 'longOffset',
+  });
+  const name = dtf.formatToParts(instant).find((p) => p.type === 'timeZoneName').value;
+  const m = name.match(/GMT([+-])(\d{2}):?(\d{2})?/);
+  if (!m) return 0;
+  const sign = m[1] === '-' ? -1 : 1;
+  const hours = parseInt(m[2], 10);
+  const minutes = parseInt(m[3] || '0', 10);
+  return sign * (hours * 60 + minutes) * 60_000;
+}
+
+/**
+ * Epoch-ms start/end of a calendar day in America/Chicago (CoServ's territory).
+ * Iterates a couple of times so the offset is correct across DST transitions.
+ */
+function ctDayBounds(m, d, y) {
+  const utcMidnight = Date.UTC(y, m - 1, d, 0, 0, 0);
+  let start = utcMidnight;
+  for (let i = 0; i < 3; i++) start = utcMidnight - tzOffsetMs(start, 'America/Chicago');
+
+  const nextUtcMidnight = Date.UTC(y, m - 1, d + 1, 0, 0, 0);
+  let end = nextUtcMidnight;
+  for (let i = 0; i < 3; i++) end = nextUtcMidnight - tzOffsetMs(end, 'America/Chicago');
+
+  return { startMs: start, endMs: end - 1 };
+}
+
+/**
+ * Convert the averageUsage response payload [{y, name: "12am"}, …] into DB
+ * records. Pure — no I/O — so it can be unit-tested. Skips null values and
+ * unparsable hour labels; zero values are kept (a real hour can be 0 kWh).
+ */
+function recordsFromUsageData(data, m, d, y, kwhRate) {
+  if (!Array.isArray(data) || !data.length) return [];
+  const records = [];
+  for (const pt of data) {
+    const label = (pt && pt.name ? pt.name : '').trim();
+    let hour = -1;
+    const apMatch = label.match(/^(\d{1,2})(am|pm)/i);
+    if (apMatch) {
+      let h = parseInt(apMatch[1], 10);
+      if (h === 12) h = 0;
+      if (apMatch[2].toLowerCase() === 'pm') h += 12;
+      hour = h;
+    }
+
+    if (hour < 0 || hour > 23 || pt == null || pt.y == null) continue;
+
+    const usageKwh = Math.round(Number(pt.y) * 1000) / 1000;
+    if (!Number.isFinite(usageKwh)) continue;
+
+    records.push({
+      timestamp: tsForDateAndHour(m, d, y, hour),
+      usageKwh,
+      cost: Math.round(usageKwh * kwhRate * 100) / 100,
+      source: SOURCE_LABEL,
+      sourceProvider: SOURCE_PROVIDER,
+      processingVersion: PROCESSING_VERSION,
+    });
+  }
+  return records;
+}
+
 // ─── Fetch usage for a date via API ─────────────────────────────
 async function fetchUsageForDate(apiHeaders, dateStr, kwhRate = 0.1171) {
   const [m, d, y] = dateStr.split('/').map(Number);
 
-  // Start and end of the day in CT (UTC-5), converted to epoch ms
-  // CT date: use noon UTC representation to avoid DST edge cases
-  const startOfDay = new Date(Date.UTC(y, m - 1, d, 0, 0, 0));
-  const endOfDay = new Date(Date.UTC(y, m - 1, d, 23, 59, 59));
+  const { startMs, endMs } = ctDayBounds(m, d, y);
 
   const payload = {
     accountNumber: 9002001851,
     serviceLocationNumber: 1059153,
     industries: ['ELECTRIC'],
-    startDateTime: startOfDay.getTime(),
-    endDateTime: endOfDay.getTime(),
+    startDateTime: startMs,
+    endDateTime: endMs,
     reportType: 'TIME_OF_DAY',
     userId: 'bryzncode@gmail.com',
   };
@@ -187,36 +253,7 @@ async function fetchUsageForDate(apiHeaders, dateStr, kwhRate = 0.1171) {
     return [];
   }
 
-  const data = electric.usageSeries[0].data;
-  if (!data || !data.length) return [];
-
-  // Convert API response [{y: 1.31, name: "12am"}, ...] to DB records
-  const records = [];
-  for (const pt of data) {
-    const label = (pt.name || '').trim();
-    // Parse hour label
-    let hour = -1;
-    const apMatch = label.match(/^(\d{1,2})(am|pm)/i);
-    if (apMatch) {
-      let h = parseInt(apMatch[1], 10);
-      if (h === 12) h = 0;
-      if (apMatch[2].toLowerCase() === 'pm') h += 12;
-      hour = h;
-    }
-
-    if (hour < 0 || hour > 23 || pt.y == null) continue;
-
-    records.push({
-      timestamp: tsForDateAndHour(m, d, y, hour),
-      usageKwh: Math.round(pt.y * 1000) / 1000,
-      cost: Math.round(pt.y * kwhRate * 100) / 100,
-      source: SOURCE_LABEL,
-      sourceProvider: SOURCE_PROVIDER,
-      processingVersion: PROCESSING_VERSION,
-    });
-  }
-
-  return records;
+  return recordsFromUsageData(electric.usageSeries[0].data, m, d, y, kwhRate);
 }
 
 // ─── Main ──────────────────────────────────────────────────────
@@ -279,33 +316,44 @@ async function main() {
     const dateStr = fmtDate(cursor);
     const records = await fetchUsageForDate(apiHeaders, dateStr, secrets.KWH_RATE || '0.1171');
     const dailyTotal = records.reduce((s, r) => s + r.usageKwh, 0);
+    const nonZero = records.filter((r) => r.usageKwh > 0).length;
+    const dayLabel = `${records.length} records · ${nonZero} non-zero · ${dailyTotal.toFixed(2)} kWh`;
 
     if (args.dryRun) {
-      console.log(`── ${dateStr} — ${records.length} records, ${dailyTotal.toFixed(2)} kWh total`);
+      console.log(`── ${dateStr} — ${dayLabel} total`);
       for (const r of records.slice(0, 3)) {
         console.log(`   ${r.timestamp} | ${r.usageKwh} kWh`);
       }
       if (records.length > 3) console.log(`   ... and ${records.length - 3} more`);
     } else if (records.length > 0 && client) {
-      const meterId = await getOrCreateMeter(client);
-      let inserted = 0;
-      for (const r of records) {
-        try {
-          await client.query(
-            `INSERT INTO hourly_electric_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-             ON CONFLICT (meter_id, timestamp, source_provider) DO UPDATE SET
-               usage_kwh = EXCLUDED.usage_kwh, cost = EXCLUDED.cost, source = EXCLUDED.source,
-               ingestion_batch_id = EXCLUDED.ingestion_batch_id, processing_version = EXCLUDED.processing_version`,
-            [meterId, r.timestamp, r.usageKwh, r.cost,
-             r.source, r.sourceProvider, batchId, r.processingVersion]
-          );
-          inserted++;
-        } catch (e) {
-          console.error(`   DB error ${r.timestamp}: ${e.message}`);
+      if (nonZero === 0) {
+        // CoServ hasn't posted this day's hourly data yet. Don't write 0-kWh
+        // placeholders — the 30-min scheduler retry fills the real values later.
+        console.log(`── ${dateStr} — ${dayLabel} total · skipping (not posted yet)`);
+      } else {
+        const meterId = await getOrCreateMeter(client);
+        let inserted = 0;
+        // Upsert: one row per hour (unique on meter_id + timestamp + source_provider).
+        // When CoServ later posts updated/corrected values, they overwrite in place —
+        // so a day never exceeds 24 rows per meter.
+        for (const r of records) {
+          try {
+            await client.query(
+              `INSERT INTO hourly_electric_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+               ON CONFLICT (meter_id, timestamp, source_provider) DO UPDATE SET
+                 usage_kwh = EXCLUDED.usage_kwh, cost = EXCLUDED.cost, source = EXCLUDED.source,
+                 ingestion_batch_id = EXCLUDED.ingestion_batch_id, processing_version = EXCLUDED.processing_version`,
+              [meterId, r.timestamp, r.usageKwh, r.cost,
+               r.source, r.sourceProvider, batchId, r.processingVersion]
+            );
+            inserted++;
+          } catch (e) {
+            console.error(`   DB error ${r.timestamp}: ${e.message}`);
+          }
         }
+        console.log(`── ${dateStr} — ${dayLabel} total · ${inserted} written`);
       }
-      console.log(`── ${dateStr} — ${inserted} records, ${dailyTotal.toFixed(2)} kWh total`);
     } else if (records.length === 0) {
       console.log(`── ${dateStr} — 0 records (no data)`);
     }
@@ -336,4 +384,4 @@ if (require.main === module) {
   })();
 }
 
-module.exports = { parseArgs, fmtDate };
+module.exports = { parseArgs, fmtDate, recordsFromUsageData, ctDayBounds, tzOffsetMs };

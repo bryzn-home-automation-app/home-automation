@@ -5,7 +5,7 @@
   "scripts": {
     "sync": "node scripts/sync.js",
     "sync:dry-run": "node scripts/sync.js --dry-run",
-    "test": "node --test test/sync.test.js",
+    "test": "node --test test/sync.test.js test/sync-hourly.test.js",
     "test:live": "node test/coserv-live-test.js"
   },
   "devDependencies": {
