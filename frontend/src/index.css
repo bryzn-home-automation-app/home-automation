@@ -106,41 +106,41 @@
    Light theme
    ═══════════════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  --appbg:              #f8fafc;
+  --appbg:              #f1f5f9;
   --appsurface:         #ffffff;
-  --appsurface-raised:  rgba(255, 255, 255, 0.94);
-  --appinset:           #eef2f7;
-  --appinset-strong:    #e2e8f0;
+  --appsurface-raised:  rgba(255, 255, 255, 0.96);
+  --appinset:           #e2e8f0;
+  --appinset-strong:    #cbd5e1;
 
-  --apptext:            #0f172a;
+  --apptext:            #0b1220;
   --apptext-soft:       #1e293b;
-  --apptext-muted:      #334155;
-  --apptext-dim:        #475569;
+  --apptext-muted:      #1e293b;
+  --apptext-dim:        #334155;
 
-  --appborder:          rgba(15, 23, 42, 0.14);
-  --appborder-light:    rgba(15, 23, 42, 0.08);
-  --appborder-hover:    rgba(15, 23, 42, 0.24);
+  --appborder:          rgba(15, 23, 42, 0.22);
+  --appborder-light:    rgba(15, 23, 42, 0.14);
+  --appborder-hover:    rgba(15, 23, 42, 0.34);
 
-  --appaccent:          #047857;
-  --appaccent-soft:     rgba(5, 150, 105, 0.14);
-  --appaccent-border:   rgba(4, 120, 87, 0.4);
-  --appaccent-text:     #065f46;
+  --appaccent:          #065f46;
+  --appaccent-soft:     rgba(5, 150, 105, 0.18);
+  --appaccent-border:   rgba(6, 95, 70, 0.5);
+  --appaccent-text:     #064e3b;
 
-  --appsuccess:         #15803d;
-  --appwarning:         #b45309;
-  --appdanger:          #be123c;
+  --appsuccess:         #166534;
+  --appwarning:         #92400e;
+  --appdanger:          #9f1239;
 
-  --appglow:            rgba(56, 189, 248, 0.1);
-  --appglow-accent:     rgba(5, 150, 105, 0.1);
-  --appglow-header:     rgba(0, 0, 0, 0.03);
+  --appglow:            rgba(56, 189, 248, 0.12);
+  --appglow-accent:     rgba(5, 150, 105, 0.12);
+  --appglow-header:     rgba(0, 0, 0, 0.04);
 
   --appchart-bg:        #ffffff;
-  --appchart-grid:      rgba(15, 23, 42, 0.1);
-  --appchart-tick:      #475569;
-  --appchart-border:    rgba(15, 23, 42, 0.14);
+  --appchart-grid:      rgba(15, 23, 42, 0.16);
+  --appchart-tick:      #334155;
+  --appchart-border:    rgba(15, 23, 42, 0.2);
 
-  --appshadow:          rgba(15, 23, 42, 0.08);
-  --appshadow-lg:       rgba(15, 23, 42, 0.16);
+  --appshadow:          rgba(15, 23, 42, 0.12);
+  --appshadow-lg:       rgba(15, 23, 42, 0.22);
 
   color-scheme: light;
 }
