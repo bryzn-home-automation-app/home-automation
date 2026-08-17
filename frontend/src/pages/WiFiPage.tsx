@@ -56,8 +56,10 @@ export default function WiFiPage() {
     return `${window.location.origin}/guest`;
   }, []);
 
-  const ssid = 'HomeAutomation';
-  const password = 'smartguest2025';
+  // Read network credentials from build-time env so the real password never
+  // lives in source control. Set VITE_WIFI_SSID / VITE_WIFI_PASSWORD (see .env.example).
+  const ssid = import.meta.env.VITE_WIFI_SSID ?? '';
+  const password = import.meta.env.VITE_WIFI_PASSWORD ?? '';
 
   const guestSessions = useQuery({
     queryKey: ['guest-sessions'],
@@ -100,7 +102,12 @@ export default function WiFiPage() {
   }, [guestUrl, theme]);
 
   const handleCopyNetwork = () => {
-    navigator.clipboard.writeText(`SSID: ${ssid}\nPassword: ${password}\nGuest URL: ${guestUrl}`);
+    const lines = [
+      ssid && `SSID: ${ssid}`,
+      password && `Password: ${password}`,
+      `Guest URL: ${guestUrl}`,
+    ].filter(Boolean) as string[];
+    navigator.clipboard.writeText(lines.join('\n'));
     setCopySuccess(true);
     setTimeout(() => setCopySuccess(false), 2000);
   };
@@ -187,7 +194,7 @@ export default function WiFiPage() {
             <div className="flex items-center justify-between rounded-2xl border border-appborder bg-appinset px-4 py-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Network Name</p>
-                <p className="mt-0.5 text-base font-semibold text-apptext">{ssid}</p>
+                <p className={`mt-0.5 text-base font-semibold ${ssid ? 'text-apptext' : 'text-apptext-dim'}`}>{ssid || 'Not configured'}</p>
               </div>
               <span className="text-xl">📶</span>
             </div>
@@ -195,7 +202,7 @@ export default function WiFiPage() {
             <div className="flex items-center justify-between rounded-2xl border border-appborder bg-appinset px-4 py-3">
               <div>
                 <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Password</p>
-                <p className="mt-0.5 text-base font-mono font-semibold text-apptext">{password}</p>
+                <p className={`mt-0.5 text-base font-mono font-semibold ${password ? 'text-apptext' : 'text-apptext-dim'}`}>{password || 'Not configured'}</p>
               </div>
               <span className="text-xl">🔒</span>
             </div>
