@@ -99,7 +99,7 @@ function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
           className="rounded-2xl border p-4"
           style={{ borderColor: hexToRgba(c.tone, 0.55), backgroundColor: hexToRgba(c.tone, c.bgAlpha) }}
         >
-          <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-apptext-dim">
+          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">
             <span>{c.icon}</span> {c.label}
           </p>
           <p className="mt-2 text-lg font-semibold text-apptext">{c.value}</p>
@@ -190,11 +190,11 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         <div className="grid grid-cols-3 gap-2 text-xs lg:hidden">
           <div>
             {r.startedDate && <span className="font-medium text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>}
-            {r.scheduledDate && <span className="font-medium text-sky-300">📅 {formatDate(r.scheduledDate)}</span>}
+            {r.scheduledDate && <span className="font-bold text-sky-300">📅 {formatDate(r.scheduledDate)}</span>}
             {!r.startedDate && !r.scheduledDate && <span className="text-apptext-dim">—</span>}
           </div>
           <div>
-            {r.completedDate && <span className="font-medium text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
+            {r.completedDate && <span className="font-bold text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
           </div>
           <div className="flex items-center gap-1">
             {r.requestedBy ? <span className="rounded-full border border-appborder bg-appinset px-2 py-0.5 text-apptext-muted truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
@@ -225,14 +225,14 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
           {r.startedDate ? (
             <span className="font-medium text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>
           ) : r.scheduledDate ? (
-            <span className="font-medium text-sky-300">📅 {formatDate(r.scheduledDate)}</span>
+            <span className="font-bold text-sky-300">📅 {formatDate(r.scheduledDate)}</span>
           ) : (
-            <span className="text-apptext-dim">—</span>
+            <span className="font-medium text-apptext-muted">—</span>
           )}
           {r.completedDate ? (
-            <span className="font-medium text-emerald-300">✅ {formatDate(r.completedDate)}</span>
+            <span className="font-bold text-emerald-300">✅ {formatDate(r.completedDate)}</span>
           ) : (
-            <span className="text-apptext-dim">—</span>
+            <span className="font-medium text-apptext-muted">—</span>
           )}
         </div>
 
@@ -241,7 +241,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
           {r.requestedBy ? (
             <span className="rounded-full border border-appborder bg-appinset px-2 py-0.5 text-apptext-muted">👤 {r.requestedBy}</span>
           ) : (
-            <span className="text-apptext-dim">—</span>
+            <span className="font-medium text-apptext-muted">—</span>
           )}
         </div>
 
@@ -250,7 +250,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
           {r.completedBy ? (
             <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span>
           ) : (
-            <span className="text-apptext-dim">—</span>
+            <span className="font-medium text-apptext-muted">—</span>
           )}
         </div>
 
@@ -808,7 +808,7 @@ export default function MaintenanceDashboard() {
         ) : (
           <div className="max-h-[40rem] overflow-y-auto pr-1">
             {/* Column headers */}
-            <div className="mb-2 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] items-center gap-3 px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-apptext-dim">
+            <div className="mb-2 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] items-center gap-3 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">
               <span>Job</span>
               <span>Dates</span>
               <span>Requested</span>

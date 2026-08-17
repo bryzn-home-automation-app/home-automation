@@ -158,9 +158,12 @@
      Mapping 300→500 (instead of the darker 600/700) keeps the text legible
      AND lets the 10%/20% tinted backgrounds + borders actually show their
      green/yellow color instead of washing out to near-invisible. */
-  --color-amber-200:    #fbbf24;   /* 400 */
-  --color-amber-300:    #f59e0b;   /* 500 */
-  --color-amber-400:    #d97706;   /* 600 */
+  /* One notch darker than a plain 400/500/600 mapping — same reasoning
+     as sky/emerald below: badges/labels use this as plain text on top
+     of tinted card fills now, not just a subtle dark-mode pastel. */
+  --color-amber-200:    #f59e0b;   /* 500 */
+  --color-amber-300:    #d97706;   /* 600 */
+  --color-amber-400:    #b45309;   /* 700 */
 
   /* One notch darker than the other remapped families (500/600/700
      instead of 400/500/600) — plain text, e.g. job-row dates and cost
@@ -208,9 +211,9 @@
   --color-yellow-300:   #eab308;   /* 500 */
   --color-yellow-400:   #ca8a04;   /* 600 */
 
-  --color-orange-200:   #fb923c;   /* 400 */
-  --color-orange-300:   #f97316;   /* 500 */
-  --color-orange-400:   #ea580c;   /* 600 */
+  --color-orange-200:   #f97316;   /* 500 */
+  --color-orange-300:   #ea580c;   /* 600 */
+  --color-orange-400:   #c2410c;   /* 700 */
 
   color-scheme: light;
 }
