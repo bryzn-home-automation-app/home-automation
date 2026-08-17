@@ -12,8 +12,8 @@ export interface PaletteOption {
 export const PALETTES: PaletteOption[] = [
   { id: 'default', label: 'Default', swatch: { light: '#047857', dark: '#34d399' } },
   { id: 'ocean', label: 'Ocean', swatch: { light: '#0369a1', dark: '#38bdf8' } },
-  { id: 'sunset', label: 'Sunset', swatch: { light: '#c2410c', dark: '#fda172' } },
-  { id: 'violet', label: 'Violet', swatch: { light: '#6d28d9', dark: '#8f00ff' } },
+  { id: 'sunset', label: 'Sunset', swatch: { light: '#c2410c', dark: '#c2410c' } },
+  { id: 'violet', label: 'Violet', swatch: { light: '#6d28d9', dark: '#6d28d9' } },
 ];
 const PALETTE_IDS = PALETTES.map((p) => p.id);
 const DEFAULT_PALETTE = 'default';
@@ -40,14 +40,16 @@ export const KPI_TONES: Record<string, { light: string[]; dark: string[] }> = {
     dark:  ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
   },
   sunset: {
+    // Same tones in both modes on request — dark mode isn't a separate
+    // brighter variant here, it should look like light Sunset.
     light: ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
-    // #FDA172 is the exact hex requested for dark Sunset's accent.
-    dark:  ['#fda172', '#f97316', '#10b981', '#fda172', '#f97316', '#fb7185'],
+    dark:  ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
   },
   violet: {
+    // Same tones in both modes on request — dark mode isn't a separate
+    // brighter variant here, it should look like light Violet.
     light: ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
-    // #8F00FF is the exact hex requested for dark Violet's accent.
-    dark:  ['#b24dff', '#8f00ff', '#10b981', '#b24dff', '#8f00ff', '#d946ef'],
+    dark:  ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
   },
 };
 
