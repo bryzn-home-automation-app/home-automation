@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, Fragment } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
@@ -29,6 +29,18 @@ function hourLabel(iso: string): string {
   const ampm = h >= 12 ? 'PM' : 'AM';
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${h12} ${ampm}`;
+}
+
+/** "Today"/"Tomorrow" + weekday/date label for a YYYY-MM-DD key. */
+function dayLabel(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.round((date.getTime() - today.getTime()) / 86_400_000);
+  const rel = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : null;
+  const fmt = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return rel ? `${rel} · ${fmt}` : fmt;
 }
 
 // ── Inline strip: next few hours, shown on the Home weather bar ──
@@ -89,19 +101,24 @@ export function ForecastModal({
   }, [onClose]);
 
   return (
+    // NOTE: no backdrop-blur here. On a large desktop viewport the blur has to
+    // recomposite the entire (tall, gradient-heavy) page behind it on every
+    // scroll frame, which made scrolling the hourly list janky. A solid-ish
+    // dark overlay is effectively free. Also a single flex-column layout with
+    // ONE inner scroll region (the list) instead of nested scroll containers.
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 pt-[4vh] backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label="24-hour weather forecast"
     >
       <div
-        className="w-full max-w-2xl rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_24px_60px_var(--appshadow-lg)] sm:p-6"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_24px_60px_var(--appshadow-lg)] sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
             <h3 className="mt-1 text-xl font-semibold text-apptext">Next 24 hours</h3>
@@ -124,7 +141,7 @@ export function ForecastModal({
 
         {/* Temperature curve */}
         {chartData.length >= 2 && (
-          <div className="mb-5 rounded-2xl border border-appborder bg-appinset p-3">
+          <div className="mb-5 shrink-0 rounded-2xl border border-appborder bg-appinset p-3">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Temperature (°F)</p>
             <ResponsiveContainer width="100%" height={140} debounce={80}>
               <AreaChart data={chartData} margin={CHART_MARGIN}>
@@ -148,8 +165,8 @@ export function ForecastModal({
           </div>
         )}
 
-        {/* Hourly detail list */}
-        <div className="max-h-[42vh] overflow-y-auto pr-1">
+        {/* Hourly detail list — the single scroll region */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {/* Header row */}
           <div className="mb-1 grid grid-cols-[3.5rem_2rem_1fr_auto] items-center gap-2 px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-apptext-soft sm:grid-cols-[4rem_2.5rem_1fr_4rem_4rem_4rem]">
             <span>Time</span>
@@ -163,9 +180,18 @@ export function ForecastModal({
             {hours.map((h, i) => {
               const emoji = getWeatherEmojiForHour(h.weatherCode, hourOf(h.time));
               const pop = Math.round(h.precipitationProbability);
+              const dateKey = h.time.slice(0, 10);
+              const newDay = i > 0 && dateKey !== hours[i - 1].time.slice(0, 10);
               return (
+                <Fragment key={h.time}>
+                {newDay && (
+                  <div className="flex items-center gap-2 px-1 pt-2.5 pb-0.5">
+                    <span className="h-px flex-1 bg-appborder" />
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-muted">{dayLabel(dateKey)}</span>
+                    <span className="h-px flex-1 bg-appborder" />
+                  </div>
+                )}
                 <div
-                  key={h.time}
                   className="grid grid-cols-[3.5rem_2rem_1fr_auto] items-center gap-2 rounded-xl border border-appborder-light bg-appinset px-2 py-2 text-sm sm:grid-cols-[4rem_2.5rem_1fr_4rem_4rem_4rem]"
                 >
                   <span className="text-xs font-medium text-apptext-soft">{i === 0 ? 'Now' : hourLabel(h.time)}</span>
@@ -180,6 +206,7 @@ export function ForecastModal({
                   </span>
                   <span className="hidden text-right text-xs tabular-nums text-apptext-soft sm:block">{Math.round(h.windSpeed)} mph</span>
                 </div>
+                </Fragment>
               );
             })}
           </div>
