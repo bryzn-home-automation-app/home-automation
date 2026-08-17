@@ -35,6 +35,23 @@ const CHART_MARGIN = { top: 5, right: 20, left: 0, bottom: 5 } as const;
 const TICK_PROPS = { fontSize: 11 } as const;
 const TICK_LINE_FALSE = false;
 const CARTESIAN_GRID_DASH = '3 3';
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: chartTheme.tooltipBg,
+  border: `1px solid ${chartTheme.tooltipBorder}`,
+  borderRadius: '16px',
+  fontSize: '13px',
+  color: chartTheme.text,
+  boxShadow: '0 20px 50px var(--appshadow-lg)',
+} as const;
+const TOOLTIP_LABEL_STYLE = { color: chartTheme.muted, marginBottom: 4 } as const;
+
+function tooltipValueFormatter(value: number, name: string) {
+  if (name === 'kWh') return [`${value.toFixed(2)} kWh`, 'Usage'];
+  if (name === 'avgTemp' || name === 'temp') return [`${Math.round(value)}°F`, 'Temp'];
+  if (name === 'highTemp') return [`${Math.round(value)}°F`, 'High'];
+  if (name === 'lowTemp') return [`${Math.round(value)}°F`, 'Low'];
+  return [value, name];
+}
 
 function formatDateLabel(iso: string): string {
   const dateOnly = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
@@ -282,6 +299,22 @@ function UsageWeatherChart({
     return { kwhDomain: axis.domain, kwhTicks: axis.ticks };
   }, [filteredData]);
 
+  // Depends on `useHourly` (whether to show the full hourly timestamp in the
+  // tooltip label vs. the pre-formatted daily label) — memoized so identity
+  // is stable across renders where the range/granularity hasn't changed.
+  const tooltipLabelFormatter = useMemo(() => {
+    return (label: string, payload: any) => {
+      if (useHourly && payload?.[0]?.payload?.time) {
+        const d = new Date(payload[0].payload.time);
+        return d.toLocaleString('en-US', {
+          month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit',
+        });
+      }
+      return label;
+    };
+  }, [useHourly]);
+
   const { tempDomain, tempTicks } = useMemo(() => {
     const tempValues = useHourly
       ? filteredData.map((row: any) => row.temp)
@@ -403,26 +436,10 @@ function UsageWeatherChart({
           {hasWeather && <YAxis yAxisId="right" orientation="right" tick={{ fill: '#f59e0b', ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit="°" domain={tempDomain as [number, number]} ticks={tempTicks} tickFormatter={(value) => `${Math.round(Number(value))}`} />}
 
           <Tooltip
-            contentStyle={{ backgroundColor: chartTheme.tooltipBg, border: `1px solid ${chartTheme.tooltipBorder}`, borderRadius: '16px', fontSize: '13px', color: chartTheme.text, boxShadow: '0 20px 50px var(--appshadow-lg)' }}
-            formatter={(value: number, name: string) => {
-              if (name === 'kWh') return [`${value.toFixed(2)} kWh`, 'Usage'];
-              if (name === 'avgTemp' || name === 'temp') return [`${Math.round(value)}°F`, 'Temp'];
-              if (name === 'highTemp') return [`${Math.round(value)}°F`, 'High'];
-              if (name === 'lowTemp') return [`${Math.round(value)}°F`, 'Low'];
-              return [value, name];
-            }}
-            labelFormatter={(label: string, payload: any) => {
-              // Show full timestamp in tooltip for hourly data
-              if (useHourly && payload?.[0]?.payload?.time) {
-                const d = new Date(payload[0].payload.time);
-                return d.toLocaleString('en-US', {
-                  month: 'short', day: 'numeric',
-                  hour: 'numeric', minute: '2-digit',
-                });
-              }
-              return label;
-            }}
-            labelStyle={{ color: chartTheme.muted, marginBottom: 4 }}
+            contentStyle={TOOLTIP_CONTENT_STYLE}
+            formatter={tooltipValueFormatter}
+            labelFormatter={tooltipLabelFormatter}
+            labelStyle={TOOLTIP_LABEL_STYLE}
           />
 
           {/* Electric usage — tight line for hourly, bolder for daily */}

@@ -376,16 +376,24 @@ async function main(cfg) {
         } else if (records.length > 0 && client) {
           let inserted = 0;
           for (const r of records) {
-            await client.query(
+            // ON CONFLICT DO NOTHING is a true no-op on a duplicate — check
+            // rowCount rather than assuming the query wrote a row. Otherwise
+            // a re-run against an already-populated day (e.g. a manual
+            // Debug Dashboard trigger, which forces a sync with no
+            // idempotency skip) logs "N written" when N rows were actually
+            // silently skipped as duplicates.
+            const result = await client.query(
               `INSERT INTO electric_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                ON CONFLICT DO NOTHING`,
               [meterId, r.timestamp, r.usageKwh, r.cost, r.source, r.sourceProvider, batchId, r.processingVersion]
             );
-            inserted++;
+            if (result.rowCount > 0) inserted++;
           }
+          const skipped = records.length - inserted;
           const dayTotal = records.reduce((s, r) => s + r.usageKwh, 0).toFixed(2);
-          console.log(`── ${dateStr} (daily) — ${records.length} record(s) · ${dayTotal} kWh · ${inserted} written`);
+          const skippedNote = skipped > 0 ? ` · ${skipped} already existed` : '';
+          console.log(`── ${dateStr} (daily) — ${records.length} record(s) · ${dayTotal} kWh · ${inserted} written${skippedNote}`);
         } else {
           console.log(`── ${dateStr} (daily) — 0 records (no data posted yet)`);
         }

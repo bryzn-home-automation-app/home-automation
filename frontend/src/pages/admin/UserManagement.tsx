@@ -32,7 +32,7 @@ const statusBadgeColors: Record<string, string> = {
   PENDING_APPROVAL: 'border-yellow-300/30 bg-yellow-300/10 text-yellow-200',
   ACTIVE: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200',
   DISABLED: 'border-rose-300/30 bg-rose-300/10 text-rose-200',
-  EXPIRED: 'border-slate-300/30 bg-slate-300/10 text-slate-300',
+  EXPIRED: 'border-appborder bg-appinset text-apptext-muted',
 };
 
 function roleAccent(role: string): string {
@@ -323,10 +323,10 @@ function UserCard({
             </div>
 
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${roleBadgeColors[user.role] ?? 'border-white/10 bg-white/5 text-slate-300'}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${roleBadgeColors[user.role] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                 {user.role === 'USER' ? 'Household Member' : user.role}
               </span>
-              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusBadgeColors[user.status] ?? 'border-white/10 bg-white/5 text-slate-300'}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusBadgeColors[user.status] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                 {user.status.replace('_', ' ')}
               </span>
             </div>

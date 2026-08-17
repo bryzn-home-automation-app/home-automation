@@ -5,6 +5,11 @@ import ColorPicker from '../components/profile/ColorPicker';
 
 export default function GuestLogin() {
   const [name, setName] = useState('');
+  const [code, setCode] = useState(() =>
+    typeof window !== 'undefined'
+      ? new URLSearchParams(window.location.search).get('code') ?? ''
+      : ''
+  );
   const [accentColor, setAccentColor] = useState('#A855F7');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
@@ -48,7 +53,7 @@ export default function GuestLogin() {
         displayName: trimmed,
         accentColor,
         avatarUrl: avatarUrl || undefined,
-      });
+      }, code.trim());
       sessionStorage.setItem('guestName', resp.displayName);
       sessionStorage.setItem('guestToken', resp.token);
       sessionStorage.setItem('guestAccent', accentColor);
@@ -196,6 +201,21 @@ export default function GuestLogin() {
                 placeholder="e.g. Sarah or Mike"
                 autoComplete="name"
                 autoFocus
+                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="guestCode" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+                Invite Code
+              </label>
+              <input
+                id="guestCode"
+                type="text"
+                value={code}
+                onChange={(e) => { setCode(e.target.value); if (error) setError(''); }}
+                placeholder="Provided by your host"
+                autoComplete="off"
                 className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
               />
             </div>

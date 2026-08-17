@@ -350,10 +350,11 @@ class UserServiceTest {
             // Create a guest with a past expiry
             userService.guestLogin(
                 new GuestLoginRequest("ExpiredG", null, null, "1.1.1.1", "Test"));
-            // Manually set expiry to past
+            // Simulate 31 days of inactivity — expireGuestSessions() expires on
+            // lastSeenAt (kept fresh by heartbeat), not on expiresAt.
             var sessions = sessionRepo.findByStatus(GuestSession.Status.ACTIVE);
             sessions.forEach(s -> {
-                s.setExpiresAt(java.time.LocalDateTime.now().minusDays(1));
+                s.setLastSeenAt(java.time.LocalDateTime.now().minusDays(31));
                 sessionRepo.save(s);
             });
 

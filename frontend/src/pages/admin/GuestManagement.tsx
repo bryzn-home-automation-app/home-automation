@@ -136,7 +136,7 @@ export default function GuestManagement() {
                     <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
                       s.status === 'ACTIVE'
                         ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
-                        : 'border-slate-300/20 bg-slate-300/10 text-slate-300'
+                        : 'border-appborder bg-appinset text-apptext-muted'
                     }`}>
                       {s.status === 'ACTIVE'
                         ? formatDate(s.expiresAt)

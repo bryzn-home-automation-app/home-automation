@@ -23,25 +23,35 @@ spring:
 
 app:
   kwh-rate: ${KWH_RATE:0.12}
+  gas-unit-rate: ${GAS_UNIT_RATE:1.47}
   data-start-date: ${DATA_START_DATE:07/24/2026}
   property-latitude: ${PROPERTY_LATITUDE}
   property-longitude: ${PROPERTY_LONGITUDE}
   jwt:
-    secret: ${JWT_SECRET:home-platform-default-secret-key-change-in-prod-32chars!}
+    secret: ${JWT_SECRET}
     expiration-ms: 86400000
   admin:
     seed-email: ${ADMIN_EMAIL:bryznnguyen@gmail.com}
     seed-username: ${ADMIN_USERNAME:bryzncode}
-    seed-password: ${ADMIN_PASSWORD:bryzncode}
+    seed-password: ${ADMIN_PASSWORD}
     seed-display-name: ${ADMIN_DISPLAY_NAME:Bryan}
+  guest:
+    # Guest check-in requires this shared code. Blank = guest login disabled.
+    invite-code: ${GUEST_INVITE_CODE:}
+  security:
+    login:
+      max-attempts: ${LOGIN_MAX_ATTEMPTS:10}
+      window-minutes: ${LOGIN_WINDOW_MINUTES:15}
 
 server:
   port: 8080
 
 springdoc:
   api-docs:
+    enabled: ${SPRINGDOC_API_DOCS_ENABLED:false}
     path: /v3/api-docs
   swagger-ui:
+    enabled: ${SPRINGDOC_SWAGGER_UI_ENABLED:false}
     path: /swagger-ui.html
 
 # Logging

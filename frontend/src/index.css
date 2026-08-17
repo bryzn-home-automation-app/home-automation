@@ -106,7 +106,10 @@
    Light theme
    ═══════════════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  --appbg:              #f8fafc;
+  /* Distinctly grayer than white so raised cards (--appsurface) visibly pop
+     off the page instead of blending into it (previously #f8fafc, only ~2%
+     darker than white — cards were nearly indistinguishable from the page). */
+  --appbg:              #eef1f6;
   --appsurface:         #ffffff;
   --appsurface-raised:  rgba(255, 255, 255, 0.94);
   --appinset:           #f1f5f9;
@@ -175,6 +178,24 @@
   --color-pink-300:     #ec4899;   /* 500 */
   --color-pink-400:     #db2777;   /* 600 */
 
+  /* Same idiom, same 200/300/400 → 400/500/600 shift as above. These three
+     families weren't covered before, so every badge using them (role/status
+     pills in UserManagement, AuditLogs, Notifications, MaintenanceDashboard —
+     e.g. GUEST role, PENDING_APPROVAL status, CRITICAL severity) fell back to
+     Tailwind's dark-mode-tuned defaults and washed out to near-invisible
+     tinted backgrounds + low-contrast text in light mode. */
+  --color-red-200:      #f87171;   /* 400 */
+  --color-red-300:      #ef4444;   /* 500 */
+  --color-red-400:      #dc2626;   /* 600 */
+
+  --color-purple-200:   #c084fc;   /* 400 */
+  --color-purple-300:   #a855f7;   /* 500 */
+  --color-purple-400:   #9333ea;   /* 600 */
+
+  --color-yellow-200:   #facc15;   /* 400 */
+  --color-yellow-300:   #eab308;   /* 500 */
+  --color-yellow-400:   #ca8a04;   /* 600 */
+
   color-scheme: light;
 }
 
@@ -229,7 +250,11 @@ body {
 }
 
 .theme-toggle-thumb {
-  @apply flex h-6 w-6 items-center justify-center rounded-full bg-white shadow-md
+  /* Stays white in both themes (reads clearly against the dark track in
+     dark mode) but gets a hairline border so it doesn't blend into the
+     light-mode track, which is close to white too. */
+  @apply flex h-6 w-6 items-center justify-center rounded-full bg-white
+         border border-black/5 shadow-md
          transition-transform duration-300 ease-out;
 }
 

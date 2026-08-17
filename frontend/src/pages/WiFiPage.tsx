@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import { useQuery } from '@tanstack/react-query';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
-import { fetchGuestSessions, fetchGuestSessionCount, type GuestSession } from '../api/auth';
+import { fetchGuestSessions, fetchGuestSessionCount, fetchGuestInviteCode, type GuestSession } from '../api/auth';
 import OnlineDot from '../components/profile/OnlineDot';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 
@@ -45,7 +45,7 @@ function useCountdown(expiresAt: string): { label: string; urgent: boolean } {
 
 export default function WiFiPage() {
   const { theme } = useTheme();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isGuest, user } = useAuth();
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [qrLargeUrl, setQrLargeUrl] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState(false);
@@ -55,6 +55,20 @@ export default function WiFiPage() {
     if (typeof window === 'undefined') return '';
     return `${window.location.origin}/guest`;
   }, []);
+
+  // Members/admins can fetch the shared invite code so the QR carries it.
+  const inviteCodeQuery = useQuery({
+    queryKey: ['guest-invite-code'],
+    queryFn: fetchGuestInviteCode,
+    staleTime: 300_000,
+    enabled: !!user && !isGuest,
+  });
+
+  const guestInviteUrl = useMemo(() => {
+    const code = inviteCodeQuery.data;
+    if (!code) return guestUrl;
+    return `${guestUrl}?code=${encodeURIComponent(code)}`;
+  }, [guestUrl, inviteCodeQuery.data]);
 
   // Read network credentials from build-time env so the real password never
   // lives in source control. Set VITE_WIFI_SSID / VITE_WIFI_PASSWORD (see .env.example).
@@ -91,21 +105,21 @@ export default function WiFiPage() {
       light: theme === 'dark' ? '#0f172a' : '#ffffff',
     };
 
-    QRCode.toDataURL(guestUrl, { width: 320, margin: 2, color })
+    QRCode.toDataURL(guestInviteUrl, { width: 320, margin: 2, color })
       .then((url) => { if (!cancelled) setQrDataUrl(url); });
 
     // Big version for the modal
-    QRCode.toDataURL(guestUrl, { width: 800, margin: 4, color })
+    QRCode.toDataURL(guestInviteUrl, { width: 800, margin: 4, color })
       .then((url) => { if (!cancelled) setQrLargeUrl(url); });
 
     return () => { cancelled = true; };
-  }, [guestUrl, theme]);
+  }, [guestInviteUrl, theme]);
 
   const handleCopyNetwork = () => {
     const lines = [
       ssid && `SSID: ${ssid}`,
       password && `Password: ${password}`,
-      `Guest URL: ${guestUrl}`,
+      `Guest URL: ${guestInviteUrl}`,
     ].filter(Boolean) as string[];
     navigator.clipboard.writeText(lines.join('\n'));
     setCopySuccess(true);
@@ -173,7 +187,7 @@ export default function WiFiPage() {
               <div className="rounded-2xl border border-appborder bg-appinset p-4">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim">Guest Portal URL</p>
                 <code className="mt-1 block break-all text-sm font-medium text-appaccent-text select-all">
-                  {guestUrl}
+                  {guestInviteUrl}
                 </code>
               </div>
               <p className="text-xs text-apptext-muted leading-5">
@@ -298,7 +312,7 @@ export default function WiFiPage() {
             )}
 
             <p className="mt-4 text-center text-sm text-slate-300">
-              {guestUrl}
+              {guestInviteUrl}
             </p>
             <p className="mt-2 text-center text-xs text-slate-500">
               Click outside or press ✕ to close

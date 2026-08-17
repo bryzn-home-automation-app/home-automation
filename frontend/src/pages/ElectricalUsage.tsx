@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from 'react';
-import { useQueries, useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
@@ -7,7 +7,7 @@ import MonthlyComparison from '../components/MonthlyComparison';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
-import { fetchUsageSummary } from '../api/energy';
+import { fetchBatchSummaries } from '../api/energy';
 import { fetchWeatherForRange } from '../api/weather';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
@@ -142,21 +142,22 @@ export default memo(function ElectricalUsage() {
     return map;
   }, [weather]);
 
-  // ── Summary queries ────────────────────────────────────────────
-  const summaryQueries = useQueries({
-    queries: periodDefinitions.map((period) => ({
-      queryKey: ['usage-summary', electricMeter?.id, period.key, period.start, period.end],
-      queryFn: () =>
-        electricMeter
-          ? fetchUsageSummary(electricMeter.id, period.start, period.end)
-          : Promise.resolve(createEmptyUsageSummary(0, period.start, period.end)),
-      enabled: !!electricMeter,
-      staleTime: 30_000,
-    })),
+  // ── Summary query ───────────────────────────────────────────────
+  // One batched HTTP call for all periods instead of N parallel ones —
+  // same data, same shape, fewer round-trips.
+  const periodsKey = periodDefinitions.map((p) => `${p.start}:${p.end}`).join('|');
+  const batchSummary = useQuery({
+    queryKey: ['usage-summaries', electricMeter?.id, periodsKey],
+    queryFn: () =>
+      electricMeter
+        ? fetchBatchSummaries(electricMeter.id, periodDefinitions.map((p) => ({ start: p.start, end: p.end })))
+        : Promise.resolve(periodDefinitions.map((p) => createEmptyUsageSummary(0, p.start, p.end))),
+    enabled: !!electricMeter && periodDefinitions.length > 0,
+    staleTime: 30_000,
   });
 
   const summaryCards = periodDefinitions.map((period, index) => {
-    const s = summaryQueries[index]?.data ??
+    const s = batchSummary.data?.[index] ??
       createEmptyUsageSummary(electricMeter?.id ?? 0, period.start, period.end);
     const periodWx = Array.from(weatherByDate.entries())
       .filter(([date]) => date >= period.start.slice(0, 10) && date <= period.end.slice(0, 10));
@@ -175,7 +176,7 @@ export default memo(function ElectricalUsage() {
     };
   });
 
-  const summaryLoading = summaryQueries.some((query) => query.isLoading);
+  const summaryLoading = batchSummary.isLoading;
 
   // ── Usage log table ────────────────────────────────────────────
   // Daily filter: one row per date (sum of hourly), newest first

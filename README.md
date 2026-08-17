@@ -402,6 +402,7 @@ All configuration lives in `.env` (gitignored). Copy `.env.example` as a startin
 | `COSERV_PORTAL_URL` | `coserv.smarthub.coop/ui/#/login` | SmartHub login URL |
 | `DATA_START_DATE` | `07/24/2026` | Earliest date to query (house purchase / move-in) |
 | `KWH_RATE` | `0.12` | Electric rate in $/kWh for bill estimation |
+| `GAS_UNIT_RATE` | `1.47` | Gas rate in $/unit for bill estimation (gas is metered in units, not kWh) |
 | `JWT_SECRET` | — | JWT signing key (256-bit minimum) |
 | `ADMIN_USERNAME` | `bryzncode` | Seed admin username |
 | `ADMIN_PASSWORD` | `bryzncode` | Seed admin password |

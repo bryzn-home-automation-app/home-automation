@@ -15,13 +15,13 @@ public class JwtAuthFilter implements Filter {
 
     // Only these specific auth endpoints are public — /api/auth/me and
     // /api/auth/heartbeat require a valid token.
+    // (Swagger / api-docs are disabled by default in production — see
+    // application.yml springdoc.*.enabled.)
     private static final List<String> PUBLIC_PATHS = List.of(
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/guest-login",
-            "/api/health",
-            "/swagger-ui",
-            "/v3/api-docs"
+            "/api/health"
     );
 
     private static final List<String> PUBLIC_PREFIXES = List.of(

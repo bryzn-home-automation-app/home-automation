@@ -27,7 +27,7 @@ public class DataSeeder implements CommandLineRunner {
     @Value("${app.admin.seed-username:bryzncode}")
     private String adminUsername;
 
-    @Value("${app.admin.seed-password:bryzncode}")
+    @Value("${app.admin.seed-password}")
     private String adminPassword;
 
     @Value("${app.admin.seed-display-name:Bryan}")

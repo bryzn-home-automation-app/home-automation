@@ -61,7 +61,7 @@ const typeColors: Record<string, string> = {
   disabled: 'border-rose-300/20 bg-rose-300/10 text-rose-200',
   role_change: 'border-purple-300/20 bg-purple-300/10 text-purple-200',
   guest_connect: 'border-cyan-300/20 bg-cyan-300/10 text-cyan-200',
-  guest_expire: 'border-slate-300/20 bg-slate-300/10 text-slate-300',
+  guest_expire: 'border-appborder bg-appinset text-apptext-muted',
 };
 
 const typeLabels: Record<string, string> = {
@@ -129,7 +129,7 @@ export default function AuditLogs() {
                 className="flex items-center justify-between gap-4 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
               >
                 <div className="flex items-center gap-3">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-white/10 bg-white/5 text-slate-300'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                     {typeLabels[entry.type] ?? entry.type}
                   </span>
                   <span className="text-sm text-apptext-soft">{entry.description}</span>

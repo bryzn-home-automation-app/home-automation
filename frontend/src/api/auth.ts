@@ -89,9 +89,16 @@ export async function register(req: RegisterRequest): Promise<AdminUser> {
   return data;
 }
 
-export async function guestLogin(req: GuestLoginRequest): Promise<LoginResponse> {
-  const { data } = await api.post('/auth/guest-login', req);
+export async function guestLogin(req: GuestLoginRequest, code?: string): Promise<LoginResponse> {
+  const { data } = await api.post('/auth/guest-login', req, {
+    params: code ? { code } : undefined,
+  });
   return data;
+}
+
+export async function fetchGuestInviteCode(): Promise<string> {
+  const { data } = await api.get('/auth/guest-invite-code');
+  return data.code;
 }
 
 export async function fetchMe(): Promise<LoginResponse> {

@@ -1,12 +1,12 @@
 import { memo, useMemo } from 'react';
-import { useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
 import MonthlyComparison from '../components/MonthlyComparison';
 import DeferredRender from '../components/DeferredRender';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
-import { fetchUsageSummary } from '../api/energy';
+import { fetchBatchSummaries } from '../api/energy';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 import WeatherContextCard from '../components/WeatherContextCard';
 import Weather24HourCard from '../components/Weather24HourCard';
@@ -17,6 +17,10 @@ export default memo(function GasUsage() {
   const data = gasUsage.data ?? [];
   const loading = gasUsage.isLoading;
   const monthKwh = gasTotal.data?.totalKwh ?? 0;
+  // Gas is metered in CCF-equivalent "units", not kWh — priced separately
+  // from the electric $/kWh rate.
+  const gasUnitRate = config.data?.gasUnitRate ?? 1.47;
+  const sixtyDaySpend = monthKwh * gasUnitRate;
   const realData = useMemo(
     () => data.filter((d) => d.usageKwh > 0),
     [data]
@@ -37,16 +41,17 @@ export default memo(function GasUsage() {
     [config.data?.dataStartDate]
   );
 
-  const summaryQueries = useQueries({
-    queries: periodDefinitions.map((period) => ({
-      queryKey: ['usage-summary', gasMeter?.id, period.key, period.start, period.end],
-      queryFn: () =>
-        gasMeter
-          ? fetchUsageSummary(gasMeter.id, period.start, period.end)
-          : Promise.resolve(createEmptyUsageSummary(0, period.start, period.end)),
-      enabled: !!gasMeter,
-      staleTime: 30_000,
-    })),
+  // One batched HTTP call for all periods instead of N parallel ones —
+  // same data, same shape, fewer round-trips.
+  const periodsKey = periodDefinitions.map((p) => `${p.start}:${p.end}`).join('|');
+  const batchSummary = useQuery({
+    queryKey: ['usage-summaries', gasMeter?.id, periodsKey],
+    queryFn: () =>
+      gasMeter
+        ? fetchBatchSummaries(gasMeter.id, periodDefinitions.map((p) => ({ start: p.start, end: p.end })))
+        : Promise.resolve(periodDefinitions.map((p) => createEmptyUsageSummary(0, p.start, p.end))),
+    enabled: !!gasMeter && periodDefinitions.length > 0,
+    staleTime: 30_000,
   });
 
   const summaryCards = periodDefinitions.map((period, index) => ({
@@ -54,11 +59,11 @@ export default memo(function GasUsage() {
     rangeStart: period.displayStart,
     rangeEnd: period.displayEnd,
     summary:
-      summaryQueries[index]?.data ??
+      batchSummary.data?.[index] ??
       createEmptyUsageSummary(gasMeter?.id ?? 0, period.start, period.end),
   }));
 
-  const summaryLoading = summaryQueries.some((query) => query.isLoading);
+  const summaryLoading = batchSummary.isLoading;
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -82,13 +87,27 @@ export default memo(function GasUsage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 lg:gap-4">
         <StatTile
           label="Gas Total (60d)"
           value={monthKwh.toFixed(0)}
-          unit="kWh"
+          unit="units"
           loading={loading}
           icon={Icons.Calendar}
+        />
+        <StatTile
+          label="Rate"
+          value={`$${gasUnitRate.toFixed(2)}`}
+          unit="/unit"
+          loading={loading}
+          icon={Icons.Dollar}
+        />
+        <StatTile
+          label="60-Day Spend"
+          value={`$${sixtyDaySpend.toFixed(2)}`}
+          unit=""
+          loading={loading}
+          icon={Icons.Dollar}
         />
         <StatTile
           label="Records"
@@ -124,7 +143,7 @@ export default memo(function GasUsage() {
               loading={loading}
               title="Gas usage trend"
               emptyText="No gas usage data is available yet."
-              unitLabel="kWh"
+              unitLabel="units"
               accentColor="#38bdf8"
             />
           </DeferredRender>
@@ -134,7 +153,7 @@ export default memo(function GasUsage() {
               loading={loading}
               title="Monthly gas comparison"
               emptyText="More gas history is needed for month-over-month comparison."
-              unitLabel="kWh"
+              unitLabel="units"
               barColor="#0ea5e9"
             />
           </DeferredRender>
@@ -163,7 +182,7 @@ export default memo(function GasUsage() {
 
       <UsageSummaryGrid
         title="Gas highs, lows, and rolling period totals"
-        unitLabel="kWh"
+        unitLabel="units"
         summaries={summaryCards}
         loading={summaryLoading}
       />

@@ -16,12 +16,17 @@ export default function HomeSummary() {
   const { electricUsage, gasUsage, electricTotal, gasTotal, config } = useUsageData();
 
   const kwhRate = config.data?.kwhRate ?? 0.1171;
+  // Gas is metered in CCF-equivalent "units", not kWh — it has its own rate
+  // and must never be added directly into an electric kWh total. Dollar
+  // amounts from each fuel ARE directly additive, though, so the combined
+  // estimate below sums $ from each source priced at its own rate rather
+  // than summing raw usage and pricing it once at the electric rate.
+  const gasUnitRate = config.data?.gasUnitRate ?? 1.47;
   const elecKwh = electricTotal.data?.totalKwh ?? 0;
-  const gasKwh = gasTotal.data?.totalKwh ?? 0;
-  const totalKwh = elecKwh + gasKwh;
-  // The 60-day moving-window total * the kWh rate. This is "60-day spend",
-  // not a monthly bill — re-labeled honestly per improvements.md §7.
-  const sixtyDaySpend = totalKwh * kwhRate;
+  const gasUnits = gasTotal.data?.totalKwh ?? 0;
+  // The 60-day moving-window spend. This is "60-day spend", not a monthly
+  // bill — re-labeled honestly per improvements.md §7.
+  const sixtyDaySpend = elecKwh * kwhRate + gasUnits * gasUnitRate;
   const monthlyEstimate = sixtyDaySpend * 0.5;
 
   // Latest daily usage — sum hourly records per date, take the most recent with ≥ 20 records
@@ -98,14 +103,17 @@ export default function HomeSummary() {
   const wxEmoji = currentWx ? getWeatherEmoji(currentWx.weatherCode) : null;
   const wxDesc = currentWx ? getWeatherCodeDescription(currentWx.weatherCode) : null;
 
-  const modules = [
+  // Memoized so the 6 module cards (and their icon/pill children) don't get
+  // fresh object references — and re-render — on every parent render; only
+  // rebuild when one of the underlying values actually changes.
+  const modules = useMemo(() => [
     { label: 'Electric', detail: `${electricUsage.data?.length ?? 0} records`, route: '/electric', icon: '⚡', pill: 'Live' },
     { label: 'Gas', detail: `${gasUsage.data?.length ?? 0} records synced`, route: '/gas', icon: '🔥', pill: 'Tracking' },
     { label: 'Maintenance', detail: m ? `${m.openCount} open · ${m.completedCount} done` : 'Loading...', route: '/maintenance', icon: '🔧', pill: m ? `${m.openCount} open` : '...' },
     { label: 'Notifications', detail: `${unreadCount.data ?? 0} unread alerts`, route: '/notifications', icon: '🔔', pill: unreadCount.data ? `${unreadCount.data} new` : 'Clear' },
     { label: 'Users', detail: `${guestCount.data ?? 0} guests connected`, route: '/users', icon: '👥', pill: 'Active' },
     { label: 'WiFi', detail: `${guestCount.data ?? 0} guests online`, route: '/wifi', icon: '📶', pill: guestCount.data ? `${guestCount.data} on` : 'Ready' },
-  ];
+  ], [electricUsage.data?.length, gasUsage.data?.length, m, unreadCount.data, guestCount.data]);
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -114,9 +122,9 @@ export default function HomeSummary() {
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">Home</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-            {totalKwh.toFixed(0)} kWh
+            {elecKwh.toFixed(0)} kWh
           </h2>
-          <p className="mt-2 text-sm text-apptext-soft">Combined 60-day usage · ~${monthlyEstimate.toFixed(0)}/mo estimate</p>
+          <p className="mt-2 text-sm text-apptext-soft">Electric 60-day usage · ~${monthlyEstimate.toFixed(0)}/mo combined electric + gas estimate</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-appborder bg-appinset p-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Rate</p>
@@ -173,7 +181,7 @@ export default function HomeSummary() {
         />
         <StatTile label="Electric (60d)" value={elecKwh.toFixed(0)} unit="kWh" loading={electricTotal.isLoading} icon={Icons.Bolt} />
         <StatTile label="Monthly Est." value={`$${monthlyEstimate.toFixed(2)}`} unit="/mo" loading={electricTotal.isLoading} icon={Icons.Dollar} />
-        <StatTile label="Gas (60d)" value={gasKwh.toFixed(0)} unit="kWh" loading={gasTotal.isLoading} icon={Icons.Calendar} />
+        <StatTile label="Gas (60d)" value={gasUnits.toFixed(0)} unit="units" loading={gasTotal.isLoading} icon={Icons.Calendar} />
       </section>
 
       {/* Current weather card */}

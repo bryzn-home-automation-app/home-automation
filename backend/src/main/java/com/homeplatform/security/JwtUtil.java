@@ -16,13 +16,16 @@ public class JwtUtil {
     private final long expirationMs;
 
     public JwtUtil(
-            @Value("${app.jwt.secret:home-platform-default-secret-key-change-in-prod-32chars!}") String secret,
+            @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.expiration-ms:86400000}") long expirationMs) {
-        // Ensure at least 256-bit key
-        byte[] keyBytes = new byte[32];
         byte[] secretBytes = secret.getBytes(StandardCharsets.UTF_8);
-        System.arraycopy(secretBytes, 0, keyBytes, 0, Math.min(secretBytes.length, 32));
-        this.key = Keys.hmacShaKeyFor(keyBytes);
+        // HMAC-SHA256 requires a >= 256-bit key. Refuse to start with a short or
+        // (former) default secret — a forgeable signing key is a full-auth bypass.
+        if (secretBytes.length < 32) {
+            throw new IllegalStateException(
+                    "app.jwt.secret (JWT_SECRET) must be at least 32 bytes — refusing to start with a weak or default secret");
+        }
+        this.key = Keys.hmacShaKeyFor(secretBytes);
         this.expirationMs = expirationMs;
     }
 

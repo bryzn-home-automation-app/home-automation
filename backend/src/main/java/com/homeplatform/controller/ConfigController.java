@@ -21,6 +21,9 @@ public class ConfigController {
     @Value("${app.kwh-rate:0.12}")
     private double kwhRate;
 
+    @Value("${app.gas-unit-rate:1.47}")
+    private double gasUnitRate;
+
     @Value("${app.data-start-date:07/24/2026}")
     private String dataStartDate;
 
@@ -40,6 +43,7 @@ public class ConfigController {
     public ResponseEntity<Map<String, Object>> getConfig() {
         Map<String, Object> config = new LinkedHashMap<>();
         config.put("kwhRate", kwhRate);
+        config.put("gasUnitRate", gasUnitRate);
         config.put("dataStartDate", dataStartDate);
         config.put("propertyLatitude", propertyLatitude);
         config.put("propertyLongitude", propertyLongitude);

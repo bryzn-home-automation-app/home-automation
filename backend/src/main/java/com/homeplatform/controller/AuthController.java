@@ -46,15 +46,35 @@ public class AuthController {
         }
     }
 
-    /** Guest sign-in — creates an ACTIVE guest account immediately (no approval). */
+    /** Guest sign-in — creates an ACTIVE guest account immediately (no approval).
+     *  Requires a valid invite code (blank/disabled → 403). */
     @PostMapping("/guest-login")
-    public ResponseEntity<LoginResponse> guestLogin(
+    public ResponseEntity<?> guestLogin(
             @Valid @RequestBody GuestLoginRequest req,
+            @RequestParam(required = false) String code,
             HttpServletRequest httpReq) {
+        if (!userService.isGuestInviteCodeValid(code)) {
+            return ResponseEntity.status(403)
+                    .body(Map.of("error", "Guest access requires a valid invite code"));
+        }
         String ip = getClientIp(httpReq);
         String ua = httpReq.getHeader("User-Agent");
         GuestLoginRequest enriched = new GuestLoginRequest(req.displayName(), req.accentColor(), req.avatarUrl(), ip, ua);
         return ResponseEntity.ok(userService.guestLogin(enriched));
+    }
+
+    /** Current guest invite code — members/admins only, so guests can't invite others. */
+    @GetMapping("/guest-invite-code")
+    public ResponseEntity<?> guestInviteCode(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        String role = (String) request.getAttribute("role");
+        if (userId == null) {
+            return ResponseEntity.status(401).build();
+        }
+        if ("GUEST".equals(role)) {
+            return ResponseEntity.status(403).build();
+        }
+        return ResponseEntity.ok(Map.of("code", userService.getGuestInviteCode()));
     }
 
     /** Get current user info from JWT. */

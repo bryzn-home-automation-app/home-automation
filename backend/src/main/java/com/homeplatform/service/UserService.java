@@ -10,11 +10,12 @@ import com.homeplatform.repository.UserRepository;
 import com.homeplatform.security.JwtUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -30,17 +31,27 @@ public class UserService {
     private final JwtUtil jwtUtil;
     private final AlertEngine alertEngine;
     private final MaintenanceService maintenanceService;
+    private final PasswordEncoder passwordEncoder;
+    private final LoginRateLimiter rateLimiter;
+
+    /** Shared code required for guest check-in. Blank = guest login disabled. */
+    @Value("${app.guest.invite-code:}")
+    private String guestInviteCode;
 
     public UserService(UserRepository userRepo,
                        GuestSessionRepository sessionRepo,
                        JwtUtil jwtUtil,
                        AlertEngine alertEngine,
-                       MaintenanceService maintenanceService) {
+                       MaintenanceService maintenanceService,
+                       PasswordEncoder passwordEncoder,
+                       LoginRateLimiter rateLimiter) {
         this.userRepo = userRepo;
         this.sessionRepo = sessionRepo;
         this.jwtUtil = jwtUtil;
         this.alertEngine = alertEngine;
         this.maintenanceService = maintenanceService;
+        this.passwordEncoder = passwordEncoder;
+        this.rateLimiter = rateLimiter;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -76,10 +87,20 @@ public class UserService {
     // ═══════════════════════════════════════════════════════════
 
     public LoginResponse login(LoginRequest req, String ipAddress, String userAgent) {
-        User user = userRepo.findByUsername(req.username())
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials"));
+        // Brute-force protection: block before verifying credentials.
+        if (rateLimiter.isBlocked("login:" + ipAddress)) {
+            throw new IllegalStateException("Too many failed login attempts. Try again later.");
+        }
 
-        if (user.getPasswordHash() == null || !verifyPassword(req.password(), user.getPasswordHash())) {
+        User user = userRepo.findByUsername(req.username()).orElse(null);
+
+        // Fail uniformly for a missing user or a wrong password — never reveal
+        // which one it was.
+        boolean badCredentials = user == null
+                || user.getPasswordHash() == null
+                || !verifyPassword(req.password(), user.getPasswordHash());
+        if (badCredentials) {
+            rateLimiter.recordFailure("login:" + ipAddress);
             throw new IllegalArgumentException("Invalid credentials");
         }
 
@@ -96,7 +117,14 @@ public class UserService {
         // Update login stats
         user.setLastLoginAt(LocalDateTime.now());
         user.setLoginCount(user.getLoginCount() + 1);
+
+        // Transparently upgrade legacy SHA-256 hashes to bcrypt on successful login.
+        if (isLegacyHash(user.getPasswordHash())) {
+            user.setPasswordHash(passwordEncoder.encode(req.password()));
+        }
         userRepo.save(user);
+
+        rateLimiter.clear("login:" + ipAddress);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole().name());
 
@@ -371,6 +399,12 @@ public class UserService {
     @Transactional
     public void seedAdminIfNeeded(String email, String username, String password, String displayName) {
         if (!userRepo.existsByUsername(username)) {
+            if (password == null || password.isBlank()) {
+                throw new IllegalStateException(
+                        "ADMIN_PASSWORD must be set to seed the admin account '" + username
+                                + "' — refusing to seed with no password");
+            }
+
             User admin = User.builder()
                     .email(email)
                     .username(username)
@@ -383,6 +417,20 @@ public class UserService {
             userRepo.save(admin);
             log.info("Seeded admin user: {}", username);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Guest invite code
+    // ═══════════════════════════════════════════════════════════
+
+    /** True only when a non-blank invite code is configured and matches {@code code}. */
+    public boolean isGuestInviteCodeValid(String code) {
+        return guestInviteCode != null && !guestInviteCode.isBlank() && guestInviteCode.equals(code);
+    }
+
+    /** The configured guest invite code (may be blank if guest access is disabled). */
+    public String getGuestInviteCode() {
+        return guestInviteCode;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -414,23 +462,24 @@ public class UserService {
     }
 
     private String hashPassword(String password) {
-        try {
-            SecureRandom random = new SecureRandom();
-            byte[] salt = new byte[16];
-            random.nextBytes(salt);
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            md.update(salt);
-            byte[] hash = md.digest(password.getBytes("UTF-8"));
-            byte[] combined = new byte[salt.length + hash.length];
-            System.arraycopy(salt, 0, combined, 0, salt.length);
-            System.arraycopy(hash, 0, combined, salt.length, hash.length);
-            return Base64.getEncoder().encodeToString(combined);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to hash password", e);
-        }
+        return passwordEncoder.encode(password);
     }
 
+    /**
+     * Verify a password against a bcrypt hash or, for pre-migration accounts,
+     * the legacy SHA-256 (salt||hash) format. New passwords are always bcrypt.
+     */
     private boolean verifyPassword(String password, String storedHash) {
+        if (storedHash == null) return false;
+        if (!isLegacyHash(storedHash)) {
+            try {
+                return passwordEncoder.matches(password, storedHash);
+            } catch (Exception e) {
+                return false;
+            }
+        }
+        // Legacy SHA-256 (single iteration, 16-byte salt) — kept only so existing
+        // accounts can still log in once and get rehashed to bcrypt.
         try {
             byte[] combined = Base64.getDecoder().decode(storedHash);
             byte[] salt = new byte[16];
@@ -444,5 +493,10 @@ public class UserService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /** bcrypt hashes start with "$2"; legacy SHA-256 hashes are base64(salt||hash). */
+    private boolean isLegacyHash(String storedHash) {
+        return storedHash != null && !storedHash.startsWith("$2");
     }
 }
