@@ -119,7 +119,7 @@ export default memo(function App() {
         </div>
       </div>
 
-      <nav className="mt-4 flex flex-col gap-1 lg:mt-5">
+      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto lg:mt-5">
         {visibleTabs.map((tab: any) => (
           <NavLink
             key={tab.path}
@@ -148,7 +148,7 @@ export default memo(function App() {
 
         {isAdmin && (
           <div className="pt-2">
-            <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-dim">
+            <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">
               Admin
             </p>
             <div className="flex flex-col gap-1">
@@ -177,11 +177,12 @@ export default memo(function App() {
 
       {/* Profile shortcut */}
       {user ? (
-        <div className="mt-auto border-t border-appborder pt-4">
+        <div className="mt-auto shrink-0 border-t border-appborder pt-4">
+          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">Settings</p>
           <Link
             to="/profile"
             onClick={closeMenu}
-            className="flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 transition-colors hover:border-appborder hover:bg-appinset"
+            className="group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 transition-colors hover:border-appborder hover:bg-appinset"
           >
             <div className="relative shrink-0">
               <Avatar
@@ -194,9 +195,9 @@ export default memo(function App() {
             </div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-apptext">{user.displayName}</p>
-              <p className="text-xs text-apptext-dim">@{user.username}</p>
+              <p className="text-xs text-apptext-dim">@{user.username} · Profile &amp; theme</p>
             </div>
-            <span className="text-xs text-apptext-muted">→</span>
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-appborder bg-appinset text-sm transition-colors group-hover:border-appborder-hover group-hover:bg-appinset-strong">⚙️</span>
           </Link>
           <button
             type="button"
@@ -246,7 +247,7 @@ export default memo(function App() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]">
           {/* ── Desktop sidebar (sticky left rail) ── */}
-          <aside className="hidden lg:flex lg:flex-col rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_12px_36px_var(--appshadow)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5">
+          <aside className="hidden lg:flex lg:flex-col overflow-hidden rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_12px_36px_var(--appshadow)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5">
             {sidebarContent}
           </aside>
 

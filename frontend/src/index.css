@@ -285,15 +285,16 @@
 
 /* ── Dark: Ocean ── */
 [data-theme="dark"][data-palette="ocean"] {
-  /* Neutral surfaces, same as the default dark theme — see the note in
-     Dark: Sunset for why (a saturated dark-blue wash read as muddy, not
-     "ocean"). Accent is the exact same hex as light Ocean (#0369a1),
+  /* Slightly lighter than the default dark theme, with a faint blue
+     whisper — not the earlier saturated wash (that read as muddy), just
+     a touch lighter than pure neutral so it doesn't look identical to
+     Default. Accent is the exact same hex as light Ocean (#0369a1),
      not a separate brighter dark-mode blue. */
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  --appbg:              #071322;
+  --appsurface:         #0f2038;
+  --appsurface-raised:  rgba(15, 32, 56, 0.88);
+  --appinset:           rgba(7, 19, 34, 0.5);
+  --appinset-strong:    rgba(7, 19, 34, 0.72);
   --appborder:          rgba(3, 105, 161, 0.16);
   --appborder-light:    rgba(3, 105, 161, 0.09);
   --appborder-hover:    rgba(3, 105, 161, 0.28);
@@ -306,16 +307,16 @@
 
 /* ── Dark: Sunset ── */
 [data-theme="dark"][data-palette="sunset"] {
-  /* Neutral surfaces, same as the default dark theme — matching what
-     light Sunset actually does (its "tint" on appbg/appinset is so
-     subtle it reads as plain white; the orange only shows up via
-     borders/icons/accent fills). A saturated dark-brown background
-     read as "muddy" rather than "orange", so don't do that here. */
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Slightly lighter than the default dark theme, with a faint warm
+     whisper — matching what light Sunset actually does (its own "tint"
+     is so subtle it reads as plain white; the orange only shows up via
+     borders/icons/accent fills). A saturated dark-brown background read
+     as "muddy" rather than "orange", so keep this restrained. */
+  --appbg:              #170f08;
+  --appsurface:         #2a1c10;
+  --appsurface-raised:  rgba(42, 28, 16, 0.88);
+  --appinset:           rgba(23, 15, 8, 0.5);
+  --appinset-strong:    rgba(23, 15, 8, 0.72);
   /* Same accent shade as light Sunset (#c2410c), not a separate
      brighter dark-mode tint — kept identical across modes on request. */
   --appborder:          rgba(194, 65, 12, 0.16);
@@ -330,13 +331,13 @@
 
 /* ── Dark: Violet ── */
 [data-theme="dark"][data-palette="violet"] {
-  /* Neutral surfaces, same as the default dark theme — see the note
-     in Dark: Sunset above, identical reasoning. */
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Slightly lighter than the default dark theme, with a faint violet
+     whisper — see the note in Dark: Sunset above, identical reasoning. */
+  --appbg:              #150f22;
+  --appsurface:         #251a3d;
+  --appsurface-raised:  rgba(37, 26, 61, 0.88);
+  --appinset:           rgba(21, 15, 34, 0.5);
+  --appinset-strong:    rgba(21, 15, 34, 0.72);
   /* Same accent shade as light Violet (#6d28d9), not a separate
      brighter dark-mode tint — kept identical across modes on request. */
   --appborder:          rgba(109, 40, 217, 0.16);
