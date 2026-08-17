@@ -83,12 +83,12 @@ function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
   const tones = KPI_TONES[palette] ?? KPI_TONES.default;
 
   const cards = [
-    { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', tone: tones[0], bgAlpha: 0.1 },
-    { label: 'Upcoming', value: a?.scheduledCount ?? '...', icon: '📅', tone: tones[1], bgAlpha: 0.1 },
-    { label: 'Completed', value: a?.completedCount ?? '...', icon: '✅', tone: tones[2], bgAlpha: 0.1 },
-    { label: 'Lifetime Cost', value: formatCurrency(a?.totalLifetimeCost ?? 0), icon: '💰', tone: tones[3], bgAlpha: 0.05 },
-    { label: 'This Year', value: formatCurrency(a?.thisYearCost ?? 0), icon: '📆', tone: tones[4], bgAlpha: 0.05 },
-    { label: 'Monthly Avg', value: formatCurrency(a?.averageMonthlyCost ?? 0), icon: '📊', tone: tones[5], bgAlpha: 0.05 },
+    { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', tone: tones[0], bgAlpha: 0.18 },
+    { label: 'Upcoming', value: a?.scheduledCount ?? '...', icon: '📅', tone: tones[1], bgAlpha: 0.18 },
+    { label: 'Completed', value: a?.completedCount ?? '...', icon: '✅', tone: tones[2], bgAlpha: 0.18 },
+    { label: 'Lifetime Cost', value: formatCurrency(a?.totalLifetimeCost ?? 0), icon: '💰', tone: tones[3], bgAlpha: 0.14 },
+    { label: 'This Year', value: formatCurrency(a?.thisYearCost ?? 0), icon: '📆', tone: tones[4], bgAlpha: 0.14 },
+    { label: 'Monthly Avg', value: formatCurrency(a?.averageMonthlyCost ?? 0), icon: '📊', tone: tones[5], bgAlpha: 0.14 },
   ];
 
   return (
@@ -97,7 +97,7 @@ function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
         <div
           key={c.label}
           className="rounded-2xl border p-4"
-          style={{ borderColor: hexToRgba(c.tone, 0.3), backgroundColor: hexToRgba(c.tone, c.bgAlpha) }}
+          style={{ borderColor: hexToRgba(c.tone, 0.4), backgroundColor: hexToRgba(c.tone, c.bgAlpha) }}
         >
           <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-apptext-dim">
             <span>{c.icon}</span> {c.label}

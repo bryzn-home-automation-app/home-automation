@@ -235,7 +235,7 @@ export default memo(function ElectricalUsage() {
               <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">{realData.length}</p>
             </div>
             {(config.data?.lastSyncCheck || config.data?.lastElectricReading) && (
-              <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 p-3 sm:p-4">
+              <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 p-3 sm:p-4">
                 <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-muted sm:text-[11px]">Last Updated</p>
                 {config.data?.lastElectricReading && (
                   <p className="mt-1 text-xs text-apptext-dim">

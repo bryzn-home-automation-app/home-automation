@@ -38,7 +38,7 @@ export default function IntegrationPanel() {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-cyan-300/12 bg-cyan-300/8 p-4">
+      <div className="rounded-2xl border border-cyan-300/35 bg-cyan-300/18 p-4">
         <p className="text-sm leading-6 text-apptext-soft">
           Sync pulls daily usage from CoServ SmartHub through Green Button Download and writes it directly into PostgreSQL.
         </p>

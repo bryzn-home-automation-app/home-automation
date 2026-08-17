@@ -220,7 +220,7 @@ export default function DebugDashboard() {
 
       {/* Last sync check box */}
       {health?.lastSyncCheck && (
-        <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 px-4 py-3">
+        <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3">
           <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
           <p className="mt-1 text-sm text-apptext-soft">
             {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
@@ -239,11 +239,11 @@ export default function DebugDashboard() {
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
             <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
           </div>
-          <div className="rounded-2xl border border-rose-300/10 bg-rose-300/5 p-4 text-center">
+          <div className="rounded-2xl border border-rose-300/30 bg-rose-300/15 p-4 text-center">
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
             <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
           </div>
-          <div className="rounded-2xl border border-amber-300/10 bg-amber-300/5 p-4 text-center">
+          <div className="rounded-2xl border border-amber-300/30 bg-amber-300/15 p-4 text-center">
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
             <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
           </div>
@@ -536,7 +536,7 @@ LIMIT 50`);
 
       {/* DB Size / Row Counts */}
       {dbStats && (
-        <div className="mb-4 rounded-2xl border border-emerald-300/10 bg-emerald-300/5 p-3">
+        <div className="mb-4 rounded-2xl border border-emerald-300/30 bg-emerald-300/15 p-3">
           <p className="text-xs text-apptext-muted">
             DB size: <span className="font-semibold text-emerald-200">{dbStats.dbSizePretty}</span>
             {' · '}
@@ -554,7 +554,7 @@ LIMIT 50`);
             <button
               key={p.label}
               onClick={() => setQuery(p.query)}
-              className="rounded-full border border-sky-300/10 bg-sky-300/5 px-2.5 py-1 text-[10px] font-medium text-apptext-muted transition-colors hover:border-sky-300/25 hover:bg-sky-300/10"
+              className="rounded-full border border-sky-300/35 bg-sky-300/18 px-2.5 py-1 text-[10px] font-medium text-apptext-muted transition-colors hover:border-sky-300/50 hover:bg-sky-300/25"
               title={`${tables.find(t => t.name === p.label)?.size ?? ''} · ${tables.find(t => t.name === p.label)?.columns ?? ''} cols`}
             >
               {p.label}
@@ -589,7 +589,7 @@ LIMIT 50`);
 
       {/* Error */}
       {results?.error && (
-        <div className="mb-3 rounded-2xl border border-rose-300/20 bg-rose-300/5 p-3 text-sm text-rose-300">
+        <div className="mb-3 rounded-2xl border border-rose-300/40 bg-rose-300/15 p-3 text-sm text-rose-300">
           {results.error}
         </div>
       )}

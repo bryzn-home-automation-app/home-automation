@@ -69,7 +69,7 @@ export default function Roomba() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <div className="rounded-[28px] border border-amber-300/15 bg-amber-300/8 p-4">
+      <div className="rounded-[28px] border border-amber-300/35 bg-amber-300/18 p-4">
         <p className="text-xs text-apptext-muted">
           🤖 Mock data — Roomba/smart device integration coming in Phase 3
         </p>

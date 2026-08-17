@@ -66,7 +66,7 @@ export default function UsageSummaryGrid({
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-emerald-300/10 bg-emerald-300/8 p-3">
+              <div className="rounded-2xl border border-emerald-300/35 bg-emerald-300/18 p-3">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-muted">Low</p>
                 <p className="mt-2 text-base font-semibold text-apptext">
                   {loading || !summary.lowest ? '...' : `${summary.lowest.usageKwh.toFixed(1)} ${unitLabel}`}
@@ -76,7 +76,7 @@ export default function UsageSummaryGrid({
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-rose-300/10 bg-rose-300/8 p-3">
+              <div className="rounded-2xl border border-rose-300/35 bg-rose-300/18 p-3">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-muted">High</p>
                 <p className="mt-2 text-base font-semibold text-apptext">
                   {loading || !summary.highest ? '...' : `${summary.highest.usageKwh.toFixed(1)} ${unitLabel}`}
@@ -88,7 +88,7 @@ export default function UsageSummaryGrid({
             </div>
 
             {(wxAvg != null || wxHigh != null || wxLow != null) && (
-              <div className="mt-3 rounded-2xl border border-amber-300/10 bg-amber-300/5 p-3">
+              <div className="mt-3 rounded-2xl border border-amber-300/30 bg-amber-300/15 p-3">
                 <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-muted">Temperature</p>
                 <p className="mt-1 text-sm text-apptext-soft">
                   {wxAvg != null && `${wxAvg}° avg`}
