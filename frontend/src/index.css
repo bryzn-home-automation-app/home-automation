@@ -285,69 +285,69 @@
 
 /* ── Dark: Ocean ── */
 [data-theme="dark"][data-palette="ocean"] {
-  /* Slightly lighter than the default dark theme, with a faint blue
-     whisper — not the earlier saturated wash (that read as muddy), just
-     a touch lighter than pure neutral so it doesn't look identical to
-     Default. Accent is the exact same hex as light Ocean (#0369a1),
-     not a separate brighter dark-mode blue. */
-  --appbg:              #071322;
-  --appsurface:         #0f2038;
-  --appsurface-raised:  rgba(15, 32, 56, 0.88);
-  --appinset:           rgba(7, 19, 34, 0.5);
-  --appinset-strong:    rgba(7, 19, 34, 0.72);
-  --appborder:          rgba(3, 105, 161, 0.16);
-  --appborder-light:    rgba(3, 105, 161, 0.09);
-  --appborder-hover:    rgba(3, 105, 161, 0.28);
-  --appaccent:          #0369a1;
-  --appaccent-soft:     rgba(2, 132, 199, 0.14);
-  --appaccent-border:   rgba(3, 105, 161, 0.4);
+  /* Neutral surfaces, identical to the default dark theme — the color
+     only shows up in small parts of the UI (borders, icon badges,
+     accent fills), NOT as a background wash. Any tinting of the surface
+     tokens themselves made the color feel like it had too much effect.
+     Accent lightened a step vs. light Ocean (#0369a1 → #0284c7) so it
+     reads better against the dark neutral surface. */
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  --appborder:          rgba(2, 132, 199, 0.18);
+  --appborder-light:    rgba(2, 132, 199, 0.1);
+  --appborder-hover:    rgba(2, 132, 199, 0.3);
+  --appaccent:          #0284c7;
+  --appaccent-soft:     rgba(2, 132, 199, 0.16);
+  --appaccent-border:   rgba(2, 132, 199, 0.42);
   --appaccent-text:     #bae6fd;
   --appglow-accent:     rgba(2, 132, 199, 0.22);
 }
 
 /* ── Dark: Sunset ── */
 [data-theme="dark"][data-palette="sunset"] {
-  /* Slightly lighter than the default dark theme, with a faint warm
-     whisper — matching what light Sunset actually does (its own "tint"
-     is so subtle it reads as plain white; the orange only shows up via
-     borders/icons/accent fills). A saturated dark-brown background read
-     as "muddy" rather than "orange", so keep this restrained. */
-  --appbg:              #170f08;
-  --appsurface:         #2a1c10;
-  --appsurface-raised:  rgba(42, 28, 16, 0.88);
-  --appinset:           rgba(23, 15, 8, 0.5);
-  --appinset-strong:    rgba(23, 15, 8, 0.72);
-  /* Same accent shade as light Sunset (#c2410c), not a separate
-     brighter dark-mode tint — kept identical across modes on request. */
-  --appborder:          rgba(194, 65, 12, 0.16);
-  --appborder-light:    rgba(194, 65, 12, 0.09);
-  --appborder-hover:    rgba(194, 65, 12, 0.28);
-  --appaccent:          #c2410c;
-  --appaccent-soft:     rgba(234, 88, 12, 0.14);
-  --appaccent-border:   rgba(194, 65, 12, 0.4);
+  /* Neutral surfaces, identical to the default dark theme — see the
+     note in Dark: Ocean. Color shows only in small accent parts, never
+     as a background wash. */
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Accent lightened a step vs. light Sunset (#c2410c → #ea580c) so it
+     reads better against the dark neutral surface. */
+  --appborder:          rgba(234, 88, 12, 0.18);
+  --appborder-light:    rgba(234, 88, 12, 0.1);
+  --appborder-hover:    rgba(234, 88, 12, 0.3);
+  --appaccent:          #ea580c;
+  --appaccent-soft:     rgba(234, 88, 12, 0.16);
+  --appaccent-border:   rgba(234, 88, 12, 0.42);
   --appaccent-text:     #ffe1d0;
-  --appglow-accent:     rgba(194, 65, 12, 0.22);
+  --appglow-accent:     rgba(234, 88, 12, 0.22);
 }
 
 /* ── Dark: Violet ── */
 [data-theme="dark"][data-palette="violet"] {
-  /* Slightly lighter than the default dark theme, with a faint violet
-     whisper — see the note in Dark: Sunset above, identical reasoning. */
-  --appbg:              #150f22;
-  --appsurface:         #251a3d;
-  --appsurface-raised:  rgba(37, 26, 61, 0.88);
-  --appinset:           rgba(21, 15, 34, 0.5);
-  --appinset-strong:    rgba(21, 15, 34, 0.72);
-  /* Same accent shade as light Violet (#6d28d9), not a separate
-     brighter dark-mode tint — kept identical across modes on request. */
-  --appborder:          rgba(109, 40, 217, 0.16);
-  --appborder-light:    rgba(109, 40, 217, 0.09);
-  --appborder-hover:    rgba(109, 40, 217, 0.28);
-  --appaccent:          #6d28d9;
-  --appaccent-soft:     rgba(124, 58, 237, 0.14);
-  --appaccent-border:   rgba(109, 40, 217, 0.4);
+  /* Neutral surfaces, identical to the default dark theme — see the
+     note in Dark: Ocean. Color shows only in small accent parts, never
+     as a background wash. */
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Accent lightened a step vs. light Violet (#6d28d9 → #7c3aed) so it
+     reads better against the dark neutral surface. */
+  --appborder:          rgba(124, 58, 237, 0.2);
+  --appborder-light:    rgba(124, 58, 237, 0.11);
+  --appborder-hover:    rgba(124, 58, 237, 0.32);
+  --appaccent:          #7c3aed;
+  --appaccent-soft:     rgba(124, 58, 237, 0.16);
+  --appaccent-border:   rgba(124, 58, 237, 0.42);
   --appaccent-text:     #dcc2ff;
-  --appglow-accent:     rgba(109, 40, 217, 0.22);
+  --appglow-accent:     rgba(124, 58, 237, 0.22);
 }
 
 /* ── Base ── */

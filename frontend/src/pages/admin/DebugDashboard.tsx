@@ -169,7 +169,7 @@ export default function DebugDashboard() {
 
       {/* System Health */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <div className="rounded-2xl border border-appborder bg-appinset p-4">
+        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
           <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Database</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
@@ -184,7 +184,7 @@ export default function DebugDashboard() {
             </>
           )}
         </div>
-        <div className="rounded-2xl border border-appborder bg-appinset p-4">
+        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
           <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Uptime</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
@@ -198,7 +198,7 @@ export default function DebugDashboard() {
             </p>
           )}
         </div>
-        <div className="rounded-2xl border border-appborder bg-appinset p-4">
+        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
           <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Heap Memory</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
@@ -208,7 +208,7 @@ export default function DebugDashboard() {
             </p>
           )}
         </div>
-        <div className="rounded-2xl border border-appborder bg-appinset p-4">
+        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
           <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Threads</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
@@ -235,15 +235,15 @@ export default function DebugDashboard() {
       {/* Event summary badges */}
       {summary && (
         <section className="grid grid-cols-3 gap-3">
-          <div className="rounded-2xl border border-appborder bg-appinset p-4 text-center">
+          <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
             <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
           </div>
-          <div className="rounded-2xl border border-rose-300/30 bg-rose-300/15 p-4 text-center">
+          <div className="rounded-2xl border border-rose-300/40 bg-rose-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
             <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
           </div>
-          <div className="rounded-2xl border border-amber-300/30 bg-amber-300/15 p-4 text-center">
+          <div className="rounded-2xl border border-amber-300/40 bg-amber-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
             <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
           </div>
