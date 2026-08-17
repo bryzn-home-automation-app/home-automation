@@ -79,6 +79,9 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+      args:
+        VITE_WIFI_SSID: ${VITE_WIFI_SSID}
+        VITE_WIFI_PASSWORD: ${VITE_WIFI_PASSWORD}
     container_name: homeplatform-nginx
     ports:
       - "80:80"
