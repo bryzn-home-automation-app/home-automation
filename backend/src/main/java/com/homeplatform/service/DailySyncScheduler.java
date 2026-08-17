@@ -11,12 +11,16 @@ import java.io.InputStreamReader;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 /**
  * Runs the daily sync every 30 min from 6:30 AM to 11:45 PM CT.
  * Downloads daily data from the CoServ Usage Explorer API and writes to electric_usage.
- * Skips if yesterday's daily reading is already populated (idempotent).
+ * Skips if the day is already populated (idempotent), and backfills any gaps in
+ * the last {@link #LOOKBACK_DAYS} days left by server downtime.
  *
  * Complements the {@link HourlySyncScheduler} which writes to hourly_electric_usage —
  * together they provide two independent data sources for reconciliation.
@@ -27,6 +31,9 @@ public class DailySyncScheduler {
     private static final Logger log = LoggerFactory.getLogger(DailySyncScheduler.class);
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
     private static final DateTimeFormatter US_DATE = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+    /** CoServ only retains ~2 weeks of data — backfill lookback is bounded by this window. */
+    private static final int LOOKBACK_DAYS = 14;
 
     private final DataSource dataSource;
     private final AppEventService appEventService;
@@ -42,20 +49,22 @@ public class DailySyncScheduler {
      *  offset by 15 min to avoid both browser logins at the exact same second. */
     @Scheduled(cron = "0 0,30 6-23 * * *", zone = "America/Chicago")
     public void runDailySync() {
-        String yesterday = LocalDate.now(CHICAGO).minusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        LocalDate yesterday = LocalDate.now(CHICAGO).minusDays(1);
         log.info("DailySyncScheduler: checking for {}…", yesterday);
 
-        // Skip if yesterday already has a non-zero daily reading
-        if (isYesterdayPopulated(yesterday)) {
+        // Skip only when every day in the lookback window is already populated.
+        Optional<LocalDate> earliest = findEarliestMissingDay(yesterday, LOOKBACK_DAYS);
+        if (earliest.isEmpty()) {
             log.info("DailySyncScheduler: {} already populated — skipping", yesterday);
             return;
         }
 
+        LocalDate start = earliest.get();
+        String label = start.equals(yesterday) ? start.toString() : start + " → " + yesterday;
         appEventService.info("sync", "DailySyncScheduler",
-                "Starting daily sync for " + yesterday);
+                "Starting daily sync for " + label);
 
-        String dateArg = LocalDate.now(CHICAGO).minusDays(1).format(US_DATE);
-        runSync(List.of("node", "/scripts/sync.js", "--granularity", "daily", "--date", dateArg), yesterday);
+        runSync(dailyCommand(start, yesterday), label);
     }
 
     /**
@@ -76,6 +85,15 @@ public class DailySyncScheduler {
                 : List.of("node", "/scripts/sync.js", "--granularity", "daily", "--start", start, "--end", end);
 
         runSync(command, label);
+    }
+
+    /** Build the sync.js invocation for a (possibly single-day) date range. */
+    private List<String> dailyCommand(LocalDate start, LocalDate end) {
+        String startUs = start.format(US_DATE);
+        String endUs = end.format(US_DATE);
+        return start.equals(end)
+                ? List.of("node", "/scripts/sync.js", "--granularity", "daily", "--date", startUs)
+                : List.of("node", "/scripts/sync.js", "--granularity", "daily", "--start", startUs, "--end", endUs);
     }
 
     /** Spawn sync.js and record the result as an app event (with full output in details). */
@@ -140,17 +158,33 @@ public class DailySyncScheduler {
         return LocalDate.parse(iso).format(US_DATE);
     }
 
-    private boolean isYesterdayPopulated(String date) {
+    /**
+     * Find the earliest day in the last {@code windowDays} days (through
+     * {@code yesterday}) that has no non-zero daily reading. Empty when every
+     * day is already populated. Backfills gaps left by server downtime, bounded
+     * by CoServ's ~2-week retention window.
+     */
+    private Optional<LocalDate> findEarliestMissingDay(LocalDate yesterday, int windowDays) {
+        LocalDate first = yesterday.minusDays(windowDays - 1);
+        Set<LocalDate> populated = new HashSet<>();
         try (var conn = dataSource.getConnection();
              var stmt = conn.prepareStatement(
-                     "SELECT 1 FROM electric_usage WHERE timestamp::date = ?::date AND usage_kwh > 0 LIMIT 1")) {
-            stmt.setString(1, date);
+                     "SELECT DISTINCT timestamp::date FROM electric_usage " +
+                     "WHERE usage_kwh > 0 AND timestamp::date >= ?::date AND timestamp::date <= ?::date")) {
+            stmt.setString(1, first.toString());
+            stmt.setString(2, yesterday.toString());
             try (var rs = stmt.executeQuery()) {
-                return rs.next();
+                while (rs.next()) populated.add(rs.getDate(1).toLocalDate());
             }
         } catch (Exception e) {
-            log.warn("DailySyncScheduler DB check failed: {}", e.getMessage());
-            return false;
+            log.warn("DailySyncScheduler backfill scan failed: {}", e.getMessage());
+            return Optional.empty();
         }
+
+        LocalDate missing = null;
+        for (LocalDate d = yesterday; !d.isBefore(first); d = d.minusDays(1)) {
+            if (!populated.contains(d)) missing = d;
+        }
+        return Optional.ofNullable(missing);
     }
 }
