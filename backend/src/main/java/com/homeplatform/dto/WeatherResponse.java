@@ -15,6 +15,7 @@ public record WeatherResponse(
             double apparentTemperature,
             double humidity,
             double precipitation,
+            double windSpeed,
             int weatherCode
     ) {}
 
@@ -33,6 +34,8 @@ public record WeatherResponse(
             double apparentTemperature,
             double humidity,
             double precipitation,
+            double precipitationProbability,
+            double windSpeed,
             int weatherCode
     ) {}
 

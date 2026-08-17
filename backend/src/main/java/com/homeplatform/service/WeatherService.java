@@ -115,26 +115,30 @@ public class WeatherService {
     }
 
     private String buildForecastUrl(double lat, double lon) {
+        // forecast_days=2 so a rolling "next 24 hours" from any time of day is
+        // always fully covered (forecast_days=1 stops at tonight's midnight).
         return String.format(Locale.US,
                 "%s?latitude=%.4f&longitude=%.4f" +
-                "&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code" +
-                "&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code" +
+                "&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,wind_speed_10m,weather_code" +
+                "&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,precipitation_probability,wind_speed_10m,weather_code" +
                 "&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,weather_code" +
                 "&temperature_unit=fahrenheit" +
                 "&precipitation_unit=inch" +
+                "&wind_speed_unit=mph" +
                 "&timezone=America/Chicago" +
                 "&past_days=%d" +
-                "&forecast_days=1",
+                "&forecast_days=2",
                 FORECAST_URL, lat, lon, PAST_DAYS);
     }
 
     private String buildArchiveUrl(double lat, double lon, LocalDate start, LocalDate end) {
         return String.format(Locale.US,
                 "%s?latitude=%.4f&longitude=%.4f" +
-                "&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,weather_code" +
+                "&hourly=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,precipitation_probability,wind_speed_10m,weather_code" +
                 "&daily=temperature_2m_max,temperature_2m_min,temperature_2m_mean,precipitation_sum,weather_code" +
                 "&temperature_unit=fahrenheit" +
                 "&precipitation_unit=inch" +
+                "&wind_speed_unit=mph" +
                 "&timezone=America/Chicago" +
                 "&start_date=%s" +
                 "&end_date=%s",
@@ -219,6 +223,7 @@ public class WeatherService {
                 current.get("apparent_temperature").asDouble(),
                 current.get("relative_humidity_2m").asDouble(),
                 current.get("precipitation").asDouble(),
+                current.has("wind_speed_10m") ? current.get("wind_speed_10m").asDouble() : 0.0,
                 current.get("weather_code").asInt()
         );
     }
@@ -255,6 +260,8 @@ public class WeatherService {
                     safeDouble(hourly.get("apparent_temperature"), i),
                     safeDouble(hourly.get("relative_humidity_2m"), i),
                     safeDouble(hourly.get("precipitation"), i),
+                    safeDouble(hourly.get("precipitation_probability"), i),
+                    safeDouble(hourly.get("wind_speed_10m"), i),
                     safeInt(hourly.get("weather_code"), i)
             ));
         }

@@ -50,6 +50,16 @@ export function getWeatherEmoji(code: number): string {
   return isNightTime() ? entry.night : entry.day;
 }
 
+/**
+ * Weather emoji for a specific hour, day/night-aware based on THAT hour's
+ * local time (not the current time). `hour` is 0-23.
+ */
+export function getWeatherEmojiForHour(code: number, hour: number): string {
+  const entry = WMO_CODES[code] ?? DEFAULT_WEATHER;
+  const isNight = hour >= 20 || hour < 6;
+  return isNight ? entry.night : entry.day;
+}
+
 /** Get the dominant weather emoji for a list of codes (mode), day/night-aware. */
 export function getDominantWeatherEmoji(codes: number[]): string {
   if (!codes.length) return isNightTime() ? DEFAULT_WEATHER.night : DEFAULT_WEATHER.day;

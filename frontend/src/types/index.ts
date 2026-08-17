@@ -114,6 +114,7 @@ export interface WeatherCurrent {
   apparentTemperature: number;
   humidity: number;
   precipitation: number;
+  windSpeed: number;
   weatherCode: number;
 }
 
@@ -132,6 +133,8 @@ export interface WeatherHour {
   apparentTemperature: number;
   humidity: number;
   precipitation: number;
+  precipitationProbability: number;
+  windSpeed: number;
   weatherCode: number;
 }
 

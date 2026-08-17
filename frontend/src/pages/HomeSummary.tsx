@@ -1,9 +1,10 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
 import VirtualizedList from '../components/VirtualizedList';
+import { ForecastStrip, ForecastModal } from '../components/WeatherForecast';
 import { fetchMaintenanceAnalytics } from '../api/maintenance';
 import { fetchNotifications } from '../api/notifications';
 import { fetchUnreadCount } from '../api/notifications';
@@ -14,6 +15,7 @@ import { isHourlySource } from '../utils/usageSource';
 
 export default function HomeSummary() {
   const { electricUsage, gasUsage, electricTotal, gasTotal, config } = useUsageData();
+  const [showForecast, setShowForecast] = useState(false);
 
   const kwhRate = config.data?.kwhRate ?? 0.1171;
   // Gas is metered in CCF-equivalent "units", not kWh — it has its own rate
@@ -184,10 +186,16 @@ export default function HomeSummary() {
         <StatTile label="Gas (60d)" value={gasUnits.toFixed(0)} unit="units" loading={gasTotal.isLoading} icon={Icons.Calendar} />
       </section>
 
-      {/* Current weather card */}
+      {/* Current weather card — click to open the 24-hour forecast */}
       {currentWx && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
-          <div className="flex items-center justify-between gap-4">
+        <section
+          role="button"
+          tabIndex={0}
+          onClick={() => setShowForecast(true)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShowForecast(true); } }}
+          className="cursor-pointer rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft text-2xl">{wxEmoji}</span>
               <div>
@@ -197,14 +205,34 @@ export default function HomeSummary() {
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <div className="rounded-2xl border border-appborder bg-appinset px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="rounded-2xl border border-appborder bg-appinset px-4 py-3 text-center">
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Humidity</p>
                 <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(latestHumidity!)}%</p>
               </div>
+              {currentWx.windSpeed != null && (
+                <div className="hidden rounded-2xl border border-appborder bg-appinset px-4 py-3 text-center sm:block">
+                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Wind</p>
+                  <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(currentWx.windSpeed)}<span className="text-xs font-normal text-apptext-muted"> mph</span></p>
+                </div>
+              )}
+              <span className="text-xs font-medium text-appaccent-text">Forecast →</span>
             </div>
           </div>
+
+          {/* Next-few-hours strip */}
+          <div className="mt-4">
+            <ForecastStrip hourly={currentWeather?.hourly} />
+          </div>
         </section>
+      )}
+
+      {showForecast && (
+        <ForecastModal
+          hourly={currentWeather?.hourly}
+          current={currentWx}
+          onClose={() => setShowForecast(false)}
+        />
       )}
 
       {/* Module cards */}
