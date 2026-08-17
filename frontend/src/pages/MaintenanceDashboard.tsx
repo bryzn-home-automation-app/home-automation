@@ -79,8 +79,8 @@ function formatDate(d: string | null): string {
 // ════════════════════════════════════════════════════════
 
 function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
-  const { palette } = useTheme();
-  const tones = KPI_TONES[palette] ?? KPI_TONES.default;
+  const { palette, isDark } = useTheme();
+  const tones = (KPI_TONES[palette] ?? KPI_TONES.default)[isDark ? 'dark' : 'light'];
 
   const cards = [
     { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', tone: tones[0], bgAlpha: 0.3 },

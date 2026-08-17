@@ -140,8 +140,8 @@ export default function HomeSummary() {
         </div>
 
         {/* Quick-glance stats card */}
-        <div className="rounded-[30px] border border-appaccent-border/20 bg-[linear-gradient(180deg,var(--appaccent-soft),var(--appinset))] p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-appaccent-text/75">At a Glance</p>
+        <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
+          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">At a Glance</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <Link to="/maintenance" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">🛠️ Maintenance</p>
@@ -186,10 +186,10 @@ export default function HomeSummary() {
 
       {/* Current weather card */}
       {currentWx && (
-        <section className="rounded-[28px] border border-appaccent-border bg-appaccent-soft p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <span className="text-4xl">{wxEmoji}</span>
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft text-2xl">{wxEmoji}</span>
               <div>
                 <p className="text-sm font-medium text-apptext-soft">{wxDesc}</p>
                 <p className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-apptext">
@@ -198,7 +198,7 @@ export default function HomeSummary() {
               </div>
             </div>
             <div className="text-right">
-              <div className="rounded-2xl border border-appaccent-border bg-appsurface/60 px-4 py-3">
+              <div className="rounded-2xl border border-appborder bg-appinset px-4 py-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Humidity</p>
                 <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(latestHumidity!)}%</p>
               </div>

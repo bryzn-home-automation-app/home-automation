@@ -26,13 +26,29 @@ const DEFAULT_PALETTE = 'default';
  * success, warm-2, cool-2, distinct]. "success" (index 2) stays a
  * green/teal across every palette — a checkmark reading as anything
  * but "done" would be confusing — everything else is re-hued to fit
- * the palette's family.
+ * the palette's family. Split by mode (not just palette) so an exact
+ * requested hex for one mode (e.g. dark Violet) doesn't also silently
+ * change the other mode's already-approved look.
  */
-export const KPI_TONES: Record<string, string[]> = {
-  default: ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
-  ocean:   ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
-  sunset:  ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
-  violet:  ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
+export const KPI_TONES: Record<string, { light: string[]; dark: string[] }> = {
+  default: {
+    light: ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
+    dark:  ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
+  },
+  ocean: {
+    light: ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
+    dark:  ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
+  },
+  sunset: {
+    light: ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
+    // #FDA172 is the exact hex requested for dark Sunset's accent.
+    dark:  ['#fda172', '#f97316', '#10b981', '#fda172', '#f97316', '#fb7185'],
+  },
+  violet: {
+    light: ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
+    // #8F00FF is the exact hex requested for dark Violet's accent.
+    dark:  ['#b24dff', '#8f00ff', '#10b981', '#b24dff', '#8f00ff', '#d946ef'],
+  },
 };
 
 /** Convert a `#rrggbb` hex color to an `rgba(...)` string at the given alpha. */
