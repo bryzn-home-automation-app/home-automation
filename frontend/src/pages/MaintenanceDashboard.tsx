@@ -49,7 +49,7 @@ const STATUS_COLORS: Record<string, string> = {
   SCHEDULED: 'border-sky-400/30 bg-sky-400/10 text-sky-300',
   IN_PROGRESS: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
   COMPLETED: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-  CANCELLED: 'border-slate-400/30 bg-slate-400/10 text-slate-400',
+  CANCELLED: 'border-appborder bg-appinset text-apptext-muted',
 };
 
 function isBusiness(name: string): boolean {
@@ -189,7 +189,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
             {r.completedDate && <span className="text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
           </div>
           <div className="flex items-center gap-1">
-            {r.requestedBy ? <span className="rounded-full border border-slate-300/20 bg-slate-300/10 px-2 py-0.5 text-slate-300 truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
+            {r.requestedBy ? <span className="rounded-full border border-appborder bg-appinset px-2 py-0.5 text-apptext-muted truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
             {r.completedBy ? <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300 truncate">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span> : null}
           </div>
         </div>
@@ -231,7 +231,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         {/* Requested by */}
         <div className="hidden text-[12px] truncate lg:block">
           {r.requestedBy ? (
-            <span className="rounded-full border border-slate-300/20 bg-slate-300/10 px-2 py-0.5 text-slate-300">👤 {r.requestedBy}</span>
+            <span className="rounded-full border border-appborder bg-appinset px-2 py-0.5 text-apptext-muted">👤 {r.requestedBy}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
@@ -334,7 +334,7 @@ function DetailModal({ r, onClose, onEdit }: {
         {/* Cost */}
         {r.cost != null && r.cost > 0 && (
           <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-amber-100/70">Cost</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-muted">Cost</p>
             <p className="mt-1 text-lg font-semibold text-amber-200">{formatCurrency(r.cost)}</p>
           </div>
         )}
@@ -365,7 +365,7 @@ function DetailModal({ r, onClose, onEdit }: {
 
         {r.warrantyExpiration && (
           <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-amber-100/70">Warranty Expires</p>
+            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-muted">Warranty Expires</p>
             <p className="mt-1 text-sm font-medium text-amber-200">{formatDate(r.warrantyExpiration)}</p>
           </div>
         )}

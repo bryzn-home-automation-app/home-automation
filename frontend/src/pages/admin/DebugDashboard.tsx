@@ -170,7 +170,7 @@ export default function DebugDashboard() {
       {/* System Health */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <div className="rounded-2xl border border-appborder bg-appinset p-4">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Database</p>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Database</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -185,7 +185,7 @@ export default function DebugDashboard() {
           )}
         </div>
         <div className="rounded-2xl border border-appborder bg-appinset p-4">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Uptime</p>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Uptime</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -199,7 +199,7 @@ export default function DebugDashboard() {
           )}
         </div>
         <div className="rounded-2xl border border-appborder bg-appinset p-4">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Heap Memory</p>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Heap Memory</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -209,7 +209,7 @@ export default function DebugDashboard() {
           )}
         </div>
         <div className="rounded-2xl border border-appborder bg-appinset p-4">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Threads</p>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Threads</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -221,7 +221,7 @@ export default function DebugDashboard() {
       {/* Last sync check box */}
       {health?.lastSyncCheck && (
         <div className="rounded-2xl border border-sky-300/10 bg-sky-300/5 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-sky-200/60">Last Sync Check</p>
+          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
           <p className="mt-1 text-sm text-apptext-soft">
             {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
               month: 'short', day: 'numeric',
@@ -236,15 +236,15 @@ export default function DebugDashboard() {
       {summary && (
         <section className="grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-appborder bg-appinset p-4 text-center">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">24h Events</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
             <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
           </div>
           <div className="rounded-2xl border border-rose-300/10 bg-rose-300/5 p-4 text-center">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-rose-200/60">Errors</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
             <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
           </div>
           <div className="rounded-2xl border border-amber-300/10 bg-amber-300/5 p-4 text-center">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-amber-200/60">Warnings</p>
+            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
             <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
           </div>
         </section>
@@ -537,7 +537,7 @@ LIMIT 50`);
       {/* DB Size / Row Counts */}
       {dbStats && (
         <div className="mb-4 rounded-2xl border border-emerald-300/10 bg-emerald-300/5 p-3">
-          <p className="text-xs text-emerald-200/70">
+          <p className="text-xs text-apptext-muted">
             DB size: <span className="font-semibold text-emerald-200">{dbStats.dbSizePretty}</span>
             {' · '}
             {Object.entries(dbStats.rowCounts).filter(([, v]) => v > 0).map(([k, v]) => (
@@ -554,7 +554,7 @@ LIMIT 50`);
             <button
               key={p.label}
               onClick={() => setQuery(p.query)}
-              className="rounded-full border border-sky-300/10 bg-sky-300/5 px-2.5 py-1 text-[10px] font-medium text-sky-200/80 transition-colors hover:border-sky-300/25 hover:bg-sky-300/10"
+              className="rounded-full border border-sky-300/10 bg-sky-300/5 px-2.5 py-1 text-[10px] font-medium text-apptext-muted transition-colors hover:border-sky-300/25 hover:bg-sky-300/10"
               title={`${tables.find(t => t.name === p.label)?.size ?? ''} · ${tables.find(t => t.name === p.label)?.columns ?? ''} cols`}
             >
               {p.label}

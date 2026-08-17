@@ -196,6 +196,10 @@
   --color-yellow-300:   #eab308;   /* 500 */
   --color-yellow-400:   #ca8a04;   /* 600 */
 
+  --color-orange-200:   #fb923c;   /* 400 */
+  --color-orange-300:   #f97316;   /* 500 */
+  --color-orange-400:   #ea580c;   /* 600 */
+
   color-scheme: light;
 }
 

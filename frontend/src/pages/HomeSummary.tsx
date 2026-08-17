@@ -191,7 +191,7 @@ export default function HomeSummary() {
             <div className="flex items-center gap-4">
               <span className="text-4xl">{wxEmoji}</span>
               <div>
-                <p className="text-sm font-medium text-sky-200/80">{wxDesc}</p>
+                <p className="text-sm font-medium text-apptext-soft">{wxDesc}</p>
                 <p className="mt-1 text-3xl font-semibold tracking-[-0.03em] text-apptext">
                   {Math.round(latestTemp!)}°F
                 </p>

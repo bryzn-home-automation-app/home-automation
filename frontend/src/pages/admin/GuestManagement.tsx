@@ -65,8 +65,8 @@ export default function GuestManagement() {
               disabled={expireMut.isPending}
               className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-left transition-colors hover:bg-amber-300/20"
             >
-              <p className="text-[11px] uppercase tracking-[0.16em] text-amber-100/70">Maintenance</p>
-              <p className="mt-2 text-sm font-semibold text-amber-100">
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-muted">Maintenance</p>
+              <p className="mt-2 text-sm font-semibold text-amber-200">
                 {expireMut.isPending ? 'Expiring...' : 'Expire All'}
               </p>
             </button>

@@ -108,13 +108,13 @@ export default memo(function App() {
 
       <div className="mt-4 grid grid-cols-2 gap-2">
         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Status</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Status</p>
           <p className="mt-1 text-xs font-semibold text-apptext">
             {backendUp ? 'API Up' : 'API Down'}
           </p>
         </div>
         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Role</p>
+          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Role</p>
           <p className="mt-1 text-xs font-semibold text-apptext">{user ? user.role : 'Guest'}</p>
         </div>
       </div>
@@ -296,15 +296,15 @@ export default memo(function App() {
                     actions={
                       <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
                         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Backend</p>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Backend</p>
                           <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
                         </div>
                         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Unread</p>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Unread</p>
                           <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
                         </div>
                         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-dim">Access</p>
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Access</p>
                           <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
                         </div>
                       </div>

@@ -70,7 +70,7 @@ export default function Roomba() {
   return (
     <div className="space-y-6 sm:space-y-7">
       <div className="rounded-[28px] border border-amber-300/15 bg-amber-300/8 p-4">
-        <p className="text-xs text-amber-100/80">
+        <p className="text-xs text-apptext-muted">
           🤖 Mock data — Roomba/smart device integration coming in Phase 3
         </p>
       </div>
@@ -131,7 +131,7 @@ export default function Roomba() {
               Placeholder map for future room-aware cleaning history, no-go zones, and per-room run analytics.
             </p>
           </div>
-          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100">
+          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-apptext-muted">
             Mock Layout
           </span>
         </div>

@@ -380,7 +380,7 @@ function UsageWeatherChart({
           ? `${dates[0]} — ${dates[dates.length - 1]}`
           : '';
         return (
-          <div className="mb-3 rounded-2xl border border-amber-300/10 bg-amber-300/5 px-3 py-2 text-xs text-amber-200/70">
+          <div className="mb-3 rounded-2xl border border-amber-300/10 bg-amber-300/5 px-3 py-2 text-xs text-apptext-muted">
             ⚡ Showing {filteredData.length} complete data points{rangeText && ` for ${rangeText}`}. Meter updates once daily — today's readings may not be available yet.
           </div>
         );

@@ -129,7 +129,7 @@ export default function UserManagement() {
               <p className="mt-2 text-lg font-semibold text-apptext">{allUsers.data?.length ?? '...'}</p>
             </div>
             <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-emerald-100/70">Online</p>
+              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-muted">Online</p>
               <p className="mt-2 text-lg font-semibold text-emerald-200">{onlineCount}</p>
             </div>
             {isAdmin && (
