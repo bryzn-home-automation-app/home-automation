@@ -316,11 +316,11 @@
 
 /* ── Dark: Violet ── */
 [data-theme="dark"][data-palette="violet"] {
-  --appbg:              #120a1f;
-  --appsurface:         #211236;
-  --appsurface-raised:  rgba(33, 18, 54, 0.88);
-  --appinset:           rgba(18, 10, 31, 0.5);
-  --appinset-strong:    rgba(18, 10, 31, 0.7);
+  --appbg:              #241533;
+  --appsurface:         #3a2350;
+  --appsurface-raised:  rgba(58, 35, 80, 0.88);
+  --appinset:           rgba(36, 21, 51, 0.55);
+  --appinset-strong:    rgba(36, 21, 51, 0.78);
   --appborder:          rgba(167, 139, 250, 0.14);
   --appborder-light:    rgba(167, 139, 250, 0.08);
   --appborder-hover:    rgba(167, 139, 250, 0.24);
