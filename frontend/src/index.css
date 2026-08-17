@@ -211,6 +211,70 @@
   color-scheme: light;
 }
 
+/* ═══════════════════════════════════════════════════════════════
+   Palette variants — override only the accent tokens (backgrounds,
+   text, and borders stay on the proven-safe default values from
+   above; only the "brand" accent hue changes). Applied via a
+   `data-palette` attribute alongside `data-theme`, e.g.
+   [data-theme="light"][data-palette="ocean"]. No block is needed
+   for the "default" palette — the base theme blocks above already
+   are the default.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Light: Ocean ── */
+[data-theme="light"][data-palette="ocean"] {
+  --appaccent:          #0369a1;
+  --appaccent-soft:     rgba(2, 132, 199, 0.14);
+  --appaccent-border:   rgba(3, 105, 161, 0.4);
+  --appaccent-text:     #075985;
+  --appglow-accent:     rgba(2, 132, 199, 0.1);
+}
+
+/* ── Light: Sunset ── */
+[data-theme="light"][data-palette="sunset"] {
+  --appaccent:          #c2410c;
+  --appaccent-soft:     rgba(234, 88, 12, 0.14);
+  --appaccent-border:   rgba(194, 65, 12, 0.4);
+  --appaccent-text:     #9a3412;
+  --appglow-accent:     rgba(234, 88, 12, 0.1);
+}
+
+/* ── Light: Violet ── */
+[data-theme="light"][data-palette="violet"] {
+  --appaccent:          #6d28d9;
+  --appaccent-soft:     rgba(124, 58, 237, 0.14);
+  --appaccent-border:   rgba(109, 40, 217, 0.4);
+  --appaccent-text:     #5b21b6;
+  --appglow-accent:     rgba(124, 58, 237, 0.1);
+}
+
+/* ── Dark: Ocean ── */
+[data-theme="dark"][data-palette="ocean"] {
+  --appaccent:          #38bdf8;
+  --appaccent-soft:     rgba(56, 189, 248, 0.15);
+  --appaccent-border:   rgba(56, 189, 248, 0.4);
+  --appaccent-text:     #bae6fd;
+  --appglow-accent:     rgba(56, 189, 248, 0.18);
+}
+
+/* ── Dark: Sunset ── */
+[data-theme="dark"][data-palette="sunset"] {
+  --appaccent:          #fb923c;
+  --appaccent-soft:     rgba(251, 146, 60, 0.15);
+  --appaccent-border:   rgba(251, 146, 60, 0.4);
+  --appaccent-text:     #fed7aa;
+  --appglow-accent:     rgba(251, 146, 60, 0.18);
+}
+
+/* ── Dark: Violet ── */
+[data-theme="dark"][data-palette="violet"] {
+  --appaccent:          #a78bfa;
+  --appaccent-soft:     rgba(167, 139, 250, 0.15);
+  --appaccent-border:   rgba(167, 139, 250, 0.4);
+  --appaccent-text:     #ddd6fe;
+  --appglow-accent:     rgba(167, 139, 250, 0.18);
+}
+
 /* ── Base ── */
 html {
   font-family: 'Manrope', sans-serif;

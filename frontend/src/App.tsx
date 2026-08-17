@@ -230,8 +230,8 @@ export default memo(function App() {
       className="min-h-[100dvh] transition-colors duration-300"
       style={{
         background: isDark
-          ? 'radial-gradient(circle at top left, rgba(56,189,248,0.16), transparent 24%), radial-gradient(circle at top right, rgba(16,185,129,0.18), transparent 30%), linear-gradient(180deg, #07111f 0%, #08101c 42%, #050913 100%)'
-          : 'radial-gradient(circle at top left, rgba(56,189,248,0.08), transparent 24%), radial-gradient(circle at top right, rgba(5,150,105,0.08), transparent 30%), linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
+          ? 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #07111f 0%, #08101c 42%, #050913 100%)'
+          : 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
       }}
     >
       <div className="w-full px-2 py-2 sm:px-5 sm:py-5 lg:px-6 lg:py-6 2xl:px-8 pb-20 lg:pb-0">

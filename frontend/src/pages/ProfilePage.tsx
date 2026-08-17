@@ -4,6 +4,7 @@ import { fetchProfile, updateProfile as apiUpdateProfile, type ProfileUpdateRequ
 import { useAuth } from '../context/AuthContext';
 import UserProfileCard from '../components/profile/UserProfileCard';
 import UserEditModal from '../components/profile/UserEditModal';
+import ThemePicker from '../components/ThemePicker';
 
 export default function ProfilePage() {
   const queryClient = useQueryClient();
@@ -76,6 +77,9 @@ export default function ProfilePage() {
         role={p.role}
         onEdit={() => setEditing(true)}
       />
+
+      {/* Theme & palette picker */}
+      <ThemePicker />
 
       {saveError && (
         <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-appdanger">
