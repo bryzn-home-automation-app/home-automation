@@ -285,19 +285,23 @@
 
 /* ── Dark: Ocean ── */
 [data-theme="dark"][data-palette="ocean"] {
-  --appbg:              #030f1f;
-  --appsurface:         #0a1e33;
-  --appsurface-raised:  rgba(10, 30, 51, 0.88);
-  --appinset:           rgba(3, 15, 31, 0.5);
-  --appinset-strong:    rgba(3, 15, 31, 0.7);
-  --appborder:          rgba(56, 189, 248, 0.14);
-  --appborder-light:    rgba(56, 189, 248, 0.08);
-  --appborder-hover:    rgba(56, 189, 248, 0.24);
-  --appaccent:          #38bdf8;
-  --appaccent-soft:     rgba(56, 189, 248, 0.15);
-  --appaccent-border:   rgba(56, 189, 248, 0.4);
+  /* Neutral surfaces, same as the default dark theme — see the note in
+     Dark: Sunset for why (a saturated dark-blue wash read as muddy, not
+     "ocean"). Accent is the exact same hex as light Ocean (#0369a1),
+     not a separate brighter dark-mode blue. */
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  --appborder:          rgba(3, 105, 161, 0.16);
+  --appborder-light:    rgba(3, 105, 161, 0.09);
+  --appborder-hover:    rgba(3, 105, 161, 0.28);
+  --appaccent:          #0369a1;
+  --appaccent-soft:     rgba(2, 132, 199, 0.14);
+  --appaccent-border:   rgba(3, 105, 161, 0.4);
   --appaccent-text:     #bae6fd;
-  --appglow-accent:     rgba(56, 189, 248, 0.22);
+  --appglow-accent:     rgba(2, 132, 199, 0.22);
 }
 
 /* ── Dark: Sunset ── */
