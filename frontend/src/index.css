@@ -302,40 +302,47 @@
 
 /* ── Dark: Sunset ── */
 [data-theme="dark"][data-palette="sunset"] {
-  --appbg:              #201206;
-  --appsurface:         #38230f;
-  --appsurface-raised:  rgba(56, 35, 15, 0.88);
-  --appinset:           rgba(32, 18, 6, 0.5);
-  --appinset-strong:    rgba(32, 18, 6, 0.7);
+  /* Neutral surfaces, same as the default dark theme — matching what
+     light Sunset actually does (its "tint" on appbg/appinset is so
+     subtle it reads as plain white; the orange only shows up via
+     borders/icons/accent fills). A saturated dark-brown background
+     read as "muddy" rather than "orange", so don't do that here. */
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
   /* Same accent shade as light Sunset (#c2410c), not a separate
      brighter dark-mode tint — kept identical across modes on request. */
-  --appborder:          rgba(194, 65, 12, 0.22);
-  --appborder-light:    rgba(194, 65, 12, 0.13);
-  --appborder-hover:    rgba(194, 65, 12, 0.32);
+  --appborder:          rgba(194, 65, 12, 0.16);
+  --appborder-light:    rgba(194, 65, 12, 0.09);
+  --appborder-hover:    rgba(194, 65, 12, 0.28);
   --appaccent:          #c2410c;
-  --appaccent-soft:     rgba(194, 65, 12, 0.22);
-  --appaccent-border:   rgba(194, 65, 12, 0.5);
+  --appaccent-soft:     rgba(234, 88, 12, 0.14);
+  --appaccent-border:   rgba(194, 65, 12, 0.4);
   --appaccent-text:     #ffe1d0;
-  --appglow-accent:     rgba(194, 65, 12, 0.3);
+  --appglow-accent:     rgba(194, 65, 12, 0.22);
 }
 
 /* ── Dark: Violet ── */
 [data-theme="dark"][data-palette="violet"] {
-  --appbg:              #241533;
-  --appsurface:         #3a2350;
-  --appsurface-raised:  rgba(58, 35, 80, 0.88);
-  --appinset:           rgba(36, 21, 51, 0.55);
-  --appinset-strong:    rgba(36, 21, 51, 0.78);
+  /* Neutral surfaces, same as the default dark theme — see the note
+     in Dark: Sunset above, identical reasoning. */
+  --appbg:              #020617;
+  --appsurface:         #0f172a;
+  --appsurface-raised:  rgba(15, 23, 42, 0.88);
+  --appinset:           rgba(2, 8, 23, 0.45);
+  --appinset-strong:    rgba(2, 8, 23, 0.65);
   /* Same accent shade as light Violet (#6d28d9), not a separate
      brighter dark-mode tint — kept identical across modes on request. */
-  --appborder:          rgba(109, 40, 217, 0.24);
-  --appborder-light:    rgba(109, 40, 217, 0.14);
-  --appborder-hover:    rgba(109, 40, 217, 0.34);
+  --appborder:          rgba(109, 40, 217, 0.16);
+  --appborder-light:    rgba(109, 40, 217, 0.09);
+  --appborder-hover:    rgba(109, 40, 217, 0.28);
   --appaccent:          #6d28d9;
-  --appaccent-soft:     rgba(109, 40, 217, 0.24);
-  --appaccent-border:   rgba(109, 40, 217, 0.55);
+  --appaccent-soft:     rgba(124, 58, 237, 0.14);
+  --appaccent-border:   rgba(109, 40, 217, 0.4);
   --appaccent-text:     #dcc2ff;
-  --appglow-accent:     rgba(109, 40, 217, 0.32);
+  --appglow-accent:     rgba(109, 40, 217, 0.22);
 }
 
 /* ── Base ── */
