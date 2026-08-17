@@ -186,7 +186,7 @@ export default function HomeSummary() {
 
       {/* Current weather card */}
       {currentWx && (
-        <section className="rounded-[28px] border border-sky-300/35 bg-sky-300/15 p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
+        <section className="rounded-[28px] border border-appaccent-border bg-appaccent-soft p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-4">
               <span className="text-4xl">{wxEmoji}</span>
@@ -198,8 +198,8 @@ export default function HomeSummary() {
               </div>
             </div>
             <div className="text-right">
-              <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3">
-                <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Humidity</p>
+              <div className="rounded-2xl border border-appaccent-border bg-appsurface/60 px-4 py-3">
+                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Humidity</p>
                 <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(latestHumidity!)}%</p>
               </div>
             </div>

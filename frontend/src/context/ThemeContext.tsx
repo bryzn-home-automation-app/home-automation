@@ -12,8 +12,8 @@ export interface PaletteOption {
 export const PALETTES: PaletteOption[] = [
   { id: 'default', label: 'Default', swatch: { light: '#047857', dark: '#34d399' } },
   { id: 'ocean', label: 'Ocean', swatch: { light: '#0369a1', dark: '#38bdf8' } },
-  { id: 'sunset', label: 'Sunset', swatch: { light: '#c2410c', dark: '#fb923c' } },
-  { id: 'violet', label: 'Violet', swatch: { light: '#6d28d9', dark: '#a78bfa' } },
+  { id: 'sunset', label: 'Sunset', swatch: { light: '#c2410c', dark: '#fda172' } },
+  { id: 'violet', label: 'Violet', swatch: { light: '#6d28d9', dark: '#8f00ff' } },
 ];
 const PALETTE_IDS = PALETTES.map((p) => p.id);
 const DEFAULT_PALETTE = 'default';
