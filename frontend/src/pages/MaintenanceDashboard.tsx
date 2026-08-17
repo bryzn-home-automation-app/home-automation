@@ -40,16 +40,16 @@ const CAT_ICONS: Record<string, string> = {
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  LOW: 'border-sky-300/20 bg-sky-300/10 text-sky-300',
-  MEDIUM: 'border-amber-300/20 bg-amber-300/10 text-amber-300',
-  HIGH: 'border-orange-300/20 bg-orange-300/10 text-orange-300',
-  EMERGENCY: 'border-red-400/30 bg-red-400/10 text-red-400',
+  LOW: 'border-sky-300/40 bg-sky-300/10 text-sky-300',
+  MEDIUM: 'border-amber-300/40 bg-amber-300/10 text-amber-300',
+  HIGH: 'border-orange-300/40 bg-orange-300/10 text-orange-300',
+  EMERGENCY: 'border-red-400/50 bg-red-400/10 text-red-400',
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  SCHEDULED: 'border-sky-400/30 bg-sky-400/10 text-sky-300',
-  IN_PROGRESS: 'border-amber-400/30 bg-amber-400/10 text-amber-300',
-  COMPLETED: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
+  SCHEDULED: 'border-sky-400/50 bg-sky-400/10 text-sky-300',
+  IN_PROGRESS: 'border-amber-400/50 bg-amber-400/10 text-amber-300',
+  COMPLETED: 'border-emerald-400/50 bg-emerald-400/10 text-emerald-300',
   CANCELLED: 'border-appborder bg-appinset text-apptext-muted',
 };
 
@@ -178,10 +178,10 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
             </p>
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_COLORS[r.priority]}`}>
+            <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>
               {r.priority}
             </span>
-            <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${STATUS_COLORS[r.status]}`}>
+            <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>
               {r.status.replace('_', ' ')}
             </span>
           </div>
@@ -189,12 +189,12 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         {/* Row 2 — mobile: dates + people */}
         <div className="grid grid-cols-3 gap-2 text-xs lg:hidden">
           <div>
-            {r.startedDate && <span className="text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>}
-            {r.scheduledDate && <span className="text-sky-300">📅 {formatDate(r.scheduledDate)}</span>}
+            {r.startedDate && <span className="font-medium text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>}
+            {r.scheduledDate && <span className="font-medium text-sky-300">📅 {formatDate(r.scheduledDate)}</span>}
             {!r.startedDate && !r.scheduledDate && <span className="text-apptext-dim">—</span>}
           </div>
           <div>
-            {r.completedDate && <span className="text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
+            {r.completedDate && <span className="font-medium text-emerald-300">✅ {formatDate(r.completedDate)}</span>}
           </div>
           <div className="flex items-center gap-1">
             {r.requestedBy ? <span className="rounded-full border border-appborder bg-appinset px-2 py-0.5 text-apptext-muted truncate">👤 {r.requestedBy}</span> : <span className="text-apptext-dim">—</span>}
@@ -207,7 +207,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-semibold text-apptext">{r.title}</p>
-              <span className={`shrink-0 rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${STATUS_COLORS[r.status]}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>
                 {r.status.replace('_', ' ')}
               </span>
             </div>
@@ -223,14 +223,14 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         {/* Dates column */}
         <div className="hidden flex-col gap-0.5 text-[12px] lg:flex">
           {r.startedDate ? (
-            <span className="text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>
+            <span className="font-medium text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>
           ) : r.scheduledDate ? (
-            <span className="text-sky-300">📅 {formatDate(r.scheduledDate)}</span>
+            <span className="font-medium text-sky-300">📅 {formatDate(r.scheduledDate)}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
           {r.completedDate ? (
-            <span className="text-emerald-300">✅ {formatDate(r.completedDate)}</span>
+            <span className="font-medium text-emerald-300">✅ {formatDate(r.completedDate)}</span>
           ) : (
             <span className="text-apptext-dim">—</span>
           )}
@@ -256,7 +256,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
 
         {/* Priority */}
         <div className="hidden text-right lg:block">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_COLORS[r.priority]}`}>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>
             {r.priority}
           </span>
         </div>
@@ -293,8 +293,8 @@ function DetailModal({ r, onClose, onEdit }: {
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${PRIORITY_COLORS[r.priority]}`}>{r.priority}</span>
-              <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${STATUS_COLORS[r.status]}`}>{r.status.replace('_',' ')}</span>
+              <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>{r.priority}</span>
+              <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>{r.status.replace('_',' ')}</span>
             </div>
             <h2 className="text-xl font-semibold text-apptext">{r.title}</h2>
             <p className="mt-1 text-sm text-apptext-muted">{CAT_ICONS[r.category] || '🔨'} {r.category}{r.area ? ` · ${r.area}` : ''}</p>
