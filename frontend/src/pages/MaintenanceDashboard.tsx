@@ -1,5 +1,6 @@
 import { useState, type FormEvent, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useTheme, KPI_TONES, hexToRgba } from '../context/ThemeContext';
 import {
   fetchMaintenanceRecords,
   fetchMaintenanceAnalytics,
@@ -78,19 +79,26 @@ function formatDate(d: string | null): string {
 // ════════════════════════════════════════════════════════
 
 function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
+  const { palette } = useTheme();
+  const tones = KPI_TONES[palette] ?? KPI_TONES.default;
+
   const cards = [
-    { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', accent: 'border-amber-300/30 bg-amber-300/10' },
-    { label: 'Upcoming', value: a?.scheduledCount ?? '...', icon: '📅', accent: 'border-sky-300/30 bg-sky-300/10' },
-    { label: 'Completed', value: a?.completedCount ?? '...', icon: '✅', accent: 'border-emerald-300/30 bg-emerald-300/10' },
-    { label: 'Lifetime Cost', value: formatCurrency(a?.totalLifetimeCost ?? 0), icon: '💰', accent: 'border-amber-300/20 bg-amber-300/5' },
-    { label: 'This Year', value: formatCurrency(a?.thisYearCost ?? 0), icon: '📆', accent: 'border-sky-300/20 bg-sky-300/5' },
-    { label: 'Monthly Avg', value: formatCurrency(a?.averageMonthlyCost ?? 0), icon: '📊', accent: 'border-purple-300/20 bg-purple-300/5' },
+    { label: 'Open Tasks', value: a?.openCount ?? '...', icon: '📋', tone: tones[0], bgAlpha: 0.1 },
+    { label: 'Upcoming', value: a?.scheduledCount ?? '...', icon: '📅', tone: tones[1], bgAlpha: 0.1 },
+    { label: 'Completed', value: a?.completedCount ?? '...', icon: '✅', tone: tones[2], bgAlpha: 0.1 },
+    { label: 'Lifetime Cost', value: formatCurrency(a?.totalLifetimeCost ?? 0), icon: '💰', tone: tones[3], bgAlpha: 0.05 },
+    { label: 'This Year', value: formatCurrency(a?.thisYearCost ?? 0), icon: '📆', tone: tones[4], bgAlpha: 0.05 },
+    { label: 'Monthly Avg', value: formatCurrency(a?.averageMonthlyCost ?? 0), icon: '📊', tone: tones[5], bgAlpha: 0.05 },
   ];
 
   return (
     <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
       {cards.map((c) => (
-        <div key={c.label} className={`rounded-2xl border ${c.accent} p-4`}>
+        <div
+          key={c.label}
+          className="rounded-2xl border p-4"
+          style={{ borderColor: hexToRgba(c.tone, 0.3), backgroundColor: hexToRgba(c.tone, c.bgAlpha) }}
+        >
           <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.14em] text-apptext-dim">
             <span>{c.icon}</span> {c.label}
           </p>

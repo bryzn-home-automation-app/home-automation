@@ -18,6 +18,30 @@ export const PALETTES: PaletteOption[] = [
 const PALETTE_IDS = PALETTES.map((p) => p.id);
 const DEFAULT_PALETTE = 'default';
 
+/**
+ * Per-palette accent tones for multi-color decorative UI (e.g. the
+ * Maintenance summary cards) that would otherwise hardcode a fixed
+ * amber/sky/emerald/purple rainbow regardless of the chosen palette.
+ * 6 tones per palette, in a consistent role order: [warm-1, cool-1,
+ * success, warm-2, cool-2, distinct]. "success" (index 2) stays a
+ * green/teal across every palette — a checkmark reading as anything
+ * but "done" would be confusing — everything else is re-hued to fit
+ * the palette's family.
+ */
+export const KPI_TONES: Record<string, string[]> = {
+  default: ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
+  ocean:   ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
+  sunset:  ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
+  violet:  ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
+};
+
+/** Convert a `#rrggbb` hex color to an `rgba(...)` string at the given alpha. */
+export function hexToRgba(hex: string, alpha: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 interface ThemeContextValue {
   theme: Theme;
   toggleTheme: () => void;
