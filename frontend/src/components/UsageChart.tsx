@@ -167,7 +167,13 @@ function UsageChart({
             tick={{ fill: t.tick, ...TICK_PROPS }}
             axisLine={{ stroke: t.grid }}
             tickLine={TICK_LINE_FALSE}
-            interval={0}
+            // Auto-thin the date labels to fit the available width (keeps every
+            // data point on the line — only the tick TEXT is thinned). Scales
+            // responsively: more labels on a wide desktop chart, fewer on a
+            // narrow phone, instead of cramming all ~30 dates on top of
+            // each other.
+            interval="preserveStartEnd"
+            minTickGap={28}
             angle={-35}
             textAnchor="end"
             height={50}

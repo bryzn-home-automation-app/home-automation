@@ -217,13 +217,14 @@ export default memo(function App() {
     </>
   );
 
-  // ── Bottom nav tabs (mobile only) ──
+  // ── Bottom nav tabs (mobile only) — 4 primary destinations + a "More"
+  //    button (rendered separately) that opens the full menu, so every
+  //    section is reachable from the bottom bar. ──
   const bottomTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
     { path: '/electric', label: 'Electric', icon: '⚡', end: false },
-    { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },
     { path: '/gas', label: 'Gas', icon: '🔥', end: false },
-    { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
+    { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },
   ];
 
   return (
@@ -274,45 +275,36 @@ export default memo(function App() {
           )}
 
           <div className="min-w-0">
-            <header className="rounded-2xl border border-appborder bg-appsurface-raised px-3 py-3 shadow-[0_10px_30px_var(--appshadow)] sm:px-6 sm:py-5 lg:rounded-[28px] lg:px-7 lg:py-6">
-              <div className="flex items-center gap-3">
-                {/* Hamburger — mobile only */}
-                <button
-                  ref={hamburgerButtonRef}
-                  type="button"
-                  onClick={() => setMobileMenuOpen(true)}
-                  className="rounded-xl border border-appborder bg-appinset p-2 text-apptext hover:border-appborder-hover lg:hidden"
-                  aria-label="Open menu"
-                  aria-expanded={mobileMenuOpen}
-                  aria-controls="mobile-sidebar"
-                >
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                </button>
-                <div className="flex-1">
-                  <PageHeader
-                    title="Home"
-                    eyebrow="Operations Console"
-                    actions={
-                      <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
-                        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Backend</p>
-                          <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
-                        </div>
-                        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Unread</p>
-                          <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
-                        </div>
-                        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Access</p>
-                          <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
-                        </div>
-                      </div>
-                    }
-                  />
-                </div>
+            <header className="rounded-2xl border border-appborder bg-appsurface-raised px-4 py-4 shadow-[0_10px_30px_var(--appshadow)] sm:px-6 sm:py-5 lg:rounded-[28px] lg:px-7 lg:py-6">
+              {/* Mobile brand row — replaces the standalone hamburger (nav is
+                  now on the bottom bar, incl. a "More" tab for the full menu). */}
+              <div className="mb-3 flex items-center justify-between lg:hidden">
+                <span className="text-sm font-semibold tracking-[-0.02em] text-apptext">HomeOS</span>
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-appborder bg-appinset px-2.5 py-1 text-[10px] font-medium text-apptext-muted">
+                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${backendUp ? 'bg-appsuccess' : 'bg-appdanger'}`} />
+                  {backendUp ? 'Healthy' : 'Offline'}
+                </span>
               </div>
+              <PageHeader
+                title="Home"
+                eyebrow="Operations Console"
+                actions={
+                  <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
+                    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Backend</p>
+                      <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
+                    </div>
+                    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Unread</p>
+                      <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
+                    </div>
+                    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
+                      <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Access</p>
+                      <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
+                    </div>
+                  </div>
+                }
+              />
             </header>
 
             <main className="mt-4 lg:mt-5">
@@ -342,15 +334,30 @@ export default memo(function App() {
                 }`
               }
             >
-              <span className="text-lg">{tab.icon}</span>
+              <span className="relative text-lg">
+                {tab.icon}
+                {tab.path === '/notifications' && unreadCount > 0 && (
+                  <span className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-white">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </span>
               <span className="leading-none">{tab.label}</span>
-              {tab.path === '/notifications' && unreadCount > 0 && (
-                <span className="absolute -top-0.5 right-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-white">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
             </NavLink>
           ))}
+          {/* More — opens the full menu (every section, incl. admin) */}
+          <button
+            ref={hamburgerButtonRef}
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="More menu"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-sidebar"
+            className="flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[11px] font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
+          >
+            <span className="flex h-[1.5rem] items-center text-lg leading-none">⋯</span>
+            <span className="leading-none">More</span>
+          </button>
         </div>
       </nav>
     </div>
