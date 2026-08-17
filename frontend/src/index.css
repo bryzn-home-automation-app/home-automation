@@ -118,7 +118,15 @@
   --apptext:            #0f172a;
   --apptext-soft:       #334155;
   --apptext-muted:      #475569;
-  --apptext-dim:        #64748b;
+  /* Darkened from #64748b (slate-500, ~4.6:1 on white — borderline for normal
+     text, and visibly too weak once used on a tinted card background rather
+     than plain white). The app uses this token for tiny 10-11px uppercase
+     eyebrow labels in ~50+ places (confirmed via screenshot across Debug
+     Dashboard, Maintenance, Home, WiFi, and others), the same role
+     --apptext-muted already handles correctly elsewhere — so this keeps a
+     hair of distinction from --apptext-muted rather than making them
+     identical, but is meaningfully more legible than the old value. */
+  --apptext-dim:        #56637a;
 
   --appborder:          rgba(15, 23, 42, 0.14);
   --appborder-light:    rgba(15, 23, 42, 0.08);
