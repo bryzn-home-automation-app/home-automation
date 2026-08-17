@@ -212,67 +212,119 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Palette variants — override only the accent tokens (backgrounds,
-   text, and borders stay on the proven-safe default values from
-   above; only the "brand" accent hue changes). Applied via a
-   `data-palette` attribute alongside `data-theme`, e.g.
-   [data-theme="light"][data-palette="ocean"]. No block is needed
-   for the "default" palette — the base theme blocks above already
-   are the default.
+   Palette variants — override the page background, surfaces, insets,
+   borders, and accent tokens for a real hue shift across the whole
+   UI, not just buttons/badges. Deliberately UNCHANGED per palette:
+   --apptext*/--appborder ratios stay legible (same lightness/opacity
+   approach as the default, just hue-shifted — contrast is a function
+   of lightness, not hue, so this keeps the contrast work from
+   earlier sessions intact) and --appsurface stays pure white (light)
+   / near-black (dark) in every palette so raised cards keep popping
+   against the now-tinted page background. Chart tick/grid/success/
+   warning/danger colors also stay fixed across palettes on purpose
+   (see DECISIONS.md — a user should not have to relearn what color
+   means error, and electric/gas charts use green/blue as a stable
+   data-identity convention, not a brand color).
+   Applied via a `data-palette` attribute alongside `data-theme`,
+   e.g. [data-theme="light"][data-palette="ocean"]. No block is
+   needed for the "default" palette — the base theme blocks above
+   already are the default.
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── Light: Ocean ── */
 [data-theme="light"][data-palette="ocean"] {
+  --appbg:              #e8f1f9;
+  --appinset:           #dceaf5;
+  --appinset-strong:    #c3ddf0;
+  --appborder:          rgba(3, 105, 161, 0.16);
+  --appborder-light:    rgba(3, 105, 161, 0.09);
+  --appborder-hover:    rgba(3, 105, 161, 0.28);
   --appaccent:          #0369a1;
   --appaccent-soft:     rgba(2, 132, 199, 0.14);
   --appaccent-border:   rgba(3, 105, 161, 0.4);
   --appaccent-text:     #075985;
-  --appglow-accent:     rgba(2, 132, 199, 0.1);
+  --appglow-accent:     rgba(2, 132, 199, 0.14);
 }
 
 /* ── Light: Sunset ── */
 [data-theme="light"][data-palette="sunset"] {
+  --appbg:              #fbf0e7;
+  --appinset:           #f8e5d3;
+  --appinset-strong:    #f0d0b0;
+  --appborder:          rgba(194, 65, 12, 0.16);
+  --appborder-light:    rgba(194, 65, 12, 0.09);
+  --appborder-hover:    rgba(194, 65, 12, 0.28);
   --appaccent:          #c2410c;
   --appaccent-soft:     rgba(234, 88, 12, 0.14);
   --appaccent-border:   rgba(194, 65, 12, 0.4);
   --appaccent-text:     #9a3412;
-  --appglow-accent:     rgba(234, 88, 12, 0.1);
+  --appglow-accent:     rgba(234, 88, 12, 0.14);
 }
 
 /* ── Light: Violet ── */
 [data-theme="light"][data-palette="violet"] {
+  --appbg:              #f2eef9;
+  --appinset:           #e9e0f6;
+  --appinset-strong:    #dbcaef;
+  --appborder:          rgba(109, 40, 217, 0.16);
+  --appborder-light:    rgba(109, 40, 217, 0.09);
+  --appborder-hover:    rgba(109, 40, 217, 0.28);
   --appaccent:          #6d28d9;
   --appaccent-soft:     rgba(124, 58, 237, 0.14);
   --appaccent-border:   rgba(109, 40, 217, 0.4);
   --appaccent-text:     #5b21b6;
-  --appglow-accent:     rgba(124, 58, 237, 0.1);
+  --appglow-accent:     rgba(124, 58, 237, 0.14);
 }
 
 /* ── Dark: Ocean ── */
 [data-theme="dark"][data-palette="ocean"] {
+  --appbg:              #030f1f;
+  --appsurface:         #0a1e33;
+  --appsurface-raised:  rgba(10, 30, 51, 0.88);
+  --appinset:           rgba(3, 15, 31, 0.5);
+  --appinset-strong:    rgba(3, 15, 31, 0.7);
+  --appborder:          rgba(56, 189, 248, 0.14);
+  --appborder-light:    rgba(56, 189, 248, 0.08);
+  --appborder-hover:    rgba(56, 189, 248, 0.24);
   --appaccent:          #38bdf8;
   --appaccent-soft:     rgba(56, 189, 248, 0.15);
   --appaccent-border:   rgba(56, 189, 248, 0.4);
   --appaccent-text:     #bae6fd;
-  --appglow-accent:     rgba(56, 189, 248, 0.18);
+  --appglow-accent:     rgba(56, 189, 248, 0.22);
 }
 
 /* ── Dark: Sunset ── */
 [data-theme="dark"][data-palette="sunset"] {
+  --appbg:              #1a0f07;
+  --appsurface:         #2e1c0f;
+  --appsurface-raised:  rgba(46, 28, 15, 0.88);
+  --appinset:           rgba(26, 15, 7, 0.5);
+  --appinset-strong:    rgba(26, 15, 7, 0.7);
+  --appborder:          rgba(251, 146, 60, 0.14);
+  --appborder-light:    rgba(251, 146, 60, 0.08);
+  --appborder-hover:    rgba(251, 146, 60, 0.24);
   --appaccent:          #fb923c;
   --appaccent-soft:     rgba(251, 146, 60, 0.15);
   --appaccent-border:   rgba(251, 146, 60, 0.4);
   --appaccent-text:     #fed7aa;
-  --appglow-accent:     rgba(251, 146, 60, 0.18);
+  --appglow-accent:     rgba(251, 146, 60, 0.22);
 }
 
 /* ── Dark: Violet ── */
 [data-theme="dark"][data-palette="violet"] {
+  --appbg:              #120a1f;
+  --appsurface:         #211236;
+  --appsurface-raised:  rgba(33, 18, 54, 0.88);
+  --appinset:           rgba(18, 10, 31, 0.5);
+  --appinset-strong:    rgba(18, 10, 31, 0.7);
+  --appborder:          rgba(167, 139, 250, 0.14);
+  --appborder-light:    rgba(167, 139, 250, 0.08);
+  --appborder-hover:    rgba(167, 139, 250, 0.24);
   --appaccent:          #a78bfa;
   --appaccent-soft:     rgba(167, 139, 250, 0.15);
   --appaccent-border:   rgba(167, 139, 250, 0.4);
   --appaccent-text:     #ddd6fe;
-  --appglow-accent:     rgba(167, 139, 250, 0.18);
+  --appglow-accent:     rgba(167, 139, 250, 0.22);
 }
 
 /* ── Base ── */
