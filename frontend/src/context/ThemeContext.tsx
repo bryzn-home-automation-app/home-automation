@@ -53,6 +53,46 @@ export const KPI_TONES: Record<string, { light: string[]; dark: string[] }> = {
   },
 };
 
+/**
+ * Line-chart series colors for the Usage-vs-Temperature chart, per palette
+ * and mode. `usage` tracks the palette's accent (so the kWh line is the theme
+ * color — green default, blue Ocean, orange Sunset, violet Violet, matching
+ * `--appaccent` / the PALETTES swatch). `temp` is the accent's COMPLEMENTARY
+ * hue in every palette, so the temperature line always reads as a deliberate
+ * contrast against its own usage line rather than defaulting to one shared
+ * color:
+ *   - Default: green usage ↔ amber temp
+ *   - Ocean:   blue usage  ↔ orange temp
+ *   - Sunset:  orange usage ↔ sky-blue temp
+ *   - Violet:  violet usage ↔ yellow temp
+ * Kept as explicit hex (not `var(--appaccent)`) because Recharts writes
+ * `stroke` as an SVG *attribute*, where `var()` resolution is unreliable
+ * across browsers (see DECISIONS.md) — same reason KPI_TONES above is
+ * hardcoded rather than CSS-var-driven. Light-mode `usage`/`temp` values are
+ * a notch deeper so both lines stay legible on the white chart background.
+ */
+export const CHART_SERIES: Record<string, {
+  light: { usage: string; temp: string };
+  dark: { usage: string; temp: string };
+}> = {
+  default: {
+    light: { usage: '#047857', temp: '#d97706' }, // green ↔ amber
+    dark:  { usage: '#34d399', temp: '#f59e0b' },
+  },
+  ocean: {
+    light: { usage: '#0369a1', temp: '#c2410c' }, // blue ↔ orange
+    dark:  { usage: '#0284c7', temp: '#f97316' },
+  },
+  sunset: {
+    light: { usage: '#c2410c', temp: '#0369a1' }, // orange ↔ sky-blue
+    dark:  { usage: '#ea580c', temp: '#38bdf8' },
+  },
+  violet: {
+    light: { usage: '#6d28d9', temp: '#ca8a04' }, // violet ↔ yellow
+    dark:  { usage: '#7c3aed', temp: '#facc15' },
+  },
+};
+
 /** Convert a `#rrggbb` hex color to an `rgba(...)` string at the given alpha. */
 export function hexToRgba(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16);

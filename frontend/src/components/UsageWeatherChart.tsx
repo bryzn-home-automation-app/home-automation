@@ -13,6 +13,7 @@ import type { EnergyUsage } from '../types';
 import { fetchWeatherForRange } from '../api/weather';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 import { isHourlySource } from '../utils/usageSource';
+import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
 
 interface UsageWeatherChartProps {
   usageData: EnergyUsage[];
@@ -159,6 +160,13 @@ function UsageWeatherChart({
   endDate,
 }: UsageWeatherChartProps) {
   const [range, setRange] = useState<TimeRangeKey>('24h');
+
+  // Per-palette line colors: usage tracks the theme accent, temperature is a
+  // contrasting hue chosen per palette (see CHART_SERIES). Re-derives whenever
+  // the theme/palette context changes.
+  const { theme, palette } = useTheme();
+  const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
+
   const dateStart = typeof startDate === 'string' ? startDate.slice(0, 10) : '';
   const dateEnd = typeof endDate === 'string' ? endDate.slice(0, 10) : '';
   const weatherEnabled = dateStart !== '' && dateEnd !== '';
@@ -368,8 +376,20 @@ function UsageWeatherChart({
           <h3 className="mt-2 text-lg font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-300">kWh</span>
-          {hasWeather && <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold text-amber-300">°F</span>}
+          <span
+            className="rounded-full border px-2.5 py-1 text-[10px] font-semibold"
+            style={{ color: series.usage, backgroundColor: hexToRgba(series.usage, 0.1), borderColor: hexToRgba(series.usage, 0.22) }}
+          >
+            kWh
+          </span>
+          {hasWeather && (
+            <span
+              className="rounded-full border px-2.5 py-1 text-[10px] font-semibold"
+              style={{ color: series.temp, backgroundColor: hexToRgba(series.temp, 0.1), borderColor: hexToRgba(series.temp, 0.22) }}
+            >
+              °F
+            </span>
+          )}
         </div>
       </div>
       {useHourly && (() => {
@@ -433,7 +453,7 @@ function UsageWeatherChart({
           />
 
           <YAxis yAxisId="left" tick={{ fill: chartTheme.tick, ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit=" kWh" domain={kwhDomain as [number, number]} ticks={kwhTicks} />
-          {hasWeather && <YAxis yAxisId="right" orientation="right" tick={{ fill: '#f59e0b', ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit="°" domain={tempDomain as [number, number]} ticks={tempTicks} tickFormatter={(value) => `${Math.round(Number(value))}`} />}
+          {hasWeather && <YAxis yAxisId="right" orientation="right" tick={{ fill: series.temp, ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit="°" domain={tempDomain as [number, number]} ticks={tempTicks} tickFormatter={(value) => `${Math.round(Number(value))}`} />}
 
           <Tooltip
             contentStyle={TOOLTIP_CONTENT_STYLE}
@@ -442,15 +462,15 @@ function UsageWeatherChart({
             labelStyle={TOOLTIP_LABEL_STYLE}
           />
 
-          {/* Electric usage — tight line for hourly, bolder for daily */}
+          {/* Electric usage — theme accent; tight line for hourly, bolder for daily */}
           {useHourly ? (
-            <Line yAxisId="left" type="monotone" dataKey="kWh" stroke="#34d399" strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
+            <Line yAxisId="left" type="monotone" dataKey="kWh" stroke={series.usage} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
           ) : (
-            <Line yAxisId="left" type="monotone" dataKey="kWh" stroke="#34d399" strokeWidth={2.5} dot={showDots ? { fill: '#34d399', r: 4 } : false} isAnimationActive={false} connectNulls />
+            <Line yAxisId="left" type="monotone" dataKey="kWh" stroke={series.usage} strokeWidth={2.5} dot={showDots ? { fill: series.usage, r: 4 } : false} isAnimationActive={false} connectNulls />
           )}
 
-          {/* Temperature — amber dashed line */}
-          {hasWeather && <Line yAxisId="right" type="monotone" dataKey={useHourly ? 'temp' : 'avgTemp'} stroke="#f59e0b" strokeWidth={2} dot={useHourly ? false : (showDots ? { fill: '#f59e0b', r: 4 } : false)} isAnimationActive={false} connectNulls strokeDasharray="8 3" />}
+          {/* Temperature — contrasting dashed line (see CHART_SERIES) */}
+          {hasWeather && <Line yAxisId="right" type="monotone" dataKey={useHourly ? 'temp' : 'avgTemp'} stroke={series.temp} strokeWidth={2} dot={useHourly ? false : (showDots ? { fill: series.temp, r: 4 } : false)} isAnimationActive={false} connectNulls strokeDasharray="8 3" />}
         </LineChart>
       </ResponsiveContainer>
     </div>
