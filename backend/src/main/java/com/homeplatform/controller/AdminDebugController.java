@@ -6,9 +6,12 @@ import com.homeplatform.service.AlertEngine;
 import com.homeplatform.service.AppEventService;
 import com.homeplatform.service.DailySyncScheduler;
 import com.homeplatform.service.HourlySyncScheduler;
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,6 +21,8 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -34,6 +39,17 @@ public class AdminDebugController {
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
     /** CoServ only retains ~2 weeks of interval data. */
     private static final int MAX_RANGE_DAYS = 14;
+    /** Mirrors HourlySyncScheduler — a day is "complete" at this many non-zero hours. */
+    private static final int HOURLY_COMPLETE_THRESHOLD = 20;
+    private static final int HOURLY_EXPECTED = 24;
+
+    // Config values, mirrored from ConfigController so the config-check panel can
+    // validate them. Never exposes secrets — only presence/booleans and non-sensitive rates.
+    @Value("${app.kwh-rate:0.12}")           private double kwhRate;
+    @Value("${app.gas-unit-rate:1.47}")      private double gasUnitRate;
+    @Value("${app.data-start-date:07/24/2026}") private String dataStartDate;
+    @Value("${app.property-latitude:0}")     private double propertyLatitude;
+    @Value("${app.property-longitude:0}")    private double propertyLongitude;
 
     private final AppEventService appEventService;
     private final DataSource dataSource;
@@ -123,6 +139,21 @@ public class AdminDebugController {
         ));
 
         health.put("threads", ManagementFactory.getThreadMXBean().getThreadCount());
+
+        // Connection pool (HikariCP) — pool exhaustion is the classic "everything
+        // hangs" failure and is invisible from the single-connection DB status check above.
+        if (dataSource instanceof HikariDataSource hds) {
+            try {
+                HikariPoolMXBean pool = hds.getHikariPoolMXBean();
+                health.put("pool", Map.of(
+                        "active", pool.getActiveConnections(),
+                        "idle", pool.getIdleConnections(),
+                        "total", pool.getTotalConnections(),
+                        "awaitingConnection", pool.getThreadsAwaitingConnection(),
+                        "max", hds.getMaximumPoolSize()
+                ));
+            } catch (Exception ignored) {}
+        }
 
         // Last sync check timestamp
         try (Connection conn = dataSource.getConnection();
@@ -350,6 +381,202 @@ public class AdminDebugController {
                     .body(Map.of("error", e.getMessage()));
         }
     }
+
+    /**
+     * Per-granularity data freshness: how current the daily vs hourly electric
+     * data is, plus the last sync attempt/success for each. The single
+     * "lastSyncCheck" in {@code /health} can't distinguish "hourly is 3 days
+     * stale" from "hourly checked 5 min ago and found nothing new".
+     */
+    @GetMapping("/sync/freshness")
+    public ResponseEntity<Map<String, Object>> getSyncFreshness(HttpServletRequest request) {
+        requireAdmin(request);
+        try (Connection conn = dataSource.getConnection()) {
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("daily", freshness(conn, "electric_usage", "DailySyncScheduler"));
+            out.put("hourly", freshness(conn, "hourly_electric_usage", "HourlySyncScheduler"));
+            out.put("timestamp", LocalDateTime.now().toString());
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Build a freshness block for one usage table + its scheduler source. */
+    private Map<String, Object> freshness(Connection conn, String table, String source) throws Exception {
+        Map<String, Object> m = new LinkedHashMap<>();
+        // Data freshness — the ground truth of "how current is this table".
+        try (var st = conn.prepareStatement("SELECT MAX(timestamp) FROM " + table)) {
+            var rs = st.executeQuery();
+            Timestamp ts = rs.next() ? rs.getTimestamp(1) : null;
+            if (ts != null) {
+                LocalDateTime dt = ts.toLocalDateTime();
+                m.put("dataThrough", dt.toString());
+                m.put("dataThroughDate", dt.toLocalDate().toString());
+                m.put("ageHours", Duration.between(dt, LocalDateTime.now()).toHours());
+            } else {
+                m.put("dataThrough", null);
+                m.put("dataThroughDate", null);
+                m.put("ageHours", null);
+            }
+        }
+        m.put("lastAttempt", latestEventTs(conn, source, null));
+        m.put("lastSuccess", latestEventTs(conn, source, "INFO"));
+        return m;
+    }
+
+    /** MAX(timestamp) of sync events for a source, optionally at a given level. */
+    private String latestEventTs(Connection conn, String source, String level) throws Exception {
+        String sql = "SELECT MAX(timestamp) FROM app_events WHERE category='sync' AND source=?"
+                + (level != null ? " AND level=?" : "");
+        try (var st = conn.prepareStatement(sql)) {
+            st.setString(1, source);
+            if (level != null) st.setString(2, level);
+            var rs = st.executeQuery();
+            Timestamp ts = rs.next() ? rs.getTimestamp(1) : null;
+            return ts != null ? ts.toLocalDateTime().toString() : null;
+        }
+    }
+
+    /**
+     * Per-day coverage matrix for the last N days: daily row present, hourly
+     * row count + non-zero count + completeness, and weather presence. Surfaces
+     * exactly the gap information the schedulers compute internally and discard.
+     */
+    @GetMapping("/coverage")
+    public ResponseEntity<Map<String, Object>> getCoverage(HttpServletRequest request,
+            @RequestParam(defaultValue = "14") int days) {
+        requireAdmin(request);
+        int n = Math.max(1, Math.min(days, MAX_RANGE_DAYS));
+        try (Connection conn = dataSource.getConnection()) {
+            Set<LocalDate> dailyDates = new HashSet<>();
+            try (var st = conn.prepareStatement(
+                    "SELECT DISTINCT timestamp::date FROM electric_usage WHERE timestamp::date >= CURRENT_DATE - make_interval(days => ?)")) {
+                st.setInt(1, n);
+                var rs = st.executeQuery();
+                while (rs.next()) dailyDates.add(rs.getDate(1).toLocalDate());
+            }
+
+            Map<LocalDate, int[]> hourly = new HashMap<>(); // date -> [rows, nonZero]
+            try (var st = conn.prepareStatement(
+                    "SELECT timestamp::date AS d, COUNT(*) AS rows, COUNT(*) FILTER (WHERE usage_kwh > 0) AS nz " +
+                    "FROM hourly_electric_usage WHERE timestamp::date >= CURRENT_DATE - make_interval(days => ?) GROUP BY 1")) {
+                st.setInt(1, n);
+                var rs = st.executeQuery();
+                while (rs.next()) hourly.put(rs.getDate("d").toLocalDate(), new int[]{rs.getInt("rows"), rs.getInt("nz")});
+            }
+
+            Set<LocalDate> wxDates = new HashSet<>();
+            try (var st = conn.prepareStatement(
+                    "SELECT DISTINCT observation_date FROM weather_observations WHERE observation_date >= CURRENT_DATE - make_interval(days => ?)")) {
+                st.setInt(1, n);
+                var rs = st.executeQuery();
+                while (rs.next()) wxDates.add(rs.getDate(1).toLocalDate());
+            }
+
+            List<Map<String, Object>> rows = new ArrayList<>();
+            LocalDate today = LocalDate.now(CHICAGO);
+            for (int i = 0; i < n; i++) {
+                LocalDate d = today.minusDays(i);
+                int[] h = hourly.getOrDefault(d, new int[]{0, 0});
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("date", d.toString());
+                row.put("dailyPresent", dailyDates.contains(d));
+                row.put("hourlyRows", h[0]);
+                row.put("hourlyNonZero", h[1]);
+                row.put("hourlyComplete", h[1] >= HOURLY_COMPLETE_THRESHOLD);
+                row.put("weatherPresent", wxDates.contains(d));
+                rows.add(row);
+            }
+
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("days", n);
+            out.put("expectedHourly", HOURLY_EXPECTED);
+            out.put("completeThreshold", HOURLY_COMPLETE_THRESHOLD);
+            out.put("coverage", rows);
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Sync outcome rollup over the last N days, grouped by scheduler source:
+     * total runs and OK/WARN/ERROR counts + success rate. A trend the raw
+     * "recent syncs" list can't show — catches a flaky login or CoServ outage.
+     */
+    @GetMapping("/sync/history")
+    public ResponseEntity<Map<String, Object>> getSyncHistory(HttpServletRequest request,
+            @RequestParam(defaultValue = "30") int days) {
+        requireAdmin(request);
+        int n = Math.max(1, Math.min(days, 90));
+        try (Connection conn = dataSource.getConnection();
+             var st = conn.prepareStatement(
+                "SELECT source, COUNT(*) AS total, " +
+                "COUNT(*) FILTER (WHERE level='INFO') AS ok, " +
+                "COUNT(*) FILTER (WHERE level='WARN') AS warn, " +
+                "COUNT(*) FILTER (WHERE level='ERROR') AS err, " +
+                "MAX(timestamp) AS last_run " +
+                "FROM app_events WHERE category='sync' AND timestamp >= NOW() - make_interval(days => ?) " +
+                "GROUP BY source ORDER BY source")) {
+            st.setInt(1, n);
+            var rs = st.executeQuery();
+            List<Map<String, Object>> bySource = new ArrayList<>();
+            while (rs.next()) {
+                long total = rs.getLong("total");
+                long ok = rs.getLong("ok");
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("source", rs.getString("source"));
+                m.put("total", total);
+                m.put("ok", ok);
+                m.put("warn", rs.getLong("warn"));
+                m.put("error", rs.getLong("err"));
+                m.put("successRate", total > 0 ? Math.round(ok * 1000.0 / total) / 10.0 : null);
+                Timestamp last = rs.getTimestamp("last_run");
+                m.put("lastRun", last != null ? last.toLocalDateTime().toString() : null);
+                bySource.add(m);
+            }
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("days", n);
+            out.put("bySource", bySource);
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Config sanity checks — validates runtime config that otherwise only
+     * reveals itself when something silently breaks (lat/long=0 → no weather,
+     * missing CoServ creds → sync fails). Reports presence/booleans only,
+     * never secret values.
+     */
+    @GetMapping("/config-check")
+    public ResponseEntity<Map<String, Object>> getConfigCheck(HttpServletRequest request) {
+        requireAdmin(request);
+        List<Map<String, Object>> checks = new ArrayList<>();
+        checks.add(check("kWh rate configured", kwhRate > 0, "$" + kwhRate + "/kWh"));
+        checks.add(check("Gas unit rate configured", gasUnitRate > 0, "$" + gasUnitRate + "/unit"));
+        boolean geoOk = propertyLatitude != 0 && propertyLongitude != 0;
+        checks.add(check("Property lat/long set (weather)", geoOk,
+                geoOk ? propertyLatitude + ", " + propertyLongitude : "0, 0 — weather cannot resolve"));
+        checks.add(check("Data start date set", dataStartDate != null && !dataStartDate.isBlank(), dataStartDate));
+        boolean cUser = notBlank(System.getenv("COSERV_USERNAME"));
+        boolean cPass = notBlank(System.getenv("COSERV_PASSWORD"));
+        checks.add(check("CoServ credentials present", cUser && cPass,
+                (cUser ? "username set" : "username MISSING") + " · " + (cPass ? "password set" : "password MISSING")));
+        return ResponseEntity.ok(Map.of("checks", checks));
+    }
+
+    private Map<String, Object> check(String name, boolean ok, String detail) {
+        Map<String, Object> m = new LinkedHashMap<>();
+        m.put("check", name);
+        m.put("status", ok ? "OK" : "WARN");
+        m.put("detail", detail);
+        return m;
+    }
+
+    private static boolean notBlank(String s) { return s != null && !s.isBlank(); }
 
     private Map<String, Object> triggered(String type, SyncRange range) {
         Map<String, Object> m = new LinkedHashMap<>();

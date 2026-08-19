@@ -7,6 +7,7 @@ import com.homeplatform.model.User;
 import com.homeplatform.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +31,9 @@ public class AlertEngine {
     private static final Logger log = LoggerFactory.getLogger(AlertEngine.class);
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
     private static final DateTimeFormatter US_DATE = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+
+    @Value("${app.kwh-rate:0.12}")
+    private double kwhRate;
 
     private final JdbcTemplate jdbc;
     private final NotificationService notificationService;
@@ -125,8 +129,10 @@ public class AlertEngine {
             if (isNew(userId, billTitle)) {
                 double monthKwh = queryMonthToDate(meterId);
                 if (monthKwh > 0) {
-                    // Read kWh rate from the properties table or env — hardcode fallback
-                    double rate = 0.1171;
+                    // Use the configured kWh rate (same source as ConfigController /
+                    // the dashboards) so the alert's bill estimate matches what the UI
+                    // shows — previously hardcoded 0.1171, which silently disagreed.
+                    double rate = kwhRate;
                     String msg = String.format(
                             "Month-to-date: %.0f kWh used. Estimated bill: $%.2f at $%.4f/kWh.",
                             monthKwh, monthKwh * rate, rate);

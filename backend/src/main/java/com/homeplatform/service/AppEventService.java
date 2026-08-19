@@ -4,6 +4,7 @@ import com.homeplatform.model.AppEvent;
 import com.homeplatform.repository.AppEventRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -13,6 +14,8 @@ import java.util.List;
 public class AppEventService {
 
     private static final Logger log = LoggerFactory.getLogger(AppEventService.class);
+    /** Diagnostic events older than this are pruned nightly. */
+    private static final int RETENTION_DAYS = 90;
     private final AppEventRepository repository;
 
     public AppEventService(AppEventRepository repository) {
@@ -71,5 +74,18 @@ public class AppEventService {
     public long cleanup(int days) {
         LocalDateTime cutoff = LocalDateTime.now().minusDays(days);
         return repository.deleteByTimestampBefore(cutoff);
+    }
+
+    /**
+     * Nightly retention (3:30 AM CT) — prunes events older than {@link #RETENTION_DAYS}
+     * so app_events doesn't grow unbounded. {@link #cleanup(int)} existed but nothing
+     * ever scheduled it. Cron-gated, so it doesn't fire during short test runs.
+     */
+    @Scheduled(cron = "0 30 3 * * *", zone = "America/Chicago")
+    public void scheduledCleanup() {
+        long removed = cleanup(RETENTION_DAYS);
+        if (removed > 0) {
+            log.info("app_events retention: removed {} events older than {} days", removed, RETENTION_DAYS);
+        }
     }
 }

@@ -17,11 +17,20 @@ interface AppEvent {
   details: string | null;
 }
 
+interface PoolInfo {
+  active: number;
+  idle: number;
+  total: number;
+  awaitingConnection: number;
+  max: number;
+}
+
 interface HealthInfo {
   timestamp: string;
   database: { status: string; url: string } | { status: string; error: string };
   jvm: { uptimeMinutes: number; heapUsedMB: number; heapMaxMB: number; startTime: string };
   threads: number;
+  pool?: PoolInfo;
   lastSyncCheck?: { timestamp: string; message: string };
 }
 
@@ -30,6 +39,39 @@ interface EventSummary {
   errors24h: number;
   warns24h: number;
 }
+
+interface FreshnessBlock {
+  dataThrough: string | null;
+  dataThroughDate: string | null;
+  ageHours: number | null;
+  lastAttempt: string | null;
+  lastSuccess: string | null;
+}
+interface Freshness { daily: FreshnessBlock; hourly: FreshnessBlock; timestamp: string; }
+
+interface CoverageDay {
+  date: string;
+  dailyPresent: boolean;
+  hourlyRows: number;
+  hourlyNonZero: number;
+  hourlyComplete: boolean;
+  weatherPresent: boolean;
+}
+interface Coverage { days: number; expectedHourly: number; completeThreshold: number; coverage: CoverageDay[]; }
+
+interface SyncHistoryRow {
+  source: string;
+  total: number;
+  ok: number;
+  warn: number;
+  error: number;
+  successRate: number | null;
+  lastRun: string | null;
+}
+interface SyncHistory { days: number; bySource: SyncHistoryRow[]; }
+
+interface ConfigCheckItem { check: string; status: 'OK' | 'WARN'; detail: string; }
+interface ConfigCheckResult { checks: ConfigCheckItem[]; }
 
 const CATEGORIES = [
   { key: 'all', label: 'All' },
@@ -149,11 +191,63 @@ export default function DebugDashboard() {
   });
   const version = config?.version || 'unknown';
 
+  // Per-granularity data freshness
+  const { data: freshness } = useQuery<Freshness>({
+    queryKey: ['admin-freshness'],
+    queryFn: async () => (await api.get('/admin/sync/freshness')).data,
+    staleTime: 30_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
+  });
+
+  // 14-day coverage matrix
+  const { data: coverage } = useQuery<Coverage>({
+    queryKey: ['admin-coverage'],
+    queryFn: async () => (await api.get('/admin/coverage?days=14')).data,
+    staleTime: 60_000,
+    refetchInterval: jitteredInterval(120_000),
+    refetchIntervalInBackground: false,
+  });
+
+  // Sync success-rate rollup
+  const { data: syncHistory } = useQuery<SyncHistory>({
+    queryKey: ['admin-sync-history'],
+    queryFn: async () => (await api.get('/admin/sync/history?days=30')).data,
+    staleTime: 60_000,
+    refetchInterval: jitteredInterval(120_000),
+    refetchIntervalInBackground: false,
+  });
+
+  // Config sanity checks
+  const { data: configCheck } = useQuery<ConfigCheckResult>({
+    queryKey: ['admin-config-check'],
+    queryFn: async () => (await api.get('/admin/config-check')).data,
+    staleTime: 300_000,
+  });
+
   // Sync-specific events
   const syncEvents = useMemo(
     () => (events ?? []).filter((e) => e.category === 'sync'),
     [events],
   );
+
+  // Format a naive server LocalDateTime (no zone) as local time, mirroring the
+  // existing lastSyncCheck convention (treat as UTC by appending Z).
+  const fmtTs = (ts: string | null | undefined) =>
+    ts
+      ? new Date(ts + (ts.endsWith('Z') ? '' : 'Z')).toLocaleString('en-US', {
+          month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+        })
+      : '—';
+
+  // Staleness badge from data age. Daily/hourly data legitimately lags ~1 day
+  // (meter posts once/day), so "fresh" allows up to ~30h before flagging.
+  const freshnessBadge = (ageHours: number | null | undefined) => {
+    if (ageHours == null) return { cls: 'text-apptext-muted', dot: 'bg-apptext-muted', label: 'No data' };
+    if (ageHours <= 30) return { cls: 'text-emerald-300', dot: 'bg-emerald-300', label: 'Fresh' };
+    if (ageHours <= 54) return { cls: 'text-amber-300', dot: 'bg-amber-300', label: 'Aging' };
+    return { cls: 'text-rose-300', dot: 'bg-rose-300', label: 'Stale' };
+  };
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -216,6 +310,18 @@ export default function DebugDashboard() {
             <p className="mt-2 text-lg font-semibold text-apptext">{health?.threads ?? '...'}</p>
           )}
         </div>
+        {health?.pool && (
+          <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">DB Pool</p>
+            <p className={`mt-2 text-lg font-semibold ${health.pool.awaitingConnection > 0 ? 'text-rose-300' : 'text-apptext'}`}>
+              {health.pool.active}<span className="text-sm text-apptext-muted"> / {health.pool.max} active</span>
+            </p>
+            <p className="text-xs text-apptext-dim">
+              {health.pool.idle} idle
+              {health.pool.awaitingConnection > 0 && <span className="text-rose-300"> · {health.pool.awaitingConnection} waiting</span>}
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Last sync check box */}
@@ -247,6 +353,125 @@ export default function DebugDashboard() {
             <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
             <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
           </div>
+        </section>
+      )}
+
+      {/* Data freshness — per-granularity staleness */}
+      {freshness && (
+        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-4">
+          {([['Daily', freshness.daily], ['Hourly', freshness.hourly]] as const).map(([label, f]) => {
+            const b = freshnessBadge(f.ageHours);
+            return (
+              <div key={label} className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">{label} data freshness</p>
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${b.cls}`}>
+                    <span className={`h-2 w-2 rounded-full ${b.dot}`} /> {b.label}
+                  </span>
+                </div>
+                <p className="mt-2 text-lg font-semibold text-apptext">
+                  {f.dataThroughDate ?? '—'}
+                  {f.ageHours != null && <span className="text-sm font-normal text-apptext-muted"> · {f.ageHours}h ago</span>}
+                </p>
+                <div className="mt-1 grid grid-cols-2 gap-x-3 text-xs text-apptext-dim">
+                  <span>Last success: {fmtTs(f.lastSuccess)}</span>
+                  <span>Last attempt: {fmtTs(f.lastAttempt)}</span>
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      {/* Config sanity checks */}
+      {configCheck && configCheck.checks.length > 0 && (
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+          <div className="mb-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Configuration</p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">Config sanity checks</h3>
+          </div>
+          <div className="space-y-1.5">
+            {configCheck.checks.map((c) => (
+              <div key={c.check} className="flex items-center justify-between gap-3 rounded-xl border border-appborder-light bg-appinset px-3 py-2">
+                <span className="flex items-center gap-2 text-sm text-apptext-soft">
+                  <span className={`h-2 w-2 shrink-0 rounded-full ${c.status === 'OK' ? 'bg-emerald-300' : 'bg-amber-300'}`} />
+                  {c.check}
+                </span>
+                <span className={`text-right text-xs ${c.status === 'OK' ? 'text-apptext-dim' : 'text-amber-300'}`}>{c.detail}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Sync success-rate rollup */}
+      {syncHistory && syncHistory.bySource.length > 0 && (
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+          <div className="mb-3">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync reliability</p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">Last {syncHistory.days} days by scheduler</h3>
+          </div>
+          <div className="space-y-2">
+            {syncHistory.bySource.map((s) => (
+              <div key={s.source} className="rounded-2xl border border-appborder-light bg-appinset p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-apptext">{s.source}</span>
+                  <span className={`text-sm font-semibold ${(s.successRate ?? 0) >= 90 ? 'text-emerald-300' : (s.successRate ?? 0) >= 70 ? 'text-amber-300' : 'text-rose-300'}`}>
+                    {s.successRate != null ? `${s.successRate}%` : '—'} OK
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-apptext-dim">
+                  <span>{s.total} runs</span>
+                  <span className="text-emerald-300/80">{s.ok} ok</span>
+                  <span className="text-amber-300/80">{s.warn} warn</span>
+                  <span className="text-rose-300/80">{s.error} error</span>
+                  <span className="ml-auto">last {fmtTs(s.lastRun)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 14-day coverage matrix */}
+      {coverage && coverage.coverage.length > 0 && (
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+          <div className="mb-3 flex items-end justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Data coverage</p>
+              <h3 className="mt-2 text-lg font-semibold text-apptext">Last {coverage.days} days</h3>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-apptext-dim">
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300" /> complete</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-300" /> partial</span>
+              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-300/70" /> missing</span>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="flex gap-1.5 pb-1">
+              {coverage.coverage.map((d) => {
+                const cell = d.hourlyComplete ? 'border-emerald-300/40 bg-emerald-300/15'
+                  : d.hourlyNonZero > 0 ? 'border-amber-300/40 bg-amber-300/15'
+                  : 'border-rose-300/30 bg-rose-300/10';
+                const [, mm, dd] = d.date.split('-');
+                return (
+                  <div key={d.date} title={`${d.date}\nHourly: ${d.hourlyNonZero}/${coverage.expectedHourly} non-zero\nDaily row: ${d.dailyPresent ? 'yes' : 'no'}\nWeather: ${d.weatherPresent ? 'yes' : 'no'}`}
+                       className={`flex min-w-[52px] flex-1 flex-col items-center gap-1 rounded-xl border p-2 ${cell}`}>
+                    <span className="text-[10px] tabular-nums text-apptext-muted">{mm}/{dd}</span>
+                    <span className="text-xs font-semibold tabular-nums text-apptext">{d.hourlyNonZero}<span className="text-[10px] font-normal text-apptext-dim">/{coverage.expectedHourly}</span></span>
+                    <div className="flex gap-1">
+                      <span title="daily row" className={`h-1.5 w-1.5 rounded-full ${d.dailyPresent ? 'bg-sky-300' : 'bg-appborder'}`} />
+                      <span title="weather" className={`h-1.5 w-1.5 rounded-full ${d.weatherPresent ? 'bg-cyan-300' : 'bg-appborder'}`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <p className="mt-2 text-[11px] text-apptext-dim">
+            Top number = non-zero hourly readings (of {coverage.expectedHourly}); a day is complete at ≥{coverage.completeThreshold}.
+            Dots: <span className="text-sky-300">daily row</span> · <span className="text-cyan-300">weather</span>.
+          </p>
         </section>
       )}
 
