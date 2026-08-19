@@ -62,7 +62,7 @@ function HourlySparkline({ hours }: { hours: WeatherHour[] }) {
         return (
           <div
             key={i}
-            className="flex-1 rounded-t-sm bg-appaccent-soft/60 hover:bg-appaccent transition-colors"
+            className="flex-1 rounded-t-sm bg-appaccent/45 hover:bg-appaccent transition-colors"
             style={{ height: `${height}%` }}
             title={`${formatHourTime(h.time)}: ${formatTemp(h.temperature)}`}
           />

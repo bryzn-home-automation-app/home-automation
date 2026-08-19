@@ -66,8 +66,16 @@
   --appbg:              #020617;
   --appsurface:         #0f172a;
   --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Inset panels LIGHTEN the surface rather than darken it. The old values
+     (rgba(2,8,23,.45/.65) — near-black washes) rendered every inset tile
+     DARKER than the surface it sat on, so nested tiles (e.g. Total/Average
+     inside a card, the sidebar Status/Role boxes) collapsed into dark-on-dark
+     holes with only a faint border to define them. In a dark UI elevation
+     reads as a lighter fill, so a slate lift makes inset tiles legibly pop and
+     lets -strong (used for a further-nested or hovered tile) step one notch
+     lighter still. */
+  --appinset:           rgba(148, 163, 184, 0.06);
+  --appinset-strong:    rgba(148, 163, 184, 0.11);
 
   --apptext:            #f8fafc;
   --apptext-soft:       #cbd5e1;
@@ -294,8 +302,9 @@
   --appbg:              #020617;
   --appsurface:         #0f172a;
   --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Lightening insets — see the base dark theme block for rationale. */
+  --appinset:           rgba(148, 163, 184, 0.06);
+  --appinset-strong:    rgba(148, 163, 184, 0.11);
   --appborder:          rgba(2, 132, 199, 0.18);
   --appborder-light:    rgba(2, 132, 199, 0.1);
   --appborder-hover:    rgba(2, 132, 199, 0.3);
@@ -314,8 +323,9 @@
   --appbg:              #020617;
   --appsurface:         #0f172a;
   --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Lightening insets — see the base dark theme block for rationale. */
+  --appinset:           rgba(148, 163, 184, 0.06);
+  --appinset-strong:    rgba(148, 163, 184, 0.11);
   /* Accent lightened a step vs. light Sunset (#c2410c → #ea580c) so it
      reads better against the dark neutral surface. */
   --appborder:          rgba(234, 88, 12, 0.18);
@@ -336,8 +346,9 @@
   --appbg:              #020617;
   --appsurface:         #0f172a;
   --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  --appinset:           rgba(2, 8, 23, 0.45);
-  --appinset-strong:    rgba(2, 8, 23, 0.65);
+  /* Lightening insets — see the base dark theme block for rationale. */
+  --appinset:           rgba(148, 163, 184, 0.06);
+  --appinset-strong:    rgba(148, 163, 184, 0.11);
   /* Accent lightened a step vs. light Violet (#6d28d9 → #7c3aed) so it
      reads better against the dark neutral surface. */
   --appborder:          rgba(124, 58, 237, 0.2);
