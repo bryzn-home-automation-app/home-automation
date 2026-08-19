@@ -13,12 +13,18 @@ import { jitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 import { isHourlySource } from '../utils/usageSource';
 import UsageWeatherChart from '../components/UsageWeatherChart';
+import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 
 type LogFilter = 'daily' | 'hourly';
 
 export default memo(function ElectricalUsage() {
   const { electricUsage, electricTotal, electricMeter, config } = useUsageData();
   const [logFilter, setLogFilter] = useState<LogFilter>('daily');
+
+  // Usage visuals (trend line + monthly bars) follow the theme accent so they
+  // match the palette instead of a hardcoded green (see CHART_SERIES).
+  const { theme, palette } = useTheme();
+  const usageColor = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme].usage;
 
   const data = electricUsage.data ?? [];
   const loading = electricUsage.isLoading;
@@ -295,7 +301,7 @@ export default memo(function ElectricalUsage() {
             title="Electric usage trend"
             emptyText="No electric usage data yet. Run a sync to populate this view."
             unitLabel="kWh"
-            accentColor="#34d399"
+            accentColor={usageColor}
           />
         </DeferredRender>
         <DeferredRender minHeight={360}>
@@ -305,7 +311,7 @@ export default memo(function ElectricalUsage() {
             title="Monthly electric comparison"
             emptyText="Not enough electric history for a monthly comparison yet."
             unitLabel="kWh"
-            barColor="#10b981"
+            barColor={usageColor}
           />
         </DeferredRender>
       </section>
