@@ -70,7 +70,7 @@ export default function GuestLogin() {
 
   if (submitted) {
     return (
-      <div className="guest-bg flex min-h-screen items-center justify-center px-4">
+      <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
         <div className="w-full max-w-md text-center">
           <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
             {/* Avatar preview on success */}
@@ -135,7 +135,7 @@ export default function GuestLogin() {
   }
 
   return (
-    <div className="guest-bg flex min-h-screen items-center justify-center px-4">
+    <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
           <div className="mb-8 text-center">

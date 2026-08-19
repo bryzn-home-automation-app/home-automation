@@ -113,7 +113,7 @@ export default function HomeSummary() {
     { label: 'Gas', detail: `${gasUsage.data?.length ?? 0} records synced`, route: '/gas', icon: '🔥', pill: 'Tracking' },
     { label: 'Maintenance', detail: m ? `${m.openCount} open · ${m.completedCount} done` : 'Loading...', route: '/maintenance', icon: '🔧', pill: m ? `${m.openCount} open` : '...' },
     { label: 'Notifications', detail: `${unreadCount.data ?? 0} unread alerts`, route: '/notifications', icon: '🔔', pill: unreadCount.data ? `${unreadCount.data} new` : 'Clear' },
-    { label: 'Users', detail: `${guestCount.data ?? 0} guests connected`, route: '/users', icon: '👥', pill: 'Active' },
+    { label: 'Users', detail: `${guestCount.data ?? 0} guests online`, route: '/users', icon: '👥', pill: 'Active' },
     { label: 'WiFi', detail: `${guestCount.data ?? 0} guests online`, route: '/wifi', icon: '📶', pill: guestCount.data ? `${guestCount.data} on` : 'Ready' },
   ], [electricUsage.data?.length, gasUsage.data?.length, m, unreadCount.data, guestCount.data]);
 
@@ -156,9 +156,9 @@ export default function HomeSummary() {
               <p className="mt-0.5 text-xs text-apptext-muted">Notification center</p>
             </Link>
             <Link to="/users" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">👥 Household</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">2<span className="text-sm font-normal text-apptext-muted"> members</span></p>
-              <p className="mt-0.5 text-xs text-apptext-muted">{guestCount.data ?? 0} guests online</p>
+              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">👥 Guests</p>
+              <p className="mt-1.5 text-lg font-semibold text-apptext">{guestCount.data ?? 0}<span className="text-sm font-normal text-apptext-muted"> online</span></p>
+              <p className="mt-0.5 text-xs text-apptext-muted">On the guest network</p>
             </Link>
             <div className="rounded-2xl border border-appborder bg-appinset/70 p-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">💰 Lifetime</p>
@@ -300,8 +300,8 @@ export default function HomeSummary() {
               }}
             />
           ) : (
-            <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-              No usage data yet. Run <code className="mx-1 text-apptext-soft">npm run sync</code>.
+            <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset px-4 text-center text-sm text-apptext-muted">
+              No readings yet — usage syncs automatically each evening once your utility posts the day's data.
             </div>
           )}
         </div>

@@ -361,6 +361,14 @@
   --appglow-accent:     rgba(124, 58, 237, 0.22);
 }
 
+/* ── Safe-area padding for the mobile bottom nav ──
+   `pb-safe` was used on the bottom nav (App.tsx) but never defined, so it
+   silently did nothing and tab labels crowded the iOS home-indicator zone.
+   Requires `viewport-fit=cover` on the viewport meta for env() to resolve. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 /* ── Base ── */
 html {
   font-family: 'Manrope', sans-serif;
@@ -377,7 +385,9 @@ body {
 }
 
 #root {
-  min-height: 100vh;
+  /* dvh, not vh — mobile browser toolbars shrink the visual viewport, and
+     100vh overflows it (pushing centered auth cards under the URL bar). */
+  min-height: 100dvh;
 }
 
 /* ── Scrollbar ── */

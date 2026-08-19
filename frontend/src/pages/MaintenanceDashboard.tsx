@@ -269,7 +269,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
 // Detail Modal
 // ════════════════════════════════════════════════════════
 
-function DetailModal({ r, onClose, onEdit }: {
+function DetailModal({ r, onClose, onEdit, onDelete }: {
   r: MaintenanceRecord;
   onClose: () => void;
   onEdit: () => void;
@@ -416,10 +416,20 @@ function DetailModal({ r, onClose, onEdit }: {
         <div className="flex gap-3 pt-2 border-t border-appborder">
           <button onClick={onEdit} className="flex-1 rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3 text-sm font-semibold text-appaccent-text hover:bg-appaccent-soft/80">✏️ Edit</button>
           <button
-            onClick={() => { if (confirm('Delete this record?')) { del.mutate(r.id); onClose(); } }}
-            className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm font-semibold text-appdanger hover:bg-appdanger/20"
+            disabled={del.isPending}
+            onClick={() => {
+              if (!confirm('Delete this record?')) return;
+              del.mutate(r.id, {
+                // Invalidate the record/analytics queries (via onDelete) so the
+                // list refreshes — the modal previously closed without ever
+                // calling onDelete, leaving the deleted record on screen.
+                onSuccess: () => { onDelete?.(); onClose(); },
+                onError: () => alert('Could not delete this record. Please try again.'),
+              });
+            }}
+            className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm font-semibold text-appdanger hover:bg-appdanger/20 disabled:opacity-50"
           >
-            🗑️
+            {del.isPending ? '…' : '🗑️'}
           </button>
         </div>
       </div>

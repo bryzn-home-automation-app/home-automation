@@ -438,6 +438,21 @@ function UsageWeatherChart({
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       {header}
 
+      {/* Legend: clarifies which line is which and which axis it reads against
+          (solid = usage on the left axis, dashed = temperature on the right). */}
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-apptext-muted">
+        <span className="inline-flex items-center gap-1.5">
+          <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={series.usage} strokeWidth="2.5" /></svg>
+          Usage (kWh, left)
+        </span>
+        {hasWeather && (
+          <span className="inline-flex items-center gap-1.5">
+            <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={series.temp} strokeWidth="2" strokeDasharray="5 3" /></svg>
+            Temp (°F, right)
+          </span>
+        )}
+      </div>
+
       <ResponsiveContainer width="100%" height={320} debounce={80}>
         <LineChart data={filteredData} margin={CHART_MARGIN}>
           <CartesianGrid strokeDasharray={CARTESIAN_GRID_DASH} stroke={chartTheme.grid} />

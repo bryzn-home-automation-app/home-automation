@@ -97,7 +97,7 @@ function UsageChart({
   data,
   loading,
   title = 'Daily Usage',
-  emptyText = 'No usage data yet — sync to pull data from CoServ',
+  emptyText = 'No usage data yet — readings sync automatically each evening.',
   unitLabel = 'kWh',
   accentColor = '#34d399',
 }: UsageChartProps) {

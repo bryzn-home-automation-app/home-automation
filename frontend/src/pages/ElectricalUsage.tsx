@@ -299,7 +299,7 @@ export default memo(function ElectricalUsage() {
             data={chartData}
             loading={loading}
             title="Electric usage trend"
-            emptyText="No electric usage data yet. Run a sync to populate this view."
+            emptyText="No electric usage data yet — readings sync automatically each evening once your utility posts the day's data."
             unitLabel="kWh"
             accentColor={usageColor}
           />
@@ -357,6 +357,21 @@ export default memo(function ElectricalUsage() {
             ))}
           </div>
         </div>
+        {/* Legend for the hourly threshold color bands (daily rows are single-color) */}
+        {logFilter === 'hourly' && (
+          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-apptext-muted">
+            <span className="uppercase tracking-[0.14em] text-apptext-dim">Per hour:</span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-emerald-300" /> Low · under 2 kWh
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-amber-300" /> Moderate · 2–4 kWh
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="h-2 w-2 rounded-full bg-rose-300" /> High · 5 kWh and up
+            </span>
+          </div>
+        )}
         {loading ? (
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3].map((i) => (

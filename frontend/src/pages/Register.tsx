@@ -44,7 +44,7 @@ export default function Register() {
 
   if (success) {
     return (
-      <div className="guest-bg flex min-h-screen items-center justify-center px-4">
+      <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
         <div className="w-full max-w-md text-center">
           <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
             <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-amber-400/10 text-4xl">
@@ -84,7 +84,7 @@ export default function Register() {
   }
 
   return (
-    <div className="guest-bg flex min-h-screen items-center justify-center px-4">
+    <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
       <div className="w-full max-w-md">
         <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
           <div className="mb-8 text-center">
