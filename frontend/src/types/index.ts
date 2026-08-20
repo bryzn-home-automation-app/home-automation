@@ -154,3 +154,111 @@ export interface WeatherResponse {
   hourly: WeatherHour[];
   aggregation: WeatherAggregation | null;
 }
+
+// ── Roomba ────────────────────────────────────────────────
+// Shapes mirror the backend REST contract (BUILD_CONTRACT.md). The poller
+// writes append-only run rows + latest status/map snapshots; the backend
+// exposes them read-only. `null` from a fetch fn means 204 (nothing yet).
+
+/** Latest live snapshot from GET /api/roomba/status (or null = 204, no row yet). */
+export interface RoombaStatus {
+  robotId: string;
+  name: string | null;
+  batteryPct: number | null;
+  /** raw V4 phase: run | charge | stop | idle | evac | hmPostMsn | ... */
+  phase: string | null;
+  /** raw V4 cycle: clean | none | ... */
+  cycle: string | null;
+  error: number;
+  /** true when phase is an active-cleaning phase (run/evac/...). */
+  running: boolean;
+  binPresent: boolean | null;
+  tankPresent: boolean | null;
+  currentMissionId: string | null;
+  missionStart: string | null;
+  sqft: number | null;
+  runtimeMinutes: number | null;
+  dockState: number | null;
+  lifetimeMissions: number | null;
+  lifetimeRunMinutes: number | null;
+  mapVersion: string | null;
+  /** updated_at within the last 10 min. */
+  online: boolean;
+  updatedAt: string;
+}
+
+export type RoombaRunStatus = 'COMPLETED' | 'STUCK' | 'CANCELLED';
+
+/** One completed mission from GET /api/roomba/runs (newest first). */
+export interface RoombaRun {
+  id: number;
+  startedAt: string;
+  completedAt: string | null;
+  durationMinutes: number | null;
+  squareFeet: number | null;
+  /** COMPLETED | STUCK | CANCELLED (widened to string for forward-compat). */
+  status: RoombaRunStatus | string;
+  missionId: string | null;
+}
+
+// ── Minimal GeoJSON (only what the map renderer consumes) ──
+
+export type GeoPosition = number[]; // [x, y] in meters
+
+export interface GeoPointGeometry {
+  type: 'Point';
+  coordinates: GeoPosition;
+}
+
+export interface GeoPolygonGeometry {
+  type: 'Polygon';
+  coordinates: GeoPosition[][]; // rings
+}
+
+export interface GeoLineStringGeometry {
+  type: 'LineString';
+  coordinates: GeoPosition[];
+}
+
+export interface GeoMultiPolygonGeometry {
+  type: 'MultiPolygon';
+  coordinates: GeoPosition[][][];
+}
+
+export type GeoGeometry =
+  | GeoPointGeometry
+  | GeoPolygonGeometry
+  | GeoLineStringGeometry
+  | GeoMultiPolygonGeometry;
+
+export interface GeoFeature {
+  type: 'Feature';
+  id?: string | number;
+  geometry: GeoGeometry | null;
+  properties?: Record<string, unknown> | null;
+}
+
+export interface GeoFeatureCollection {
+  type: 'FeatureCollection';
+  features: GeoFeature[];
+}
+
+/** Parsed map bundle stored by the poller — each layer is a FeatureCollection. */
+export interface RoombaMapGeoJson {
+  manifest?: unknown;
+  metadata?: unknown;
+  rooms?: GeoFeatureCollection | null;
+  borders?: GeoFeatureCollection | null;
+  floorPlan?: GeoFeatureCollection | null;
+  dockPose?: GeoFeatureCollection | null;
+}
+
+/** GET /api/roomba/map (or null = 204, no map built yet). */
+export interface RoombaMap {
+  robotId: string;
+  mapId: string | null;
+  mapVersion: string | null;
+  name: string | null;
+  geojson: RoombaMapGeoJson;
+  updatedAt: string;
+}

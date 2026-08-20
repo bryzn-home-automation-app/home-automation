@@ -138,9 +138,15 @@ public class AuthController {
     }
 
     private String getClientIp(HttpServletRequest request) {
+        // Trust only the LAST entry in X-Forwarded-For — the one appended by our
+        // trusted reverse proxy (nginx). The leftmost entries are client-supplied
+        // and spoofable; reading [0] there let an attacker forge a fresh IP per
+        // request and bypass the login rate limiter. nginx replaces (not appends)
+        // this header with $remote_addr, so in practice there is a single value.
         String xfwd = request.getHeader("X-Forwarded-For");
         if (xfwd != null && !xfwd.isBlank()) {
-            return xfwd.split(",")[0].trim();
+            String[] parts = xfwd.split(",");
+            return parts[parts.length - 1].trim();
         }
         return request.getRemoteAddr();
     }

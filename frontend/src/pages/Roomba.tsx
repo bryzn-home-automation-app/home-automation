@@ -1,378 +1,380 @@
-import { useMemo } from 'react';
+import { memo, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import RoombaMap from '../components/RoombaMap';
+import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap } from '../api/roomba';
+import { jitteredInterval } from '../hooks/useJitteredInterval';
+import type { RoombaStatus, RoombaRun } from '../types';
 
-interface RoombaRun {
-  date: string;
-  duration: number; // minutes
-  dirtEvents: number;
-  sqft: number;
-  completed: boolean;
-}
+// ── Presentation helpers ──────────────────────────────────
 
-function generateMockRoombaData(): RoombaRun[] {
-  const runs: RoombaRun[] = [];
-  const now = new Date();
-
-  for (let i = 30; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    // Roomba runs ~5 days a week
-    const dayOfWeek = d.getDay();
-    if (dayOfWeek === 2 || dayOfWeek === 5) continue; // skip Tue/Fri
-
-    const duration = 45 + Math.floor(Math.random() * 40); // 45-85 min
-    runs.push({
-      date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-      duration,
-      dirtEvents: Math.floor(Math.random() * 12),
-      sqft: 1800,
-      completed: Math.random() > 0.1,
-    });
+/** Map a raw V4 phase to a human label. */
+function phaseLabel(status: RoombaStatus | null | undefined): string {
+  if (!status) return 'Unknown';
+  if (status.error && status.error !== 0) return 'Needs attention';
+  switch (status.phase) {
+    case 'run':
+      return 'Cleaning';
+    case 'evac':
+      return 'Emptying bin';
+    case 'charge':
+      return 'Charging';
+    case 'hmMidMsn':
+    case 'hmPostMsn':
+    case 'hmUsrDock':
+      return 'Returning to dock';
+    case 'stop':
+    case 'idle':
+    case 'none':
+    case null:
+    case undefined:
+      return 'Idle';
+    default:
+      return status.phase.charAt(0).toUpperCase() + status.phase.slice(1);
   }
-
-  return runs;
 }
 
-/** Theme-aware chart colors */
-function useChartColors() {
-  // We read CSS variables at runtime; these are the recharts config values
-  return {
-    tooltipBg: 'var(--appchart-bg)',
-    tooltipBorder: 'var(--appchart-border)',
-    tooltipText: 'var(--apptext)',
-    tooltipLabel: 'var(--apptext-muted)',
-    gridStroke: 'var(--appchart-grid)',
-    tickFill: 'var(--appchart-tick)',
-    axisStroke: 'var(--appchart-grid)',
-  };
+function formatDuration(minutes: number | null | undefined): string {
+  if (minutes == null || !Number.isFinite(minutes)) return '—';
+  if (minutes < 60) return `${Math.round(minutes)} min`;
+  const h = Math.floor(minutes / 60);
+  const m = Math.round(minutes % 60);
+  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
 }
 
-export default function Roomba() {
-  const runs = useMemo(() => generateMockRoombaData(), []);
-  const chartColors = useChartColors();
+function formatRelative(iso: string | null | undefined): string {
+  if (!iso) return 'never';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return 'unknown';
+  const diffSec = Math.round((Date.now() - then) / 1000);
+  if (diffSec < 45) return 'just now';
+  if (diffSec < 90) return 'a minute ago';
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr ago`;
+  const diffDay = Math.round(diffHr / 24);
+  return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+}
 
+function runStatusStyle(status: string): { label: string; className: string } {
+  switch (status) {
+    case 'COMPLETED':
+      return {
+        label: 'Completed',
+        className: 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-300',
+      };
+    case 'STUCK':
+      return {
+        label: 'Stuck',
+        className: 'border border-rose-300/20 bg-rose-300/10 text-rose-300',
+      };
+    case 'CANCELLED':
+      return {
+        label: 'Cancelled',
+        className: 'border border-amber-300/20 bg-amber-300/10 text-amber-300',
+      };
+    default:
+      return {
+        label: status.charAt(0) + status.slice(1).toLowerCase(),
+        className: 'border border-appborder bg-appinset text-apptext-muted',
+      };
+  }
+}
+
+function presenceChip(label: string, present: boolean | null | undefined): { text: string; className: string } {
+  if (present == null) {
+    return { text: `${label}: —`, className: 'border-appborder bg-appinset text-apptext-muted' };
+  }
+  return present
+    ? { text: `${label} present`, className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' }
+    : { text: `${label} missing`, className: 'border-amber-300/20 bg-amber-300/10 text-amber-300' };
+}
+
+// ── Page ──────────────────────────────────────────────────
+
+export default memo(function Roomba() {
+  const statusQuery = useQuery({
+    queryKey: ['roomba-status'],
+    queryFn: fetchRoombaStatus,
+    staleTime: 20_000,
+    refetchInterval: jitteredInterval(30_000, 5_000),
+    refetchIntervalInBackground: false,
+  });
+
+  const runsQuery = useQuery({
+    queryKey: ['roomba-runs'],
+    queryFn: () => fetchRoombaRuns(50),
+    staleTime: 60_000,
+    refetchInterval: jitteredInterval(60_000),
+    refetchIntervalInBackground: false,
+  });
+
+  const mapQuery = useQuery({
+    queryKey: ['roomba-map'],
+    queryFn: fetchRoombaMap,
+    staleTime: 300_000,
+    refetchInterval: jitteredInterval(300_000, 30_000),
+    refetchIntervalInBackground: false,
+  });
+
+  const status = statusQuery.data ?? null;
+  const runs = useMemo<RoombaRun[]>(() => runsQuery.data ?? [], [runsQuery.data]);
+  const statusLoading = statusQuery.isLoading;
+  const running = status?.running ?? false;
+
+  const dockChip = useMemo(() => {
+    if (!status) return null;
+    if (running) return { text: 'Cleaning', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
+    if (status.phase === 'charge') return { text: 'Docked · charging', className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
+    if (status.phase === 'evac') return { text: 'Docked · emptying', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
+    return { text: 'Idle', className: 'border-appborder bg-appinset text-apptext-muted' };
+  }, [status, running]);
+
+  const binChip = presenceChip('Bin', status?.binPresent);
+  const tankChip = presenceChip('Tank', status?.tankPresent);
+
+  // Aggregate lifetime stats for a friendly summary line.
   const totalRuns = runs.length;
-  const totalMinutes = runs.reduce((s, r) => s + r.duration, 0);
-  const avgMinutes = Math.round(totalMinutes / totalRuns);
-  const completedRuns = runs.filter((r) => r.completed).length;
+  const completedRuns = runs.filter((r) => r.status === 'COMPLETED').length;
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <div className="rounded-[28px] border border-amber-300/35 bg-amber-300/18 p-4">
-        <p className="text-xs text-apptext-muted">
-          🤖 Mock data — Roomba/smart device integration coming in Phase 3
-        </p>
-      </div>
-
+      {/* ── Hero / live status header ─────────────────────── */}
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
-          Device Automation Preview
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-          Visualize smart device routines with the same dashboard system.
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-apptext-soft sm:text-base">
-          The Roomba preview demonstrates how future device telemetry can live beside utility analytics without introducing a separate UX pattern.
-        </p>
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+              Robot Vacuum
+            </p>
+            <h2 className="mt-3 flex items-center gap-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
+              {status?.name || 'Roomba'}
+              {running && (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-appaccent-border bg-appaccent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-appaccent-text">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-appaccent opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-appaccent" />
+                  </span>
+                  Live
+                </span>
+              )}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
+              {status
+                ? `${phaseLabel(status)}${running && status.sqft ? ` · ${status.sqft} sq ft cleaned so far` : ''}.`
+                : 'Live status, cleaning history, and floor map for your robot vacuum.'}
+            </p>
+          </div>
+
+          {/* Online + presence chips */}
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="flex items-center gap-2">
+              <span
+                className={`h-2.5 w-2.5 rounded-full ${
+                  status?.online ? 'bg-emerald-400' : 'bg-amber-400'
+                }`}
+              />
+              <span className="text-sm font-medium text-apptext-soft">
+                {status?.online ? 'Online' : status ? 'Offline' : 'No data'}
+              </span>
+              <span className="text-xs text-apptext-dim">
+                · updated {formatRelative(status?.updatedAt)}
+              </span>
+            </div>
+            {status && (
+              <div className="flex flex-wrap gap-2 lg:justify-end">
+                {dockChip && (
+                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${dockChip.className}`}>
+                    {dockChip.text}
+                  </span>
+                )}
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${binChip.className}`}>
+                  {binChip.text}
+                </span>
+                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${tankChip.className}`}>
+                  {tankChip.text}
+                </span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {statusQuery.isError && (
+          <p className="mt-4 rounded-2xl border border-rose-300/25 bg-rose-300/10 px-4 py-2.5 text-xs text-rose-200">
+            Couldn't reach the robot status service. Showing the last known values if available.
+          </p>
+        )}
+        {!statusLoading && !status && !statusQuery.isError && (
+          <p className="mt-4 rounded-2xl border border-appborder bg-appinset px-4 py-2.5 text-xs text-apptext-muted">
+            Waiting for your Roomba's first check-in. Status appears here once the poller
+            connects to the robot.
+          </p>
+        )}
       </section>
 
+      {/* ── Live status stat tiles ────────────────────────── */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <StatTile
-          label="Runs (30d)"
-          value={String(totalRuns)}
-          unit=""
-          loading={false}
+          label="Battery"
+          value={status?.batteryPct != null ? String(status.batteryPct) : '—'}
+          unit="%"
+          loading={statusLoading}
+          icon={Icons.Bolt}
+          subtitle={status ? phaseLabel(status) : undefined}
+        />
+        <StatTile
+          label={running ? 'This Run' : 'Last Area'}
+          value={status?.sqft != null ? String(status.sqft) : '—'}
+          unit="sq ft"
+          loading={statusLoading}
+          icon={Icons.Dollar}
+          subtitle={running ? 'cleaning now' : undefined}
+        />
+        <StatTile
+          label={running ? 'Runtime' : 'Lifetime Runs'}
+          value={
+            running
+              ? status?.runtimeMinutes != null
+                ? formatDuration(status.runtimeMinutes)
+                : '—'
+              : status?.lifetimeMissions != null
+                ? String(status.lifetimeMissions)
+                : String(totalRuns || '—')
+          }
+          unit={running ? '' : 'missions'}
+          loading={statusLoading}
           icon={Icons.Calendar}
         />
         <StatTile
-          label="Total Time"
-          value={String(totalMinutes)}
-          unit="min"
-          loading={false}
+          label="Lifetime Time"
+          value={
+            status?.lifetimeRunMinutes != null
+              ? String(Math.round(status.lifetimeRunMinutes / 60))
+              : '—'
+          }
+          unit="hrs"
+          loading={statusLoading}
           icon={Icons.Bolt}
-        />
-        <StatTile
-          label="Avg Duration"
-          value={String(avgMinutes)}
-          unit="min"
-          loading={false}
-          icon={Icons.Bolt}
-        />
-        <StatTile
-          label="Completed"
-          value={`${completedRuns}/${totalRuns}`}
-          unit=""
-          loading={false}
-          icon={Icons.Dollar}
         />
       </section>
 
+      {/* ── Floor-plan map ────────────────────────────────── */}
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Cleaning Map Preview
+              Floor Plan
             </p>
             <h3 className="mt-2 text-lg font-semibold text-apptext">
-              Dummy floor map and run path
+              {mapQuery.data?.name || 'Cleaning map'}
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
-              Placeholder map for future room-aware cleaning history, no-go zones, and per-room run analytics.
+              Rooms, walls, and dock location as mapped by the robot. Built up over the first
+              several cleaning runs.
             </p>
           </div>
-          <span className="rounded-full border border-amber-300/20 bg-amber-300/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-apptext-muted">
-            Mock Layout
-          </span>
         </div>
-
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.25fr)_minmax(240px,0.75fr)]">
-          <div className="rounded-[24px] border border-appborder bg-appinset p-4">
-            <svg
-              viewBox="0 0 640 420"
-              className="h-auto w-full rounded-[18px] border border-appborder-light bg-[linear-gradient(180deg,var(--appinset)_0%,var(--appsurface)_100%)]"
-              role="img"
-              aria-label="Dummy Roomba floor map"
-            >
-              <rect x="16" y="16" width="608" height="388" rx="22" fill="#0f1726" stroke="#334155" strokeWidth="2" />
-
-              <rect x="42" y="42" width="210" height="150" rx="18" fill="#152235" stroke="#475569" />
-              <text x="62" y="74" fill="#e2e8f0" fontSize="20" fontWeight="600">Living Room</text>
-
-              <rect x="270" y="42" width="156" height="112" rx="18" fill="#16273a" stroke="#475569" />
-              <text x="290" y="74" fill="#e2e8f0" fontSize="18" fontWeight="600">Kitchen</text>
-
-              <rect x="444" y="42" width="154" height="176" rx="18" fill="#142233" stroke="#475569" />
-              <text x="466" y="74" fill="#e2e8f0" fontSize="18" fontWeight="600">Bedroom</text>
-
-              <rect x="42" y="210" width="180" height="160" rx="18" fill="#16273a" stroke="#475569" />
-              <text x="62" y="242" fill="#e2e8f0" fontSize="18" fontWeight="600">Office</text>
-
-              <rect x="240" y="172" width="166" height="198" rx="18" fill="#132031" stroke="#475569" />
-              <text x="260" y="204" fill="#e2e8f0" fontSize="18" fontWeight="600">Hall</text>
-
-              <rect x="424" y="238" width="174" height="132" rx="18" fill="#17283b" stroke="#475569" />
-              <text x="446" y="270" fill="#e2e8f0" fontSize="18" fontWeight="600">Dining</text>
-
-              <rect x="256" y="92" width="16" height="48" rx="8" fill="#94a3b8" opacity="0.5" />
-              <rect x="404" y="106" width="16" height="48" rx="8" fill="#94a3b8" opacity="0.5" />
-              <rect x="214" y="262" width="48" height="16" rx="8" fill="#94a3b8" opacity="0.5" />
-              <rect x="406" y="284" width="48" height="16" rx="8" fill="#94a3b8" opacity="0.5" />
-
-              <path
-                d="M112 134 C164 148, 182 176, 214 216 S286 272, 326 262 S392 214, 438 184 S494 218, 532 254 S544 318, 520 336"
-                fill="none"
-                stroke="#22c55e"
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray="14 14"
-                opacity="0.9"
-              />
-
-              <circle cx="112" cy="134" r="14" fill="#38bdf8" />
-              <circle cx="520" cy="336" r="16" fill="#f59e0b" />
-              <circle cx="520" cy="336" r="30" fill="#f59e0b" opacity="0.12" />
-
-              <rect x="470" y="314" width="74" height="28" rx="14" fill="#0f172a" stroke="#f59e0b" strokeWidth="1.5" />
-              <text x="486" y="333" fill="#f8fafc" fontSize="14" fontWeight="700">Roomba</text>
-            </svg>
-          </div>
-
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Current Zone</p>
-              <p className="mt-2 text-lg font-semibold text-apptext">Dining Room</p>
-              <p className="mt-1 text-sm text-apptext-muted">Coverage 82% on this mock run.</p>
-            </div>
-
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Dock Status</p>
-              <p className="mt-2 text-lg font-semibold text-apptext">Living Room Base</p>
-              <p className="mt-1 text-sm text-apptext-muted">Battery return route available.</p>
-            </div>
-
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Future Uses</p>
-              <div className="mt-2 space-y-2 text-sm text-apptext-soft">
-                <p>Room-level clean history</p>
-                <p>No-go zones and schedules</p>
-                <p>Battery and stuck-event overlays</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <DeferredRender minHeight={360}>
-        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Trend</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">
-              Cleaning Duration
-            </h3>
-          </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart
-              data={runs}
-              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
-                axisLine={{ stroke: chartColors.axisStroke }}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
-                axisLine={{ stroke: chartColors.axisStroke }}
-                tickLine={false}
-                unit="m"
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: chartColors.tooltipBg,
-                  border: `1px solid ${chartColors.tooltipBorder}`,
-                  borderRadius: '16px',
-                  fontSize: '13px',
-                  color: chartColors.tooltipText,
-                  boxShadow: `0 20px 50px var(--appshadow-lg)`,
-                }}
-                formatter={(value: number) => [
-                  `${value} min`,
-                  'Duration',
-                ]}
-                labelStyle={{ color: chartColors.tooltipLabel, marginBottom: 4 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="duration"
-                isAnimationActive={false}
-                stroke="#f59e0b"
-                fill="#f59e0b24"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        </DeferredRender>
-
-        <DeferredRender minHeight={360}>
-        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Signal</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">
-              Dirt Events per Run
-            </h3>
-          </div>
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart
-              data={runs}
-              margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.gridStroke} />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
-                axisLine={{ stroke: chartColors.axisStroke }}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fill: chartColors.tickFill, fontSize: 11 }}
-                axisLine={{ stroke: chartColors.axisStroke }}
-                tickLine={false}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: chartColors.tooltipBg,
-                  border: `1px solid ${chartColors.tooltipBorder}`,
-                  borderRadius: '16px',
-                  fontSize: '13px',
-                  color: chartColors.tooltipText,
-                  boxShadow: `0 20px 50px var(--appshadow-lg)`,
-                }}
-                formatter={(value: number) => [
-                  `${value} events`,
-                  'Dirt Events',
-                ]}
-                labelStyle={{ color: chartColors.tooltipLabel, marginBottom: 4 }}
-              />
-              <Area
-                type="monotone"
-                dataKey="dirtEvents"
-                isAnimationActive={false}
-                stroke="#38bdf8"
-                fill="#38bdf824"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        <DeferredRender minHeight={320}>
+          <RoombaMap map={mapQuery.data ?? null} loading={mapQuery.isLoading} />
         </DeferredRender>
       </section>
 
+      {/* ── Run history ───────────────────────────────────── */}
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <h3 className="mb-4 text-lg font-semibold text-apptext">
-          Recent Runs
-        </h3>
-        <div className="overflow-x-auto">
-          <div className="text-sm">
-            <div className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] border-b border-appborder pb-2 text-left text-apptext-dim">
-              <div className="font-medium">Date</div>
-              <div className="text-right font-medium">Duration</div>
-              <div className="hidden text-right font-medium md:block">Dirt Events</div>
-              <div className="hidden text-right font-medium md:block">Sq Ft</div>
-              <div className="text-right font-medium">Status</div>
-            </div>
-            <VirtualizedList
-              items={[...runs].reverse()}
-              height={360}
-              itemHeight={54}
-              overscan={6}
-              className="mt-1"
-              renderItem={(r, index) => (
-                <div
-                  key={`${r.date}-${index}`}
-                  className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.15fr_1fr_1fr_0.9fr_0.95fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
-                >
-                  <div className="py-3 text-apptext-soft">{r.date}</div>
-                  <div className="py-3 text-right tabular-nums text-apptext">
-                    {r.duration} min
-                  </div>
-                  <div className="hidden py-3 text-right tabular-nums text-apptext md:block">
-                    {r.dirtEvents}
-                  </div>
-                  <div className="hidden py-3 text-right text-apptext-muted md:block">{r.sqft}</div>
-                  <div className="py-3 text-right">
-                    <span
-                      className={`rounded-full px-2.5 py-1 text-xs ${
-                        r.completed
-                          ? 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
-                          : 'border border-rose-300/20 bg-rose-300/10 text-rose-200'
-                      }`}
-                    >
-                      {r.completed ? 'Done' : 'Stuck'}
-                    </span>
-                  </div>
-                </div>
-              )}
-            />
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              History
+            </p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">Recent runs</h3>
           </div>
+          {totalRuns > 0 && (
+            <span className="text-xs text-apptext-dim">
+              {completedRuns}/{totalRuns} completed
+            </span>
+          )}
         </div>
+
+        {runsQuery.isLoading ? (
+          <div className="space-y-2 animate-pulse">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-12 rounded-2xl bg-appinset" />
+            ))}
+          </div>
+        ) : runs.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-appborder bg-appinset p-10 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft text-appaccent-text">
+              {Icons.Calendar}
+            </div>
+            <p className="text-sm font-medium text-apptext-soft">No cleaning runs yet</p>
+            <p className="max-w-xs text-xs leading-5 text-apptext-muted">
+              Once your Roomba finishes its first mission, each run will show up here with its
+              duration, area cleaned, and outcome.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <div className="text-sm">
+              <div className="grid grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-appborder pb-2 text-left text-apptext-dim">
+                <div className="font-medium">Date</div>
+                <div className="text-right font-medium">Duration</div>
+                <div className="hidden text-right font-medium md:block">Sq Ft</div>
+                <div className="text-right font-medium">Status</div>
+              </div>
+              <VirtualizedList
+                items={runs}
+                height={Math.min(runs.length, 8) * 56 + 8}
+                itemHeight={56}
+                overscan={6}
+                className="mt-1"
+                renderItem={(r) => {
+                  const started = new Date(r.startedAt);
+                  const dateLabel = Number.isNaN(started.getTime())
+                    ? '—'
+                    : started.toLocaleDateString('en-US', {
+                        month: 'short',
+                        day: 'numeric',
+                        year: 'numeric',
+                      });
+                  const timeLabel = Number.isNaN(started.getTime())
+                    ? ''
+                    : started.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                      });
+                  const st = runStatusStyle(r.status);
+                  return (
+                    <div
+                      key={r.id}
+                      className="grid grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                    >
+                      <div className="py-3">
+                        <div className="text-apptext-soft">{dateLabel}</div>
+                        {timeLabel && (
+                          <div className="text-[11px] text-apptext-dim">{timeLabel}</div>
+                        )}
+                      </div>
+                      <div className="py-3 text-right tabular-nums text-apptext">
+                        {formatDuration(r.durationMinutes)}
+                      </div>
+                      <div className="hidden py-3 text-right tabular-nums text-apptext-muted md:block">
+                        {r.squareFeet != null ? r.squareFeet : '—'}
+                      </div>
+                      <div className="py-3 text-right">
+                        <span className={`rounded-full px-2.5 py-1 text-xs ${st.className}`}>
+                          {st.label}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                }}
+              />
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );
-}
+});

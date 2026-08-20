@@ -243,9 +243,11 @@ public class HourlySyncScheduler {
     }
 
     /**
-     * Emit the post-sync result as an app event. Raises a WARN when the day has
-     * too many 0.00 hours (data not fully posted), or when the row count breaks
-     * the 24-row-per-day invariant.
+     * Emit the post-sync result as an app event. A too-large row count breaks the
+     * 24-row-per-day invariant and is a genuine WARN. An incomplete day (CoServ
+     * hasn't posted all of yesterday's intervals yet) is an EXPECTED mid-day state
+     * that the scheduler retries on its own, so it is logged at INFO — a partial
+     * result is not a failure and shouldn't read as a warning in the event feed.
      */
     private void emitSyncResult(String date, DaySnapshot day, String details) {
         int zeros = day.total() - day.nonZero();
@@ -259,14 +261,14 @@ public class HourlySyncScheduler {
                     "Hourly sync " + date + ": " + day.nonZero() + "/24 non-zero · "
                             + fmtKwh(day.totalKwh()) + " kWh ✓", details);
         } else if (zeros > 0) {
-            appEventService.log("sync", "WARN", "HourlySyncScheduler",
-                    "Hourly sync " + date + ": too many 0.00 readings — " + day.nonZero()
-                            + "/24 non-zero (" + zeros + " zeros) · " + fmtKwh(day.totalKwh())
-                            + " kWh ⚠ (data may not be fully posted — will retry)", details);
+            appEventService.log("sync", "INFO", "HourlySyncScheduler",
+                    "Hourly sync " + date + ": " + day.nonZero() + "/24 non-zero so far ("
+                            + zeros + " not posted yet) · " + fmtKwh(day.totalKwh())
+                            + " kWh — will retry when CoServ posts the rest", details);
         } else {
-            appEventService.log("sync", "WARN", "HourlySyncScheduler",
-                    "Hourly sync " + date + ": only " + day.nonZero() + "/24 readings · "
-                            + fmtKwh(day.totalKwh()) + " kWh ⚠ (incomplete)", details);
+            appEventService.log("sync", "INFO", "HourlySyncScheduler",
+                    "Hourly sync " + date + ": " + day.nonZero() + "/24 readings so far · "
+                            + fmtKwh(day.totalKwh()) + " kWh — waiting on CoServ (will retry)", details);
         }
     }
 

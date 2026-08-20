@@ -321,6 +321,20 @@ export default memo(function App() {
       {/* ── Mobile bottom nav ── */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-appborder bg-appsurface/95 backdrop-blur-md lg:hidden pb-safe">
         <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-1.5">
+          {/* Menu — leftmost, so the trigger sits on the same side as the
+              left-anchored sidebar it opens. Hamburger (☰) reads as "menu". */}
+          <button
+            ref={hamburgerButtonRef}
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-sidebar"
+            className="flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[11px] font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
+          >
+            <span className="flex h-[1.5rem] items-center text-lg leading-none">☰</span>
+            <span className="leading-none">Menu</span>
+          </button>
           {bottomTabs.map((tab) => (
             <NavLink
               key={tab.path}
@@ -345,19 +359,6 @@ export default memo(function App() {
               <span className="leading-none">{tab.label}</span>
             </NavLink>
           ))}
-          {/* More — opens the full menu (every section, incl. admin) */}
-          <button
-            ref={hamburgerButtonRef}
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            aria-label="More menu"
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-sidebar"
-            className="flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[11px] font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
-          >
-            <span className="flex h-[1.5rem] items-center text-lg leading-none">⋯</span>
-            <span className="leading-none">More</span>
-          </button>
         </div>
       </nav>
     </div>

@@ -1,0 +1,14 @@
+# Secrets — never commit
+.env
+
+# Local virtualenv
+.venv/
+venv/
+
+# Raw probe captures (contain device identifiers — redact before sharing upstream)
+captures/*
+!captures/README.md
+
+# Python cruft
+__pycache__/
+*.pyc

@@ -147,6 +147,40 @@ CREATE TABLE IF NOT EXISTS roomba_runs (
 
 CREATE INDEX IF NOT EXISTS idx_roomba_runs_started_at ON roomba_runs (started_at);
 
+-- Latest live-status snapshot per robot. Poller UPSERTs (UNIQUE robot_id).
+CREATE TABLE IF NOT EXISTS roomba_status (
+    id                  SERIAL PRIMARY KEY,
+    robot_id            VARCHAR(64)    NOT NULL UNIQUE,
+    name                VARCHAR(120),
+    battery_pct         INTEGER,
+    phase               VARCHAR(40),
+    cycle               VARCHAR(40),
+    error               INTEGER        DEFAULT 0,
+    bin_present         BOOLEAN,
+    tank_present        BOOLEAN,
+    current_mission_id  VARCHAR(64),
+    mission_start       TIMESTAMP,
+    sqft                INTEGER,
+    runtime_minutes     INTEGER,
+    dock_state          INTEGER,
+    lifetime_missions   INTEGER,
+    lifetime_run_minutes INTEGER,
+    map_version         VARCHAR(64),
+    raw                 JSONB,
+    updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+-- Current floor-plan map bundle per robot. Poller UPSERTs when map_version changes.
+CREATE TABLE IF NOT EXISTS roomba_map (
+    id            SERIAL PRIMARY KEY,
+    robot_id      VARCHAR(64)  NOT NULL UNIQUE,
+    map_id        VARCHAR(80),
+    map_version   VARCHAR(64),
+    name          VARCHAR(120),
+    geojson       JSONB        NOT NULL,
+    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
 -- Compatibility view so the current backend and frontend contract can read
 -- electric + gas records while the physical storage stays isolated.
 CREATE OR REPLACE VIEW energy_usage AS

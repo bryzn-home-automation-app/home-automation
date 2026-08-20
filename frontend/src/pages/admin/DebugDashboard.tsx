@@ -656,8 +656,8 @@ export default function DebugDashboard() {
             {syncEvents.slice(0, 6).map((e) => (
               <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
-                    {e.level === 'ERROR' ? 'Failed' : 'OK'}
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
+                    {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
                   </span>
                   <span className="text-xs text-apptext-dim">
                     {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}

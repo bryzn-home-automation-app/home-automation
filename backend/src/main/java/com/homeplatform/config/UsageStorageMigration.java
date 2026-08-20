@@ -199,6 +199,44 @@ public class UsageStorageMigration implements ApplicationRunner {
             )
             """);
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_roomba_runs_started_at ON roomba_runs (started_at)");
+
+        // Latest live-status snapshot per robot (poller UPSERTs, UNIQUE robot_id).
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_status (
+                id                  SERIAL PRIMARY KEY,
+                robot_id            VARCHAR(64)    NOT NULL UNIQUE,
+                name                VARCHAR(120),
+                battery_pct         INTEGER,
+                phase               VARCHAR(40),
+                cycle               VARCHAR(40),
+                error               INTEGER        DEFAULT 0,
+                bin_present         BOOLEAN,
+                tank_present        BOOLEAN,
+                current_mission_id  VARCHAR(64),
+                mission_start       TIMESTAMP,
+                sqft                INTEGER,
+                runtime_minutes     INTEGER,
+                dock_state          INTEGER,
+                lifetime_missions   INTEGER,
+                lifetime_run_minutes INTEGER,
+                map_version         VARCHAR(64),
+                raw                 JSONB,
+                updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+            )
+            """);
+
+        // Current floor-plan map bundle per robot (poller UPSERTs on map_version change).
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_map (
+                id            SERIAL PRIMARY KEY,
+                robot_id      VARCHAR(64)  NOT NULL UNIQUE,
+                map_id        VARCHAR(80),
+                map_version   VARCHAR(64),
+                name          VARCHAR(120),
+                geojson       JSONB        NOT NULL,
+                updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+            )
+            """);
     }
 
     private void migrateLegacyRows(String tableName) {
