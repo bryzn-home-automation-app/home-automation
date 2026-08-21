@@ -156,6 +156,7 @@ CREATE TABLE IF NOT EXISTS roomba_status (
     phase               VARCHAR(40),
     cycle               VARCHAR(40),
     error               INTEGER        DEFAULT 0,
+    error_text          VARCHAR(255),
     bin_present         BOOLEAN,
     tank_present        BOOLEAN,
     current_mission_id  VARCHAR(64),
@@ -163,6 +164,15 @@ CREATE TABLE IF NOT EXISTS roomba_status (
     sqft                INTEGER,
     runtime_minutes     INTEGER,
     dock_state          INTEGER,
+    dock_error          INTEGER,
+    dock_text           VARCHAR(120),
+    not_ready           INTEGER,
+    initiator           VARCHAR(40),
+    detected_pad        VARCHAR(40),
+    charge_cycles       INTEGER,
+    charge_errors       INTEGER,
+    fault_text          VARCHAR(255),
+    wear                JSONB,
     lifetime_missions   INTEGER,
     lifetime_run_minutes INTEGER,
     map_version         VARCHAR(64),
@@ -179,6 +189,45 @@ CREATE TABLE IF NOT EXISTS roomba_map (
     name          VARCHAR(120),
     geojson       JSONB        NOT NULL,
     updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+-- Control command queue. Backend enqueues (ADMIN only); the poller executes each
+-- against the robot and updates status. Append-only-ish (status transitions in place).
+CREATE TABLE IF NOT EXISTS roomba_commands (
+    id            SERIAL PRIMARY KEY,
+    robot_id      VARCHAR(64),
+    command       VARCHAR(40)  NOT NULL,   -- start|stop|pause|resume|dock|find|evac|favorite
+    arg           VARCHAR(120),            -- favorite id for 'favorite'
+    status        VARCHAR(20)  NOT NULL DEFAULT 'PENDING',  -- PENDING|SENT|OK|FAILED
+    detail        VARCHAR(500),
+    requested_by  VARCHAR(120),
+    created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
+    processed_at  TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_roomba_commands_status ON roomba_commands (status, id);
+
+-- Static device identity + firmware per robot. Poller UPSERTs once per connect.
+CREATE TABLE IF NOT EXISTS roomba_device (
+    id            SERIAL PRIMARY KEY,
+    robot_id      VARCHAR(64)  NOT NULL UNIQUE,
+    sku           VARCHAR(40),
+    series        VARCHAR(20),
+    family        VARCHAR(60),
+    serial_number VARCHAR(60),
+    firmware      VARCHAR(60),
+    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
+-- Live robot position (poller UPSERTs from watch_live_map() while a mission runs,
+-- UNIQUE robot_id). x/y are meters in the same space as the map bundle GeoJSON;
+-- theta is the raw wire heading in radians. Read-only + staleness-gated by the API.
+CREATE TABLE IF NOT EXISTS roomba_position (
+    id            SERIAL PRIMARY KEY,
+    robot_id      VARCHAR(64)       NOT NULL UNIQUE,
+    x             DOUBLE PRECISION,
+    y             DOUBLE PRECISION,
+    theta         DOUBLE PRECISION,
+    updated_at    TIMESTAMP         NOT NULL DEFAULT NOW()
 );
 
 -- Compatibility view so the current backend and frontend contract can read

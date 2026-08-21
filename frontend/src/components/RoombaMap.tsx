@@ -1,4 +1,6 @@
 import { memo, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchRoombaPosition } from '../api/roomba';
 import type {
   GeoFeatureCollection,
   GeoPosition,
@@ -9,6 +11,21 @@ interface RoombaMapProps {
   map: RoombaMapData | null;
   loading?: boolean;
   className?: string;
+  /** When true, poll the live position (~1.5s) and draw the moving robot dot. */
+  running?: boolean;
+}
+
+/** A drawable policy zone (keep-out / no-mop) polygon + its category. */
+interface ZonePoly {
+  points: string;
+  category: string;
+}
+
+/** A room name label positioned at the room polygon centroid (SVG units). */
+interface RoomLabel {
+  x: number;
+  y: number;
+  text: string;
 }
 
 interface Bounds {
@@ -48,7 +65,7 @@ function extendBounds(fc: GeoFeatureCollection | null | undefined, b: Bounds): v
 const VIEW_EXTENT = 1000;
 const PAD_RATIO = 0.06; // 6% breathing room around the plan
 
-export default memo(function RoombaMap({ map, loading, className }: RoombaMapProps) {
+export default memo(function RoombaMap({ map, loading, className, running }: RoombaMapProps) {
   const geo = map?.geojson;
 
   const model = useMemo(() => {
@@ -142,6 +159,56 @@ export default memo(function RoombaMap({ map, loading, className }: RoombaMapPro
       }
     }
 
+    // Policy zones — keep-out / no-mop polygons + virtual-wall lines. The
+    // non-obvious rule (maps.md #4): a virtual wall is a KEEP_OUT_ZONE-typed
+    // feature whose GEOMETRY is a LineString, so classify by geometry first.
+    const zonePolys: ZonePoly[] = [];
+    const wallLines: string[] = [];
+    if (geo.policyZones?.features) {
+      for (const f of geo.policyZones.features) {
+        const g = f.geometry;
+        if (!g) continue;
+        const category = String(
+          (f.properties?.category ?? f.properties?.type ?? '') as string,
+        ).toUpperCase();
+        if (g.type === 'LineString') {
+          wallLines.push(ringToPoints(g.coordinates));
+        } else if (g.type === 'Polygon') {
+          for (const ring of g.coordinates) zonePolys.push({ points: ringToPoints(ring), category });
+        } else if (g.type === 'MultiPolygon') {
+          for (const poly of g.coordinates)
+            for (const ring of poly) zonePolys.push({ points: ringToPoints(ring), category });
+        }
+      }
+    }
+
+    // Room name labels — join the bundle room feature's properties.name to its
+    // polygon centroid. Absent names (our single unnamed room) render nothing.
+    const roomLabels: RoomLabel[] = [];
+    if (geo.rooms?.features) {
+      for (const f of geo.rooms.features) {
+        const g = f.geometry;
+        if (!g) continue;
+        const name = (f.properties?.name ?? f.properties?.room_name) as unknown;
+        if (typeof name !== 'string' || !name.trim()) continue;
+        let ring: GeoPosition[] | null = null;
+        if (g.type === 'Polygon') ring = g.coordinates[0] ?? null;
+        else if (g.type === 'MultiPolygon') ring = g.coordinates[0]?.[0] ?? null;
+        if (!ring || ring.length === 0) continue;
+        let sx = 0;
+        let sy = 0;
+        let n = 0;
+        for (const p of ring) {
+          const [px, py] = project(p);
+          sx += px;
+          sy += py;
+          n += 1;
+        }
+        if (n === 0) continue;
+        roomLabels.push({ x: sx / n, y: sy / n, text: name.trim() });
+      }
+    }
+
     const hasGeometry =
       floorPolys.length > 0 ||
       roomPolys.length > 0 ||
@@ -150,15 +217,31 @@ export default memo(function RoombaMap({ map, loading, className }: RoombaMapPro
     return {
       width,
       height,
+      project,
       floorPolys,
       roomPolys,
       borderPaths,
       dockMarkers,
+      zonePolys,
+      wallLines,
+      roomLabels,
       hasGeometry,
       // dock marker radius relative to the map extent
       dockR: Math.max(width, height) * 0.018,
     };
   }, [geo]);
+
+  // Live position — polled only while the robot is running. A 204 (stale/none)
+  // comes back as null from the fetcher, which hides the dot.
+  const positionQuery = useQuery({
+    queryKey: ['roomba-position'],
+    queryFn: fetchRoombaPosition,
+    enabled: !!running,
+    refetchInterval: running ? 1500 : false,
+    refetchIntervalInBackground: false,
+    staleTime: 1000,
+  });
+  const position = running ? positionQuery.data ?? null : null;
 
   if (loading) {
     return (
@@ -191,7 +274,39 @@ export default memo(function RoombaMap({ map, loading, className }: RoombaMapPro
     );
   }
 
-  const { width, height, floorPolys, roomPolys, borderPaths, dockMarkers, dockR } = model;
+  const {
+    width,
+    height,
+    project,
+    floorPolys,
+    roomPolys,
+    borderPaths,
+    dockMarkers,
+    zonePolys,
+    wallLines,
+    roomLabels,
+    dockR,
+  } = model;
+  const maxDim = Math.max(width, height);
+
+  // Live robot dot geometry, in the SAME projected space as everything else.
+  // The heading is drawn in SVG space where y grows downward, so the meter-space
+  // angle theta maps to (cos θ, −sin θ). theta is provisional (may point out the
+  // robot's back — see maps.md #1); still useful as a facing hint.
+  const robot =
+    position && Number.isFinite(position.x) && Number.isFinite(position.y)
+      ? (() => {
+          const [cx, cy] = project([position.x, position.y]);
+          const r = maxDim * 0.02;
+          const theta = typeof position.theta === 'number' ? position.theta : null;
+          const L = r * 2.4;
+          const head =
+            theta != null
+              ? { hx: cx + L * Math.cos(theta), hy: cy - L * Math.sin(theta) }
+              : null;
+          return { cx, cy, r, head };
+        })()
+      : null;
 
   return (
     <div
@@ -228,6 +343,25 @@ export default memo(function RoombaMap({ map, loading, className }: RoombaMapPro
           />
         ))}
 
+        {/* Keep-out / no-mop zones — hatched, distinct per category */}
+        {zonePolys.map((z, i) => {
+          const noMop = z.category.includes('NO_MOP') || z.category.includes('MOP');
+          const color = noMop ? 'var(--appwarning)' : 'var(--appdanger)';
+          return (
+            <polygon
+              key={`zone-${i}`}
+              points={z.points}
+              fill={color}
+              fillOpacity={0.14}
+              stroke={color}
+              strokeOpacity={0.85}
+              strokeWidth={maxDim * 0.004}
+              strokeDasharray={`${maxDim * 0.012} ${maxDim * 0.008}`}
+              strokeLinejoin="round"
+            />
+          );
+        })}
+
         {/* Borders / walls — strong outline */}
         {borderPaths.map((pts, i) => (
           <polyline
@@ -235,7 +369,21 @@ export default memo(function RoombaMap({ map, loading, className }: RoombaMapPro
             points={pts}
             fill="none"
             stroke="var(--apptext-muted)"
-            strokeWidth={Math.max(width, height) * 0.006}
+            strokeWidth={maxDim * 0.006}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+        ))}
+
+        {/* Virtual walls — LineString policy zones, dashed danger-colored */}
+        {wallLines.map((pts, i) => (
+          <polyline
+            key={`vwall-${i}`}
+            points={pts}
+            fill="none"
+            stroke="var(--appdanger)"
+            strokeWidth={maxDim * 0.007}
+            strokeDasharray={`${maxDim * 0.016} ${maxDim * 0.01}`}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
@@ -255,6 +403,55 @@ export default memo(function RoombaMap({ map, loading, className }: RoombaMapPro
             />
           </g>
         ))}
+
+        {/* Room name labels — centered on each named room's centroid */}
+        {roomLabels.map((lbl, i) => (
+          <text
+            key={`roomlabel-${i}`}
+            x={lbl.x}
+            y={lbl.y}
+            fill="var(--apptext-soft)"
+            fontSize={maxDim * 0.026}
+            fontWeight={600}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            style={{ paintOrder: 'stroke', pointerEvents: 'none' }}
+            stroke="var(--appsurface-raised)"
+            strokeWidth={maxDim * 0.006}
+            strokeLinejoin="round"
+          >
+            {lbl.text}
+          </text>
+        ))}
+
+        {/* Live robot dot + heading — same project() space, hidden when stale */}
+        {robot && (
+          <g aria-label="Robot position">
+            {robot.head && (
+              <line
+                x1={robot.cx}
+                y1={robot.cy}
+                x2={robot.head.hx}
+                y2={robot.head.hy}
+                stroke="var(--appsuccess)"
+                strokeWidth={robot.r * 0.55}
+                strokeLinecap="round"
+              />
+            )}
+            <circle cx={robot.cx} cy={robot.cy} r={robot.r * 2.4} fill="var(--appsuccess)" fillOpacity={0.18}>
+              <animate attributeName="r" values={`${robot.r * 1.8};${robot.r * 3};${robot.r * 1.8}`} dur="1.6s" repeatCount="indefinite" />
+              <animate attributeName="fill-opacity" values="0.28;0.05;0.28" dur="1.6s" repeatCount="indefinite" />
+            </circle>
+            <circle
+              cx={robot.cx}
+              cy={robot.cy}
+              r={robot.r}
+              fill="var(--appsuccess)"
+              stroke="var(--appsurface-raised)"
+              strokeWidth={robot.r * 0.4}
+            />
+          </g>
+        )}
       </svg>
     </div>
   );

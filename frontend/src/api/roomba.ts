@@ -1,5 +1,12 @@
 import api from './client';
-import type { RoombaMap, RoombaRun, RoombaStatus } from '../types';
+import type {
+  RoombaCommand,
+  RoombaDevice,
+  RoombaMap,
+  RoombaPosition,
+  RoombaRun,
+  RoombaStatus,
+} from '../types';
 
 /**
  * A 204 (No Content) comes back from axios with a 204 status and an empty
@@ -28,4 +35,33 @@ export async function fetchRoombaMap(): Promise<RoombaMap | null> {
   const res = await api.get<RoombaMap | ''>('/roomba/map');
   if (isNoContent(res.status, res.data)) return null;
   return res.data as RoombaMap;
+}
+
+/**
+ * Live robot position for the map dot, or null when there's no fresh fix
+ * (204 = none/stale). Poll this only while the robot is running.
+ */
+export async function fetchRoombaPosition(): Promise<RoombaPosition | null> {
+  const res = await api.get<RoombaPosition | ''>('/roomba/position');
+  if (isNoContent(res.status, res.data)) return null;
+  return res.data as RoombaPosition;
+}
+
+/** Static device identity + firmware, or null until the poller syncs it. */
+export async function fetchRoombaDevice(): Promise<RoombaDevice | null> {
+  const res = await api.get<RoombaDevice | ''>('/roomba/device');
+  if (isNoContent(res.status, res.data)) return null;
+  return res.data as RoombaDevice;
+}
+
+/** Enqueue a control command (ADMIN only). `arg` carries the favorite id. */
+export async function sendRoombaCommand(command: string, arg?: string): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/command', { command, arg });
+  return res.data;
+}
+
+/** Recent control commands + their status (ADMIN only). */
+export async function fetchRoombaCommands(): Promise<RoombaCommand[]> {
+  const res = await api.get<RoombaCommand[]>('/admin/roomba/commands');
+  return Array.isArray(res.data) ? res.data : [];
 }

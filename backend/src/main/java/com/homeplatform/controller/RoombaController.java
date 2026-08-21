@@ -1,6 +1,8 @@
 package com.homeplatform.controller;
 
+import com.homeplatform.dto.RoombaDeviceResponse;
 import com.homeplatform.dto.RoombaMapResponse;
+import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
 import com.homeplatform.service.RoombaService;
@@ -42,6 +44,22 @@ public class RoombaController {
     @GetMapping("/map")
     public ResponseEntity<RoombaMapResponse> getMap() {
         return service.getMap()
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /** Static device identity + firmware, or 204 if not synced yet. */
+    @GetMapping("/device")
+    public ResponseEntity<RoombaDeviceResponse> getDevice() {
+        return service.getDevice()
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /** Live robot position for the map dot, or 204 when none/stale (older than ~15s). */
+    @GetMapping("/position")
+    public ResponseEntity<RoombaPositionResponse> getPosition() {
+        return service.getPosition()
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

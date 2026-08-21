@@ -41,6 +41,9 @@ public class RoombaStatus {
     @Column
     private Integer error;
 
+    @Column(name = "error_text", length = 255)
+    private String errorText;
+
     @Column(name = "bin_present")
     private Boolean binPresent;
 
@@ -61,6 +64,34 @@ public class RoombaStatus {
 
     @Column(name = "dock_state")
     private Integer dockState;
+
+    @Column(name = "dock_error")
+    private Integer dockError;
+
+    @Column(name = "dock_text", length = 120)
+    private String dockText;
+
+    @Column(name = "not_ready")
+    private Integer notReady;
+
+    @Column(length = 40)
+    private String initiator;
+
+    @Column(name = "detected_pad", length = 40)
+    private String detectedPad;
+
+    @Column(name = "charge_cycles")
+    private Integer chargeCycles;
+
+    @Column(name = "charge_errors")
+    private Integer chargeErrors;
+
+    @Column(name = "fault_text", length = 255)
+    private String faultText;
+
+    /** Wear/stall/cliff counters (bbrun) as stored JSON; passed through to the API. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String wear;
 
     @Column(name = "lifetime_missions")
     private Integer lifetimeMissions;

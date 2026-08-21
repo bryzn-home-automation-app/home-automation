@@ -169,7 +169,9 @@ export interface RoombaStatus {
   phase: string | null;
   /** raw V4 cycle: clean | none | ... */
   cycle: string | null;
-  error: number;
+  error: number | null;
+  /** Decoded error title (poller-side vendor_error lookup), null when no error. */
+  errorText: string | null;
   /** true when phase is an active-cleaning phase (run/evac/...). */
   running: boolean;
   binPresent: boolean | null;
@@ -179,11 +181,27 @@ export interface RoombaStatus {
   sqft: number | null;
   runtimeMinutes: number | null;
   dockState: number | null;
+  dockError: number | null;
+  /** Friendly dock-state label (e.g. "Bag Full", "Evacuation In Progress"). */
+  dockText: string | null;
+  notReady: number | null;
+  /** Who/what started the current mission (rmtApp / schedule / cloud / ...). */
+  initiator: string | null;
+  detectedPad: string | null;
+  chargeCycles: number | null;
+  chargeErrors: number | null;
+  /** Free-text fault the numeric error code doesn't cover, or null. */
+  faultText: string | null;
+  /** Wear/stall/cliff counters (bbrun) passthrough, or null on this firmware. */
+  wear: Record<string, number> | null;
   lifetimeMissions: number | null;
   lifetimeRunMinutes: number | null;
   mapVersion: string | null;
   /** updated_at within the last 10 min. */
   online: boolean;
+  /** true when any attentionReasons are present. */
+  needsAttention: boolean;
+  attentionReasons: string[];
   updatedAt: string;
 }
 
@@ -199,6 +217,43 @@ export interface RoombaRun {
   /** COMPLETED | STUCK | CANCELLED (widened to string for forward-compat). */
   status: RoombaRunStatus | string;
   missionId: string | null;
+}
+
+/**
+ * Live robot position for the map dot (GET /api/roomba/position, or null = 204
+ * when none/stale). x/y are meters in the map bundle's coordinate space; theta
+ * is the raw wire heading in radians (provisional — may point out the back).
+ */
+export interface RoombaPosition {
+  robotId: string;
+  x: number;
+  y: number;
+  theta: number | null;
+  updatedAt: string;
+}
+
+/** Static device identity + firmware (GET /api/roomba/device). */
+export interface RoombaDevice {
+  robotId: string;
+  sku: string | null;
+  series: string | null;
+  family: string | null;
+  serialNumber: string | null;
+  firmware: string | null;
+  updatedAt: string;
+}
+
+/** A queued/processed control command (ADMIN only). */
+export interface RoombaCommand {
+  id: number;
+  command: string;
+  arg: string | null;
+  /** PENDING | SENT | OK | FAILED. "OK" = broker accepted, not necessarily acted. */
+  status: string;
+  detail: string | null;
+  requestedBy: string | null;
+  createdAt: string;
+  processedAt: string | null;
 }
 
 // ── Minimal GeoJSON (only what the map renderer consumes) ──
@@ -251,6 +306,13 @@ export interface RoombaMapGeoJson {
   borders?: GeoFeatureCollection | null;
   floorPlan?: GeoFeatureCollection | null;
   dockPose?: GeoFeatureCollection | null;
+  /**
+   * Keep-out / no-mop / virtual-wall zones. Feature `properties.category` is a
+   * PolicyZoneCategory (KEEP_OUT_ZONE | NO_MOP_ZONE | VIRTUAL_WALL | THRESHOLD).
+   * NOTE: a virtual wall is a KEEP_OUT_ZONE-typed feature whose geometry is a
+   * LineString, not its own category string. Absent on maps with no zones.
+   */
+  policyZones?: GeoFeatureCollection | null;
 }
 
 /** GET /api/roomba/map (or null = 204, no map built yet). */

@@ -1,12 +1,17 @@
 package com.homeplatform.service;
 
 import com.homeplatform.dto.RoombaMapResponse;
+import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
 import com.homeplatform.model.RoombaMap;
+import com.homeplatform.model.RoombaPosition;
 import com.homeplatform.model.RoombaRun;
 import com.homeplatform.model.RoombaStatus;
+import com.homeplatform.repository.RoombaCommandRepository;
+import com.homeplatform.repository.RoombaDeviceRepository;
 import com.homeplatform.repository.RoombaMapRepository;
+import com.homeplatform.repository.RoombaPositionRepository;
 import com.homeplatform.repository.RoombaRunRepository;
 import com.homeplatform.repository.RoombaStatusRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -28,6 +33,9 @@ class RoombaServiceTest {
     private RoombaStatusRepository statusRepo;
     private RoombaRunRepository runRepo;
     private RoombaMapRepository mapRepo;
+    private RoombaCommandRepository commandRepo;
+    private RoombaDeviceRepository deviceRepo;
+    private RoombaPositionRepository positionRepo;
     private RoombaService service;
 
     @BeforeEach
@@ -35,7 +43,11 @@ class RoombaServiceTest {
         statusRepo = mock(RoombaStatusRepository.class);
         runRepo = mock(RoombaRunRepository.class);
         mapRepo = mock(RoombaMapRepository.class);
-        service = new RoombaService(statusRepo, runRepo, mapRepo);
+        commandRepo = mock(RoombaCommandRepository.class);
+        deviceRepo = mock(RoombaDeviceRepository.class);
+        positionRepo = mock(RoombaPositionRepository.class);
+        service = new RoombaService(
+                statusRepo, runRepo, mapRepo, commandRepo, deviceRepo, positionRepo);
     }
 
     @Nested
@@ -136,6 +148,52 @@ class RoombaServiceTest {
         void emptyWhenNone() {
             when(mapRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
             assertTrue(service.getMap().isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("getPosition")
+    class GetPosition {
+
+        @Test
+        @DisplayName("returns a fresh position with x/y/theta")
+        void freshPosition() {
+            RoombaPosition p = RoombaPosition.builder()
+                    .robotId("robot-1")
+                    .x(1.25)
+                    .y(-3.5)
+                    .theta(1.57)
+                    .updatedAt(LocalDateTime.now().minusSeconds(2))
+                    .build();
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(p));
+
+            RoombaPositionResponse r = service.getPosition().orElseThrow();
+            assertEquals("robot-1", r.robotId());
+            assertEquals(1.25, r.x());
+            assertEquals(-3.5, r.y());
+            assertEquals(1.57, r.theta());
+        }
+
+        @Test
+        @DisplayName("empty when the position is stale (older than the freshness window)")
+        void staleIsEmpty() {
+            RoombaPosition p = RoombaPosition.builder()
+                    .robotId("robot-1")
+                    .x(1.0)
+                    .y(2.0)
+                    .theta(0.0)
+                    .updatedAt(LocalDateTime.now().minusMinutes(2))
+                    .build();
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(p));
+
+            assertTrue(service.getPosition().isEmpty());
+        }
+
+        @Test
+        @DisplayName("empty when no position row exists")
+        void emptyWhenNone() {
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
+            assertTrue(service.getPosition().isEmpty());
         }
     }
 }

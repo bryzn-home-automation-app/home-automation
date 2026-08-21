@@ -237,6 +237,51 @@ public class UsageStorageMigration implements ApplicationRunner {
                 updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
             )
             """);
+
+        // Control command queue (backend enqueues ADMIN-only; poller executes).
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_commands (
+                id            SERIAL PRIMARY KEY,
+                robot_id      VARCHAR(64),
+                command       VARCHAR(40)  NOT NULL,
+                arg           VARCHAR(120),
+                status        VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+                detail        VARCHAR(500),
+                requested_by  VARCHAR(120),
+                created_at    TIMESTAMP    NOT NULL DEFAULT NOW(),
+                processed_at  TIMESTAMP
+            )
+            """);
+        jdbcTemplate.execute(
+            "CREATE INDEX IF NOT EXISTS idx_roomba_commands_status ON roomba_commands (status, id)");
+
+        // Static device identity + firmware (poller UPSERTs once per connect).
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_device (
+                id            SERIAL PRIMARY KEY,
+                robot_id      VARCHAR(64)  NOT NULL UNIQUE,
+                sku           VARCHAR(40),
+                series        VARCHAR(20),
+                family        VARCHAR(60),
+                serial_number VARCHAR(60),
+                firmware      VARCHAR(60),
+                updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+            )
+            """);
+
+        // Live robot position (poller UPSERTs from watch_live_map() mid-mission,
+        // UNIQUE robot_id). x/y meters in the map bundle's coordinate space;
+        // theta = raw wire heading (radians). Read-only + staleness-gated by the API.
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_position (
+                id            SERIAL PRIMARY KEY,
+                robot_id      VARCHAR(64)       NOT NULL UNIQUE,
+                x             DOUBLE PRECISION,
+                y             DOUBLE PRECISION,
+                theta         DOUBLE PRECISION,
+                updated_at    TIMESTAMP         NOT NULL DEFAULT NOW()
+            )
+            """);
     }
 
     private void migrateLegacyRows(String tableName) {

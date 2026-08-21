@@ -4,8 +4,10 @@ import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
 import RoombaMap from '../components/RoombaMap';
-import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap } from '../api/roomba';
+import RoombaControls from '../components/RoombaControls';
+import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useAuth } from '../context/AuthContext';
 import type { RoombaStatus, RoombaRun } from '../types';
 
 // ── Presentation helpers ──────────────────────────────────
@@ -57,6 +59,29 @@ function formatRelative(iso: string | null | undefined): string {
   if (diffHr < 24) return `${diffHr} hr ago`;
   const diffDay = Math.round(diffHr / 24);
   return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
+}
+
+const INITIATOR_LABELS: Record<string, string> = {
+  rmtApp: 'App',
+  localApp: 'App',
+  schedule: 'Schedule',
+  manual: 'Robot button',
+  cloud: 'Cloud',
+  voice: 'Voice assistant',
+};
+function initiatorLabel(v: string | null | undefined): string {
+  if (!v) return '—';
+  return INITIATOR_LABELS[v] ?? v;
+}
+
+/** One label/value cell in the maintenance detail strip. */
+function Detail({ label, value, tone }: { label: string; value: string; tone?: 'warn' }) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim">{label}</p>
+      <p className={`mt-1 font-medium ${tone === 'warn' ? 'text-amber-300' : 'text-apptext'}`}>{value}</p>
+    </div>
+  );
 }
 
 function runStatusStyle(status: string): { label: string; className: string } {
@@ -120,14 +145,38 @@ export default memo(function Roomba() {
     refetchIntervalInBackground: false,
   });
 
+  const deviceQuery = useQuery({
+    queryKey: ['roomba-device'],
+    queryFn: fetchRoombaDevice,
+    staleTime: 600_000,
+    refetchInterval: jitteredInterval(600_000, 30_000),
+    refetchIntervalInBackground: false,
+  });
+
   const status = statusQuery.data ?? null;
+  const device = deviceQuery.data ?? null;
   const runs = useMemo<RoombaRun[]>(() => runsQuery.data ?? [], [runsQuery.data]);
   const statusLoading = statusQuery.isLoading;
   const running = status?.running ?? false;
+  const { isAdmin } = useAuth();
+
+  const deviceLine = device
+    ? [device.family || device.sku, device.series && `Series ${device.series}`,
+       device.firmware && `firmware ${device.firmware}`].filter(Boolean).join(' · ')
+    : null;
 
   const dockChip = useMemo(() => {
     if (!status) return null;
     if (running) return { text: 'Cleaning', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
+    if (status.dockText) {
+      const attention = status.dockError != null && status.dockError !== 0;
+      return {
+        text: `Dock · ${status.dockText}`,
+        className: attention
+          ? 'border-amber-300/25 bg-amber-300/10 text-amber-300'
+          : 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300',
+      };
+    }
     if (status.phase === 'charge') return { text: 'Docked · charging', className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
     if (status.phase === 'evac') return { text: 'Docked · emptying', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
     return { text: 'Idle', className: 'border-appborder bg-appinset text-apptext-muted' };
@@ -135,6 +184,16 @@ export default memo(function Roomba() {
 
   const binChip = presenceChip('Bin', status?.binPresent);
   const tankChip = presenceChip('Tank', status?.tankPresent);
+
+  const wearSummary = useMemo(() => {
+    const w = status?.wear;
+    if (!w) return null;
+    const parts: string[] = [];
+    if (w.nStuck) parts.push(`${w.nStuck} stuck`);
+    if (w.nCliffsF) parts.push(`${w.nCliffsF} cliff`);
+    if (w.nPicks) parts.push(`${w.nPicks} pickup`);
+    return parts.length ? parts.join(' · ') : null;
+  }, [status?.wear]);
 
   // Aggregate lifetime stats for a friendly summary line.
   const totalRuns = runs.length;
@@ -166,6 +225,9 @@ export default memo(function Roomba() {
                 ? `${phaseLabel(status)}${running && status.sqft ? ` · ${status.sqft} sq ft cleaned so far` : ''}.`
                 : 'Live status, cleaning history, and floor map for your robot vacuum.'}
             </p>
+            {deviceLine && (
+              <p className="mt-1.5 text-xs text-apptext-dim">{deviceLine}</p>
+            )}
           </div>
 
           {/* Online + presence chips */}
@@ -200,6 +262,16 @@ export default memo(function Roomba() {
             )}
           </div>
         </div>
+
+        {status?.needsAttention && (
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3">
+            <span className="mt-0.5 text-lg leading-none">⚠️</span>
+            <div className="text-sm text-amber-200">
+              <p className="font-semibold">Needs attention</p>
+              <p className="mt-0.5 text-amber-200/90">{status.attentionReasons.join(' · ')}</p>
+            </div>
+          </div>
+        )}
 
         {statusQuery.isError && (
           <p className="mt-4 rounded-2xl border border-rose-300/25 bg-rose-300/10 px-4 py-2.5 text-xs text-rose-200">
@@ -260,6 +332,28 @@ export default memo(function Roomba() {
         />
       </section>
 
+      {/* ── Admin controls ────────────────────────────────── */}
+      {isAdmin && <RoombaControls status={status} />}
+
+      {/* ── Maintenance / detail strip ────────────────────── */}
+      {status &&
+        (status.errorText || status.dockText || status.initiator || status.detectedPad ||
+          status.chargeCycles != null || wearSummary) && (
+        <section className="rounded-[24px] border border-appborder bg-appsurface-raised p-4 sm:p-5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+            {status.errorText && <Detail label="Error" value={status.errorText} tone="warn" />}
+            {!running && status.dockText && <Detail label="Dock" value={status.dockText} />}
+            {running && status.initiator && <Detail label="Started by" value={initiatorLabel(status.initiator)} />}
+            {status.detectedPad && <Detail label="Mop pad" value={status.detectedPad} />}
+            {status.chargeCycles != null && <Detail label="Charge cycles" value={String(status.chargeCycles)} />}
+            {status.chargeErrors != null && status.chargeErrors > 0 && (
+              <Detail label="Charging faults" value={String(status.chargeErrors)} tone="warn" />
+            )}
+            {wearSummary && <Detail label="Recent incidents" value={wearSummary} />}
+          </div>
+        </section>
+      )}
+
       {/* ── Floor-plan map ────────────────────────────────── */}
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
         <div className="mb-4 flex items-start justify-between gap-4">
@@ -277,7 +371,7 @@ export default memo(function Roomba() {
           </div>
         </div>
         <DeferredRender minHeight={320}>
-          <RoombaMap map={mapQuery.data ?? null} loading={mapQuery.isLoading} />
+          <RoombaMap map={mapQuery.data ?? null} loading={mapQuery.isLoading} running={running} />
         </DeferredRender>
       </section>
 

@@ -21,17 +21,22 @@ Credentials + config come from env only (never a file):
   backend receives).
 """
 import asyncio
+import contextlib
 import logging
 import os
 import sys
+import time
 import uuid
 from datetime import datetime, timezone
 
 import aiohttp
 import psycopg
 from psycopg.types.json import Json
+from roombapy_prime.models.livemap import PositionUpdateMessage
 from roombapy_prime.models.map_bundle import parse_map_bundle
+from roombapy_prime.models.robot_info import DockState
 from roombapy_prime.prime_factory import PrimeFactory
+from roombapy_prime.vendor_errors import vendor_error
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -48,6 +53,10 @@ log = logging.getLogger("roomba-poller")
 
 # Phases that mean the mission is over. Anything else with a missionId is "running".
 TERMINAL_PHASES = {"charge", "stop", "hmPostMsn"}
+
+# Live position (watch_live_map) DB write throttle — the stream can emit many
+# samples/sec; we persist at most one row per this many seconds.
+LIVE_WRITE_MIN_INTERVAL = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -93,12 +102,42 @@ def _epoch_to_utc(epoch):
         return None
 
 
-def _runtime_minutes(rep):
-    rs = rep.get("runtimeStats") or {}
+def _elapsed_min(start_dt, end_dt=None):
+    """Whole minutes from a mission's start to now (or end_dt).
+
+    NOTE: `ro-currentstate.runtimeStats.hr` is NOT hours — it's a large internal
+    counter (observed hr=496446), so `hr*60+min` produced a nonsense ~29.8M-minute
+    value. Mission runtime + run duration are derived from `mssnStrtTm` wall-clock.
+    (Lifetime hours come from `ro-stats.bbsys`, which IS hr/min and stays correct.)
+    """
+    if start_dt is None:
+        return None
+    end = end_dt or datetime.now(timezone.utc)
+    return max(0, int((end - start_dt).total_seconds() // 60))
+
+
+def _error_text(code):
+    """Human-readable title for a robot error code (None when no error)."""
     try:
-        return int(rs.get("hr", 0)) * 60 + int(rs.get("min", 0))
+        code = int(code or 0)
     except (ValueError, TypeError):
         return None
+    if code == 0:
+        return None
+    info = vendor_error(code)
+    if info and info.get("title"):
+        return info["title"][:255]
+    return f"Error {code}"
+
+
+def _dock_text(state):
+    """Friendly label for a dock state code (server may send codes past the enum)."""
+    if state is None:
+        return None
+    try:
+        return DockState(int(state)).name.replace("DOCK_", "").replace("_", " ").title()
+    except (ValueError, TypeError):
+        return f"Dock state {state}"
 
 
 def _classify(phase, error):
@@ -130,14 +169,15 @@ class PollerState:
         self.active = None            # snapshot dict of the currently-running mission
         self.completed_missions = set()  # missionIds already INSERTed this process
         self.last_map_version = None  # last map version successfully persisted
+        self.device_synced = False    # static device identity/firmware persisted this process
+        self.mission_running = False  # true while a mission is actively cleaning (drives the live-map task)
 
 
-def _snapshot(cms, rep):
+def _snapshot(cms):
     return {
         "mission_id": cms.get("missionId"),
         "started_at": _epoch_to_utc(cms.get("mssnStrtTm")),
         "sqft": cms.get("sqft"),
-        "runtime_minutes": _runtime_minutes(rep),
         "error": cms.get("error", 0),
         "phase": cms.get("phase"),
     }
@@ -149,29 +189,48 @@ def _snapshot(cms, rep):
 # ---------------------------------------------------------------------------
 def upsert_status(conninfo, robot_id, name, rep, stats, map_version):
     cms = rep.get("cleanMissionStatus") or {}
+    _mission_start = _epoch_to_utc(cms.get("mssnStrtTm"))
+    _running = bool(cms.get("missionId")) and cms.get("phase") not in TERMINAL_PHASES
     lifetime_missions = None
     lifetime_run_minutes = None
+    charge_cycles = None
+    charge_errors = None
+    fault_text = None
+    wear = None
     if stats:
         bbmssn = stats.get("bbmssn") or {}
         bbsys = stats.get("bbsys") or {}
+        bbchg = stats.get("bbchg") or {}
         lifetime_missions = bbmssn.get("nMssn")
         if bbsys:
             try:
                 lifetime_run_minutes = int(bbsys.get("hr", 0)) * 60 + int(bbsys.get("min", 0))
             except (ValueError, TypeError):
                 lifetime_run_minutes = None
+        charge_cycles = bbchg.get("nChgOk")
+        _ce, _lf = bbchg.get("nChgErr"), bbchg.get("nLithF")
+        if _ce is not None or _lf is not None:
+            charge_errors = (_ce or 0) + (_lf or 0)
+        fault_text = stats.get("unprocessedError")  # free-text fault error==0 misses
+        wear = stats.get("bbrun")  # stall/cliff/pickup counters dict, or None
+
+    dock = rep.get("dock") or {}
+    dock_state = dock.get("state")
 
     sql = """
         INSERT INTO roomba_status (
-            robot_id, name, battery_pct, phase, cycle, error, bin_present,
+            robot_id, name, battery_pct, phase, cycle, error, error_text, bin_present,
             tank_present, current_mission_id, mission_start, sqft, runtime_minutes,
-            dock_state, lifetime_missions, lifetime_run_minutes, map_version, raw,
-            updated_at
+            dock_state, dock_error, dock_text, not_ready, initiator, detected_pad,
+            charge_cycles, charge_errors, fault_text, wear,
+            lifetime_missions, lifetime_run_minutes, map_version, raw, updated_at
         ) VALUES (
             %(robot_id)s, %(name)s, %(battery_pct)s, %(phase)s, %(cycle)s, %(error)s,
-            %(bin_present)s, %(tank_present)s, %(current_mission_id)s, %(mission_start)s,
-            %(sqft)s, %(runtime_minutes)s, %(dock_state)s, %(lifetime_missions)s,
-            %(lifetime_run_minutes)s, %(map_version)s, %(raw)s, NOW()
+            %(error_text)s, %(bin_present)s, %(tank_present)s, %(current_mission_id)s,
+            %(mission_start)s, %(sqft)s, %(runtime_minutes)s, %(dock_state)s,
+            %(dock_error)s, %(dock_text)s, %(not_ready)s, %(initiator)s, %(detected_pad)s,
+            %(charge_cycles)s, %(charge_errors)s, %(fault_text)s, %(wear)s,
+            %(lifetime_missions)s, %(lifetime_run_minutes)s, %(map_version)s, %(raw)s, NOW()
         )
         ON CONFLICT (robot_id) DO UPDATE SET
             name = EXCLUDED.name,
@@ -179,6 +238,7 @@ def upsert_status(conninfo, robot_id, name, rep, stats, map_version):
             phase = EXCLUDED.phase,
             cycle = EXCLUDED.cycle,
             error = EXCLUDED.error,
+            error_text = EXCLUDED.error_text,
             bin_present = EXCLUDED.bin_present,
             tank_present = EXCLUDED.tank_present,
             current_mission_id = EXCLUDED.current_mission_id,
@@ -186,6 +246,15 @@ def upsert_status(conninfo, robot_id, name, rep, stats, map_version):
             sqft = EXCLUDED.sqft,
             runtime_minutes = EXCLUDED.runtime_minutes,
             dock_state = EXCLUDED.dock_state,
+            dock_error = EXCLUDED.dock_error,
+            dock_text = EXCLUDED.dock_text,
+            not_ready = EXCLUDED.not_ready,
+            initiator = EXCLUDED.initiator,
+            detected_pad = EXCLUDED.detected_pad,
+            charge_cycles = EXCLUDED.charge_cycles,
+            charge_errors = EXCLUDED.charge_errors,
+            fault_text = EXCLUDED.fault_text,
+            wear = EXCLUDED.wear,
             lifetime_missions = EXCLUDED.lifetime_missions,
             lifetime_run_minutes = EXCLUDED.lifetime_run_minutes,
             map_version = EXCLUDED.map_version,
@@ -199,13 +268,23 @@ def upsert_status(conninfo, robot_id, name, rep, stats, map_version):
         "phase": cms.get("phase"),
         "cycle": cms.get("cycle"),
         "error": cms.get("error", 0),
+        "error_text": _error_text(cms.get("error")),
         "bin_present": (rep.get("bin") or {}).get("present"),
         "tank_present": rep.get("tankPresent"),
         "current_mission_id": cms.get("missionId"),
-        "mission_start": _epoch_to_utc(cms.get("mssnStrtTm")),
+        "mission_start": _mission_start,
         "sqft": cms.get("sqft"),
-        "runtime_minutes": _runtime_minutes(rep),
-        "dock_state": (rep.get("dock") or {}).get("state"),
+        "runtime_minutes": _elapsed_min(_mission_start) if _running else None,
+        "dock_state": dock_state,
+        "dock_error": dock.get("error"),
+        "dock_text": _dock_text(dock_state),
+        "not_ready": cms.get("notReady"),
+        "initiator": cms.get("initiator"),
+        "detected_pad": rep.get("detectedPad"),
+        "charge_cycles": charge_cycles,
+        "charge_errors": charge_errors,
+        "fault_text": fault_text,
+        "wear": Json(wear) if wear is not None else None,
         "lifetime_missions": lifetime_missions,
         "lifetime_run_minutes": lifetime_run_minutes,
         "map_version": map_version,
@@ -232,11 +311,9 @@ def run_exists(conninfo, started_at):
 
 
 def insert_run(conninfo, snap, status):
-    duration = snap.get("runtime_minutes")
     started = snap.get("started_at")
     completed = datetime.now(timezone.utc)
-    if not duration and started is not None:
-        duration = max(0, int((completed - started).total_seconds() // 60))
+    duration = _elapsed_min(started, completed)
     sql = """
         INSERT INTO roomba_runs (
             started_at, completed_at, duration_minutes, dirt_events, square_feet,
@@ -250,6 +327,35 @@ def insert_run(conninfo, snap, status):
             sql,
             (started, completed, duration, snap.get("sqft"), status, str(uuid.uuid4())),
         )
+
+
+def upsert_device(conninfo, robot_id, sku, series, family, serial, firmware):
+    sql = """
+        INSERT INTO roomba_device (robot_id, sku, series, family, serial_number, firmware, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
+        ON CONFLICT (robot_id) DO UPDATE SET
+            sku = EXCLUDED.sku, series = EXCLUDED.series, family = EXCLUDED.family,
+            serial_number = EXCLUDED.serial_number, firmware = EXCLUDED.firmware, updated_at = NOW()
+    """
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        conn.execute(sql, (robot_id, sku, series, family, serial, firmware))
+
+
+async def sync_device(robot, conninfo, robot_id):
+    """Fetch static identity (serial/sku/series/family) + firmware once and persist."""
+    info = await robot.get_serial_number_data()
+    firmware = None
+    try:
+        swrep = _reported(await robot.get_named_shadow("rw-software", timeout=8.0))
+        sub = swrep.get("subModSwVer") or {}
+        firmware = sub.get("con") or swrep.get("softwareVer")  # controller ver = installed
+    except Exception as e:  # noqa: BLE001 — firmware is a nice-to-have
+        log.debug("rw-software read failed: %s: %s", type(e).__name__, e)
+    upsert_device(
+        conninfo, robot_id,
+        getattr(info, "sku", None), getattr(info, "series", None),
+        getattr(info, "family", None), getattr(info, "serial_number", None), firmware,
+    )
 
 
 def load_map_version(conninfo, robot_id):
@@ -275,6 +381,93 @@ def upsert_map(conninfo, robot_id, map_id, map_version, name, geojson):
         conn.execute(sql, (robot_id, map_id, map_version, name, Json(geojson)))
 
 
+def upsert_position(conninfo, robot_id, x, y, theta):
+    """UPSERT the latest live position (UNIQUE robot_id). x/y meters, theta radians."""
+    sql = """
+        INSERT INTO roomba_position (robot_id, x, y, theta, updated_at)
+        VALUES (%s, %s, %s, %s, NOW())
+        ON CONFLICT (robot_id) DO UPDATE SET
+            x = EXCLUDED.x,
+            y = EXCLUDED.y,
+            theta = EXCLUDED.theta,
+            updated_at = NOW()
+    """
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        conn.execute(sql, (robot_id, x, y, theta))
+
+
+# ---------------------------------------------------------------------------
+# Live position stream (concurrent task, shares the single robot connection)
+# ---------------------------------------------------------------------------
+async def run_live_map(robot, conninfo, robot_id):
+    """Stream live position from watch_live_map() and UPSERT the latest point
+    (throttled to ~1/sec) into roomba_position.
+
+    Runs as a CONCURRENT task over the SAME robot connection as the main loop —
+    it opens no second cloud connection. Strictly fail-open: every error is
+    logged and swallowed so it can never crash the poller; the task simply ends
+    (no dot) and the main loop restarts it on the next mission / reconnect.
+    Cancelled cleanly on disconnect (watch_live_map()'s own finally unsubscribes).
+
+    Field names come straight from roombapy_prime.models.livemap:
+      PositionUpdateMessage.updates : list[PositionSample]
+      PositionSample.point          : (x, y)  meters
+      PositionSample.orientation    : float   radians (raw wire heading)
+    MapUpdateMessage (the other stream shape) is ignored — we only want the dot.
+    """
+    last_write = 0.0
+    try:
+        async for msg in robot.watch_live_map():
+            try:
+                if not isinstance(msg, PositionUpdateMessage) or not msg.updates:
+                    continue
+                now = time.monotonic()
+                if now - last_write < LIVE_WRITE_MIN_INTERVAL:
+                    continue  # throttle DB writes; keep only ~1 sample/sec
+                sample = msg.updates[-1]  # newest point in this trajectory-like message
+                x, y = sample.point
+                upsert_position(conninfo, robot_id, x, y, sample.orientation)
+                last_write = now
+            except Exception as e:  # noqa: BLE001 — one bad sample must not end the stream
+                log.warning("live position sample failed: %s: %s", type(e).__name__, e)
+    except asyncio.CancelledError:
+        raise
+    except RuntimeError as e:
+        # watch_live_map() raises RuntimeError when irbt_topic_prefix is absent —
+        # degrade gracefully (no dot) rather than break anything.
+        log.info("live position stream unavailable (no dot): %s", e)
+    except Exception as e:  # noqa: BLE001 — fail-open; a new task starts on reconnect
+        log.warning("live position stream ended (%s: %s)", type(e).__name__, e)
+
+
+async def _cancel_live_task(task):
+    """Cancel + await the live-map task, swallowing whatever it ends with."""
+    if task is None:
+        return
+    if not task.done():
+        task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
+
+
+async def _manage_live_task(task, robot, conninfo, state):
+    """Start the live-map task while a mission is running, stop it otherwise, and
+    replace a task that has finished/failed. Returns the current task handle."""
+    running = bool(state.mission_running)
+    alive = task is not None and not task.done()
+    if running and not alive:
+        if task is not None:
+            await _cancel_live_task(task)  # clear a finished/failed handle first
+        log.info("Mission running — starting live-position stream")
+        return asyncio.ensure_future(run_live_map(robot, conninfo, robot.blid))
+    if not running and task is not None:
+        if alive:
+            log.info("Mission ended — stopping live-position stream")
+        await _cancel_live_task(task)
+        return None
+    return task
+
+
 # ---------------------------------------------------------------------------
 # Mission completion detection
 # ---------------------------------------------------------------------------
@@ -298,12 +491,8 @@ def detect_completion(state, rep, conninfo):
         if same_mission and cur_phase in TERMINAL_PHASES:
             # Prefer current terminal cms values if still populated for this mission.
             completed = dict(prev)
-            if cur_mid == prev["mission_id"]:
-                if cms.get("sqft") is not None:
-                    completed["sqft"] = cms.get("sqft")
-                rt = _runtime_minutes(rep)
-                if rt:
-                    completed["runtime_minutes"] = rt
+            if cur_mid == prev["mission_id"] and cms.get("sqft") is not None:
+                completed["sqft"] = cms.get("sqft")
             status = _classify(cur_phase, cur_error or prev.get("error"))
         elif cur_mid and cur_mid != prev["mission_id"]:
             # Jumped straight to a new mission; the previous one finished unseen.
@@ -333,7 +522,7 @@ def detect_completion(state, rep, conninfo):
 
     # Refresh / set the active snapshot for the currently-running mission.
     if cur_running:
-        state.active = _snapshot(cms, rep)
+        state.active = _snapshot(cms)
     elif completed is not None:
         state.active = None
 
@@ -408,6 +597,17 @@ async def poll_once(robot, conninfo, state):
     name = getattr(robot, "name", None)
     robot_id = robot.blid
 
+    # Drives the concurrent live-position task (started only mid-mission).
+    _cms = rep.get("cleanMissionStatus") or {}
+    state.mission_running = bool(_cms.get("missionId")) and _cms.get("phase") not in TERMINAL_PHASES
+
+    if not state.device_synced:
+        try:
+            await sync_device(robot, conninfo, robot_id)
+            state.device_synced = True
+        except Exception as e:  # noqa: BLE001
+            log.warning("device sync failed: %s: %s", type(e).__name__, e)
+
     try:
         upsert_status(conninfo, robot_id, name, rep, stats,
                       state.last_map_version or shadow_version)
@@ -422,6 +622,78 @@ async def poll_once(robot, conninfo, state):
     await refresh_map(robot, conninfo, robot_id, state, shadow_version)
 
 
+# ---------------------------------------------------------------------------
+# Control commands (poller executes what the backend enqueued into roomba_commands)
+# ---------------------------------------------------------------------------
+CMD_TICK_SECONDS = 5
+SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
+
+
+def _fetch_pending(conninfo, limit=5):
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        return conn.execute(
+            "SELECT id, command, arg FROM roomba_commands "
+            "WHERE status = 'PENDING' ORDER BY id LIMIT %s",
+            (limit,),
+        ).fetchall()
+
+
+def _mark_command(conninfo, cmd_id, status, detail=None, terminal=True):
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        if terminal:
+            conn.execute(
+                "UPDATE roomba_commands SET status = %s, detail = %s, processed_at = NOW() WHERE id = %s",
+                (status, (detail[:500] if detail else None), cmd_id),
+            )
+        else:
+            conn.execute("UPDATE roomba_commands SET status = %s WHERE id = %s", (status, cmd_id))
+
+
+async def _run_favorite(robot, favorite_id):
+    """Replay a saved favorite/zone by id. Unvalidated on hardware (we have 0 favorites
+    yet) — kept best-effort; any failure is caught and marked FAILED by the caller."""
+    from roombapy_prime.models.mission_control import RoutineCommand, RoutineCommandType
+    cmd = RoutineCommand(
+        command_type=RoutineCommandType.START,
+        asset_id=robot.blid,
+        favorite_id=favorite_id,
+        initiator="rmtApp",
+    )
+    await robot.send_routine_command_via_cmd_topic(cmd)
+
+
+async def process_commands(robot, conninfo):
+    """Execute PENDING control commands through the shared robot connection. 'OK' means
+    the broker accepted it — NOT that the robot necessarily acted (phantom-mission case)."""
+    try:
+        pending = _fetch_pending(conninfo)
+    except Exception as e:  # noqa: BLE001 — table may not exist yet at first boot
+        log.debug("command fetch skipped: %s: %s", type(e).__name__, e)
+        return
+    for cmd_id, command, arg in pending:
+        try:
+            _mark_command(conninfo, cmd_id, "SENT", terminal=False)  # claim → no double-send on restart
+        except Exception:
+            continue
+        try:
+            if command in SIMPLE_COMMANDS:
+                ok = await robot.send_simple_command(command)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED",
+                              "accepted by broker" if ok else "broker rejected")
+            elif command == "favorite":
+                await _run_favorite(robot, arg)
+                _mark_command(conninfo, cmd_id, "OK", f"favorite {arg} sent")
+            else:
+                _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")
+            log.info("command #%s (%s) processed", cmd_id, command)
+        except Exception as e:  # noqa: BLE001 — fail-open, never crash the loop
+            log.warning("command #%s (%s) failed: %s: %s", cmd_id, command, type(e).__name__, e)
+            try:
+                _mark_command(conninfo, cmd_id, "FAILED", f"{type(e).__name__}: {e}")
+            except Exception:
+                pass
+
+
 async def main():
     email = _env("IROBOT_EMAIL", required=True)
     password = _env("IROBOT_PASSWORD", required=True)
@@ -434,26 +706,41 @@ async def main():
     conninfo = build_conninfo()
     state = PollerState()
 
-    log.info("Roomba poller starting (interval=%ss)", interval)
+    log.info("Roomba poller starting (poll every %ss, command tick %ss)", interval, CMD_TICK_SECONDS)
 
     async with aiohttp.ClientSession() as session:
         robot = None
+        live_task = None
+        last_poll = 0.0
         while True:
             try:
                 if robot is None:
                     robot = await connect_robot(session, email, password, country, blid)
-                await poll_once(robot, conninfo, state)
+                    last_poll = 0.0  # poll immediately after (re)connect
+                # Commands are latency-sensitive → checked every tick; status polls on interval.
+                await process_commands(robot, conninfo)
+                now = time.monotonic()
+                if now - last_poll >= interval:
+                    await poll_once(robot, conninfo, state)
+                    last_poll = now
+                # Keep the concurrent live-position task in sync with mission state.
+                live_task = await _manage_live_task(live_task, robot, conninfo, state)
             except asyncio.CancelledError:
+                await _cancel_live_task(live_task)
+                live_task = None
                 raise
             except Exception as e:  # noqa: BLE001 — fail-open, reconnect next cycle
                 log.warning("Cycle failed (%s: %s); will reconnect", type(e).__name__, e)
+                await _cancel_live_task(live_task)  # tied to this connection — drop it
+                live_task = None
+                state.mission_running = False
                 if robot is not None:
                     try:
                         await robot.disconnect()
                     except Exception:
                         pass
                 robot = None
-            await asyncio.sleep(interval)
+            await asyncio.sleep(CMD_TICK_SECONDS)
 
 
 if __name__ == "__main__":
