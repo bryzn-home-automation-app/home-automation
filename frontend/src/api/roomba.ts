@@ -83,3 +83,19 @@ export async function renameRoombaRoom(
   });
   return res.data;
 }
+
+/**
+ * Divide a mapped room in two along a line (ADMIN only). `points` are [x, y]
+ * pairs in the map's meter space (the endpoints of the divide line). EXPERIMENTAL
+ * — never validated on hardware and not cleanly reversible; the caller confirms first.
+ */
+export async function splitRoombaRoom(
+  roomId: string,
+  points: number[][],
+): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/rooms/split', {
+    roomId,
+    points,
+  });
+  return res.data;
+}

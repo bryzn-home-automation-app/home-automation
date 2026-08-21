@@ -629,6 +629,7 @@ async def poll_once(robot, conninfo, state):
 CMD_TICK_SECONDS = 5
 SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
 RENAME_ROOM = "rename_room"
+SPLIT_ROOM = "split_room"
 
 
 def _fetch_pending(conninfo, limit=5):
@@ -664,6 +665,14 @@ async def _run_favorite(robot, favorite_id):
     await robot.send_routine_command_via_cmd_topic(cmd)
 
 
+async def _active_p2map_id(robot):
+    """Current active p2map_id, or None. Map edits target a specific map id."""
+    versions = await robot.get_active_map_versions()
+    if not (isinstance(versions, list) and versions):
+        return None
+    return versions[0].get("p2map_id") or versions[0].get("p2mapId")
+
+
 async def _rename_room(robot, conninfo, arg, state):
     """Rename a mapped room (and optionally set its category) via the map-edit API.
 
@@ -697,25 +706,66 @@ async def _rename_room(robot, conninfo, arg, state):
         return False, "nothing to change"
 
     # Resolve the current map id fresh — the edit targets a specific p2map_id.
-    versions = await robot.get_active_map_versions()
-    if not (isinstance(versions, list) and versions):
-        return False, "no active map"
-    p2map_id = versions[0].get("p2map_id") or versions[0].get("p2mapId")
+    p2map_id = await _active_p2map_id(robot)
     if not p2map_id:
-        return False, "no map id"
+        return False, "no active map"
 
     cmd = SetRoomMetadataV1(room_id=str(room_id), name=name, room_type=room_type)
-    result = await robot.edit_map_checked(p2map_id, cmd)
+    return await _apply_map_edit(robot, p2map_id, cmd, state)
 
+
+async def _split_room(robot, conninfo, arg, state):
+    """Divide a mapped room in two along a user-drawn line (adds a "section").
+
+    EXPERIMENTAL — never validated on hardware and NOT cleanly reversible (the
+    library maintainer's own verify tool refuses to test it for that reason).
+    Same transport as rename (edit_map_checked); the risk is the robot's
+    acceptance + the self-derived split geometry.
+
+    `arg` JSON: {room_id, points: [[x, y], [x, y], ...]} in the map's meter space.
+    SplitRoomV1 flattens the points into split_points [x1, y1, x2, y2, ...].
+    """
+    from roombapy_prime.models.map_editing import SplitRoomV1
+
+    try:
+        params = json.loads(arg or "{}")
+    except (ValueError, TypeError):
+        return False, "bad split payload"
+    room_id = params.get("room_id")
+    raw_points = params.get("points")
+    if not room_id:
+        return False, "missing room_id"
+    if not isinstance(raw_points, list) or len(raw_points) < 2:
+        return False, "need at least two points for the divide line"
+    points = []
+    for p in raw_points:
+        if not (isinstance(p, (list, tuple)) and len(p) >= 2):
+            return False, "malformed point"
+        try:
+            points.append((float(p[0]), float(p[1])))
+        except (ValueError, TypeError):
+            return False, "non-numeric point"
+
+    p2map_id = await _active_p2map_id(robot)
+    if not p2map_id:
+        return False, "no active map"
+
+    cmd = SplitRoomV1(room_id=str(room_id), split_points=points)
+    return await _apply_map_edit(robot, p2map_id, cmd, state)
+
+
+async def _apply_map_edit(robot, p2map_id, cmd, state):
+    """Send a map-edit command and interpret the MapEditResult. On success (or
+    partial) clears the map-version cache so the next poll re-fetches the bundle.
+    Returns (ok, detail)."""
+    result = await robot.edit_map_checked(p2map_id, cmd)
     if result.is_error:
         # MapEditingError groups: NOT_FOUND (stale id, re-read), INVALID (bad request),
-        # NOT_NOW (transient) — surface the name so the UI can explain the failure.
+        # NOT_NOW (transient) — surface the code so the UI can explain the failure.
         err = result.error.name if result.error else result.error_code
         msg = (result.error_message or "").strip()
         return False, f"robot refused ({err}){': ' + msg if msg else ''}"
-
-    # Success (or partial: edit applied but the rendered map hasn't regenerated yet).
-    # Either way, force a bundle re-fetch on the next poll so the label updates.
+    # Success, or partial: edit applied but the rendered map hasn't regenerated yet.
     state.last_map_version = None
     return True, "applied; map updating shortly" if result.is_partial else "applied"
 
@@ -743,6 +793,9 @@ async def process_commands(robot, conninfo, state):
                 _mark_command(conninfo, cmd_id, "OK", f"favorite {arg} sent")
             elif command == RENAME_ROOM:
                 ok, detail = await _rename_room(robot, conninfo, arg, state)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
+            elif command == SPLIT_ROOM:
+                ok, detail = await _split_room(robot, conninfo, arg, state)
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")

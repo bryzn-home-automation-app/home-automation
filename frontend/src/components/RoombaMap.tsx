@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRoombaPosition } from '../api/roomba';
 import type {
@@ -13,6 +13,13 @@ export interface RoomSelection {
   name: string | null;
 }
 
+/** A completed divide line: the room to split + the two endpoints in meters. */
+export interface SplitLine {
+  roomId: string;
+  roomName: string | null;
+  points: [number, number][];
+}
+
 interface RoombaMapProps {
   map: RoombaMapData | null;
   loading?: boolean;
@@ -22,6 +29,10 @@ interface RoombaMapProps {
   /** When true, rooms are clickable (admin) — clicking one fires onSelectRoom. */
   editable?: boolean;
   onSelectRoom?: (room: RoomSelection) => void;
+  /** When true, the map is in "divide a room" mode: click two points to draw a line. */
+  splitMode?: boolean;
+  /** Fired once two points are placed (in the same room) — the meter-space divide line. */
+  onSplitReady?: (line: SplitLine) => void;
 }
 
 /** A drawable policy zone (keep-out / no-mop) polygon + its category. */
@@ -35,8 +46,23 @@ interface RoomShape {
   id: string | null;
   name: string | null;
   rings: string[];
+  /** Numeric outer ring in projected SVG space — for point-in-room hit testing. */
+  outerPts: [number, number][];
   cx: number;
   cy: number;
+}
+
+/** Ray-casting point-in-polygon test (ring is [x,y] pairs, in any one space). */
+function pointInRing(px: number, py: number, ring: [number, number][]): boolean {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    const intersect =
+      yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 interface Bounds {
@@ -83,9 +109,24 @@ export default memo(function RoombaMap({
   running,
   editable,
   onSelectRoom,
+  splitMode,
+  onSplitReady,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
+  // Split ("divide a room") interaction: first placed point (SVG space) + its
+  // room, and the live cursor for the rubber-band preview line.
+  const [splitA, setSplitA] = useState<{ vx: number; vy: number; roomId: string } | null>(null);
+  const [cursor, setCursor] = useState<{ vx: number; vy: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  // Reset the in-progress divide whenever split mode toggles off.
+  useEffect(() => {
+    if (!splitMode) {
+      setSplitA(null);
+      setCursor(null);
+    }
+  }, [splitMode]);
 
   const model = useMemo(() => {
     if (!geo) return null;
@@ -116,6 +157,12 @@ export default memo(function RoombaMap({
     const project = ([x, y]: GeoPosition): [number, number] => [
       (x - b.minX) * scale + pad,
       (b.maxY - y) * scale + pad,
+    ];
+    // Inverse: SVG (viewBox) → meters. Used to turn a drawn divide line back
+    // into the robot's coordinate space.
+    const unproject = ([vx, vy]: [number, number]): [number, number] => [
+      (vx - pad) / scale + b.minX,
+      b.maxY - (vy - pad) / scale,
     ];
 
     const ringToPoints = (ring: GeoPosition[]): string =>
@@ -219,22 +266,22 @@ export default memo(function RoombaMap({
         }
         if (rings.length === 0 || !outer || outer.length === 0) continue;
 
+        const outerPts = outer.map((p) => project(p));
         let sx = 0;
         let sy = 0;
-        for (const p of outer) {
-          const [px, py] = project(p);
+        for (const [px, py] of outerPts) {
           sx += px;
           sy += py;
         }
-        const cx = sx / outer.length;
-        const cy = sy / outer.length;
+        const cx = sx / outerPts.length;
+        const cy = sy / outerPts.length;
 
         const rawName = (f.properties?.name ?? f.properties?.room_name) as unknown;
         const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : null;
         const rawId = f.id;
         const id = rawId == null ? null : String(rawId);
 
-        rooms.push({ id, name, rings, cx, cy });
+        rooms.push({ id, name, rings, outerPts, cx, cy });
       }
     }
 
@@ -247,6 +294,7 @@ export default memo(function RoombaMap({
       width,
       height,
       project,
+      unproject,
       floorPolys,
       rooms,
       borderPaths,
@@ -306,6 +354,7 @@ export default memo(function RoombaMap({
     width,
     height,
     project,
+    unproject,
     floorPolys,
     rooms,
     borderPaths,
@@ -315,7 +364,56 @@ export default memo(function RoombaMap({
     dockR,
   } = model;
   const maxDim = Math.max(width, height);
-  const canEdit = !!editable && !!onSelectRoom;
+  const isSplitting = !!splitMode && !!onSplitReady;
+  // Rename clicks are disabled while dividing, so the two interactions never conflict.
+  const canEdit = !!editable && !!onSelectRoom && !isSplitting;
+
+  // Convert a mouse event to viewBox (SVG user-space) coordinates via the CTM.
+  const eventToViewBox = (e: { clientX: number; clientY: number }): [number, number] | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const local = pt.matrixTransform(ctm.inverse());
+    return [local.x, local.y];
+  };
+
+  const roomAt = (vx: number, vy: number): RoomShape | null => {
+    for (const room of rooms) {
+      if (room.id && pointInRing(vx, vy, room.outerPts)) return room;
+    }
+    return null;
+  };
+
+  const handleSplitClick = (e: ReactMouseEvent<SVGSVGElement>) => {
+    if (!isSplitting) return;
+    const vb = eventToViewBox(e);
+    if (!vb) return;
+    const [vx, vy] = vb;
+    if (!splitA) {
+      const room = roomAt(vx, vy);
+      if (!room || !room.id) return; // must start inside a room
+      setSplitA({ vx, vy, roomId: room.id });
+      setCursor({ vx, vy });
+      return;
+    }
+    // Second point → emit the divide line (meters) for the room of the first point.
+    const a = unproject([splitA.vx, splitA.vy]);
+    const b = unproject([vx, vy]);
+    const roomName = rooms.find((r) => r.id === splitA.roomId)?.name ?? null;
+    onSplitReady?.({ roomId: splitA.roomId, roomName, points: [a, b] });
+    setSplitA(null);
+    setCursor(null);
+  };
+
+  const handleSplitMove = (e: ReactMouseEvent<SVGSVGElement>) => {
+    if (!isSplitting || !splitA) return;
+    const vb = eventToViewBox(e);
+    if (vb) setCursor({ vx: vb[0], vy: vb[1] });
+  };
 
   // Live robot dot geometry, in the SAME projected space as everything else.
   // The heading is drawn in SVG space where y grows downward, so the meter-space
@@ -341,11 +439,15 @@ export default memo(function RoombaMap({
       className={`overflow-hidden rounded-[24px] border border-appborder bg-appinset p-3 ${className ?? ''}`}
     >
       <svg
+        ref={svgRef}
         viewBox={`0 0 ${width.toFixed(1)} ${height.toFixed(1)}`}
         className="h-auto w-full"
         role="img"
         aria-label={`Roomba floor plan${map?.name ? `: ${map.name}` : ''}`}
         preserveAspectRatio="xMidYMid meet"
+        style={isSplitting ? { cursor: 'crosshair' } : undefined}
+        onClick={isSplitting ? handleSplitClick : undefined}
+        onMouseMove={isSplitting ? handleSplitMove : undefined}
       >
         {/* Floor plan — the outer walkable surface */}
         {floorPolys.map((pts, i) => (
@@ -541,6 +643,47 @@ export default memo(function RoombaMap({
               fill="var(--appsuccess)"
               stroke="var(--appsurface-raised)"
               strokeWidth={robot.r * 0.4}
+            />
+          </g>
+        )}
+
+        {/* Divide-a-room preview — the room being split + the rubber-band line */}
+        {isSplitting && splitA && (
+          <g style={{ pointerEvents: 'none' }}>
+            {rooms
+              .filter((room) => room.id === splitA.roomId)
+              .flatMap((room, ri) =>
+                room.rings.map((pts, i) => (
+                  <polygon
+                    key={`split-room-${ri}-${i}`}
+                    points={pts}
+                    fill="var(--appaccent)"
+                    fillOpacity={0.16}
+                    stroke="var(--appaccent)"
+                    strokeWidth={maxDim * 0.004}
+                    strokeLinejoin="round"
+                  />
+                )),
+              )}
+            {cursor && (
+              <line
+                x1={splitA.vx}
+                y1={splitA.vy}
+                x2={cursor.vx}
+                y2={cursor.vy}
+                stroke="var(--appdanger)"
+                strokeWidth={maxDim * 0.006}
+                strokeDasharray={`${maxDim * 0.014} ${maxDim * 0.009}`}
+                strokeLinecap="round"
+              />
+            )}
+            <circle
+              cx={splitA.vx}
+              cy={splitA.vy}
+              r={maxDim * 0.012}
+              fill="var(--appdanger)"
+              stroke="var(--appsurface-raised)"
+              strokeWidth={maxDim * 0.004}
             />
           </g>
         )}

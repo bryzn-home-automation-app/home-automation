@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
-import RoombaMap, { type RoomSelection } from '../components/RoombaMap';
+import RoombaMap, { type RoomSelection, type SplitLine } from '../components/RoombaMap';
 import RoomRenameModal from '../components/RoomRenameModal';
+import RoomSplitModal from '../components/RoomSplitModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
@@ -161,6 +162,8 @@ export default memo(function Roomba() {
   const running = status?.running ?? false;
   const { isAdmin } = useAuth();
   const [selectedRoom, setSelectedRoom] = useState<RoomSelection | null>(null);
+  const [splitMode, setSplitMode] = useState(false);
+  const [pendingSplit, setPendingSplit] = useState<SplitLine | null>(null);
 
   const deviceLine = device
     ? [device.family || device.sku, device.series && `Series ${device.series}`,
@@ -369,10 +372,32 @@ export default memo(function Roomba() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
               Rooms, walls, and dock location as mapped by the robot. Built up over the first
               several cleaning runs.
-              {isAdmin && ' Tap a room to rename it or set its type.'}
+              {isAdmin && !splitMode && ' Tap a room to rename it or set its type.'}
             </p>
           </div>
+          {isAdmin && mapQuery.data && (
+            <button
+              type="button"
+              onClick={() => setSplitMode((v) => !v)}
+              className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                splitMode
+                  ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
+                  : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
+              }`}
+            >
+              {splitMode ? 'Cancel divide' : '✂ Divide a room'}
+            </button>
+          )}
         </div>
+
+        {isAdmin && splitMode && (
+          <div className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-200">
+            <span className="font-semibold">Divide mode.</span> Click two points across a room to
+            draw a dividing line — the first click picks the room. This is an experimental,
+            not-cleanly-reversible map edit.
+          </div>
+        )}
+
         <DeferredRender minHeight={320}>
           <RoombaMap
             map={mapQuery.data ?? null}
@@ -380,6 +405,11 @@ export default memo(function Roomba() {
             running={running}
             editable={isAdmin}
             onSelectRoom={setSelectedRoom}
+            splitMode={splitMode}
+            onSplitReady={(line) => {
+              setPendingSplit(line);
+              setSplitMode(false);
+            }}
           />
         </DeferredRender>
       </section>
@@ -482,6 +512,11 @@ export default memo(function Roomba() {
       {/* Admin room-rename dialog */}
       {isAdmin && selectedRoom && (
         <RoomRenameModal room={selectedRoom} onClose={() => setSelectedRoom(null)} />
+      )}
+
+      {/* Admin divide-a-room confirmation */}
+      {isAdmin && pendingSplit && (
+        <RoomSplitModal split={pendingSplit} onClose={() => setPendingSplit(null)} />
       )}
     </div>
   );

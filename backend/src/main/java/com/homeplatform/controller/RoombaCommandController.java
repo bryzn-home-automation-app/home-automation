@@ -3,6 +3,7 @@ package com.homeplatform.controller;
 import com.homeplatform.dto.RoombaCommandRequest;
 import com.homeplatform.dto.RoombaCommandResponse;
 import com.homeplatform.dto.RoombaRenameRoomRequest;
+import com.homeplatform.dto.RoombaSplitRoomRequest;
 import com.homeplatform.service.RoombaService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -60,6 +61,23 @@ public class RoombaCommandController {
             RoombaCommandResponse resp = roombaService.enqueueRenameRoom(
                     body.roomId(), body.name(), body.roomType(),
                     userId == null ? null : "user:" + userId);
+            return ResponseEntity.ok(resp);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Divide a mapped room in two along a user-drawn line ("add a section"). Queued
+     * for the poller. EXPERIMENTAL / not cleanly reversible — the UI confirms first.
+     */
+    @PostMapping("/rooms/split")
+    public ResponseEntity<?> splitRoom(@RequestBody RoombaSplitRoomRequest body, HttpServletRequest request) {
+        requireAdmin(request);
+        Object userId = request.getAttribute("userId");
+        try {
+            RoombaCommandResponse resp = roombaService.enqueueSplitRoom(
+                    body.roomId(), body.points(), userId == null ? null : "user:" + userId);
             return ResponseEntity.ok(resp);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

@@ -223,6 +223,51 @@ class RoombaServiceTest {
     }
 
     @Nested
+    @DisplayName("enqueueSplitRoom")
+    class EnqueueSplitRoom {
+
+        @BeforeEach
+        void echoSave() {
+            when(commandRepo.save(any(RoombaCommand.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("encodes room_id + rounded points as JSON arg")
+        void encodesPoints() {
+            RoombaCommandResponse r = service.enqueueSplitRoom(
+                    "12", List.of(List.of(1.23456, -2.0), List.of(3.5, 4.0)), "user:1");
+            assertEquals("split_room", r.command());
+            assertTrue(r.arg().contains("\"room_id\":\"12\""));
+            // rounded to 3 decimals
+            assertTrue(r.arg().contains("1.235"), r.arg());
+            assertTrue(r.arg().contains("[[1.235,-2.0],[3.5,4.0]]"), r.arg());
+            assertEquals("PENDING", r.status());
+        }
+
+        @Test
+        @DisplayName("rejects a blank roomId")
+        void blankRoomId() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueSplitRoom("  ", List.of(List.of(1.0, 2.0), List.of(3.0, 4.0)), null));
+        }
+
+        @Test
+        @DisplayName("rejects fewer than two points")
+        void tooFewPoints() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueSplitRoom("12", List.of(List.of(1.0, 2.0)), null));
+        }
+
+        @Test
+        @DisplayName("rejects a malformed point")
+        void malformedPoint() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueSplitRoom("12", List.of(List.of(1.0), List.of(3.0, 4.0)), null));
+        }
+    }
+
+    @Nested
     @DisplayName("getPosition")
     class GetPosition {
 

@@ -3,6 +3,7 @@ package com.homeplatform.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.homeplatform.dto.RoombaCommandResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
@@ -177,6 +178,64 @@ public class RoombaService {
                 .createdAt(LocalDateTime.now())
                 .build();
         return toCommandResponse(commandRepo.save(cmd));
+    }
+
+    /**
+     * Validate + enqueue a room split (divide one room in two along a line). The
+     * poller turns this into a SplitRoomV1 map edit. {@code points} are [x,y] meter
+     * pairs; the {@code arg} carries JSON {room_id, points:[[x,y],...]}.
+     *
+     * EXPERIMENTAL: this edit has never been validated on hardware and is not
+     * cleanly reversible — the UI gates it behind an explicit confirmation.
+     */
+    public RoombaCommandResponse enqueueSplitRoom(String roomId, List<List<Double>> points,
+                                                  String requestedBy) {
+        if (roomId == null || roomId.isBlank()) {
+            throw new IllegalArgumentException("roomId is required");
+        }
+        if (points == null || points.size() < 2) {
+            throw new IllegalArgumentException("At least two points are required for the divide line");
+        }
+        ArrayNode pointArray = mapper.createArrayNode();
+        for (List<Double> p : points) {
+            if (p == null || p.size() < 2 || p.get(0) == null || p.get(1) == null) {
+                throw new IllegalArgumentException("Each point must be an [x, y] pair");
+            }
+            ArrayNode pair = mapper.createArrayNode();
+            pair.add(round3(p.get(0)));
+            pair.add(round3(p.get(1)));
+            pointArray.add(pair);
+        }
+
+        ObjectNode payload = mapper.createObjectNode();
+        payload.put("room_id", roomId.trim());
+        payload.set("points", pointArray);
+        String arg;
+        try {
+            arg = mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Could not encode split request");
+        }
+        if (arg.length() > 255) {
+            throw new IllegalArgumentException("Too many points for the divide line");
+        }
+
+        String robotId = statusRepo.findTopByOrderByUpdatedAtDesc()
+                .map(RoombaStatus::getRobotId).orElse(null);
+        RoombaCommand cmd = RoombaCommand.builder()
+                .robotId(robotId)
+                .command("split_room")
+                .arg(arg)
+                .status("PENDING")
+                .requestedBy(requestedBy)
+                .createdAt(LocalDateTime.now())
+                .build();
+        return toCommandResponse(commandRepo.save(cmd));
+    }
+
+    /** Round to 3 decimals (mm precision is plenty; keeps the JSON arg compact). */
+    private static double round3(double v) {
+        return Math.round(v * 1000.0) / 1000.0;
     }
 
     public List<RoombaCommandResponse> recentCommands() {
