@@ -21,7 +21,7 @@ if errorlevel 1 (
 echo [2/4] Rebuilding Docker images... >> "%LOG%"
 for /f "tokens=*" %%i in ('git rev-parse --short HEAD') do set GIT_COMMIT=%%i
 echo    commit: %GIT_COMMIT% >> "%LOG%"
-docker compose build backend nginx >> "%LOG%" 2>&1
+docker compose build backend nginx roomba-poller >> "%LOG%" 2>&1
 if errorlevel 1 (
     echo DEPLOY FAILED: docker build >> "%LOG%"
     exit /b 1
