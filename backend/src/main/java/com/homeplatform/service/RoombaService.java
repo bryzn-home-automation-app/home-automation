@@ -1,7 +1,9 @@
 package com.homeplatform.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.homeplatform.dto.RoombaCommandResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
 import com.homeplatform.dto.RoombaMapResponse;
@@ -49,6 +51,14 @@ public class RoombaService {
     /** Control commands the poller knows how to execute. */
     private static final Set<String> ALLOWED_COMMANDS =
             Set.of("start", "stop", "pause", "resume", "dock", "find", "evac", "favorite");
+
+    /** Valid RoomCategory wire values (snake_case) accepted for a room's type. */
+    private static final Set<String> ROOM_CATEGORIES = Set.of(
+            "unknown", "bedroom", "dining_room", "bathroom", "hallway",
+            "kitchen", "living_room", "balcony", "other");
+
+    /** Max room-name length — the app's names are short; keeps the JSON arg well under 255. */
+    private static final int MAX_ROOM_NAME = 80;
 
     private final RoombaStatusRepository statusRepo;
     private final RoombaRunRepository runRepo;
@@ -109,6 +119,59 @@ public class RoombaService {
                 .robotId(robotId)
                 .command(c)
                 .arg(favorite ? arg.trim() : null)
+                .status("PENDING")
+                .requestedBy(requestedBy)
+                .createdAt(LocalDateTime.now())
+                .build();
+        return toCommandResponse(commandRepo.save(cmd));
+    }
+
+    /**
+     * Validate + enqueue a room rename (and optional category change). The poller
+     * turns this into a SetRoomMetadataV1 map edit — the one live-confirmed,
+     * reversible map mutation. The {@code arg} carries a JSON {room_id,name?,type?}.
+     */
+    public RoombaCommandResponse enqueueRenameRoom(String roomId, String name,
+                                                   String roomType, String requestedBy) {
+        if (roomId == null || roomId.isBlank()) {
+            throw new IllegalArgumentException("roomId is required");
+        }
+        String trimmedName = name == null ? null : name.trim();
+        if (trimmedName != null && trimmedName.isEmpty()) {
+            trimmedName = null;
+        }
+        if (trimmedName != null && trimmedName.length() > MAX_ROOM_NAME) {
+            throw new IllegalArgumentException("name must be " + MAX_ROOM_NAME + " characters or fewer");
+        }
+        String category = roomType == null || roomType.isBlank() ? null : roomType.trim().toLowerCase();
+        if (category != null && !ROOM_CATEGORIES.contains(category)) {
+            throw new IllegalArgumentException("Unsupported room type: " + roomType);
+        }
+        if (trimmedName == null && category == null) {
+            throw new IllegalArgumentException("Provide a new name or a room type to change");
+        }
+
+        ObjectNode payload = mapper.createObjectNode();
+        payload.put("room_id", roomId.trim());
+        if (trimmedName != null) {
+            payload.put("name", trimmedName);
+        }
+        if (category != null) {
+            payload.put("type", category);
+        }
+        String arg;
+        try {
+            arg = mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Could not encode rename request");
+        }
+
+        String robotId = statusRepo.findTopByOrderByUpdatedAtDesc()
+                .map(RoombaStatus::getRobotId).orElse(null);
+        RoombaCommand cmd = RoombaCommand.builder()
+                .robotId(robotId)
+                .command("rename_room")
+                .arg(arg)
                 .status("PENDING")
                 .requestedBy(requestedBy)
                 .createdAt(LocalDateTime.now())

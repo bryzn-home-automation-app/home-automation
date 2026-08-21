@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRoombaPosition } from '../api/roomba';
 import type {
@@ -7,12 +7,21 @@ import type {
   RoombaMap as RoombaMapData,
 } from '../types';
 
+/** A mapped room the caller can act on (rename). id is the map's room_id. */
+export interface RoomSelection {
+  id: string;
+  name: string | null;
+}
+
 interface RoombaMapProps {
   map: RoombaMapData | null;
   loading?: boolean;
   className?: string;
   /** When true, poll the live position (~1.5s) and draw the moving robot dot. */
   running?: boolean;
+  /** When true, rooms are clickable (admin) — clicking one fires onSelectRoom. */
+  editable?: boolean;
+  onSelectRoom?: (room: RoomSelection) => void;
 }
 
 /** A drawable policy zone (keep-out / no-mop) polygon + its category. */
@@ -21,11 +30,13 @@ interface ZonePoly {
   category: string;
 }
 
-/** A room name label positioned at the room polygon centroid (SVG units). */
-interface RoomLabel {
-  x: number;
-  y: number;
-  text: string;
+/** One room feature: its ring polygons, centroid (SVG units), id and current name. */
+interface RoomShape {
+  id: string | null;
+  name: string | null;
+  rings: string[];
+  cx: number;
+  cy: number;
 }
 
 interface Bounds {
@@ -65,8 +76,16 @@ function extendBounds(fc: GeoFeatureCollection | null | undefined, b: Bounds): v
 const VIEW_EXTENT = 1000;
 const PAD_RATIO = 0.06; // 6% breathing room around the plan
 
-export default memo(function RoombaMap({ map, loading, className, running }: RoombaMapProps) {
+export default memo(function RoombaMap({
+  map,
+  loading,
+  className,
+  running,
+  editable,
+  onSelectRoom,
+}: RoombaMapProps) {
   const geo = map?.geojson;
+  const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
 
   const model = useMemo(() => {
     if (!geo) return null;
@@ -104,7 +123,6 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
 
     // Collect renderable primitives per layer.
     const floorPolys: string[] = [];
-    const roomPolys: string[] = [];
     const borderPaths: string[] = [];
     const dockMarkers: Array<[number, number]> = [];
 
@@ -126,7 +144,6 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
     };
 
     collectPolys(geo.floorPlan, floorPolys);
-    collectPolys(geo.rooms, roomPolys);
 
     // Borders can be polygons (wall outlines) or linestrings.
     if (geo.borders?.features) {
@@ -182,36 +199,48 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
       }
     }
 
-    // Room name labels — join the bundle room feature's properties.name to its
-    // polygon centroid. Absent names (our single unnamed room) render nothing.
-    const roomLabels: RoomLabel[] = [];
+    // Rooms — one entry per feature, carrying its ring polygons, centroid, id
+    // (the map's room_id, used for renaming) and current name. The centroid is
+    // taken from the outer ring, matching where the label sits.
+    const rooms: RoomShape[] = [];
     if (geo.rooms?.features) {
       for (const f of geo.rooms.features) {
         const g = f.geometry;
         if (!g) continue;
-        const name = (f.properties?.name ?? f.properties?.room_name) as unknown;
-        if (typeof name !== 'string' || !name.trim()) continue;
-        let ring: GeoPosition[] | null = null;
-        if (g.type === 'Polygon') ring = g.coordinates[0] ?? null;
-        else if (g.type === 'MultiPolygon') ring = g.coordinates[0]?.[0] ?? null;
-        if (!ring || ring.length === 0) continue;
+        const rings: string[] = [];
+        let outer: GeoPosition[] | null = null;
+        if (g.type === 'Polygon') {
+          for (const ring of g.coordinates) rings.push(ringToPoints(ring));
+          outer = g.coordinates[0] ?? null;
+        } else if (g.type === 'MultiPolygon') {
+          for (const poly of g.coordinates)
+            for (const ring of poly) rings.push(ringToPoints(ring));
+          outer = g.coordinates[0]?.[0] ?? null;
+        }
+        if (rings.length === 0 || !outer || outer.length === 0) continue;
+
         let sx = 0;
         let sy = 0;
-        let n = 0;
-        for (const p of ring) {
+        for (const p of outer) {
           const [px, py] = project(p);
           sx += px;
           sy += py;
-          n += 1;
         }
-        if (n === 0) continue;
-        roomLabels.push({ x: sx / n, y: sy / n, text: name.trim() });
+        const cx = sx / outer.length;
+        const cy = sy / outer.length;
+
+        const rawName = (f.properties?.name ?? f.properties?.room_name) as unknown;
+        const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : null;
+        const rawId = f.id;
+        const id = rawId == null ? null : String(rawId);
+
+        rooms.push({ id, name, rings, cx, cy });
       }
     }
 
     const hasGeometry =
       floorPolys.length > 0 ||
-      roomPolys.length > 0 ||
+      rooms.length > 0 ||
       borderPaths.length > 0;
 
     return {
@@ -219,12 +248,11 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
       height,
       project,
       floorPolys,
-      roomPolys,
+      rooms,
       borderPaths,
       dockMarkers,
       zonePolys,
       wallLines,
-      roomLabels,
       hasGeometry,
       // dock marker radius relative to the map extent
       dockR: Math.max(width, height) * 0.018,
@@ -279,15 +307,15 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
     height,
     project,
     floorPolys,
-    roomPolys,
+    rooms,
     borderPaths,
     dockMarkers,
     zonePolys,
     wallLines,
-    roomLabels,
     dockR,
   } = model;
   const maxDim = Math.max(width, height);
+  const canEdit = !!editable && !!onSelectRoom;
 
   // Live robot dot geometry, in the SAME projected space as everything else.
   // The heading is drawn in SVG space where y grows downward, so the meter-space
@@ -331,17 +359,25 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
           />
         ))}
 
-        {/* Rooms — accent-tinted regions */}
-        {roomPolys.map((pts, i) => (
-          <polygon
-            key={`room-${i}`}
-            points={pts}
-            fill="var(--appaccent-soft)"
-            stroke="var(--appaccent-border)"
-            strokeWidth={Math.max(width, height) * 0.003}
-            strokeLinejoin="round"
-          />
-        ))}
+        {/* Rooms — accent-tinted regions (decorative; interaction layer is below) */}
+        {rooms.map((room, ri) =>
+          room.rings.map((pts, i) => (
+            <polygon
+              key={`room-${ri}-${i}`}
+              points={pts}
+              fill={
+                canEdit && hoveredRoom && hoveredRoom === room.id
+                  ? 'var(--appaccent)'
+                  : 'var(--appaccent-soft)'
+              }
+              fillOpacity={canEdit && hoveredRoom === room.id ? 0.28 : 1}
+              stroke="var(--appaccent-border)"
+              strokeWidth={maxDim * 0.003}
+              strokeLinejoin="round"
+              style={{ pointerEvents: 'none' }}
+            />
+          )),
+        )}
 
         {/* Keep-out / no-mop zones — hatched, distinct per category */}
         {zonePolys.map((z, i) => {
@@ -404,25 +440,81 @@ export default memo(function RoombaMap({ map, loading, className, running }: Roo
           </g>
         ))}
 
-        {/* Room name labels — centered on each named room's centroid */}
-        {roomLabels.map((lbl, i) => (
-          <text
-            key={`roomlabel-${i}`}
-            x={lbl.x}
-            y={lbl.y}
-            fill="var(--apptext-soft)"
-            fontSize={maxDim * 0.026}
-            fontWeight={600}
-            textAnchor="middle"
-            dominantBaseline="middle"
-            style={{ paintOrder: 'stroke', pointerEvents: 'none' }}
-            stroke="var(--appsurface-raised)"
-            strokeWidth={maxDim * 0.006}
-            strokeLinejoin="round"
-          >
-            {lbl.text}
-          </text>
-        ))}
+        {/* Room name labels — centered on each named room's centroid. In edit
+            mode, unnamed rooms show a "Name this room" prompt instead. */}
+        {rooms.map((room, i) => {
+          const label = room.name ?? (canEdit && room.id ? 'Name this room' : null);
+          if (!label) return null;
+          const isPrompt = !room.name;
+          return (
+            <text
+              key={`roomlabel-${i}`}
+              x={room.cx}
+              y={room.cy}
+              fill={isPrompt ? 'var(--apptext-muted)' : 'var(--apptext-soft)'}
+              fontSize={maxDim * (isPrompt ? 0.022 : 0.026)}
+              fontWeight={isPrompt ? 500 : 600}
+              fontStyle={isPrompt ? 'italic' : 'normal'}
+              textAnchor="middle"
+              dominantBaseline="middle"
+              style={{ paintOrder: 'stroke', pointerEvents: 'none' }}
+              stroke="var(--appsurface-raised)"
+              strokeWidth={maxDim * 0.006}
+              strokeLinejoin="round"
+            >
+              {label}
+            </text>
+          );
+        })}
+
+        {/* Interaction layer — clickable room hit areas (admin edit mode only).
+            Rendered on top so clicks land regardless of other layers' z-order. */}
+        {canEdit &&
+          rooms
+            .filter((room) => room.id)
+            .map((room, ri) => (
+              <g
+                key={`roomhit-${ri}`}
+                role="button"
+                tabIndex={0}
+                aria-label={`Rename ${room.name ?? 'unnamed room'}`}
+                style={{ cursor: 'pointer' }}
+                onClick={() => onSelectRoom?.({ id: room.id as string, name: room.name })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    onSelectRoom?.({ id: room.id as string, name: room.name });
+                  }
+                }}
+                onMouseEnter={() => setHoveredRoom(room.id)}
+                onMouseLeave={() => setHoveredRoom((h) => (h === room.id ? null : h))}
+              >
+                {room.rings.map((pts, i) => (
+                  <polygon
+                    key={`hit-${ri}-${i}`}
+                    points={pts}
+                    fill="transparent"
+                    stroke={hoveredRoom === room.id ? 'var(--appaccent)' : 'transparent'}
+                    strokeWidth={maxDim * 0.005}
+                    strokeLinejoin="round"
+                  />
+                ))}
+                {/* Pencil affordance for already-named rooms */}
+                {room.name && (
+                  <text
+                    x={room.cx}
+                    y={room.cy + maxDim * 0.03}
+                    fill="var(--apptext-muted)"
+                    fontSize={maxDim * 0.02}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    ✏️
+                  </text>
+                )}
+              </g>
+            ))}
 
         {/* Live robot dot + heading — same project() space, hidden when stale */}
         {robot && (

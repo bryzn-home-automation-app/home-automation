@@ -1,9 +1,10 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
-import RoombaMap from '../components/RoombaMap';
+import RoombaMap, { type RoomSelection } from '../components/RoombaMap';
+import RoomRenameModal from '../components/RoomRenameModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
@@ -159,6 +160,7 @@ export default memo(function Roomba() {
   const statusLoading = statusQuery.isLoading;
   const running = status?.running ?? false;
   const { isAdmin } = useAuth();
+  const [selectedRoom, setSelectedRoom] = useState<RoomSelection | null>(null);
 
   const deviceLine = device
     ? [device.family || device.sku, device.series && `Series ${device.series}`,
@@ -367,11 +369,18 @@ export default memo(function Roomba() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
               Rooms, walls, and dock location as mapped by the robot. Built up over the first
               several cleaning runs.
+              {isAdmin && ' Tap a room to rename it or set its type.'}
             </p>
           </div>
         </div>
         <DeferredRender minHeight={320}>
-          <RoombaMap map={mapQuery.data ?? null} loading={mapQuery.isLoading} running={running} />
+          <RoombaMap
+            map={mapQuery.data ?? null}
+            loading={mapQuery.isLoading}
+            running={running}
+            editable={isAdmin}
+            onSelectRoom={setSelectedRoom}
+          />
         </DeferredRender>
       </section>
 
@@ -469,6 +478,11 @@ export default memo(function Roomba() {
           </div>
         )}
       </section>
+
+      {/* Admin room-rename dialog */}
+      {isAdmin && selectedRoom && (
+        <RoomRenameModal room={selectedRoom} onClose={() => setSelectedRoom(null)} />
+      )}
     </div>
   );
 });

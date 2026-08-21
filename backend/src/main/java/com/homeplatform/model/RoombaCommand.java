@@ -29,7 +29,9 @@ public class RoombaCommand {
     @Column(nullable = false, length = 40)
     private String command;
 
-    @Column(length = 120)
+    // Scalar for simple/favorite commands; a small JSON blob for rename_room
+    // ({room_id,name?,type?}) — hence roomier than a bare id.
+    @Column(length = 255)
     private String arg;
 
     @Column(nullable = false, length = 20)

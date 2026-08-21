@@ -1,9 +1,11 @@
 package com.homeplatform.service;
 
+import com.homeplatform.dto.RoombaCommandResponse;
 import com.homeplatform.dto.RoombaMapResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
+import com.homeplatform.model.RoombaCommand;
 import com.homeplatform.model.RoombaMap;
 import com.homeplatform.model.RoombaPosition;
 import com.homeplatform.model.RoombaRun;
@@ -148,6 +150,75 @@ class RoombaServiceTest {
         void emptyWhenNone() {
             when(mapRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
             assertTrue(service.getMap().isEmpty());
+        }
+    }
+
+    @Nested
+    @DisplayName("enqueueRenameRoom")
+    class EnqueueRenameRoom {
+
+        @BeforeEach
+        void echoSave() {
+            when(commandRepo.save(any(RoombaCommand.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("encodes a name-only rename as JSON arg")
+        void nameOnly() {
+            RoombaCommandResponse r =
+                    service.enqueueRenameRoom("15", "Living Room", null, "user:1");
+            assertEquals("rename_room", r.command());
+            assertTrue(r.arg().contains("\"room_id\":\"15\""));
+            assertTrue(r.arg().contains("\"name\":\"Living Room\""));
+            assertFalse(r.arg().contains("\"type\""));
+            assertEquals("PENDING", r.status());
+        }
+
+        @Test
+        @DisplayName("includes the room type (lowercased) when provided")
+        void withType() {
+            RoombaCommandResponse r =
+                    service.enqueueRenameRoom("15", "Den", "Living_Room", null);
+            assertTrue(r.arg().contains("\"type\":\"living_room\""));
+        }
+
+        @Test
+        @DisplayName("type-only change (no name) is allowed")
+        void typeOnly() {
+            RoombaCommandResponse r =
+                    service.enqueueRenameRoom("15", "  ", "kitchen", null);
+            assertTrue(r.arg().contains("\"type\":\"kitchen\""));
+            assertFalse(r.arg().contains("\"name\""));
+        }
+
+        @Test
+        @DisplayName("rejects a blank roomId")
+        void blankRoomId() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueRenameRoom("  ", "Kitchen", null, null));
+        }
+
+        @Test
+        @DisplayName("rejects when neither name nor type is provided")
+        void nothingToChange() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueRenameRoom("15", "  ", "", null));
+        }
+
+        @Test
+        @DisplayName("rejects an unknown room type")
+        void unknownType() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueRenameRoom("15", "Garage", "garage", null));
+        }
+
+        @Test
+        @DisplayName("rejects an over-long name")
+        void nameTooLong() {
+            String longName = "x".repeat(81);
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueRenameRoom("15", longName, null, null));
         }
     }
 

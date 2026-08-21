@@ -196,8 +196,8 @@ CREATE TABLE IF NOT EXISTS roomba_map (
 CREATE TABLE IF NOT EXISTS roomba_commands (
     id            SERIAL PRIMARY KEY,
     robot_id      VARCHAR(64),
-    command       VARCHAR(40)  NOT NULL,   -- start|stop|pause|resume|dock|find|evac|favorite
-    arg           VARCHAR(120),            -- favorite id for 'favorite'
+    command       VARCHAR(40)  NOT NULL,   -- start|stop|pause|resume|dock|find|evac|favorite|rename_room
+    arg           VARCHAR(255),            -- favorite id for 'favorite'; JSON {room_id,name?,type?} for 'rename_room'
     status        VARCHAR(20)  NOT NULL DEFAULT 'PENDING',  -- PENDING|SENT|OK|FAILED
     detail        VARCHAR(500),
     requested_by  VARCHAR(120),

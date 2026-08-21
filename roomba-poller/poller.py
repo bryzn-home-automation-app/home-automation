@@ -22,6 +22,7 @@ Credentials + config come from env only (never a file):
 """
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import sys
@@ -97,7 +98,7 @@ def _epoch_to_utc(epoch):
     if not epoch:
         return None
     try:
-        return datetime.utcfromtimestamp(int(epoch)).replace(tzinfo=timezone.utc)
+        return datetime.fromtimestamp(int(epoch), timezone.utc)
     except (ValueError, TypeError, OverflowError):
         return None
 
@@ -627,6 +628,7 @@ async def poll_once(robot, conninfo, state):
 # ---------------------------------------------------------------------------
 CMD_TICK_SECONDS = 5
 SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
+RENAME_ROOM = "rename_room"
 
 
 def _fetch_pending(conninfo, limit=5):
@@ -662,7 +664,63 @@ async def _run_favorite(robot, favorite_id):
     await robot.send_routine_command_via_cmd_topic(cmd)
 
 
-async def process_commands(robot, conninfo):
+async def _rename_room(robot, conninfo, arg, state):
+    """Rename a mapped room (and optionally set its category) via the map-edit API.
+
+    Uses SetRoomMetadataV1 → edit_map_checked — the ONLY map edit that's been
+    live-confirmed on hardware (both rename + revert), and it's reversible. The
+    JSON `arg` (built + validated by the backend) carries {room_id, name?, type?}.
+
+    Returns (ok, detail). On success the local map-version cache is cleared so the
+    next poll re-fetches the bundle and the new name shows on the floor plan.
+    """
+    from roombapy_prime.models.enums_common import RoomCategory
+    from roombapy_prime.models.map_editing import SetRoomMetadataV1
+
+    try:
+        params = json.loads(arg or "{}")
+    except (ValueError, TypeError):
+        return False, "bad rename payload"
+    room_id = params.get("room_id")
+    name = params.get("name")
+    rtype = params.get("type")
+    if not room_id:
+        return False, "missing room_id"
+
+    room_type = None
+    if rtype:
+        try:
+            room_type = RoomCategory(rtype)  # snake_case wire value, e.g. "living_room"
+        except ValueError:
+            room_type = None  # unknown category → ignore rather than fail the rename
+    if name is None and room_type is None:
+        return False, "nothing to change"
+
+    # Resolve the current map id fresh — the edit targets a specific p2map_id.
+    versions = await robot.get_active_map_versions()
+    if not (isinstance(versions, list) and versions):
+        return False, "no active map"
+    p2map_id = versions[0].get("p2map_id") or versions[0].get("p2mapId")
+    if not p2map_id:
+        return False, "no map id"
+
+    cmd = SetRoomMetadataV1(room_id=str(room_id), name=name, room_type=room_type)
+    result = await robot.edit_map_checked(p2map_id, cmd)
+
+    if result.is_error:
+        # MapEditingError groups: NOT_FOUND (stale id, re-read), INVALID (bad request),
+        # NOT_NOW (transient) — surface the name so the UI can explain the failure.
+        err = result.error.name if result.error else result.error_code
+        msg = (result.error_message or "").strip()
+        return False, f"robot refused ({err}){': ' + msg if msg else ''}"
+
+    # Success (or partial: edit applied but the rendered map hasn't regenerated yet).
+    # Either way, force a bundle re-fetch on the next poll so the label updates.
+    state.last_map_version = None
+    return True, "applied; map updating shortly" if result.is_partial else "applied"
+
+
+async def process_commands(robot, conninfo, state):
     """Execute PENDING control commands through the shared robot connection. 'OK' means
     the broker accepted it — NOT that the robot necessarily acted (phantom-mission case)."""
     try:
@@ -683,6 +741,9 @@ async def process_commands(robot, conninfo):
             elif command == "favorite":
                 await _run_favorite(robot, arg)
                 _mark_command(conninfo, cmd_id, "OK", f"favorite {arg} sent")
+            elif command == RENAME_ROOM:
+                ok, detail = await _rename_room(robot, conninfo, arg, state)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")
             log.info("command #%s (%s) processed", cmd_id, command)
@@ -718,7 +779,7 @@ async def main():
                     robot = await connect_robot(session, email, password, country, blid)
                     last_poll = 0.0  # poll immediately after (re)connect
                 # Commands are latency-sensitive → checked every tick; status polls on interval.
-                await process_commands(robot, conninfo)
+                await process_commands(robot, conninfo, state)
                 now = time.monotonic()
                 if now - last_poll >= interval:
                     await poll_once(robot, conninfo, state)

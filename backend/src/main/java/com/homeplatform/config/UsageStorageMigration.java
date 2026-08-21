@@ -244,7 +244,7 @@ public class UsageStorageMigration implements ApplicationRunner {
                 id            SERIAL PRIMARY KEY,
                 robot_id      VARCHAR(64),
                 command       VARCHAR(40)  NOT NULL,
-                arg           VARCHAR(120),
+                arg           VARCHAR(255),
                 status        VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
                 detail        VARCHAR(500),
                 requested_by  VARCHAR(120),
@@ -254,6 +254,9 @@ public class UsageStorageMigration implements ApplicationRunner {
             """);
         jdbcTemplate.execute(
             "CREATE INDEX IF NOT EXISTS idx_roomba_commands_status ON roomba_commands (status, id)");
+        // Widen arg on already-created tables (rename_room stores a JSON blob, not a
+        // bare id). Metadata-only length increase — cheap + idempotent.
+        jdbcTemplate.execute("ALTER TABLE roomba_commands ALTER COLUMN arg TYPE VARCHAR(255)");
 
         // Static device identity + firmware (poller UPSERTs once per connect).
         jdbcTemplate.execute("""

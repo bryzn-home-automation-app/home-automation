@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.RoombaCommandRequest;
 import com.homeplatform.dto.RoombaCommandResponse;
+import com.homeplatform.dto.RoombaRenameRoomRequest;
 import com.homeplatform.service.RoombaService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -48,5 +49,20 @@ public class RoombaCommandController {
     public ResponseEntity<List<RoombaCommandResponse>> recent(HttpServletRequest request) {
         requireAdmin(request);
         return ResponseEntity.ok(roombaService.recentCommands());
+    }
+
+    /** Rename a mapped room (and optionally set its category). Queued for the poller. */
+    @PostMapping("/rooms/rename")
+    public ResponseEntity<?> renameRoom(@RequestBody RoombaRenameRoomRequest body, HttpServletRequest request) {
+        requireAdmin(request);
+        Object userId = request.getAttribute("userId");
+        try {
+            RoombaCommandResponse resp = roombaService.enqueueRenameRoom(
+                    body.roomId(), body.name(), body.roomType(),
+                    userId == null ? null : "user:" + userId);
+            return ResponseEntity.ok(resp);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 }

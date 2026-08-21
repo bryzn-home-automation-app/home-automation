@@ -65,3 +65,21 @@ export async function fetchRoombaCommands(): Promise<RoombaCommand[]> {
   const res = await api.get<RoombaCommand[]>('/admin/roomba/commands');
   return Array.isArray(res.data) ? res.data : [];
 }
+
+/**
+ * Rename a mapped room, optionally setting its category (ADMIN only). Queued for
+ * the poller to apply via the robot's map-edit API — the floor plan updates once
+ * the poller re-fetches the map bundle (within ~a minute). Returns the queued command.
+ */
+export async function renameRoombaRoom(
+  roomId: string,
+  name?: string,
+  roomType?: string,
+): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/rooms/rename', {
+    roomId,
+    name,
+    roomType,
+  });
+  return res.data;
+}
