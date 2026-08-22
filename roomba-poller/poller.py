@@ -172,6 +172,7 @@ class PollerState:
         self.last_map_version = None  # last map version successfully persisted
         self.device_synced = False    # static device identity/firmware persisted this process
         self.mission_running = False  # true while a mission is actively cleaning (drives the live-map task)
+        self.map_refresh_due = None   # monotonic ts: re-fetch the map bundle soon (set after a map edit)
 
 
 def _snapshot(cms):
@@ -627,6 +628,10 @@ async def poll_once(robot, conninfo, state):
 # Control commands (poller executes what the backend enqueued into roomba_commands)
 # ---------------------------------------------------------------------------
 CMD_TICK_SECONDS = 5
+# After a map edit applies, re-fetch the map bundle this many seconds later — enough
+# for the robot to regenerate the rendered map, far sooner than the next status poll
+# (POLL_INTERVAL_SECONDS, 300s on the NUC). Keeps the floor plan from lagging ~5 min.
+MAP_REFRESH_AFTER_EDIT = 12
 SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
 RENAME_ROOM = "rename_room"
 SPLIT_ROOM = "split_room"
@@ -795,7 +800,10 @@ async def _apply_map_edit(robot, p2map_id, cmd, state):
         msg = (result.error_message or "").strip()
         return False, f"robot refused ({err}){': ' + msg if msg else ''}"
     # Success, or partial: edit applied but the rendered map hasn't regenerated yet.
+    # Clear the cache AND schedule a soon map re-fetch so the UI updates in seconds,
+    # not at the next 5-minute status poll.
     state.last_map_version = None
+    state.map_refresh_due = time.monotonic() + MAP_REFRESH_AFTER_EDIT
     return True, "applied; map updating shortly" if result.is_partial else "applied"
 
 
@@ -869,6 +877,12 @@ async def main():
                 if now - last_poll >= interval:
                     await poll_once(robot, conninfo, state)
                     last_poll = now
+                # A recent map edit asked for a prompt bundle re-fetch — do it once the
+                # short settle delay has passed (poll_once above may already have, which
+                # makes this a cheap no-op via the version check in refresh_map).
+                if state.map_refresh_due is not None and now >= state.map_refresh_due:
+                    state.map_refresh_due = None
+                    await refresh_map(robot, conninfo, robot.blid, state, None)
                 # Keep the concurrent live-position task in sync with mission state.
                 live_task = await _manage_live_task(live_task, robot, conninfo, state)
             except asyncio.CancelledError:
