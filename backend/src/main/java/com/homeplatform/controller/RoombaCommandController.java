@@ -110,7 +110,7 @@ public class RoombaCommandController {
         Object userId = request.getAttribute("userId");
         try {
             RoombaCommandResponse resp = roombaService.enqueueCleanRoom(
-                    body.roomId(), body.suction(), body.passes(),
+                    body.roomId(), body.suction(), body.passes(), body.mode(),
                     userId == null ? null : "user:" + userId);
             return ResponseEntity.ok(resp);
         } catch (IllegalArgumentException e) {

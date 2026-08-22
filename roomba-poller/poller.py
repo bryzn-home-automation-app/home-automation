@@ -33,6 +33,7 @@ from datetime import datetime, timezone
 import aiohttp
 import psycopg
 from psycopg.types.json import Json
+from roombapy_prime.auth import login
 from roombapy_prime.models.livemap import PositionUpdateMessage
 from roombapy_prime.models.map_bundle import parse_map_bundle
 from roombapy_prime.models.robot_info import DockState
@@ -173,6 +174,7 @@ class PollerState:
         self.device_synced = False    # static device identity/firmware persisted this process
         self.mission_running = False  # true while a mission is actively cleaning (drives the live-map task)
         self.map_refresh_due = None   # monotonic ts: re-fetch the map bundle soon (set after a map edit)
+        self.robot_name = None        # user-assigned name from the account (e.g. "iRummy")
 
 
 def _snapshot(cms):
@@ -574,13 +576,23 @@ async def refresh_map(robot, conninfo, robot_id, state, shadow_version):
 # ---------------------------------------------------------------------------
 # Cloud connection + main loop
 # ---------------------------------------------------------------------------
-async def connect_robot(session, email, password, country, blid):
+async def connect_robot(session, email, password, country, blid, state):
+    # Log in ourselves so we can read the user-assigned robot name (which lives in
+    # the account's robot list, not on the PrimeRobot object), then hand the same
+    # login result to the factory to avoid a second login round-trip.
+    login_result = await login(session, email, password, country)
     robot = await PrimeFactory.create_prime_robot(
         session=session, username=email, password=password,
-        country_code=country, blid=blid or None,
+        country_code=country, blid=blid or None, login_result=login_result,
     )
     await robot.connect(timeout=15.0)
-    log.info("Connected to Roomba (BLID %s)", robot.blid)
+    try:
+        target = blid or login_result.primary_blid()
+        entry = login_result.robots.get(target)
+        state.robot_name = getattr(entry, "name", None) if entry else None
+    except Exception as e:  # noqa: BLE001 — name is a nice-to-have, never fatal
+        log.debug("robot name lookup failed: %s: %s", type(e).__name__, e)
+    log.info("Connected to Roomba '%s' (BLID %s)", state.robot_name or "?", robot.blid)
     return robot
 
 
@@ -596,7 +608,7 @@ async def poll_once(robot, conninfo, state):
         log.warning("ro-stats read failed: %s: %s", type(e).__name__, e)
 
     shadow_version = _map_version(rep)
-    name = getattr(robot, "name", None)
+    name = state.robot_name or getattr(robot, "name", None)
     robot_id = robot.blid
 
     # Drives the concurrent live-position task (started only mid-mission).
@@ -811,7 +823,8 @@ async def _apply_map_edit(robot, p2map_id, cmd, state):
 async def _clean_room(robot, conninfo, arg):
     """Clean ONE specific room (region clean). CONFIRMED working on a Combo 105.
 
-    `arg` JSON: {room_id, suction?: 1-4, passes?: "one"|"two"}.
+    `arg` JSON: {room_id, suction?: 1-4, passes?: "one"|"two", mode?: 2|4|6}.
+    mode = operatingMode command value (vendor codec): 2=vacuum, 4=mop, 6=vac+mop.
 
     SAFETY — this exact shape is load-bearing (see the library's
     send_routine_command_via_cmd_topic docstring): it MUST use command_type=START
@@ -855,6 +868,14 @@ async def _clean_room(robot, conninfo, arg):
     elif passes == "one":
         cp_kwargs["two_pass"] = False
         cp_kwargs["no_auto_passes"] = True
+    mode = params.get("mode")
+    if mode is not None:
+        try:
+            m = int(mode)
+            if m in (2, 4, 6):  # vendor codec: vacuum / mop / vac+mop
+                cp_kwargs["operating_mode"] = m
+        except (ValueError, TypeError):
+            pass
     cparams = CommandParams(**cp_kwargs) if cp_kwargs else None
 
     region = Region(region_id=str(room_id), region_type=RegionType.RID, params=cparams)
@@ -934,7 +955,7 @@ async def main():
         while True:
             try:
                 if robot is None:
-                    robot = await connect_robot(session, email, password, country, blid)
+                    robot = await connect_robot(session, email, password, country, blid, state)
                     last_poll = 0.0  # poll immediately after (re)connect
                 # Commands are latency-sensitive → checked every tick; status polls on interval.
                 await process_commands(robot, conninfo, state)

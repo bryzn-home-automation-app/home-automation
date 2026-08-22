@@ -18,6 +18,14 @@ const PASSES: { value: string; label: string }[] = [
   { value: 'two', label: 'Two passes' },
 ];
 
+// Combo robots only; a vacuum-only robot ignores mop modes.
+const MODES: { value: string; label: string }[] = [
+  { value: '', label: 'Robot default' },
+  { value: 'vacuum', label: 'Vacuum only' },
+  { value: 'mop', label: 'Mop only' },
+  { value: 'vacmop', label: 'Vacuum + mop' },
+];
+
 interface Props {
   room: RoomSelection;
   onClose: () => void;
@@ -30,6 +38,7 @@ interface Props {
 export default function RoomCleanModal({ room, onClose }: Props) {
   const [suction, setSuction] = useState('');
   const [passes, setPasses] = useState('');
+  const [mode, setMode] = useState('');
   const [commandId, setCommandId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -41,7 +50,8 @@ export default function RoomCleanModal({ room, onClose }: Props) {
   }, [onClose]);
 
   const mutation = useMutation({
-    mutationFn: () => cleanRoombaRoom(room.id, suction || undefined, passes || undefined),
+    mutationFn: () =>
+      cleanRoombaRoom(room.id, suction || undefined, passes || undefined, mode || undefined),
     onSuccess: (cmd) => setCommandId(cmd.id),
   });
 
@@ -115,6 +125,22 @@ export default function RoomCleanModal({ room, onClose }: Props) {
             {PASSES.map((p) => (
               <option key={p.value} value={p.value}>
                 {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="mt-4 block text-xs font-medium text-apptext-soft">
+          Mode
+          <select
+            value={mode}
+            onChange={(e) => setMode(e.target.value)}
+            disabled={submitting || status === 'OK'}
+            className="mt-1.5 w-full rounded-xl border border-appborder bg-appinset px-3 py-2.5 text-sm text-apptext outline-none focus:border-appaccent-border disabled:opacity-60"
+          >
+            {MODES.map((m) => (
+              <option key={m.value} value={m.value}>
+                {m.label}
               </option>
             ))}
           </select>

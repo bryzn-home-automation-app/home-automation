@@ -70,7 +70,7 @@ class RoombaServiceTest {
                     .robotId("robot-1")
                     .phase("run")
                     .batteryPct(97)
-                    .updatedAt(LocalDateTime.now().minusMinutes(2))
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(2))
                     .build();
             when(statusRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(s));
 
@@ -86,7 +86,7 @@ class RoombaServiceTest {
             RoombaStatus s = RoombaStatus.builder()
                     .robotId("robot-1")
                     .phase("charge")
-                    .updatedAt(LocalDateTime.now().minusMinutes(30))
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(30))
                     .build();
             when(statusRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(s));
 
@@ -135,7 +135,7 @@ class RoombaServiceTest {
                     .mapVersion("260820T")
                     .name("Map 1")
                     .geojson("{\"rooms\":{\"type\":\"FeatureCollection\",\"features\":[]}}")
-                    .updatedAt(LocalDateTime.now())
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC))
                     .build();
             when(mapRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(m));
 
@@ -316,33 +316,43 @@ class RoombaServiceTest {
         @Test
         @DisplayName("room-only clean encodes just the room_id")
         void roomOnly() {
-            RoombaCommandResponse r = service.enqueueCleanRoom("12", null, null, "user:1");
+            RoombaCommandResponse r = service.enqueueCleanRoom("12", null, null, null, "user:1");
             assertEquals("clean_room", r.command());
             assertEquals("{\"room_id\":\"12\"}", r.arg());
         }
 
         @Test
-        @DisplayName("maps suction level name to its int and includes passes")
-        void suctionAndPasses() {
-            RoombaCommandResponse r = service.enqueueCleanRoom("12", "High", "two", null);
+        @DisplayName("maps suction, passes, and operating mode to wire values")
+        void allConfig() {
+            RoombaCommandResponse r = service.enqueueCleanRoom("12", "High", "two", "vacmop", null);
             assertTrue(r.arg().contains("\"suction\":3"), r.arg());
             assertTrue(r.arg().contains("\"passes\":\"two\""), r.arg());
+            assertTrue(r.arg().contains("\"mode\":6"), r.arg()); // vac+mop = 6
+        }
+
+        @Test
+        @DisplayName("maps vacuum/mop modes to 2 and 4")
+        void modes() {
+            assertTrue(service.enqueueCleanRoom("12", null, null, "vacuum", null).arg().contains("\"mode\":2"));
+            assertTrue(service.enqueueCleanRoom("12", null, null, "mop", null).arg().contains("\"mode\":4"));
         }
 
         @Test
         @DisplayName("rejects a blank roomId")
         void blankRoom() {
             assertThrows(IllegalArgumentException.class,
-                    () -> service.enqueueCleanRoom("  ", null, null, null));
+                    () -> service.enqueueCleanRoom("  ", null, null, null, null));
         }
 
         @Test
-        @DisplayName("rejects an unknown suction level or passes value")
+        @DisplayName("rejects an unknown suction, passes, or mode value")
         void badConfig() {
             assertThrows(IllegalArgumentException.class,
-                    () -> service.enqueueCleanRoom("12", "ludicrous", null, null));
+                    () -> service.enqueueCleanRoom("12", "ludicrous", null, null, null));
             assertThrows(IllegalArgumentException.class,
-                    () -> service.enqueueCleanRoom("12", null, "three", null));
+                    () -> service.enqueueCleanRoom("12", null, "three", null, null));
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueCleanRoom("12", null, null, "steam", null));
         }
     }
 
@@ -358,7 +368,7 @@ class RoombaServiceTest {
                     .x(1.25)
                     .y(-3.5)
                     .theta(1.57)
-                    .updatedAt(LocalDateTime.now().minusSeconds(2))
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(2))
                     .build();
             when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(p));
 
@@ -377,7 +387,7 @@ class RoombaServiceTest {
                     .x(1.0)
                     .y(2.0)
                     .theta(0.0)
-                    .updatedAt(LocalDateTime.now().minusMinutes(2))
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(2))
                     .build();
             when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(p));
 

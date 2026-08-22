@@ -28,6 +28,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -56,6 +57,10 @@ public class RoombaService {
     /** Suction level name → SuctionLevel int (1..4). Null/absent = robot default. */
     private static final java.util.Map<String, Integer> SUCTION_LEVELS = java.util.Map.of(
             "low", 1, "medium", 2, "high", 3, "turbo", 4);
+
+    /** Operating-mode name → operatingMode command value (vendor codec). Combo only. */
+    private static final java.util.Map<String, Integer> OPERATING_MODES = java.util.Map.of(
+            "vacuum", 2, "mop", 4, "vacmop", 6);
 
     /** Valid RoomCategory wire values (snake_case) accepted for a room's type. */
     private static final Set<String> ROOM_CATEGORIES = Set.of(
@@ -92,7 +97,7 @@ public class RoombaService {
      * the dot rather than pinning it to a stale spot after a mission ends.
      */
     public Optional<RoombaPositionResponse> getPosition() {
-        LocalDateTime cutoff = LocalDateTime.now().minusSeconds(POSITION_STALE_SECONDS);
+        LocalDateTime cutoff = LocalDateTime.now(ZoneOffset.UTC).minusSeconds(POSITION_STALE_SECONDS);
         return positionRepo.findTopByOrderByUpdatedAtDesc()
                 .filter(p -> p.getUpdatedAt() != null && p.getUpdatedAt().isAfter(cutoff))
                 .map(p -> new RoombaPositionResponse(
@@ -126,7 +131,7 @@ public class RoombaService {
                 .arg(favorite ? arg.trim() : null)
                 .status("PENDING")
                 .requestedBy(requestedBy)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build();
         return toCommandResponse(commandRepo.save(cmd));
     }
@@ -179,7 +184,7 @@ public class RoombaService {
                 .arg(arg)
                 .status("PENDING")
                 .requestedBy(requestedBy)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build();
         return toCommandResponse(commandRepo.save(cmd));
     }
@@ -232,7 +237,7 @@ public class RoombaService {
                 .arg(arg)
                 .status("PENDING")
                 .requestedBy(requestedBy)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build();
         return toCommandResponse(commandRepo.save(cmd));
     }
@@ -277,7 +282,7 @@ public class RoombaService {
                 .arg(arg)
                 .status("PENDING")
                 .requestedBy(requestedBy)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build();
         return toCommandResponse(commandRepo.save(cmd));
     }
@@ -287,8 +292,8 @@ public class RoombaService {
      * safety-critical START/RID/map_id RoutineCommand. {@code arg} carries JSON
      * {room_id, suction?:1-4, passes?:"one"|"two"}.
      */
-    public RoombaCommandResponse enqueueCleanRoom(String roomId, String suction,
-                                                  String passes, String requestedBy) {
+    public RoombaCommandResponse enqueueCleanRoom(String roomId, String suction, String passes,
+                                                  String mode, String requestedBy) {
         if (roomId == null || roomId.isBlank()) {
             throw new IllegalArgumentException("roomId is required");
         }
@@ -309,6 +314,13 @@ public class RoombaService {
             }
             payload.put("passes", p);
         }
+        if (mode != null && !mode.isBlank()) {
+            Integer m = OPERATING_MODES.get(mode.trim().toLowerCase());
+            if (m == null) {
+                throw new IllegalArgumentException("Unsupported mode: " + mode);
+            }
+            payload.put("mode", m);
+        }
 
         String arg;
         try {
@@ -325,7 +337,7 @@ public class RoombaService {
                 .arg(arg)
                 .status("PENDING")
                 .requestedBy(requestedBy)
-                .createdAt(LocalDateTime.now())
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
                 .build();
         return toCommandResponse(commandRepo.save(cmd));
     }
@@ -363,7 +375,7 @@ public class RoombaService {
         boolean running = s.getPhase() != null
                 && RUNNING_PHASES.contains(s.getPhase().toLowerCase());
         boolean online = s.getUpdatedAt() != null
-                && s.getUpdatedAt().isAfter(LocalDateTime.now().minusMinutes(ONLINE_WINDOW_MINUTES));
+                && s.getUpdatedAt().isAfter(LocalDateTime.now(ZoneOffset.UTC).minusMinutes(ONLINE_WINDOW_MINUTES));
 
         List<String> reasons = new ArrayList<>();
         if (s.getError() != null && s.getError() != 0) {
@@ -460,7 +472,14 @@ public class RoombaService {
         }
     }
 
+    /**
+     * Serialize a stored timestamp as UTC ISO-8601 with a 'Z'. All roomba_* rows
+     * hold UTC wall-clock (Postgres runs in UTC; run times come from UTC epochs).
+     * Emitting a bare LocalDateTime (no zone) made the browser parse it as LOCAL
+     * time, shifting every displayed time by the viewer's UTC offset (~5-6h in CT).
+     * With the 'Z', the browser converts to the viewer's local zone correctly.
+     */
     private String iso(LocalDateTime dt) {
-        return dt == null ? null : dt.toString();
+        return dt == null ? null : dt.atOffset(ZoneOffset.UTC).toString();
     }
 }

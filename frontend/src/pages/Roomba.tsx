@@ -576,6 +576,7 @@ export default memo(function Roomba() {
 
         <DeferredRender minHeight={320}>
           <RoombaMap
+            className="mx-auto max-w-xl"
             map={mapQuery.data ?? null}
             loading={mapQuery.isLoading}
             running={running}
