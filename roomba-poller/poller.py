@@ -589,7 +589,8 @@ async def connect_robot(session, email, password, country, blid, state):
     try:
         target = blid or login_result.primary_blid()
         entry = login_result.robots.get(target)
-        state.robot_name = getattr(entry, "name", None) if entry else None
+        raw_name = getattr(entry, "name", None) if entry else None
+        state.robot_name = raw_name.strip() if isinstance(raw_name, str) and raw_name.strip() else None
     except Exception as e:  # noqa: BLE001 — name is a nice-to-have, never fatal
         log.debug("robot name lookup failed: %s: %s", type(e).__name__, e)
     log.info("Connected to Roomba '%s' (BLID %s)", state.robot_name or "?", robot.blid)
