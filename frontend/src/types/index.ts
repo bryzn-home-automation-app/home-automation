@@ -217,6 +217,13 @@ export interface RoombaRun {
   /** COMPLETED | STUCK | CANCELLED (widened to string for forward-compat). */
   status: RoombaRunStatus | string;
   missionId: string | null;
+  /** Enrichment fields — populated for runs recorded after the detail work; else null. */
+  missionNumber: number | null;
+  error: number | null;
+  errorText: string | null;
+  initiator: string | null;
+  cycle: string | null;
+  source: string | null;
 }
 
 /**

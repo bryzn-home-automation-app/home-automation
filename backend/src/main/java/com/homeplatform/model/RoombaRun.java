@@ -40,6 +40,24 @@ public class RoombaRun {
     @Column(length = 50)
     private String status;
 
+    @Column(name = "mission_id", length = 64)
+    private String missionId;
+
+    @Column(name = "mission_number")
+    private Integer missionNumber;
+
+    @Column(name = "error")
+    private Integer error;
+
+    @Column(name = "error_text", length = 255)
+    private String errorText;
+
+    @Column(length = 40)
+    private String initiator;
+
+    @Column(length = 40)
+    private String cycle;
+
     @Column(length = 100)
     private String source;
 

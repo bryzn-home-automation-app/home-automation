@@ -184,6 +184,9 @@ def _snapshot(cms):
         "sqft": cms.get("sqft"),
         "error": cms.get("error", 0),
         "phase": cms.get("phase"),
+        "initiator": cms.get("initiator"),
+        "cycle": cms.get("cycle"),
+        "mission_number": cms.get("nMssn"),
     }
 
 
@@ -318,18 +321,26 @@ def insert_run(conninfo, snap, status):
     started = snap.get("started_at")
     completed = datetime.now(timezone.utc)
     duration = _elapsed_min(started, completed)
+    err = snap.get("error", 0)
     sql = """
         INSERT INTO roomba_runs (
             started_at, completed_at, duration_minutes, dirt_events, square_feet,
-            status, source, source_provider, ingestion_batch_id
+            status, mission_id, mission_number, error, error_text, initiator, cycle,
+            source, source_provider, ingestion_batch_id
         ) VALUES (
-            %s, %s, %s, NULL, %s, %s, 'roombapy-prime', 'irobot', %s
+            %s, %s, %s, NULL, %s, %s, %s, %s, %s, %s, %s, %s,
+            'roombapy-prime', 'irobot', %s
         )
     """
     with psycopg.connect(conninfo, autocommit=True) as conn:
         conn.execute(
             sql,
-            (started, completed, duration, snap.get("sqft"), status, str(uuid.uuid4())),
+            (
+                started, completed, duration, snap.get("sqft"), status,
+                snap.get("mission_id"), snap.get("mission_number"),
+                err, _error_text(err), snap.get("initiator"), snap.get("cycle"),
+                str(uuid.uuid4()),
+            ),
         )
 
 
@@ -675,9 +686,9 @@ def _mark_command(conninfo, cmd_id, status, detail=None, terminal=True):
 async def _run_favorite(robot, favorite_id):
     """Replay a saved favorite/zone by id. Unvalidated on hardware (we have 0 favorites
     yet) — kept best-effort; any failure is caught and marked FAILED by the caller."""
-    from roombapy_prime.models.mission_control import RoutineCommand, RoutineCommandType
+    from roombapy_prime.models.mission_control import MissionCommandType, RoutineCommand
     cmd = RoutineCommand(
-        command_type=RoutineCommandType.START,
+        command_type=MissionCommandType.START,
         asset_id=robot.blid,
         favorite_id=favorite_id,
         initiator="rmtApp",

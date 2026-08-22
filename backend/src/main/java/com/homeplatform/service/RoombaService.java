@@ -437,7 +437,6 @@ public class RoombaService {
     }
 
     private RoombaRunResponse toRunResponse(RoombaRun r) {
-        // roomba_runs has no mission_id column yet — missionId stays null.
         return new RoombaRunResponse(
                 r.getId(),
                 iso(r.getStartedAt()),
@@ -445,7 +444,13 @@ public class RoombaService {
                 r.getDurationMinutes(),
                 r.getSquareFeet(),
                 r.getStatus(),
-                null
+                r.getMissionId(),
+                r.getMissionNumber(),
+                r.getError(),
+                r.getErrorText(),
+                r.getInitiator(),
+                r.getCycle(),
+                r.getSource()
         );
     }
 

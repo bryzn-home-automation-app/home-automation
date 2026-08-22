@@ -191,6 +191,12 @@ public class UsageStorageMigration implements ApplicationRunner {
                 dirt_events         INTEGER,
                 square_feet         INTEGER,
                 status              VARCHAR(50)    NOT NULL DEFAULT 'COMPLETED',
+                mission_id          VARCHAR(64),
+                mission_number      INTEGER,
+                error               INTEGER,
+                error_text          VARCHAR(255),
+                initiator           VARCHAR(40),
+                cycle               VARCHAR(40),
                 source              VARCHAR(100)   NOT NULL,
                 source_provider     VARCHAR(50)    NOT NULL,
                 ingestion_batch_id  UUID,
@@ -199,6 +205,13 @@ public class UsageStorageMigration implements ApplicationRunner {
             )
             """);
         jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_roomba_runs_started_at ON roomba_runs (started_at)");
+        // Per-run detail columns (added for the run-detail popup). Idempotent —
+        // ADD COLUMN IF NOT EXISTS backfills existing roomba_runs tables.
+        for (String col : new String[]{
+                "mission_id VARCHAR(64)", "mission_number INTEGER", "error INTEGER",
+                "error_text VARCHAR(255)", "initiator VARCHAR(40)", "cycle VARCHAR(40)"}) {
+            jdbcTemplate.execute("ALTER TABLE roomba_runs ADD COLUMN IF NOT EXISTS " + col);
+        }
 
         // Latest live-status snapshot per robot (poller UPSERTs, UNIQUE robot_id).
         jdbcTemplate.execute("""

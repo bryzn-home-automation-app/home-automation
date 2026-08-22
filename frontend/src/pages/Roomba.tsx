@@ -8,6 +8,7 @@ import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
 import RoomMergeModal from '../components/RoomMergeModal';
 import RoomCleanModal from '../components/RoomCleanModal';
+import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
@@ -181,6 +182,8 @@ export default memo(function Roomba() {
   // Clean mode: tap a room to open its clean-config dialog.
   const [cleanMode, setCleanMode] = useState(false);
   const [cleanRoom, setCleanRoom] = useState<RoomSelection | null>(null);
+  // Run history: the run whose detail popup is open.
+  const [selectedRun, setSelectedRun] = useState<RoombaRun | null>(null);
 
   const exitSplitMode = () => {
     setSplitMode(false);
@@ -664,10 +667,16 @@ export default memo(function Roomba() {
                         minute: '2-digit',
                       });
                   const st = runStatusStyle(r.status);
+                  // Guard the list against any glitched stored duration (>24h).
+                  const listDuration =
+                    r.durationMinutes != null && r.durationMinutes > 1440 ? null : r.durationMinutes;
                   return (
-                    <div
+                    <button
                       key={r.id}
-                      className="grid grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                      type="button"
+                      onClick={() => setSelectedRun(r)}
+                      aria-label={`View details for the run on ${dateLabel}`}
+                      className="grid w-full grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-appborder-light pr-1 text-left transition-colors hover:bg-appinset"
                     >
                       <div className="py-3">
                         <div className="text-apptext-soft">{dateLabel}</div>
@@ -676,7 +685,7 @@ export default memo(function Roomba() {
                         )}
                       </div>
                       <div className="py-3 text-right tabular-nums text-apptext">
-                        {formatDuration(r.durationMinutes)}
+                        {formatDuration(listDuration)}
                       </div>
                       <div className="hidden py-3 text-right tabular-nums text-apptext-muted md:block">
                         {r.squareFeet != null ? r.squareFeet : '—'}
@@ -686,7 +695,7 @@ export default memo(function Roomba() {
                           {st.label}
                         </span>
                       </div>
-                    </div>
+                    </button>
                   );
                 }}
               />
@@ -713,6 +722,11 @@ export default memo(function Roomba() {
       {/* Admin clean-a-room config */}
       {isAdmin && cleanRoom && (
         <RoomCleanModal room={cleanRoom} onClose={() => setCleanRoom(null)} />
+      )}
+
+      {/* Run detail popup */}
+      {selectedRun && (
+        <RoomRunDetailModal run={selectedRun} onClose={() => setSelectedRun(null)} />
       )}
     </div>
   );

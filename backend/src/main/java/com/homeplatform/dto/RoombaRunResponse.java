@@ -1,8 +1,10 @@
 package com.homeplatform.dto;
 
 /**
- * One historical mission. Timestamps are ISO-8601 strings. {@code missionId}
- * has no backing column on {@code roomba_runs} yet, so it is currently null.
+ * One historical mission. Timestamps are UTC ISO-8601 strings (with 'Z'). The
+ * enrichment fields (missionId/missionNumber/error/errorText/initiator/cycle)
+ * are populated for runs recorded after the run-detail work; older runs leave
+ * them null.
  */
 public record RoombaRunResponse(
         Long id,
@@ -11,5 +13,11 @@ public record RoombaRunResponse(
         Integer durationMinutes,
         Integer squareFeet,
         String status,
-        String missionId
+        String missionId,
+        Integer missionNumber,
+        Integer error,
+        String errorText,
+        String initiator,
+        String cycle,
+        String source
 ) {}
