@@ -6,6 +6,7 @@ import VirtualizedList from '../components/VirtualizedList';
 import RoombaMap, { type RoomSelection, type SplitLine } from '../components/RoombaMap';
 import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
+import RoomMergeModal from '../components/RoomMergeModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
@@ -171,9 +172,42 @@ export default memo(function Roomba() {
     pts: [number, number][];
   } | null>(null);
 
+  // Merge mode: multi-select rooms to combine into one.
+  const [mergeMode, setMergeMode] = useState(false);
+  const [mergeSelection, setMergeSelection] = useState<RoomSelection[]>([]);
+  const [pendingMerge, setPendingMerge] = useState<RoomSelection[] | null>(null);
+
   const exitSplitMode = () => {
     setSplitMode(false);
     setSplitDraft(null);
+  };
+
+  const exitMergeMode = () => {
+    setMergeMode(false);
+    setMergeSelection([]);
+  };
+
+  // Split and merge are mutually exclusive — entering one exits the other.
+  const enterSplitMode = () => {
+    exitMergeMode();
+    setSplitMode(true);
+  };
+  const enterMergeMode = () => {
+    exitSplitMode();
+    setMergeMode(true);
+  };
+
+  const toggleMergeRoom = (room: RoomSelection) =>
+    setMergeSelection((prev) =>
+      prev.some((r) => r.id === room.id)
+        ? prev.filter((r) => r.id !== room.id)
+        : [...prev, room],
+    );
+
+  const finishMerge = () => {
+    if (mergeSelection.length < 2) return;
+    setPendingMerge(mergeSelection);
+    exitMergeMode();
   };
 
   // Add a corner. The first corner must land inside a room (that sets the target);
@@ -413,21 +447,34 @@ export default memo(function Roomba() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
               Rooms, walls, and dock location as mapped by the robot. Built up over the first
               several cleaning runs.
-              {isAdmin && !splitMode && ' Tap a room to rename it or set its type.'}
+              {isAdmin && !splitMode && !mergeMode && ' Tap a room to rename it or set its type.'}
             </p>
           </div>
           {isAdmin && mapQuery.data && (
-            <button
-              type="button"
-              onClick={() => (splitMode ? exitSplitMode() : setSplitMode(true))}
-              className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
-                splitMode
-                  ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
-                  : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
-              }`}
-            >
-              {splitMode ? 'Cancel divide' : '✂ Divide a room'}
-            </button>
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                onClick={() => (splitMode ? exitSplitMode() : enterSplitMode())}
+                className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                  splitMode
+                    ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
+                    : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
+                }`}
+              >
+                {splitMode ? 'Cancel divide' : '✂ Divide a room'}
+              </button>
+              <button
+                type="button"
+                onClick={() => (mergeMode ? exitMergeMode() : enterMergeMode())}
+                className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                  mergeMode
+                    ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
+                    : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
+                }`}
+              >
+                {mergeMode ? 'Cancel merge' : '⛶ Merge rooms'}
+              </button>
+            </div>
           )}
         </div>
 
@@ -463,6 +510,37 @@ export default memo(function Roomba() {
           </div>
         )}
 
+        {isAdmin && mergeMode && (
+          <div className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-200">
+            <p>
+              <span className="font-semibold">Merge mode.</span> Tap two or more rooms to select
+              them, then combine them into one. This is an experimental, not-cleanly-reversible map
+              edit.
+            </p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <span className="font-medium">
+                {mergeSelection.length} room{mergeSelection.length === 1 ? '' : 's'} selected
+              </span>
+              <button
+                type="button"
+                disabled={mergeSelection.length < 2}
+                onClick={finishMerge}
+                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-100 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Merge selected
+              </button>
+              <button
+                type="button"
+                disabled={mergeSelection.length === 0}
+                onClick={() => setMergeSelection([])}
+                className="rounded-lg border border-amber-300/25 px-2.5 py-1 transition-colors hover:bg-amber-300/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
         <DeferredRender minHeight={320}>
           <RoombaMap
             map={mapQuery.data ?? null}
@@ -476,6 +554,9 @@ export default memo(function Roomba() {
             onSplitAddPoint={addSplitPoint}
             onSplitFinish={finishSplit}
             onSplitUndo={undoSplitPoint}
+            mergeMode={mergeMode}
+            mergeSelection={mergeSelection.map((r) => r.id)}
+            onToggleMergeRoom={toggleMergeRoom}
           />
         </DeferredRender>
       </section>
@@ -583,6 +664,11 @@ export default memo(function Roomba() {
       {/* Admin divide-a-room confirmation */}
       {isAdmin && pendingSplit && (
         <RoomSplitModal split={pendingSplit} onClose={() => setPendingSplit(null)} />
+      )}
+
+      {/* Admin merge-rooms confirmation */}
+      {isAdmin && pendingMerge && (
+        <RoomMergeModal rooms={pendingMerge} onClose={() => setPendingMerge(null)} />
       )}
     </div>
   );

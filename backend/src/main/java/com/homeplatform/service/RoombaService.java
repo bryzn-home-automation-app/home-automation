@@ -238,6 +238,46 @@ public class RoombaService {
         return Math.round(v * 1000.0) / 1000.0;
     }
 
+    /**
+     * Validate + enqueue a room merge (combine two or more rooms into one — the
+     * inverse of a divide). The poller turns this into a MergeRoomsV1 map edit.
+     * The {@code arg} carries JSON {room_ids:[...]}. EXPERIMENTAL / not cleanly
+     * reversible — the UI confirms first.
+     */
+    public RoombaCommandResponse enqueueMergeRooms(List<String> roomIds, String requestedBy) {
+        List<String> clean = roomIds == null ? List.of()
+                : roomIds.stream().filter(id -> id != null && !id.isBlank())
+                        .map(String::trim).distinct().toList();
+        if (clean.size() < 2) {
+            throw new IllegalArgumentException("Select at least two rooms to merge");
+        }
+        ArrayNode idArray = mapper.createArrayNode();
+        clean.forEach(idArray::add);
+        ObjectNode payload = mapper.createObjectNode();
+        payload.set("room_ids", idArray);
+        String arg;
+        try {
+            arg = mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Could not encode merge request");
+        }
+        if (arg.length() > 1024) {
+            throw new IllegalArgumentException("Too many rooms selected");
+        }
+
+        String robotId = statusRepo.findTopByOrderByUpdatedAtDesc()
+                .map(RoombaStatus::getRobotId).orElse(null);
+        RoombaCommand cmd = RoombaCommand.builder()
+                .robotId(robotId)
+                .command("merge_rooms")
+                .arg(arg)
+                .status("PENDING")
+                .requestedBy(requestedBy)
+                .createdAt(LocalDateTime.now())
+                .build();
+        return toCommandResponse(commandRepo.save(cmd));
+    }
+
     public List<RoombaCommandResponse> recentCommands() {
         return commandRepo.findTop20ByOrderByIdDesc().stream()
                 .map(this::toCommandResponse).toList();

@@ -268,6 +268,42 @@ class RoombaServiceTest {
     }
 
     @Nested
+    @DisplayName("enqueueMergeRooms")
+    class EnqueueMergeRooms {
+
+        @BeforeEach
+        void echoSave() {
+            when(commandRepo.save(any(RoombaCommand.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("encodes distinct room_ids as JSON arg")
+        void encodesIds() {
+            RoombaCommandResponse r = service.enqueueMergeRooms(List.of("12", "15"), "user:1");
+            assertEquals("merge_rooms", r.command());
+            assertTrue(r.arg().contains("\"room_ids\":[\"12\",\"15\"]"), r.arg());
+            assertEquals("PENDING", r.status());
+        }
+
+        @Test
+        @DisplayName("drops blanks/dupes and rejects fewer than two distinct ids")
+        void dedupeAndReject() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueMergeRooms(List.of("12", "12", "  "), null));
+        }
+
+        @Test
+        @DisplayName("rejects null / single-id lists")
+        void tooFew() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueMergeRooms(null, null));
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueMergeRooms(List.of("12"), null));
+        }
+    }
+
+    @Nested
     @DisplayName("getPosition")
     class GetPosition {
 

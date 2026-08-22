@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.RoombaCommandRequest;
 import com.homeplatform.dto.RoombaCommandResponse;
+import com.homeplatform.dto.RoombaMergeRoomsRequest;
 import com.homeplatform.dto.RoombaRenameRoomRequest;
 import com.homeplatform.dto.RoombaSplitRoomRequest;
 import com.homeplatform.service.RoombaService;
@@ -78,6 +79,23 @@ public class RoombaCommandController {
         try {
             RoombaCommandResponse resp = roombaService.enqueueSplitRoom(
                     body.roomId(), body.points(), userId == null ? null : "user:" + userId);
+            return ResponseEntity.ok(resp);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /**
+     * Combine two or more mapped rooms into one (the inverse of a divide). Queued for
+     * the poller. EXPERIMENTAL / not cleanly reversible — the UI confirms first.
+     */
+    @PostMapping("/rooms/merge")
+    public ResponseEntity<?> mergeRooms(@RequestBody RoombaMergeRoomsRequest body, HttpServletRequest request) {
+        requireAdmin(request);
+        Object userId = request.getAttribute("userId");
+        try {
+            RoombaCommandResponse resp = roombaService.enqueueMergeRooms(
+                    body.roomIds(), userId == null ? null : "user:" + userId);
             return ResponseEntity.ok(resp);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

@@ -99,3 +99,12 @@ export async function splitRoombaRoom(
   });
   return res.data;
 }
+
+/**
+ * Combine two or more mapped rooms into one (ADMIN only) — the inverse of a
+ * divide. EXPERIMENTAL / not cleanly reversible; the caller confirms first.
+ */
+export async function mergeRoombaRooms(roomIds: string[]): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/rooms/merge', { roomIds });
+  return res.data;
+}

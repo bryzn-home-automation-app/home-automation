@@ -630,6 +630,7 @@ CMD_TICK_SECONDS = 5
 SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
 RENAME_ROOM = "rename_room"
 SPLIT_ROOM = "split_room"
+MERGE_ROOMS = "merge_rooms"
 
 
 def _fetch_pending(conninfo, limit=5):
@@ -754,6 +755,34 @@ async def _split_room(robot, conninfo, arg, state):
     return await _apply_map_edit(robot, p2map_id, cmd, state)
 
 
+async def _merge_rooms(robot, conninfo, arg, state):
+    """Combine two or more mapped rooms into one (the inverse of a divide).
+
+    EXPERIMENTAL, same caveats as split. `arg` JSON: {room_ids: [...]}. No geometry
+    — MergeRoomsV1 just takes the ids under the (confusingly named) "arrange_room"
+    command.
+    """
+    from roombapy_prime.models.map_editing import MergeRoomsV1
+
+    try:
+        params = json.loads(arg or "{}")
+    except (ValueError, TypeError):
+        return False, "bad merge payload"
+    ids = params.get("room_ids")
+    if not isinstance(ids, list) or len(ids) < 2:
+        return False, "need at least two rooms to merge"
+    ids = [str(i) for i in ids if i is not None and str(i).strip()]
+    if len(ids) < 2:
+        return False, "need at least two rooms to merge"
+
+    p2map_id = await _active_p2map_id(robot)
+    if not p2map_id:
+        return False, "no active map"
+
+    cmd = MergeRoomsV1(ids=ids)
+    return await _apply_map_edit(robot, p2map_id, cmd, state)
+
+
 async def _apply_map_edit(robot, p2map_id, cmd, state):
     """Send a map-edit command and interpret the MapEditResult. On success (or
     partial) clears the map-version cache so the next poll re-fetches the bundle.
@@ -796,6 +825,9 @@ async def process_commands(robot, conninfo, state):
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             elif command == SPLIT_ROOM:
                 ok, detail = await _split_room(robot, conninfo, arg, state)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
+            elif command == MERGE_ROOMS:
+                ok, detail = await _merge_rooms(robot, conninfo, arg, state)
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")

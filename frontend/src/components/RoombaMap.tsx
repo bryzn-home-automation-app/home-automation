@@ -45,6 +45,13 @@ interface RoombaMapProps {
   onSplitAddPoint?: (point: [number, number], room: RoomSelection | null) => void;
   onSplitFinish?: () => void;
   onSplitUndo?: () => void;
+  /**
+   * "Merge rooms" mode: clicking a room toggles it in the selection (controlled by
+   * the parent via `mergeSelection`). Selected rooms are highlighted.
+   */
+  mergeMode?: boolean;
+  mergeSelection?: string[];
+  onToggleMergeRoom?: (room: RoomSelection) => void;
 }
 
 /** A drawable policy zone (keep-out / no-mop) polygon + its category. */
@@ -127,6 +134,9 @@ export default memo(function RoombaMap({
   onSplitAddPoint,
   onSplitFinish,
   onSplitUndo,
+  mergeMode,
+  mergeSelection,
+  onToggleMergeRoom,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
@@ -395,9 +405,13 @@ export default memo(function RoombaMap({
   } = model;
   const maxDim = Math.max(width, height);
   const isSplitting = !!splitMode && !!onSplitAddPoint;
+  const isMerging = !!mergeMode && !!onToggleMergeRoom;
   const draftPts = isSplitting ? splitDraft ?? [] : [];
-  // Rename clicks are disabled while dividing, so the two interactions never conflict.
-  const canEdit = !!editable && !!onSelectRoom && !isSplitting;
+  const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
+  // Rename clicks are disabled while dividing/merging, so the interactions never conflict.
+  const canEdit = !!editable && !!onSelectRoom && !isSplitting && !isMerging;
+  // The room hit layer is active for rename OR merge selection.
+  const interactive = canEdit || isMerging;
 
   // Convert a mouse event to viewBox (SVG user-space) coordinates via the CTM.
   const eventToViewBox = (e: { clientX: number; clientY: number }): [number, number] | null => {
@@ -490,24 +504,23 @@ export default memo(function RoombaMap({
         ))}
 
         {/* Rooms — accent-tinted regions (decorative; interaction layer is below) */}
-        {rooms.map((room, ri) =>
-          room.rings.map((pts, i) => (
+        {rooms.map((room, ri) => {
+          const mergeSelected = !!(mergeSet && room.id && mergeSet.has(room.id));
+          const hoverHi = canEdit && hoveredRoom != null && hoveredRoom === room.id;
+          const highlighted = mergeSelected || hoverHi;
+          return room.rings.map((pts, i) => (
             <polygon
               key={`room-${ri}-${i}`}
               points={pts}
-              fill={
-                canEdit && hoveredRoom && hoveredRoom === room.id
-                  ? 'var(--appaccent)'
-                  : 'var(--appaccent-soft)'
-              }
-              fillOpacity={canEdit && hoveredRoom === room.id ? 0.28 : 1}
-              stroke="var(--appaccent-border)"
-              strokeWidth={maxDim * 0.003}
+              fill={highlighted ? 'var(--appaccent)' : 'var(--appaccent-soft)'}
+              fillOpacity={mergeSelected ? 0.34 : hoverHi ? 0.28 : 1}
+              stroke={mergeSelected ? 'var(--appaccent)' : 'var(--appaccent-border)'}
+              strokeWidth={maxDim * (mergeSelected ? 0.005 : 0.003)}
               strokeLinejoin="round"
               style={{ pointerEvents: 'none' }}
             />
-          )),
-        )}
+          ));
+        })}
 
         {/* Keep-out / no-mop zones — hatched, distinct per category */}
         {zonePolys.map((z, i) => {
@@ -597,54 +610,78 @@ export default memo(function RoombaMap({
           );
         })}
 
-        {/* Interaction layer — clickable room hit areas (admin edit mode only).
-            Rendered on top so clicks land regardless of other layers' z-order. */}
-        {canEdit &&
+        {/* Interaction layer — clickable room hit areas. Active for rename (edit
+            mode) OR merge selection. On top so clicks land regardless of z-order. */}
+        {interactive &&
           rooms
             .filter((room) => room.id)
-            .map((room, ri) => (
-              <g
-                key={`roomhit-${ri}`}
-                role="button"
-                tabIndex={0}
-                aria-label={`Rename ${room.name ?? 'unnamed room'}`}
-                style={{ cursor: 'pointer' }}
-                onClick={() => onSelectRoom?.({ id: room.id as string, name: room.name })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectRoom?.({ id: room.id as string, name: room.name });
+            .map((room, ri) => {
+              const sel: RoomSelection = { id: room.id as string, name: room.name };
+              const act = () =>
+                isMerging ? onToggleMergeRoom?.(sel) : onSelectRoom?.(sel);
+              const mergeSelected = !!(mergeSet && mergeSet.has(room.id as string));
+              return (
+                <g
+                  key={`roomhit-${ri}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={
+                    isMerging
+                      ? `${mergeSelected ? 'Deselect' : 'Select'} ${room.name ?? 'unnamed room'} to merge`
+                      : `Rename ${room.name ?? 'unnamed room'}`
                   }
-                }}
-                onMouseEnter={() => setHoveredRoom(room.id)}
-                onMouseLeave={() => setHoveredRoom((h) => (h === room.id ? null : h))}
-              >
-                {room.rings.map((pts, i) => (
-                  <polygon
-                    key={`hit-${ri}-${i}`}
-                    points={pts}
-                    fill="transparent"
-                    stroke={hoveredRoom === room.id ? 'var(--appaccent)' : 'transparent'}
-                    strokeWidth={maxDim * 0.005}
-                    strokeLinejoin="round"
-                  />
-                ))}
-                {/* Pencil affordance for already-named rooms */}
-                {room.name && (
-                  <text
-                    x={room.cx}
-                    y={room.cy + maxDim * 0.03}
-                    fill="var(--apptext-muted)"
-                    fontSize={maxDim * 0.02}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    style={{ pointerEvents: 'none' }}
-                  >
-                    ✏️
-                  </text>
-                )}
-              </g>
-            ))}
+                  style={{ cursor: 'pointer' }}
+                  onClick={act}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      act();
+                    }
+                  }}
+                  onMouseEnter={() => setHoveredRoom(room.id)}
+                  onMouseLeave={() => setHoveredRoom((h) => (h === room.id ? null : h))}
+                >
+                  {room.rings.map((pts, i) => (
+                    <polygon
+                      key={`hit-${ri}-${i}`}
+                      points={pts}
+                      fill="transparent"
+                      stroke={hoveredRoom === room.id ? 'var(--appaccent)' : 'transparent'}
+                      strokeWidth={maxDim * 0.005}
+                      strokeLinejoin="round"
+                    />
+                  ))}
+                  {/* Affordance glyph: pencil for rename, check for a selected merge room */}
+                  {isMerging
+                    ? mergeSelected && (
+                        <text
+                          x={room.cx}
+                          y={room.cy + maxDim * 0.03}
+                          fill="var(--appaccent-text)"
+                          fontSize={maxDim * 0.024}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          ✓
+                        </text>
+                      )
+                    : room.name && (
+                        <text
+                          x={room.cx}
+                          y={room.cy + maxDim * 0.03}
+                          fill="var(--apptext-muted)"
+                          fontSize={maxDim * 0.02}
+                          textAnchor="middle"
+                          dominantBaseline="middle"
+                          style={{ pointerEvents: 'none' }}
+                        >
+                          ✏️
+                        </text>
+                      )}
+                </g>
+              );
+            })}
 
         {/* Live robot dot + heading — same project() space, hidden when stale */}
         {robot && (
