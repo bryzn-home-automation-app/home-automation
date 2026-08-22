@@ -164,6 +164,47 @@ export default memo(function Roomba() {
   const [selectedRoom, setSelectedRoom] = useState<RoomSelection | null>(null);
   const [splitMode, setSplitMode] = useState(false);
   const [pendingSplit, setPendingSplit] = useState<SplitLine | null>(null);
+  // In-progress divide polyline (parent-owned): the room + its corners in meters.
+  const [splitDraft, setSplitDraft] = useState<{
+    roomId: string;
+    roomName: string | null;
+    pts: [number, number][];
+  } | null>(null);
+
+  const exitSplitMode = () => {
+    setSplitMode(false);
+    setSplitDraft(null);
+  };
+
+  // Add a corner. The first corner must land inside a room (that sets the target);
+  // later corners just extend the path.
+  const addSplitPoint = (point: [number, number], room: RoomSelection | null) => {
+    setSplitDraft((prev) => {
+      if (!prev) {
+        if (!room) return prev; // ignore clicks outside any room until one is picked
+        return { roomId: room.id, roomName: room.name, pts: [point] };
+      }
+      return { ...prev, pts: [...prev.pts, point] };
+    });
+  };
+
+  const undoSplitPoint = () =>
+    setSplitDraft((prev) => {
+      if (!prev) return prev;
+      if (prev.pts.length <= 1) return null; // removing the first corner clears the room too
+      return { ...prev, pts: prev.pts.slice(0, -1) };
+    });
+
+  const finishSplit = () => {
+    if (!splitDraft || splitDraft.pts.length < 2) return;
+    setPendingSplit({
+      roomId: splitDraft.roomId,
+      roomName: splitDraft.roomName,
+      points: splitDraft.pts,
+    });
+    setSplitMode(false);
+    setSplitDraft(null);
+  };
 
   const deviceLine = device
     ? [device.family || device.sku, device.series && `Series ${device.series}`,
@@ -378,7 +419,7 @@ export default memo(function Roomba() {
           {isAdmin && mapQuery.data && (
             <button
               type="button"
-              onClick={() => setSplitMode((v) => !v)}
+              onClick={() => (splitMode ? exitSplitMode() : setSplitMode(true))}
               className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
                 splitMode
                   ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
@@ -392,9 +433,33 @@ export default memo(function Roomba() {
 
         {isAdmin && splitMode && (
           <div className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-200">
-            <span className="font-semibold">Divide mode.</span> Click two points across a room to
-            draw a dividing line — the first click picks the room. This is an experimental,
-            not-cleanly-reversible map edit.
+            <p>
+              <span className="font-semibold">Divide mode.</span> Click across a room to drop
+              corners — the first click picks the room, and you can add as many bends as you like.
+              Double-click or press <kbd>Enter</kbd> to finish; <kbd>Backspace</kbd> removes the last
+              corner. This is an experimental, not-cleanly-reversible map edit.
+            </p>
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <span className="font-medium">
+                {splitDraft ? `${splitDraft.pts.length} corner${splitDraft.pts.length === 1 ? '' : 's'} placed` : 'No corners yet'}
+              </span>
+              <button
+                type="button"
+                disabled={!splitDraft || splitDraft.pts.length < 2}
+                onClick={finishSplit}
+                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-100 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Finish line
+              </button>
+              <button
+                type="button"
+                disabled={!splitDraft}
+                onClick={undoSplitPoint}
+                className="rounded-lg border border-amber-300/25 px-2.5 py-1 transition-colors hover:bg-amber-300/10 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Undo corner
+              </button>
+            </div>
           </div>
         )}
 
@@ -406,10 +471,11 @@ export default memo(function Roomba() {
             editable={isAdmin}
             onSelectRoom={setSelectedRoom}
             splitMode={splitMode}
-            onSplitReady={(line) => {
-              setPendingSplit(line);
-              setSplitMode(false);
-            }}
+            splitDraft={splitDraft?.pts ?? null}
+            splitRoomId={splitDraft?.roomId ?? null}
+            onSplitAddPoint={addSplitPoint}
+            onSplitFinish={finishSplit}
+            onSplitUndo={undoSplitPoint}
           />
         </DeferredRender>
       </section>

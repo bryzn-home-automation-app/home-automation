@@ -29,10 +29,22 @@ interface RoombaMapProps {
   /** When true, rooms are clickable (admin) — clicking one fires onSelectRoom. */
   editable?: boolean;
   onSelectRoom?: (room: RoomSelection) => void;
-  /** When true, the map is in "divide a room" mode: click two points to draw a line. */
+  /**
+   * "Divide a room" mode. The divide path is a CONTROLLED polyline owned by the
+   * parent: each click adds a corner (`onSplitAddPoint`), and the parent renders
+   * the accumulated `splitDraft` (meter points) back onto the map. Finish with a
+   * button / double-click / Enter (`onSplitFinish`); undo the last corner with
+   * Backspace (`onSplitUndo`).
+   */
   splitMode?: boolean;
-  /** Fired once two points are placed (in the same room) — the meter-space divide line. */
-  onSplitReady?: (line: SplitLine) => void;
+  /** Meter-space corners placed so far (for rendering the in-progress divide line). */
+  splitDraft?: [number, number][] | null;
+  /** The room the divide belongs to (its first corner) — highlighted while drawing. */
+  splitRoomId?: string | null;
+  /** Add a corner: the point in meters + the room it landed in (null outside any room). */
+  onSplitAddPoint?: (point: [number, number], room: RoomSelection | null) => void;
+  onSplitFinish?: () => void;
+  onSplitUndo?: () => void;
 }
 
 /** A drawable policy zone (keep-out / no-mop) polygon + its category. */
@@ -110,23 +122,41 @@ export default memo(function RoombaMap({
   editable,
   onSelectRoom,
   splitMode,
-  onSplitReady,
+  splitDraft,
+  splitRoomId,
+  onSplitAddPoint,
+  onSplitFinish,
+  onSplitUndo,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
-  // Split ("divide a room") interaction: first placed point (SVG space) + its
-  // room, and the live cursor for the rubber-band preview line.
-  const [splitA, setSplitA] = useState<{ vx: number; vy: number; roomId: string } | null>(null);
+  // Split ("divide a room") interaction: only the live cursor is local state —
+  // the placed corners live in the parent (controlled via splitDraft).
   const [cursor, setCursor] = useState<{ vx: number; vy: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  // Reset the in-progress divide whenever split mode toggles off.
+  // Clear the rubber-band cursor whenever split mode toggles off.
   useEffect(() => {
-    if (!splitMode) {
-      setSplitA(null);
-      setCursor(null);
-    }
+    if (!splitMode) setCursor(null);
   }, [splitMode]);
+
+  // Keyboard shortcuts while dividing: Enter finishes (≥2 corners), Backspace
+  // removes the last corner.
+  useEffect(() => {
+    if (!splitMode) return;
+    const onKey = (e: KeyboardEvent) => {
+      const n = splitDraft?.length ?? 0;
+      if (e.key === 'Enter' && n >= 2) {
+        e.preventDefault();
+        onSplitFinish?.();
+      } else if (e.key === 'Backspace' && n > 0) {
+        e.preventDefault();
+        onSplitUndo?.();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [splitMode, splitDraft, onSplitFinish, onSplitUndo]);
 
   const model = useMemo(() => {
     if (!geo) return null;
@@ -364,7 +394,8 @@ export default memo(function RoombaMap({
     dockR,
   } = model;
   const maxDim = Math.max(width, height);
-  const isSplitting = !!splitMode && !!onSplitReady;
+  const isSplitting = !!splitMode && !!onSplitAddPoint;
+  const draftPts = isSplitting ? splitDraft ?? [] : [];
   // Rename clicks are disabled while dividing, so the two interactions never conflict.
   const canEdit = !!editable && !!onSelectRoom && !isSplitting;
 
@@ -390,27 +421,23 @@ export default memo(function RoombaMap({
 
   const handleSplitClick = (e: ReactMouseEvent<SVGSVGElement>) => {
     if (!isSplitting) return;
+    // The 2nd click of a double-click also fires onClick (detail === 2); ignore it
+    // so a double-click places one final corner (detail 1) and then finishes.
+    if (e.detail > 1) return;
     const vb = eventToViewBox(e);
     if (!vb) return;
     const [vx, vy] = vb;
-    if (!splitA) {
-      const room = roomAt(vx, vy);
-      if (!room || !room.id) return; // must start inside a room
-      setSplitA({ vx, vy, roomId: room.id });
-      setCursor({ vx, vy });
-      return;
-    }
-    // Second point → emit the divide line (meters) for the room of the first point.
-    const a = unproject([splitA.vx, splitA.vy]);
-    const b = unproject([vx, vy]);
-    const roomName = rooms.find((r) => r.id === splitA.roomId)?.name ?? null;
-    onSplitReady?.({ roomId: splitA.roomId, roomName, points: [a, b] });
-    setSplitA(null);
-    setCursor(null);
+    const room = roomAt(vx, vy);
+    onSplitAddPoint?.(unproject([vx, vy]), room ? { id: room.id as string, name: room.name } : null);
+    setCursor({ vx, vy });
+  };
+
+  const handleSplitDblClick = () => {
+    if (isSplitting && draftPts.length >= 2) onSplitFinish?.();
   };
 
   const handleSplitMove = (e: ReactMouseEvent<SVGSVGElement>) => {
-    if (!isSplitting || !splitA) return;
+    if (!isSplitting || draftPts.length === 0) return;
     const vb = eventToViewBox(e);
     if (vb) setCursor({ vx: vb[0], vy: vb[1] });
   };
@@ -447,6 +474,7 @@ export default memo(function RoombaMap({
         preserveAspectRatio="xMidYMid meet"
         style={isSplitting ? { cursor: 'crosshair' } : undefined}
         onClick={isSplitting ? handleSplitClick : undefined}
+        onDoubleClick={isSplitting ? handleSplitDblClick : undefined}
         onMouseMove={isSplitting ? handleSplitMove : undefined}
       >
         {/* Floor plan — the outer walkable surface */}
@@ -647,46 +675,70 @@ export default memo(function RoombaMap({
           </g>
         )}
 
-        {/* Divide-a-room preview — the room being split + the rubber-band line */}
-        {isSplitting && splitA && (
-          <g style={{ pointerEvents: 'none' }}>
-            {rooms
-              .filter((room) => room.id === splitA.roomId)
-              .flatMap((room, ri) =>
-                room.rings.map((pts, i) => (
-                  <polygon
-                    key={`split-room-${ri}-${i}`}
-                    points={pts}
-                    fill="var(--appaccent)"
-                    fillOpacity={0.16}
-                    stroke="var(--appaccent)"
-                    strokeWidth={maxDim * 0.004}
-                    strokeLinejoin="round"
-                  />
-                )),
+        {/* Divide-a-room preview — the room being split + the multi-corner path */}
+        {isSplitting && draftPts.length > 0 && (() => {
+          // Project the placed corners (meters) back to SVG for drawing.
+          const proj = draftPts.map((p) => project(p));
+          const polyPts = proj.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+          const last = proj[proj.length - 1];
+          return (
+            <g style={{ pointerEvents: 'none' }}>
+              {/* Highlight the room being divided */}
+              {rooms
+                .filter((room) => room.id === splitRoomId)
+                .flatMap((room, ri) =>
+                  room.rings.map((pts, i) => (
+                    <polygon
+                      key={`split-room-${ri}-${i}`}
+                      points={pts}
+                      fill="var(--appaccent)"
+                      fillOpacity={0.16}
+                      stroke="var(--appaccent)"
+                      strokeWidth={maxDim * 0.004}
+                      strokeLinejoin="round"
+                    />
+                  )),
+                )}
+              {/* The placed segments */}
+              {proj.length >= 2 && (
+                <polyline
+                  points={polyPts}
+                  fill="none"
+                  stroke="var(--appdanger)"
+                  strokeWidth={maxDim * 0.006}
+                  strokeLinejoin="round"
+                  strokeLinecap="round"
+                />
               )}
-            {cursor && (
-              <line
-                x1={splitA.vx}
-                y1={splitA.vy}
-                x2={cursor.vx}
-                y2={cursor.vy}
-                stroke="var(--appdanger)"
-                strokeWidth={maxDim * 0.006}
-                strokeDasharray={`${maxDim * 0.014} ${maxDim * 0.009}`}
-                strokeLinecap="round"
-              />
-            )}
-            <circle
-              cx={splitA.vx}
-              cy={splitA.vy}
-              r={maxDim * 0.012}
-              fill="var(--appdanger)"
-              stroke="var(--appsurface-raised)"
-              strokeWidth={maxDim * 0.004}
-            />
-          </g>
-        )}
+              {/* Rubber-band from the last corner to the cursor */}
+              {cursor && (
+                <line
+                  x1={last[0]}
+                  y1={last[1]}
+                  x2={cursor.vx}
+                  y2={cursor.vy}
+                  stroke="var(--appdanger)"
+                  strokeOpacity={0.6}
+                  strokeWidth={maxDim * 0.006}
+                  strokeDasharray={`${maxDim * 0.014} ${maxDim * 0.009}`}
+                  strokeLinecap="round"
+                />
+              )}
+              {/* Corner handles */}
+              {proj.map(([x, y], i) => (
+                <circle
+                  key={`corner-${i}`}
+                  cx={x}
+                  cy={y}
+                  r={maxDim * (i === 0 ? 0.013 : 0.01)}
+                  fill="var(--appdanger)"
+                  stroke="var(--appsurface-raised)"
+                  strokeWidth={maxDim * 0.004}
+                />
+              ))}
+            </g>
+          );
+        })()}
       </svg>
     </div>
   );

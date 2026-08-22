@@ -216,7 +216,7 @@ public class RoombaService {
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Could not encode split request");
         }
-        if (arg.length() > 255) {
+        if (arg.length() > 1024) {
             throw new IllegalArgumentException("Too many points for the divide line");
         }
 

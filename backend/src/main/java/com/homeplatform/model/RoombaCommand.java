@@ -29,9 +29,10 @@ public class RoombaCommand {
     @Column(nullable = false, length = 40)
     private String command;
 
-    // Scalar for simple/favorite commands; a small JSON blob for rename_room
-    // ({room_id,name?,type?}) — hence roomier than a bare id.
-    @Column(length = 255)
+    // Scalar for simple/favorite commands; a JSON blob for rename_room
+    // ({room_id,name?,type?}) and split_room ({room_id,points:[[x,y],...]}) —
+    // roomy enough for a multi-corner divide polyline.
+    @Column(length = 1024)
     private String arg;
 
     @Column(nullable = false, length = 20)
