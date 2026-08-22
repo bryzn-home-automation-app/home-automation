@@ -108,3 +108,20 @@ export async function mergeRoombaRooms(roomIds: string[]): Promise<RoombaCommand
   const res = await api.post<RoombaCommand>('/admin/roomba/rooms/merge', { roomIds });
   return res.data;
 }
+
+/**
+ * Clean one specific room (ADMIN only), with optional suction level
+ * (low|medium|high|turbo) and passes (one|two). Confirmed working on the Combo 105.
+ */
+export async function cleanRoombaRoom(
+  roomId: string,
+  suction?: string,
+  passes?: string,
+): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/rooms/clean', {
+    roomId,
+    suction,
+    passes,
+  });
+  return res.data;
+}

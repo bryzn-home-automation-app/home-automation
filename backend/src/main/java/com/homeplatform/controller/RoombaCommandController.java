@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.RoombaCommandRequest;
 import com.homeplatform.dto.RoombaCommandResponse;
+import com.homeplatform.dto.RoombaCleanRoomRequest;
 import com.homeplatform.dto.RoombaMergeRoomsRequest;
 import com.homeplatform.dto.RoombaRenameRoomRequest;
 import com.homeplatform.dto.RoombaSplitRoomRequest;
@@ -96,6 +97,21 @@ public class RoombaCommandController {
         try {
             RoombaCommandResponse resp = roombaService.enqueueMergeRooms(
                     body.roomIds(), userId == null ? null : "user:" + userId);
+            return ResponseEntity.ok(resp);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Clean one specific room, with optional suction/passes config. Queued for the poller. */
+    @PostMapping("/rooms/clean")
+    public ResponseEntity<?> cleanRoom(@RequestBody RoombaCleanRoomRequest body, HttpServletRequest request) {
+        requireAdmin(request);
+        Object userId = request.getAttribute("userId");
+        try {
+            RoombaCommandResponse resp = roombaService.enqueueCleanRoom(
+                    body.roomId(), body.suction(), body.passes(),
+                    userId == null ? null : "user:" + userId);
             return ResponseEntity.ok(resp);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

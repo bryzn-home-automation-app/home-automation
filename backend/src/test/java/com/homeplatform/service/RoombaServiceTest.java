@@ -304,6 +304,49 @@ class RoombaServiceTest {
     }
 
     @Nested
+    @DisplayName("enqueueCleanRoom")
+    class EnqueueCleanRoom {
+
+        @BeforeEach
+        void echoSave() {
+            when(commandRepo.save(any(RoombaCommand.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("room-only clean encodes just the room_id")
+        void roomOnly() {
+            RoombaCommandResponse r = service.enqueueCleanRoom("12", null, null, "user:1");
+            assertEquals("clean_room", r.command());
+            assertEquals("{\"room_id\":\"12\"}", r.arg());
+        }
+
+        @Test
+        @DisplayName("maps suction level name to its int and includes passes")
+        void suctionAndPasses() {
+            RoombaCommandResponse r = service.enqueueCleanRoom("12", "High", "two", null);
+            assertTrue(r.arg().contains("\"suction\":3"), r.arg());
+            assertTrue(r.arg().contains("\"passes\":\"two\""), r.arg());
+        }
+
+        @Test
+        @DisplayName("rejects a blank roomId")
+        void blankRoom() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueCleanRoom("  ", null, null, null));
+        }
+
+        @Test
+        @DisplayName("rejects an unknown suction level or passes value")
+        void badConfig() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueCleanRoom("12", "ludicrous", null, null));
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueCleanRoom("12", null, "three", null));
+        }
+    }
+
+    @Nested
     @DisplayName("getPosition")
     class GetPosition {
 

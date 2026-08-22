@@ -52,6 +52,9 @@ interface RoombaMapProps {
   mergeMode?: boolean;
   mergeSelection?: string[];
   onToggleMergeRoom?: (room: RoomSelection) => void;
+  /** "Clean a room" mode: clicking a room opens its clean-config dialog. */
+  cleanMode?: boolean;
+  onSelectCleanRoom?: (room: RoomSelection) => void;
 }
 
 /** A drawable policy zone (keep-out / no-mop) polygon + its category. */
@@ -137,6 +140,8 @@ export default memo(function RoombaMap({
   mergeMode,
   mergeSelection,
   onToggleMergeRoom,
+  cleanMode,
+  onSelectCleanRoom,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
@@ -406,12 +411,13 @@ export default memo(function RoombaMap({
   const maxDim = Math.max(width, height);
   const isSplitting = !!splitMode && !!onSplitAddPoint;
   const isMerging = !!mergeMode && !!onToggleMergeRoom;
+  const isCleaning = !!cleanMode && !!onSelectCleanRoom;
   const draftPts = isSplitting ? splitDraft ?? [] : [];
   const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
-  // Rename clicks are disabled while dividing/merging, so the interactions never conflict.
-  const canEdit = !!editable && !!onSelectRoom && !isSplitting && !isMerging;
-  // The room hit layer is active for rename OR merge selection.
-  const interactive = canEdit || isMerging;
+  // Rename clicks are disabled in the other modes, so the interactions never conflict.
+  const canEdit = !!editable && !!onSelectRoom && !isSplitting && !isMerging && !isCleaning;
+  // The room hit layer is active for rename, merge selection, or clean selection.
+  const interactive = canEdit || isMerging || isCleaning;
 
   // Convert a mouse event to viewBox (SVG user-space) coordinates via the CTM.
   const eventToViewBox = (e: { clientX: number; clientY: number }): [number, number] | null => {
@@ -618,8 +624,13 @@ export default memo(function RoombaMap({
             .map((room, ri) => {
               const sel: RoomSelection = { id: room.id as string, name: room.name };
               const act = () =>
-                isMerging ? onToggleMergeRoom?.(sel) : onSelectRoom?.(sel);
+                isMerging
+                  ? onToggleMergeRoom?.(sel)
+                  : isCleaning
+                    ? onSelectCleanRoom?.(sel)
+                    : onSelectRoom?.(sel);
               const mergeSelected = !!(mergeSet && mergeSet.has(room.id as string));
+              const roomLabel = room.name ?? 'unnamed room';
               return (
                 <g
                   key={`roomhit-${ri}`}
@@ -627,8 +638,10 @@ export default memo(function RoombaMap({
                   tabIndex={0}
                   aria-label={
                     isMerging
-                      ? `${mergeSelected ? 'Deselect' : 'Select'} ${room.name ?? 'unnamed room'} to merge`
-                      : `Rename ${room.name ?? 'unnamed room'}`
+                      ? `${mergeSelected ? 'Deselect' : 'Select'} ${roomLabel} to merge`
+                      : isCleaning
+                        ? `Clean ${roomLabel}`
+                        : `Rename ${roomLabel}`
                   }
                   style={{ cursor: 'pointer' }}
                   onClick={act}
@@ -651,34 +664,35 @@ export default memo(function RoombaMap({
                       strokeLinejoin="round"
                     />
                   ))}
-                  {/* Affordance glyph: pencil for rename, check for a selected merge room */}
-                  {isMerging
-                    ? mergeSelected && (
-                        <text
-                          x={room.cx}
-                          y={room.cy + maxDim * 0.03}
-                          fill="var(--appaccent-text)"
-                          fontSize={maxDim * 0.024}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          style={{ pointerEvents: 'none' }}
-                        >
-                          ✓
-                        </text>
-                      )
-                    : room.name && (
-                        <text
-                          x={room.cx}
-                          y={room.cy + maxDim * 0.03}
-                          fill="var(--apptext-muted)"
-                          fontSize={maxDim * 0.02}
-                          textAnchor="middle"
-                          dominantBaseline="middle"
-                          style={{ pointerEvents: 'none' }}
-                        >
-                          ✏️
-                        </text>
-                      )}
+                  {/* Affordance glyph: ✓ for a selected merge room, 🧹 in clean mode,
+                      ✏️ for a named room in rename mode */}
+                  {isMerging ? (
+                    mergeSelected && (
+                      <text
+                        x={room.cx}
+                        y={room.cy + maxDim * 0.03}
+                        fill="var(--appaccent-text)"
+                        fontSize={maxDim * 0.024}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        ✓
+                      </text>
+                    )
+                  ) : (isCleaning || room.name) && (
+                    <text
+                      x={room.cx}
+                      y={room.cy + maxDim * 0.03}
+                      fill="var(--apptext-muted)"
+                      fontSize={maxDim * 0.02}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      style={{ pointerEvents: 'none' }}
+                    >
+                      {isCleaning ? '🧹' : '✏️'}
+                    </text>
+                  )}
                 </g>
               );
             })}

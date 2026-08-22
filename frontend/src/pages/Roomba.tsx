@@ -7,6 +7,7 @@ import RoombaMap, { type RoomSelection, type SplitLine } from '../components/Roo
 import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
 import RoomMergeModal from '../components/RoomMergeModal';
+import RoomCleanModal from '../components/RoomCleanModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
@@ -177,6 +178,10 @@ export default memo(function Roomba() {
   const [mergeSelection, setMergeSelection] = useState<RoomSelection[]>([]);
   const [pendingMerge, setPendingMerge] = useState<RoomSelection[] | null>(null);
 
+  // Clean mode: tap a room to open its clean-config dialog.
+  const [cleanMode, setCleanMode] = useState(false);
+  const [cleanRoom, setCleanRoom] = useState<RoomSelection | null>(null);
+
   const exitSplitMode = () => {
     setSplitMode(false);
     setSplitDraft(null);
@@ -187,14 +192,23 @@ export default memo(function Roomba() {
     setMergeSelection([]);
   };
 
-  // Split and merge are mutually exclusive — entering one exits the other.
+  const exitCleanMode = () => setCleanMode(false);
+
+  // The three room-edit modes are mutually exclusive — entering one exits the others.
   const enterSplitMode = () => {
     exitMergeMode();
+    exitCleanMode();
     setSplitMode(true);
   };
   const enterMergeMode = () => {
     exitSplitMode();
+    exitCleanMode();
     setMergeMode(true);
+  };
+  const enterCleanMode = () => {
+    exitSplitMode();
+    exitMergeMode();
+    setCleanMode(true);
   };
 
   const toggleMergeRoom = (room: RoomSelection) =>
@@ -447,11 +461,23 @@ export default memo(function Roomba() {
             <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
               Rooms, walls, and dock location as mapped by the robot. Built up over the first
               several cleaning runs.
-              {isAdmin && !splitMode && !mergeMode && ' Tap a room to rename it or set its type.'}
+              {isAdmin && !splitMode && !mergeMode && !cleanMode &&
+                ' Tap a room to rename it or set its type.'}
             </p>
           </div>
           {isAdmin && mapQuery.data && (
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => (cleanMode ? exitCleanMode() : enterCleanMode())}
+                className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                  cleanMode
+                    ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
+                    : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
+                }`}
+              >
+                {cleanMode ? 'Cancel clean' : '🧹 Clean a room'}
+              </button>
               <button
                 type="button"
                 onClick={() => (splitMode ? exitSplitMode() : enterSplitMode())}
@@ -477,6 +503,13 @@ export default memo(function Roomba() {
             </div>
           )}
         </div>
+
+        {isAdmin && cleanMode && (
+          <div className="mb-4 rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3 text-xs leading-5 text-appaccent-text">
+            <span className="font-semibold">Clean mode.</span> Tap a room to send the robot to
+            clean just that room — you can pick suction and passes before it starts.
+          </div>
+        )}
 
         {isAdmin && splitMode && (
           <div className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-200">
@@ -557,6 +590,11 @@ export default memo(function Roomba() {
             mergeMode={mergeMode}
             mergeSelection={mergeSelection.map((r) => r.id)}
             onToggleMergeRoom={toggleMergeRoom}
+            cleanMode={cleanMode}
+            onSelectCleanRoom={(room) => {
+              setCleanRoom(room);
+              exitCleanMode();
+            }}
           />
         </DeferredRender>
       </section>
@@ -669,6 +707,11 @@ export default memo(function Roomba() {
       {/* Admin merge-rooms confirmation */}
       {isAdmin && pendingMerge && (
         <RoomMergeModal rooms={pendingMerge} onClose={() => setPendingMerge(null)} />
+      )}
+
+      {/* Admin clean-a-room config */}
+      {isAdmin && cleanRoom && (
+        <RoomCleanModal room={cleanRoom} onClose={() => setCleanRoom(null)} />
       )}
     </div>
   );

@@ -636,6 +636,7 @@ SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
 RENAME_ROOM = "rename_room"
 SPLIT_ROOM = "split_room"
 MERGE_ROOMS = "merge_rooms"
+CLEAN_ROOM = "clean_room"
 
 
 def _fetch_pending(conninfo, limit=5):
@@ -807,6 +808,67 @@ async def _apply_map_edit(robot, p2map_id, cmd, state):
     return True, "applied; map updating shortly" if result.is_partial else "applied"
 
 
+async def _clean_room(robot, conninfo, arg):
+    """Clean ONE specific room (region clean). CONFIRMED working on a Combo 105.
+
+    `arg` JSON: {room_id, suction?: 1-4, passes?: "one"|"two"}.
+
+    SAFETY — this exact shape is load-bearing (see the library's
+    send_routine_command_via_cmd_topic docstring): it MUST use command_type=START
+    (never CLEAN) and a real map_id (never None) with a RID region + an initiator,
+    or the robot cleans the WHOLE HOUSE instead of the requested room. Those are
+    hardcoded here; only room_id + optional suction/passes come from the caller.
+    """
+    from roombapy_prime.models.mission_control import (
+        CommandParams,
+        MissionCommandType,
+        Region,
+        RegionType,
+        RoutineCommand,
+    )
+
+    try:
+        params = json.loads(arg or "{}")
+    except (ValueError, TypeError):
+        return False, "bad clean payload"
+    room_id = params.get("room_id")
+    if not room_id:
+        return False, "missing room_id"
+
+    p2map_id = await _active_p2map_id(robot)
+    if not p2map_id:
+        # Required: a null map_id turns a room clean into a whole-house clean.
+        return False, "no active map"
+
+    cp_kwargs = {}
+    suction = params.get("suction")
+    if suction is not None:
+        try:
+            lvl = int(suction)
+            if 1 <= lvl <= 4:
+                cp_kwargs["suction_level"] = lvl
+        except (ValueError, TypeError):
+            pass
+    passes = params.get("passes")
+    if passes == "two":
+        cp_kwargs["two_pass"] = True
+    elif passes == "one":
+        cp_kwargs["two_pass"] = False
+        cp_kwargs["no_auto_passes"] = True
+    cparams = CommandParams(**cp_kwargs) if cp_kwargs else None
+
+    region = Region(region_id=str(room_id), region_type=RegionType.RID, params=cparams)
+    cmd = RoutineCommand(
+        command_type=MissionCommandType.START,  # NOT CLEAN
+        asset_id=robot.blid,
+        map_id=p2map_id,                          # NOT None
+        regions=[region],
+        initiator="rmtApp",                       # mandatory (presence, not value)
+    )
+    ok = await robot.send_routine_command_via_cmd_topic(cmd)
+    return (True, "clean started") if ok else (False, "broker rejected")
+
+
 async def process_commands(robot, conninfo, state):
     """Execute PENDING control commands through the shared robot connection. 'OK' means
     the broker accepted it — NOT that the robot necessarily acted (phantom-mission case)."""
@@ -836,6 +898,9 @@ async def process_commands(robot, conninfo, state):
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             elif command == MERGE_ROOMS:
                 ok, detail = await _merge_rooms(robot, conninfo, arg, state)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
+            elif command == CLEAN_ROOM:
+                ok, detail = await _clean_room(robot, conninfo, arg)
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")
