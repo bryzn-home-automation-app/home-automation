@@ -22,9 +22,12 @@ Credentials + config come from env only (never a file):
 """
 import asyncio
 import contextlib
+import gzip
 import hashlib
+import io
 import json
 import logging
+import tarfile
 import os
 import sys
 import time
@@ -35,7 +38,7 @@ import aiohttp
 import psycopg
 from psycopg.types.json import Json
 from roombapy_prime.auth import login
-from roombapy_prime.models.livemap import PositionUpdateMessage
+from roombapy_prime.models.livemap import MapUpdateMessage, PositionUpdateMessage
 from roombapy_prime.models.map_bundle import parse_map_bundle
 from roombapy_prime.models.robot_info import DockState
 from roombapy_prime.prime_factory import PrimeFactory
@@ -60,6 +63,10 @@ TERMINAL_PHASES = {"charge", "stop", "hmPostMsn"}
 # Live position (watch_live_map) DB write throttle — the stream can emit many
 # samples/sec; we persist at most one row per this many seconds.
 LIVE_WRITE_MIN_INTERVAL = 1.0
+# Live cleaning-coverage refresh throttle. The coverage layer only needs to grow
+# every few seconds, and each update downloads + untars the live-map bundle, so
+# process at most one MapUpdateMessage per this many seconds.
+COVERAGE_WRITE_MIN_INTERVAL = 12.0
 
 
 # ---------------------------------------------------------------------------
@@ -412,6 +419,48 @@ def upsert_position(conninfo, robot_id, x, y, theta):
         conn.execute(sql, (robot_id, x, y, theta))
 
 
+def upsert_coverage(conninfo, robot_id, mission_id, coverage):
+    """UPSERT the latest cleaning-coverage GeoJSON for a robot (UNIQUE robot_id)."""
+    sql = """
+        INSERT INTO roomba_coverage (robot_id, mission_id, coverage, updated_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (robot_id) DO UPDATE SET
+            mission_id = EXCLUDED.mission_id,
+            coverage = EXCLUDED.coverage,
+            updated_at = NOW()
+    """
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        conn.execute(sql, (robot_id, mission_id, Json(coverage)))
+
+
+async def _persist_coverage(conninfo, robot_id, msg):
+    """Download the live-map bundle referenced by a MapUpdateMessage, pull out
+    coverage.geojson (the cleaned/traveled area), and UPSERT it into
+    roomba_coverage. The bundle is a gzip'd tar of GeoJSON layers in the same
+    meter coordinate space as the floor-plan map, so the frontend overlays it
+    directly. Fail-open: any error is the caller's to log; the stream continues.
+    """
+    url = getattr(msg, "livemap_url", None)
+    if not url:
+        return
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            raw = await resp.read()
+    body = gzip.decompress(raw) if raw[:3] == b"\x1f\x8b\x08" else raw
+    coverage = None
+    mission_id = None
+    with tarfile.open(fileobj=io.BytesIO(body)) as tf:
+        names = set(tf.getnames())
+        if "coverage.geojson" not in names:
+            return
+        coverage = json.loads(tf.extractfile("coverage.geojson").read())
+        if "metadata.json" in names:
+            meta = json.loads(tf.extractfile("metadata.json").read())
+            sm = meta.get("sourceMetadata") or {}
+            mission_id = str(sm.get("missionStartTime") or meta.get("version") or "") or None
+    upsert_coverage(conninfo, robot_id, mission_id, coverage)
+
+
 # ---------------------------------------------------------------------------
 # Live position stream (concurrent task, shares the single robot connection)
 # ---------------------------------------------------------------------------
@@ -429,12 +478,23 @@ async def run_live_map(robot, conninfo, robot_id):
       PositionUpdateMessage.updates : list[PositionSample]
       PositionSample.point          : (x, y)  meters
       PositionSample.orientation    : float   radians (raw wire heading)
-    MapUpdateMessage (the other stream shape) is ignored — we only want the dot.
+    MapUpdateMessage (the other stream shape) carries the live-map bundle URL,
+    from which we extract cleaning coverage (see _persist_coverage).
     """
     last_write = 0.0
+    last_coverage = 0.0
     try:
         async for msg in robot.watch_live_map():
             try:
+                # MapUpdateMessage carries the live-map bundle URL — pull the
+                # cleaning coverage out of it (throttled) so the tab can shade
+                # cleaned area as the robot works.
+                if isinstance(msg, MapUpdateMessage):
+                    now = time.monotonic()
+                    if now - last_coverage >= COVERAGE_WRITE_MIN_INTERVAL:
+                        await _persist_coverage(conninfo, robot_id, msg)
+                        last_coverage = now
+                    continue
                 if not isinstance(msg, PositionUpdateMessage) or not msg.updates:
                     continue
                 now = time.monotonic()
@@ -445,7 +505,7 @@ async def run_live_map(robot, conninfo, robot_id):
                 upsert_position(conninfo, robot_id, x, y, sample.orientation)
                 last_write = now
             except Exception as e:  # noqa: BLE001 — one bad sample must not end the stream
-                log.warning("live position sample failed: %s: %s", type(e).__name__, e)
+                log.warning("live sample failed: %s: %s", type(e).__name__, e)
     except asyncio.CancelledError:
         raise
     except RuntimeError as e:

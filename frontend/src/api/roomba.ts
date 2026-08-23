@@ -1,5 +1,6 @@
 import api from './client';
 import type {
+  GeoFeatureCollection,
   RoombaCommand,
   RoombaDevice,
   RoombaMap,
@@ -45,6 +46,21 @@ export async function fetchRoombaPosition(): Promise<RoombaPosition | null> {
   const res = await api.get<RoombaPosition | ''>('/roomba/position');
   if (isNoContent(res.status, res.data)) return null;
   return res.data as RoombaPosition;
+}
+
+/** Live cleaning-coverage for the map overlay. Features carry an operatingModes
+ *  property ("vacuuming" = cleaned, "traveling" = passed through). Null when
+ *  stale/none (204). Poll only while the robot is running. */
+export interface RoombaCoverage {
+  robotId: string;
+  missionId: string | null;
+  coverage: GeoFeatureCollection;
+  updatedAt: string;
+}
+export async function fetchRoombaCoverage(): Promise<RoombaCoverage | null> {
+  const res = await api.get<RoombaCoverage | ''>('/roomba/coverage');
+  if (isNoContent(res.status, res.data)) return null;
+  return res.data as RoombaCoverage;
 }
 
 /** Static device identity + firmware, or null until the poller syncs it. */

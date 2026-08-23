@@ -1,5 +1,6 @@
 package com.homeplatform.controller;
 
+import com.homeplatform.dto.RoombaCoverageResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
 import com.homeplatform.dto.RoombaMapResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
@@ -44,6 +45,14 @@ public class RoombaController {
     @GetMapping("/map")
     public ResponseEntity<RoombaMapResponse> getMap() {
         return service.getMap()
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /** Live cleaning-coverage for the active mission, or 204 when stale/none. */
+    @GetMapping("/coverage")
+    public ResponseEntity<RoombaCoverageResponse> getCoverage() {
+        return service.getCoverage()
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
     }

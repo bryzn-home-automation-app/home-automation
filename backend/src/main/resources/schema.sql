@@ -236,6 +236,18 @@ CREATE TABLE IF NOT EXISTS roomba_position (
     updated_at    TIMESTAMP         NOT NULL DEFAULT NOW()
 );
 
+-- Live cleaning-coverage per robot (poller UPSERTs the robot's coverage.geojson
+-- from the live-map bundle while a mission runs, UNIQUE robot_id). `coverage` is
+-- a GeoJSON FeatureCollection; features carry an operatingModes property
+-- (vacuuming = cleaned, traveling = passed through). Read-only + staleness-gated.
+CREATE TABLE IF NOT EXISTS roomba_coverage (
+    id            SERIAL PRIMARY KEY,
+    robot_id      VARCHAR(64)  NOT NULL UNIQUE,
+    mission_id    VARCHAR(64),
+    coverage      JSONB        NOT NULL,
+    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+
 -- App release notes for the "What's New" tab. Authored in code and upserted by
 -- ReleaseSeeder on startup (one row per version). `changes` is a JSONB array of
 -- {type: new|improved|fixed, text}. `sort_order` drives newest-first display so

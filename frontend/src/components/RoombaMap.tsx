@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchRoombaPosition } from '../api/roomba';
+import { fetchRoombaPosition, fetchRoombaCoverage } from '../api/roomba';
 import type {
   GeoFeatureCollection,
   GeoPosition,
@@ -364,6 +364,51 @@ export default memo(function RoombaMap({
   });
   const position = running ? positionQuery.data ?? null : null;
 
+  // Live cleaning coverage — polled while running, cleared otherwise. A 204
+  // (stale/none) comes back null, hiding the layer once a mission ends.
+  const coverageQuery = useQuery({
+    queryKey: ['roomba-coverage'],
+    queryFn: fetchRoombaCoverage,
+    enabled: !!running,
+    refetchInterval: running ? 5000 : false,
+    refetchIntervalInBackground: false,
+    staleTime: 4000,
+  });
+
+  // Project the coverage polygons into SVG space using the same transform as the
+  // map, tagged cleaned (vacuumed) vs traveled so they render at different shades.
+  const coverageLayer = useMemo(() => {
+    const cov = running ? coverageQuery.data ?? null : null;
+    if (!cov?.coverage?.features || !model) return [];
+    const project = model.project;
+    const ringsToPath = (rings: GeoPosition[][]): string => {
+      let d = '';
+      for (const ring of rings) {
+        ring.forEach((p, i) => {
+          const [px, py] = project(p);
+          d += `${i === 0 ? 'M' : 'L'}${px.toFixed(1)} ${py.toFixed(1)} `;
+        });
+        d += 'Z ';
+      }
+      return d;
+    };
+    const out: Array<{ mode: 'cleaned' | 'traveled'; d: string }> = [];
+    for (const f of cov.coverage.features) {
+      const g = f.geometry;
+      if (!g) continue;
+      const modes = (f.properties?.operatingModes as string[] | undefined) ?? [];
+      const mode: 'cleaned' | 'traveled' =
+        modes.includes('vacuuming') || modes.includes('mopping') ? 'cleaned' : 'traveled';
+      let d = '';
+      if (g.type === 'Polygon') d = ringsToPath(g.coordinates);
+      else if (g.type === 'MultiPolygon') for (const poly of g.coordinates) d += ringsToPath(poly);
+      if (d) out.push({ mode, d });
+    }
+    // Traveled first, cleaned painted on top (darker).
+    out.sort((a, b) => (a.mode === 'cleaned' ? 1 : 0) - (b.mode === 'cleaned' ? 1 : 0));
+    return out;
+  }, [running, coverageQuery.data, model]);
+
   if (loading) {
     return (
       <div
@@ -527,6 +572,21 @@ export default memo(function RoombaMap({
             />
           ));
         })}
+
+        {/* Live cleaning coverage — traveled-through (lighter) vs vacuumed
+            (darker), painted over the light room fill so cleaned area reads as
+            progress. Drawn under walls so outlines stay crisp. */}
+        {coverageLayer.map((c, i) => (
+          <path
+            key={`cov-${i}`}
+            d={c.d}
+            fillRule="evenodd"
+            fill="var(--appaccent)"
+            fillOpacity={c.mode === 'cleaned' ? 0.5 : 0.2}
+            stroke="none"
+            style={{ pointerEvents: 'none' }}
+          />
+        ))}
 
         {/* Keep-out / no-mop zones — hatched, distinct per category */}
         {zonePolys.map((z, i) => {

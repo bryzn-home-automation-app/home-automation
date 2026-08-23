@@ -19,6 +19,8 @@ import com.homeplatform.model.RoombaStatus;
 import com.homeplatform.repository.RoombaCommandRepository;
 import com.homeplatform.repository.RoombaDeviceRepository;
 import com.homeplatform.repository.RoombaMapRepository;
+import com.homeplatform.repository.RoombaCoverageRepository;
+import com.homeplatform.dto.RoombaCoverageResponse;
 import com.homeplatform.repository.RoombaPositionRepository;
 import com.homeplatform.repository.RoombaRunRepository;
 import com.homeplatform.repository.RoombaStatusRepository;
@@ -49,6 +51,9 @@ public class RoombaService {
 
     /** A live position older than this is treated as stale (→ 204, hide the dot). */
     private static final int POSITION_STALE_SECONDS = 15;
+    /** Coverage older than this is treated as absent, so it disappears once a
+     *  mission ends rather than showing a stale/previous run's cleaned area. */
+    private static final int COVERAGE_STALE_SECONDS = 120;
 
     /** Control commands the poller knows how to execute. */
     private static final Set<String> ALLOWED_COMMANDS =
@@ -76,19 +81,22 @@ public class RoombaService {
     private final RoombaCommandRepository commandRepo;
     private final RoombaDeviceRepository deviceRepo;
     private final RoombaPositionRepository positionRepo;
+    private final RoombaCoverageRepository coverageRepo;
 
     public RoombaService(RoombaStatusRepository statusRepo,
                          RoombaRunRepository runRepo,
                          RoombaMapRepository mapRepo,
                          RoombaCommandRepository commandRepo,
                          RoombaDeviceRepository deviceRepo,
-                         RoombaPositionRepository positionRepo) {
+                         RoombaPositionRepository positionRepo,
+                         RoombaCoverageRepository coverageRepo) {
         this.statusRepo = statusRepo;
         this.runRepo = runRepo;
         this.mapRepo = mapRepo;
         this.commandRepo = commandRepo;
         this.deviceRepo = deviceRepo;
         this.positionRepo = positionRepo;
+        this.coverageRepo = coverageRepo;
     }
 
     /**
@@ -367,6 +375,19 @@ public class RoombaService {
 
     public Optional<RoombaMapResponse> getMap() {
         return mapRepo.findTopByOrderByUpdatedAtDesc().map(this::toMapResponse);
+    }
+
+    /**
+     * Latest live cleaning-coverage, but only while fresh — coverage older than
+     * {@link #COVERAGE_STALE_SECONDS} is treated as absent so the layer clears
+     * when a mission ends and never shows a previous run's cleaned area.
+     */
+    public Optional<RoombaCoverageResponse> getCoverage() {
+        LocalDateTime cutoff = LocalDateTime.now(ZoneOffset.UTC).minusSeconds(COVERAGE_STALE_SECONDS);
+        return coverageRepo.findTopByOrderByUpdatedAtDesc()
+                .filter(c -> c.getUpdatedAt() != null && c.getUpdatedAt().isAfter(cutoff))
+                .map(c -> new RoombaCoverageResponse(
+                        c.getRobotId(), c.getMissionId(), parseJson(c.getCoverage()), iso(c.getUpdatedAt())));
     }
 
     // --- mapping ---

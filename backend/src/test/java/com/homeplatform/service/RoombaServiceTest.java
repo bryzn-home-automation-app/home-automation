@@ -14,6 +14,8 @@ import com.homeplatform.repository.RoombaCommandRepository;
 import com.homeplatform.repository.RoombaDeviceRepository;
 import com.homeplatform.repository.RoombaMapRepository;
 import com.homeplatform.repository.RoombaPositionRepository;
+import com.homeplatform.repository.RoombaCoverageRepository;
+import com.homeplatform.model.RoombaCoverage;
 import com.homeplatform.repository.RoombaRunRepository;
 import com.homeplatform.repository.RoombaStatusRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +40,7 @@ class RoombaServiceTest {
     private RoombaCommandRepository commandRepo;
     private RoombaDeviceRepository deviceRepo;
     private RoombaPositionRepository positionRepo;
+    private RoombaCoverageRepository coverageRepo;
     private RoombaService service;
 
     @BeforeEach
@@ -48,8 +51,48 @@ class RoombaServiceTest {
         commandRepo = mock(RoombaCommandRepository.class);
         deviceRepo = mock(RoombaDeviceRepository.class);
         positionRepo = mock(RoombaPositionRepository.class);
+        coverageRepo = mock(RoombaCoverageRepository.class);
         service = new RoombaService(
-                statusRepo, runRepo, mapRepo, commandRepo, deviceRepo, positionRepo);
+                statusRepo, runRepo, mapRepo, commandRepo, deviceRepo, positionRepo, coverageRepo);
+    }
+
+    @Nested
+    @DisplayName("getCoverage")
+    class GetCoverage {
+
+        @Test
+        @DisplayName("empty when no coverage row exists")
+        void emptyWhenNone() {
+            when(coverageRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
+            assertTrue(service.getCoverage().isEmpty());
+        }
+
+        @Test
+        @DisplayName("returns parsed coverage when fresh")
+        void freshCoverage() {
+            RoombaCoverage c = RoombaCoverage.builder()
+                    .robotId("BLID").missionId("m1")
+                    .coverage("{\"type\":\"FeatureCollection\",\"features\":[]}")
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(5))
+                    .build();
+            when(coverageRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(c));
+            var out = service.getCoverage();
+            assertTrue(out.isPresent());
+            assertEquals("m1", out.get().missionId());
+            assertEquals("FeatureCollection", out.get().coverage().get("type").asText());
+        }
+
+        @Test
+        @DisplayName("empty when coverage is stale (mission ended)")
+        void staleCoverage() {
+            RoombaCoverage c = RoombaCoverage.builder()
+                    .robotId("BLID")
+                    .coverage("{\"type\":\"FeatureCollection\",\"features\":[]}")
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(600))
+                    .build();
+            when(coverageRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(c));
+            assertTrue(service.getCoverage().isEmpty());
+        }
     }
 
     @Nested
