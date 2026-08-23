@@ -534,6 +534,12 @@ def detect_completion(state, rep, conninfo):
             log.warning("Failed to record mission %s: %s: %s",
                         completed.get("mission_id"), type(e).__name__, e)
         state.active = None
+        # A finished mission means the robot has regenerated its floor plan — schedule a
+        # prompt bundle re-fetch (same one-shot the map-edit path uses) so the newly
+        # learned map lands in roomba_map within ~MAP_REFRESH_AFTER_RUN s rather than on
+        # the next status poll (up to 300s later on the NUC). refresh_map's version check
+        # makes this a cheap no-op if the robot hasn't bumped the map version yet.
+        state.map_refresh_due = time.monotonic() + MAP_REFRESH_AFTER_RUN
 
     # Refresh / set the active snapshot for the currently-running mission.
     if cur_running:
@@ -656,6 +662,11 @@ CMD_TICK_SECONDS = 5
 # for the robot to regenerate the rendered map, far sooner than the next status poll
 # (POLL_INTERVAL_SECONDS, 300s on the NUC). Keeps the floor plan from lagging ~5 min.
 MAP_REFRESH_AFTER_EDIT = 12
+# Same idea after a mission finishes: the robot regenerates its floor plan (new map
+# version) at the end of a run, so schedule a prompt bundle re-fetch instead of waiting
+# up to a full poll cycle for the version bump to be noticed. Slightly longer than the
+# edit delay to give the robot time to publish the finalized map.
+MAP_REFRESH_AFTER_RUN = 25
 SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
 RENAME_ROOM = "rename_room"
 SPLIT_ROOM = "split_room"

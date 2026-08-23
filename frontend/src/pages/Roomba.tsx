@@ -1,5 +1,5 @@
-import { memo, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
@@ -164,6 +164,23 @@ export default memo(function Roomba() {
   const statusLoading = statusQuery.isLoading;
   const running = status?.running ?? false;
   const { isAdmin } = useAuth();
+
+  // When a clean finishes (running → idle), the robot regenerates its floor plan, so
+  // pull the fresh map and the newly-recorded run instead of waiting on the ~5-min map
+  // poll. The poller re-fetches the bundle ~25s after completion (MAP_REFRESH_AFTER_RUN),
+  // so refetch in a short burst to converge once the new bundle lands server-side.
+  const queryClient = useQueryClient();
+  const prevRunningRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const prev = prevRunningRef.current;
+    prevRunningRef.current = running;
+    if (prev !== true || running !== false) return; // only the cleaning → idle edge
+    const refetchMap = () => queryClient.invalidateQueries({ queryKey: ['roomba-map'] });
+    queryClient.invalidateQueries({ queryKey: ['roomba-runs'] });
+    refetchMap();
+    const timers = [setTimeout(refetchMap, 20_000), setTimeout(refetchMap, 45_000)];
+    return () => timers.forEach(clearTimeout);
+  }, [running, queryClient]);
   const [selectedRoom, setSelectedRoom] = useState<RoomSelection | null>(null);
   const [splitMode, setSplitMode] = useState(false);
   const [pendingSplit, setPendingSplit] = useState<SplitLine | null>(null);
