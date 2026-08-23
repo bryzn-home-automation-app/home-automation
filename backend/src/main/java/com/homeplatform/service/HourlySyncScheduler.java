@@ -18,9 +18,20 @@ import java.util.Optional;
 
 /**
  * Syncs yesterday's hourly electric data from the CoServ Usage Explorer API.
- * Every 30 min from 6:15 AM to 11:45 PM CT — late enough for data, frequent
+ * Every 30 min from 7:15 AM to 11:45 PM CT — late enough for data, frequent
  * enough to fill gaps. Backfills any incomplete days in the last
  * {@link #LOOKBACK_DAYS} days left by server downtime.
+ *
+ * <p><b>Run window:</b> CoServ has never posted a complete day before ~08:45 CT
+ * in the observed history (typical arrival ~09:45 CT), so the pre-07:00 window
+ * was pure no-op noise and is not scheduled. The window still runs late into the
+ * evening because CoServ occasionally posts a delayed day around 21:00–22:00 CT.
+ *
+ * <p><b>Backoff:</b> once every day in the lookback window has been confirmed
+ * complete on {@link #STANDDOWN_AFTER_CONFIRMATIONS} consecutive ticks, the
+ * scheduler stops re-scanning until the calendar day rolls over (a new
+ * "yesterday" appears). This keeps a finished date from being re-checked and
+ * re-logged every 30 minutes for the rest of the day.
  *
  * <p>"Complete" is judged on <em>non-zero</em> readings, not raw row count:
  * CoServ posts hourly values progressively, so early in the day most hours
@@ -45,9 +56,26 @@ public class HourlySyncScheduler {
     /** CoServ only retains ~2 weeks of interval data — backfill lookback is bounded by this window. */
     private static final int LOOKBACK_DAYS = 14;
 
+    /**
+     * Number of consecutive ticks that must find the whole lookback window complete
+     * before the scheduler stands down for the day. A small count (not 1) guards
+     * against a transient DB read making a still-partial day look finished.
+     */
+    private static final int STANDDOWN_AFTER_CONFIRMATIONS = 2;
+
     private final DataSource dataSource;
     private final AppEventService appEventService;
     private final AlertEngine alertEngine;
+
+    /** Consecutive ticks that found every lookback day already complete. Reset on rollover or a fresh gap. */
+    private int consecutiveCompleteChecks = 0;
+
+    /**
+     * The "yesterday" we've backed off for, or {@code null} while actively syncing.
+     * Once set, ticks return immediately until the calendar day rolls over and a new
+     * "yesterday" appears — at which point the stand-down auto-clears.
+     */
+    private LocalDate standDownFor = null;
 
     public HourlySyncScheduler(DataSource dataSource,
                                AppEventService appEventService,
@@ -57,18 +85,42 @@ public class HourlySyncScheduler {
         this.alertEngine = alertEngine;
     }
 
-    /** Every 30 min from 6:15 AM to 11:45 PM CT. Staggered 15 min from DailySync. */
-    @Scheduled(cron = "0 15,45 6-23 * * *", zone = "America/Chicago")
+    /** Every 30 min from 7:15 AM to 11:45 PM CT. Staggered 15 min from DailySync. */
+    @Scheduled(cron = "0 15,45 7-23 * * *", zone = "America/Chicago")
     public void checkAndSync() {
-        LocalDate yesterday = LocalDate.now(CHICAGO).minusDays(1);
+        LocalDate yesterday = today().minusDays(1);
+
+        // Stand-down auto-clears when the calendar day rolls over: a new "yesterday"
+        // means a new day's data to chase, so start scanning (and counting) afresh.
+        if (standDownFor != null && !standDownFor.equals(yesterday)) {
+            standDownFor = null;
+            consecutiveCompleteChecks = 0;
+        }
+
+        // Already confirmed complete for this date — don't re-scan or re-log until tomorrow.
+        if (yesterday.equals(standDownFor)) {
+            return;
+        }
 
         // Skip only when every day in the lookback window is already complete —
         // non-zero readings, not raw rows. Otherwise sync from the earliest gap.
         Optional<LocalDate> earliest = findEarliestIncompleteDay(yesterday, LOOKBACK_DAYS);
         if (earliest.isEmpty()) {
-            log.info("HourlySyncScheduler: {} already complete — skipping", yesterday);
+            // Back off after a few consecutive clean scans, so a finished date isn't
+            // re-checked every 30 min for the rest of the day.
+            if (++consecutiveCompleteChecks >= STANDDOWN_AFTER_CONFIRMATIONS) {
+                standDownFor = yesterday;
+                log.info("HourlySyncScheduler: {} complete on {} consecutive checks — standing down until tomorrow",
+                        yesterday, consecutiveCompleteChecks);
+            } else {
+                log.info("HourlySyncScheduler: {} already complete — skipping ({}/{} confirmations)",
+                        yesterday, consecutiveCompleteChecks, STANDDOWN_AFTER_CONFIRMATIONS);
+            }
             return;
         }
+
+        // A real gap remains — restart the confirmation streak before syncing.
+        consecutiveCompleteChecks = 0;
 
         LocalDate start = earliest.get();
         String label = start.equals(yesterday) ? start.toString() : start + " → " + yesterday;
@@ -161,8 +213,13 @@ public class HourlySyncScheduler {
         }
     }
 
+    /** Today in Chicago. Package-private seam so tests can drive the day-rollover backoff. */
+    LocalDate today() {
+        return LocalDate.now(CHICAGO);
+    }
+
     /** Spawn a child process, capturing merged stdout+stderr into {@code output}. Returns exit code. */
-    private int spawn(List<String> command, StringBuilder output) throws Exception {
+    int spawn(List<String> command, StringBuilder output) throws Exception {
         ProcessBuilder pb = new ProcessBuilder(command);
         pb.redirectErrorStream(true);
         Process process = pb.start();
@@ -195,7 +252,7 @@ public class HourlySyncScheduler {
      * Empty when every day is complete. Backfills gaps left by server downtime,
      * bounded by CoServ's ~2-week retention window.
      */
-    private Optional<LocalDate> findEarliestIncompleteDay(LocalDate yesterday, int windowDays) {
+    Optional<LocalDate> findEarliestIncompleteDay(LocalDate yesterday, int windowDays) {
         LocalDate first = yesterday.minusDays(windowDays - 1);
         Map<LocalDate, Integer> nonZeroByDay = new HashMap<>();
         try (var conn = dataSource.getConnection();
@@ -222,7 +279,7 @@ public class HourlySyncScheduler {
     }
 
     /** Read a day's row count, non-zero reading count, and total kWh in one query. */
-    private DaySnapshot readDay(String date) {
+    DaySnapshot readDay(String date) {
         try (var conn = dataSource.getConnection();
              var stmt = conn.prepareStatement(
                      "SELECT COUNT(*), " +
@@ -283,5 +340,5 @@ public class HourlySyncScheduler {
     }
 
     /** Row count, non-zero readings, and total kWh for a single calendar day. */
-    private record DaySnapshot(int total, int nonZero, double totalKwh) {}
+    record DaySnapshot(int total, int nonZero, double totalKwh) {}
 }

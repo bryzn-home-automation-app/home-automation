@@ -17,10 +17,21 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Runs the daily sync every 30 min from 6:30 AM to 11:45 PM CT.
+ * Runs the daily sync every 30 min from 7:00 AM to 11:30 PM CT.
  * Downloads daily data from the CoServ Usage Explorer API and writes to electric_usage.
  * Skips if the day is already populated (idempotent), and backfills any gaps in
  * the last {@link #LOOKBACK_DAYS} days left by server downtime.
+ *
+ * <p><b>Run window:</b> CoServ has never posted a complete day before ~08:45 CT in the
+ * observed history (typical arrival ~09:45 CT), so the pre-07:00 window was pure no-op
+ * noise and is not scheduled. The window still runs late into the evening because CoServ
+ * occasionally posts a delayed day around 21:00–22:00 CT.
+ *
+ * <p><b>Backoff:</b> once every day in the lookback window has been confirmed populated
+ * on {@link #STANDDOWN_AFTER_CONFIRMATIONS} consecutive ticks, the scheduler stops
+ * re-scanning until the calendar day rolls over (a new "yesterday" appears). This keeps
+ * a finished date from being re-checked and re-logged every 30 minutes for the rest of
+ * the day.
  *
  * Complements the {@link HourlySyncScheduler} which writes to hourly_electric_usage —
  * together they provide two independent data sources for reconciliation.
@@ -35,9 +46,26 @@ public class DailySyncScheduler {
     /** CoServ only retains ~2 weeks of data — backfill lookback is bounded by this window. */
     private static final int LOOKBACK_DAYS = 14;
 
+    /**
+     * Number of consecutive ticks that must find the whole lookback window populated
+     * before the scheduler stands down for the day. A small count (not 1) guards
+     * against a transient DB read making a still-missing day look finished.
+     */
+    private static final int STANDDOWN_AFTER_CONFIRMATIONS = 2;
+
     private final DataSource dataSource;
     private final AppEventService appEventService;
     private final AlertEngine alertEngine;
+
+    /** Consecutive ticks that found every lookback day already populated. Reset on rollover or a fresh gap. */
+    private int consecutiveCompleteChecks = 0;
+
+    /**
+     * The "yesterday" we've backed off for, or {@code null} while actively syncing.
+     * Once set, ticks return immediately until the calendar day rolls over and a new
+     * "yesterday" appears — at which point the stand-down auto-clears.
+     */
+    private LocalDate standDownFor = null;
 
     public DailySyncScheduler(DataSource dataSource, AppEventService appEventService, AlertEngine alertEngine) {
         this.dataSource = dataSource;
@@ -45,19 +73,44 @@ public class DailySyncScheduler {
         this.alertEngine = alertEngine;
     }
 
-    /** Every 30 min from 6:30 AM to 11:45 PM CT. Same window as hourly but
+    /** Every 30 min from 7:00 AM to 11:30 PM CT. Same window as hourly but
      *  offset by 15 min to avoid both browser logins at the exact same second. */
-    @Scheduled(cron = "0 0,30 6-23 * * *", zone = "America/Chicago")
+    @Scheduled(cron = "0 0,30 7-23 * * *", zone = "America/Chicago")
     public void runDailySync() {
-        LocalDate yesterday = LocalDate.now(CHICAGO).minusDays(1);
+        LocalDate yesterday = today().minusDays(1);
+
+        // Stand-down auto-clears when the calendar day rolls over: a new "yesterday"
+        // means a new day's data to chase, so start scanning (and counting) afresh.
+        if (standDownFor != null && !standDownFor.equals(yesterday)) {
+            standDownFor = null;
+            consecutiveCompleteChecks = 0;
+        }
+
+        // Already confirmed populated for this date — don't re-scan or re-log until tomorrow.
+        if (yesterday.equals(standDownFor)) {
+            return;
+        }
+
         log.info("DailySyncScheduler: checking for {}…", yesterday);
 
         // Skip only when every day in the lookback window is already populated.
         Optional<LocalDate> earliest = findEarliestMissingDay(yesterday, LOOKBACK_DAYS);
         if (earliest.isEmpty()) {
-            log.info("DailySyncScheduler: {} already populated — skipping", yesterday);
+            // Back off after a few consecutive clean scans, so a finished date isn't
+            // re-checked every 30 min for the rest of the day.
+            if (++consecutiveCompleteChecks >= STANDDOWN_AFTER_CONFIRMATIONS) {
+                standDownFor = yesterday;
+                log.info("DailySyncScheduler: {} populated on {} consecutive checks — standing down until tomorrow",
+                        yesterday, consecutiveCompleteChecks);
+            } else {
+                log.info("DailySyncScheduler: {} already populated — skipping ({}/{} confirmations)",
+                        yesterday, consecutiveCompleteChecks, STANDDOWN_AFTER_CONFIRMATIONS);
+            }
             return;
         }
+
+        // A real gap remains — restart the confirmation streak before syncing.
+        consecutiveCompleteChecks = 0;
 
         LocalDate start = earliest.get();
         String label = start.equals(yesterday) ? start.toString() : start + " → " + yesterday;
@@ -96,8 +149,13 @@ public class DailySyncScheduler {
                 : List.of("node", "/scripts/sync.js", "--granularity", "daily", "--start", startUs, "--end", endUs);
     }
 
+    /** Today in Chicago. Package-private seam so tests can drive the day-rollover backoff. */
+    LocalDate today() {
+        return LocalDate.now(CHICAGO);
+    }
+
     /** Spawn sync.js and record the result as an app event (with full output in details). */
-    private void runSync(List<String> command, String label) {
+    void runSync(List<String> command, String label) {
         try {
             ProcessBuilder pb = new ProcessBuilder(command);
             pb.redirectErrorStream(true);
@@ -164,7 +222,7 @@ public class DailySyncScheduler {
      * day is already populated. Backfills gaps left by server downtime, bounded
      * by CoServ's ~2-week retention window.
      */
-    private Optional<LocalDate> findEarliestMissingDay(LocalDate yesterday, int windowDays) {
+    Optional<LocalDate> findEarliestMissingDay(LocalDate yesterday, int windowDays) {
         LocalDate first = yesterday.minusDays(windowDays - 1);
         Set<LocalDate> populated = new HashSet<>();
         try (var conn = dataSource.getConnection();
