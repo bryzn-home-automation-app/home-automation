@@ -22,6 +22,7 @@ Credentials + config come from env only (never a file):
 """
 import asyncio
 import contextlib
+import hashlib
 import json
 import logging
 import os
@@ -565,6 +566,15 @@ async def refresh_map(robot, conninfo, robot_id, state, shadow_version):
     if not (map_id and map_version):
         return
 
+    # The robot can mutate the active map — newly discovered area, added/renamed
+    # rooms — WITHOUT bumping active_p2mapv_id, so gating the refresh on the version
+    # string alone silently misses those changes (the downloaded bundle *does*
+    # reflect them). Fold the room metadata into the dedup key so any content change
+    # triggers a re-download. A bare stored version (pre-signature, or after a
+    # restart) never matches a signature, so we re-fetch once and self-heal.
+    sig_src = json.dumps(v0.get("rooms_metadata") or v0, sort_keys=True, default=str)
+    map_sig = f"{map_version}:{hashlib.sha1(sig_src.encode('utf-8')).hexdigest()[:12]}"
+
     if state.last_map_version is None:
         # Lazily learn what's already persisted so we don't refetch on restart.
         try:
@@ -572,7 +582,7 @@ async def refresh_map(robot, conninfo, robot_id, state, shadow_version):
         except Exception as e:  # noqa: BLE001
             log.warning("load_map_version failed: %s: %s", type(e).__name__, e)
 
-    if map_version == state.last_map_version:
+    if map_sig == state.last_map_version:
         return
 
     try:
@@ -584,8 +594,8 @@ async def refresh_map(robot, conninfo, robot_id, state, shadow_version):
         raw = await robot.download_map_bundle(url)
         parsed = parse_map_bundle(raw)
         upsert_map(conninfo, robot_id, map_id, map_version, name, parsed)
-        state.last_map_version = map_version
-        log.info("Updated map %s version=%s (%d bytes)", map_id, map_version, len(raw))
+        state.last_map_version = map_sig
+        log.info("Updated map %s version=%s sig=%s (%d bytes)", map_id, map_version, map_sig[-12:], len(raw))
     except Exception as e:  # noqa: BLE001
         log.warning("Map refresh failed: %s: %s", type(e).__name__, e)
 
