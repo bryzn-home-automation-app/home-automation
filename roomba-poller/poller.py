@@ -183,6 +183,7 @@ class PollerState:
         self.mission_running = False  # true while a mission is actively cleaning (drives the live-map task)
         self.map_refresh_due = None   # monotonic ts: re-fetch the map bundle soon (set after a map edit)
         self.robot_name = None        # user-assigned name from the account (e.g. "iRummy")
+        self.fast_poll_until = 0.0    # monotonic ts: poll at the fast cadence until this time (set after a mission-starting command)
 
 
 def _snapshot(cms):
@@ -743,6 +744,13 @@ SPLIT_ROOM = "split_room"
 MERGE_ROOMS = "merge_rooms"
 CLEAN_ROOM = "clean_room"
 
+# Commands that (may) start a mission. After one, the poller polls at the fast
+# cadence for a short window so mission start — and thus the live dot + coverage
+# capture — is picked up within seconds instead of on the next full poll cycle.
+MISSION_START_COMMANDS = {"start", "resume", CLEAN_ROOM}
+FAST_POLL_INTERVAL = 10   # seconds — poll cadence while a mission runs or was just commanded
+FAST_POLL_WINDOW = 180    # seconds — how long to fast-poll after a mission-starting command
+
 
 def _fetch_pending(conninfo, limit=5):
     with psycopg.connect(conninfo, autocommit=True) as conn:
@@ -1019,6 +1027,10 @@ async def process_commands(robot, conninfo, state):
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")
             log.info("command #%s (%s) processed", cmd_id, command)
+            # A mission-starting command: fast-poll for a window so the live dot +
+            # coverage begin within seconds instead of on the next full poll cycle.
+            if command in MISSION_START_COMMANDS:
+                state.fast_poll_until = time.monotonic() + FAST_POLL_WINDOW
         except Exception as e:  # noqa: BLE001 — fail-open, never crash the loop
             log.warning("command #%s (%s) failed: %s: %s", cmd_id, command, type(e).__name__, e)
             try:
@@ -1053,7 +1065,12 @@ async def main():
                 # Commands are latency-sensitive → checked every tick; status polls on interval.
                 await process_commands(robot, conninfo, state)
                 now = time.monotonic()
-                if now - last_poll >= interval:
+                # Poll fast while a mission is running (or was just commanded) so the
+                # live dot + coverage stay current and mission start/end are caught
+                # promptly; otherwise fall back to the normal, quieter interval.
+                fast = state.mission_running or now < state.fast_poll_until
+                poll_interval = FAST_POLL_INTERVAL if fast else interval
+                if now - last_poll >= poll_interval:
                     await poll_once(robot, conninfo, state)
                     last_poll = now
                 # A recent map edit asked for a prompt bundle re-fetch — do it once the
