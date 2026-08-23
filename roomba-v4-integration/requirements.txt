@@ -1,3 +1,3 @@
 # Roomba V4 / "Prime" cloud client — beta. Pinned to the version we field-tested.
 # Requires Python 3.11+ (tested on 3.14).
-roombapy-prime @ git+https://github.com/johnnyh1975/roombapy-prime.git@v0.3.0b7
+roombapy-prime @ git+https://github.com/johnnyh1975/roombapy-prime.git@v0.3.0b12
