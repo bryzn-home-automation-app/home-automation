@@ -478,4 +478,13 @@ module.exports = {
   recordsFromDailyData,
   recordsFromIntervalData,
   buildPayload,
+  // Reused by the standalone gas sync (scripts/sync-gas.js) so the auth capture
+  // and async poll flow live in exactly one place.
+  loadSecrets,
+  captureAuthToken,
+  pollUntilComplete,
+  ACCOUNT_NUMBER,
+  SERVICE_LOCATION,
+  SOURCE_PROVIDER,
+  PROCESSING_VERSION,
 };

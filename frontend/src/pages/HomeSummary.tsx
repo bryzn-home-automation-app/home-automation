@@ -109,8 +109,8 @@ export default function HomeSummary() {
   // fresh object references — and re-render — on every parent render; only
   // rebuild when one of the underlying values actually changes.
   const modules = useMemo(() => [
-    { label: 'Electric', detail: `${electricUsage.data?.length ?? 0} records`, route: '/electric', icon: '⚡', pill: 'Live' },
-    { label: 'Gas', detail: `${gasUsage.data?.length ?? 0} records synced`, route: '/gas', icon: '🔥', pill: 'Tracking' },
+    { label: 'Electric', detail: `${electricUsage.data?.length ?? 0} records`, route: '/utility', icon: '⚡', pill: 'Live' },
+    { label: 'Gas', detail: `${gasUsage.data?.length ?? 0} records synced`, route: '/utility?view=gas', icon: '🔥', pill: 'Tracking' },
     { label: 'Maintenance', detail: m ? `${m.openCount} open · ${m.completedCount} done` : 'Loading...', route: '/maintenance', icon: '🔧', pill: m ? `${m.openCount} open` : '...' },
     { label: 'Notifications', detail: `${unreadCount.data ?? 0} unread alerts`, route: '/notifications', icon: '🔔', pill: unreadCount.data ? `${unreadCount.data} new` : 'Clear' },
     { label: 'Users', detail: `${guestCount.data ?? 0} guests online`, route: '/users', icon: '👥', pill: 'Active' },
@@ -270,7 +270,7 @@ export default function HomeSummary() {
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Feed</p>
               <h3 className="mt-2 text-lg font-semibold text-apptext">Recent electric readings</h3>
             </div>
-            <Link to="/electric" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>
+            <Link to="/utility" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>
           </div>
 
           {electricUsage.isLoading ? (
