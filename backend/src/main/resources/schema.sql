@@ -236,6 +236,22 @@ CREATE TABLE IF NOT EXISTS roomba_position (
     updated_at    TIMESTAMP         NOT NULL DEFAULT NOW()
 );
 
+-- App release notes for the "What's New" tab. Authored in code and upserted by
+-- ReleaseSeeder on startup (one row per version). `changes` is a JSONB array of
+-- {type: new|improved|fixed, text}. `sort_order` drives newest-first display so
+-- ordering never string-compares semantic versions.
+CREATE TABLE IF NOT EXISTS app_releases (
+    id            SERIAL PRIMARY KEY,
+    version       VARCHAR(20)   NOT NULL UNIQUE,
+    stage         VARCHAR(20)   NOT NULL,
+    released_at   DATE          NOT NULL,
+    title         VARCHAR(200)  NOT NULL,
+    summary       TEXT,
+    changes       JSONB         NOT NULL,
+    sort_order    INTEGER       NOT NULL,
+    created_at    TIMESTAMP     NOT NULL DEFAULT NOW()
+);
+
 -- Compatibility view so the current backend and frontend contract can read
 -- electric + gas records while the physical storage stays isolated.
 CREATE OR REPLACE VIEW energy_usage AS
