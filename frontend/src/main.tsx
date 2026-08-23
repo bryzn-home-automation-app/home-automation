@@ -1,6 +1,6 @@
 import React, { Suspense, lazy, type ComponentType } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
@@ -17,8 +17,7 @@ const Register = lazy(() => import('./pages/Register'));
 
 // ── Protected pages (auth required) ──
 const HomeSummary = lazy(() => import('./pages/HomeSummary'));
-const ElectricalUsage = lazy(() => import('./pages/ElectricalUsage'));
-const GasUsage = lazy(() => import('./pages/GasUsage'));
+const Utility = lazy(() => import('./pages/Utility'));
 const WaterUsage = lazy(() => import('./pages/WaterUsage'));
 const Roomba = lazy(() => import('./pages/Roomba'));
 const WiFiPage = lazy(() => import('./pages/WiFiPage'));
@@ -27,6 +26,7 @@ const WiFiPage = lazy(() => import('./pages/WiFiPage'));
 const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const MaintenanceDashboard = lazy(() => import('./pages/MaintenanceDashboard'));
+const Updates = lazy(() => import('./pages/Updates'));
 
 // ── Admin pages ──
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
@@ -69,14 +69,14 @@ const GuestHomeRoute = lazyRoute(GuestHome, 'hero');
 const LoginRoute = lazyRoute(Login, 'form');
 const RegisterRoute = lazyRoute(Register, 'form');
 const HomeSummaryRoute = lazyRoute(HomeSummary, 'stats-charts');
-const ElectricalUsageRoute = lazyRoute(ElectricalUsage, 'stats-charts');
-const GasUsageRoute = lazyRoute(GasUsage, 'stats-charts');
+const UtilityRoute = lazyRoute(Utility, 'stats-charts');
 const WaterUsageRoute = lazyRoute(WaterUsage, 'stats-charts');
 const RoombaRoute = lazyRoute(Roomba, 'stats-charts');
 const WiFiPageRoute = lazyRoute(WiFiPage, 'list');
 const NotificationsRoute = lazyRoute(NotificationsPage, 'list');
 const ProfilePageRoute = lazyRoute(ProfilePage, 'form');
 const MaintenanceDashboardRoute = lazyRoute(MaintenanceDashboard, 'list');
+const UpdatesRoute = lazyRoute(Updates, 'list');
 const UserManagementRoute = lazyRoute(UserManagement, 'list');
 const GuestManagementRoute = lazyRoute(GuestManagement, 'list');
 const AuditLogsRoute = lazyRoute(AuditLogs, 'list');
@@ -99,12 +99,15 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route element={<ProtectedRoute />}>
                 <Route element={<App />}>
                   <Route index element={<HomeSummaryRoute />} />
-                  <Route path="electric" element={<ElectricalUsageRoute />} />
-                  <Route path="gas" element={<GasUsageRoute />} />
+                  <Route path="utility" element={<UtilityRoute />} />
+                  {/* Old split tabs now live under one Utility tab. */}
+                  <Route path="electric" element={<Navigate to="/utility" replace />} />
+                  <Route path="gas" element={<Navigate to="/utility" replace />} />
                   <Route path="water" element={<WaterUsageRoute />} />
                   <Route path="roomba" element={<RoombaRoute />} />
                   <Route path="wifi" element={<WiFiPageRoute />} />
                   <Route path="notifications" element={<NotificationsRoute />} />
+                  <Route path="updates" element={<UpdatesRoute />} />
                   <Route path="profile" element={<ProfilePageRoute />} />
                   <Route path="users" element={<UserManagementRoute />} />
                   <Route element={<MemberRoute />}>

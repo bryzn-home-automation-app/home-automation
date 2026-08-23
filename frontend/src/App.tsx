@@ -11,6 +11,7 @@ import { useDocumentTitle } from './hooks/useDocumentTitle';
 import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
 import { PageHeader } from './components/PageHeader';
+import ReleaseNotesModal from './components/ReleaseNotesModal';
 
 export default memo(function App() {
   const { toggleTheme, isDark } = useTheme();
@@ -51,14 +52,14 @@ export default memo(function App() {
 
   const mainTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
-    { path: '/electric', label: 'Electric', icon: '⚡', end: false },
-    { path: '/gas', label: 'Gas', icon: '🔥', end: false },
+    { path: '/utility', label: 'Utility', icon: '⚡', end: false },
     { path: '/water', label: 'Water', icon: '💧', end: false },
     { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
     { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
     { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },
     { path: '/users', label: 'Users', icon: '👥', end: false },
     { path: '/maintenance', label: 'Maintenance', icon: '🔧', end: false, guestHidden: true },
+    { path: '/updates', label: "What's New", icon: '✨', end: false },
   ];
 
   const visibleTabs = mainTabs.filter((t: any) => !t.guestHidden || (user && user.role !== 'GUEST'));
@@ -222,8 +223,8 @@ export default memo(function App() {
   //    section is reachable from the bottom bar. ──
   const bottomTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
-    { path: '/electric', label: 'Electric', icon: '⚡', end: false },
-    { path: '/gas', label: 'Gas', icon: '🔥', end: false },
+    { path: '/utility', label: 'Utility', icon: '⚡', end: false },
+    { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
     { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },
   ];
 
@@ -361,6 +362,9 @@ export default memo(function App() {
           ))}
         </div>
       </nav>
+
+      {/* One-time "What's New" popup shown after a new version ships. */}
+      <ReleaseNotesModal />
     </div>
   );
 });
