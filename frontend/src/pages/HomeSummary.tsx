@@ -2,37 +2,24 @@ import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useUsageData } from '../hooks/useUsageData';
-import StatTile, { Icons } from '../components/StatTile';
-import VirtualizedList from '../components/VirtualizedList';
 import { ForecastStrip, ForecastModal } from '../components/WeatherForecast';
 import { fetchMaintenanceAnalytics } from '../api/maintenance';
 import { fetchNotifications } from '../api/notifications';
 import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
-import { fetchRoombaStatus } from '../api/roomba';
+import { fetchRoombaStatus, fetchRoombaRuns } from '../api/roomba';
 import { fetchCurrentWeather } from '../api/weather';
 import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
 import { isHourlySource } from '../utils/usageSource';
 
 export default function HomeSummary() {
-  const { electricUsage, gasUsage, electricTotal, gasTotal, config } = useUsageData();
+  const { electricUsage, gasUsage, config } = useUsageData();
   const [showForecast, setShowForecast] = useState(false);
 
   const kwhRate = config.data?.kwhRate ?? 0.1171;
-  // Gas is metered in CCF-equivalent "units", not kWh — it has its own rate
-  // and must never be added directly into an electric kWh total. Dollar
-  // amounts from each fuel ARE directly additive, though, so the combined
-  // estimate below sums $ from each source priced at its own rate rather
-  // than summing raw usage and pricing it once at the electric rate.
-  const gasUnitRate = config.data?.gasUnitRate ?? 1.47;
-  const elecKwh = electricTotal.data?.totalKwh ?? 0;
-  const gasUnits = gasTotal.data?.totalKwh ?? 0;
-  // The 60-day moving-window spend. This is "60-day spend", not a monthly
-  // bill — re-labeled honestly per improvements.md §7.
-  const sixtyDaySpend = elecKwh * kwhRate + gasUnits * gasUnitRate;
-  const monthlyEstimate = sixtyDaySpend * 0.5;
 
-  // Latest daily usage — sum hourly records per date, take the most recent with ≥ 20 records
+  // Latest complete daily electric total — sum hourly records per date, take
+  // the most recent day that has a near-complete set of readings.
   const latestDaily = useMemo(() => {
     const byDate = new Map<string, { total: number; count: number }>();
     for (const d of electricUsage.data ?? []) {
@@ -49,25 +36,7 @@ export default function HomeSummary() {
     return complete.length > 0 ? { date: complete[0][0], total: complete[0][1].total } : null;
   }, [electricUsage.data]);
 
-  // Daily-aggregated usage feed (from hourly records)
-  const recentElectric = useMemo(() => {
-    const byDate = new Map<string, { total: number; count: number; latestTimestamp: string }>();
-    for (const d of electricUsage.data ?? []) {
-      if (!isHourlySource(d.source)) continue;
-      const date = d.timestamp.slice(0, 10);
-      const entry = byDate.get(date) ?? { total: 0, count: 0, latestTimestamp: d.timestamp };
-      entry.total += Number(d.usageKwh);
-      entry.count++;
-      if (d.timestamp > entry.latestTimestamp) entry.latestTimestamp = d.timestamp;
-      byDate.set(date, entry);
-    }
-    return Array.from(byDate.entries())
-      .map(([date, v]) => ({ date, total: Math.round(v.total * 100) / 100, count: v.count }))
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .slice(0, 6);
-  }, [electricUsage.data]);
-
-  // ── Cross-module data ──
+  // ── Cross-module data (module cards + notifications feed) ──
   const maintenance = useQuery({
     queryKey: ['maintenance-analytics'],
     queryFn: fetchMaintenanceAnalytics,
@@ -75,8 +44,8 @@ export default function HomeSummary() {
   });
 
   const recentNotifications = useQuery({
-    queryKey: ['notifications', { limit: 5 }],
-    queryFn: () => fetchNotifications({ limit: 5 }),
+    queryKey: ['notifications', { limit: 6 }],
+    queryFn: () => fetchNotifications({ limit: 6 }),
     staleTime: 30_000,
   });
 
@@ -92,13 +61,17 @@ export default function HomeSummary() {
     staleTime: 30_000,
   });
 
-  // Live Roomba snapshot — short staleTime so a running/stuck robot shows up
-  // near-live on Home (mirrors the /roomba page's polling intent, lighter).
+  // Live Roomba snapshot + last completed run for the summary card.
   const roomba = useQuery({
     queryKey: ['roomba-status'],
     queryFn: fetchRoombaStatus,
     staleTime: 15_000,
     refetchInterval: 30_000,
+  });
+  const roombaRuns = useQuery({
+    queryKey: ['roomba-runs', { limit: 1 }],
+    queryFn: () => fetchRoombaRuns(1),
+    staleTime: 60_000,
   });
 
   const m = maintenance.data;
@@ -117,6 +90,7 @@ export default function HomeSummary() {
             ? 'Docked'
             : 'Idle';
   const roombaAttention = rb?.needsAttention ?? false;
+  const lastRun = roombaRuns.data?.[0] ?? null;
 
   // ── Current weather (latest hourly reading) ──────────────────
   const { data: currentWeather, isLoading: weatherLoading } = useQuery({
@@ -130,11 +104,9 @@ export default function HomeSummary() {
   const wxEmoji = currentWx ? getWeatherEmoji(currentWx.weatherCode) : null;
   const wxDesc = currentWx ? getWeatherCodeDescription(currentWx.weatherCode) : null;
 
-  // Memoized so the 6 module cards (and their icon/pill children) don't get
-  // fresh object references — and re-render — on every parent render; only
-  // rebuild when one of the underlying values actually changes.
+  // Module cards — the primary purpose of Home on mobile: quick jump to every
+  // section for anyone not using the sidebar.
   const modules = useMemo(() => [
-    // Utilities are now one tab (Electric + Gas + Water) — one card, one destination.
     { label: 'Utility', detail: `Electric · Gas · Water · ${(electricUsage.data?.length ?? 0) + (gasUsage.data?.length ?? 0)} records`, route: '/utility', icon: '⚡', pill: 'Live' },
     { label: 'Roomba', detail: rb ? `${roombaState}${rb.batteryPct != null ? ` · ${rb.batteryPct}%` : ''}` : 'No data yet', route: '/roomba', icon: '🤖', pill: roombaAttention ? 'Attention' : rb?.running ? 'Cleaning' : 'Idle' },
     { label: 'Maintenance', detail: m ? `${m.openCount} open · ${m.completedCount} done` : 'Loading...', route: '/maintenance', icon: '🔧', pill: m ? `${m.openCount} open` : '...' },
@@ -144,71 +116,28 @@ export default function HomeSummary() {
     { label: "What's New", detail: 'Latest releases & changes', route: '/updates', icon: '✨', pill: 'Updates' },
   ], [electricUsage.data?.length, gasUsage.data?.length, m, unreadCount.data, guestCount.data, rb, roombaState, roombaAttention]);
 
+  const dailyLabel = latestDaily
+    ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+    : null;
+  const lastCleanLabel = lastRun?.completedAt
+    ? new Date(lastRun.completedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    : null;
+
+  // Detail line for the Roomba summary card.
+  const roombaDetail = roombaAttention
+    ? (rb?.attentionReasons[0] ?? 'Needs attention')
+    : rb?.running
+      ? `Cleaning now${rb.sqft != null ? ` · ${rb.sqft} sq ft` : ''}`
+      : lastCleanLabel
+        ? `Last cleaned ${lastCleanLabel}${lastRun?.squareFeet != null ? ` · ${lastRun.squareFeet} sq ft` : ''}`
+        : rb
+          ? 'No runs recorded yet'
+          : 'Waiting for the robot';
+
   return (
     <div className="space-y-6 sm:space-y-7">
-      {/* Hero row */}
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)] lg:grid-cols-[minmax(0,1.3fr)_minmax(300px,0.8fr)]">
-        <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">Home</p>
-          <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-            {elecKwh.toFixed(0)} kWh
-          </h2>
-          <p className="mt-2 text-sm text-apptext-soft">Electric usage over the last 60 days</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-appborder bg-appinset p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Rate</p>
-              <p className="mt-1 text-sm font-semibold text-apptext">${kwhRate.toFixed(4)}/kWh</p>
-            </div>
-            <div className="rounded-xl border border-appborder bg-appinset p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Last Reading</p>
-              <p className="mt-1 text-sm font-semibold text-apptext">
-                {latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'No data'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Quick-glance stats card */}
-        <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">At a Glance</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {/* Roomba live state — turns amber when the robot needs attention so a
-                stuck/errored vacuum is visible straight from Home. */}
-            <Link
-              to="/roomba"
-              className={`rounded-2xl border p-3 transition-colors ${
-                roombaAttention
-                  ? 'border-appwarning/50 bg-appwarning/10 hover:bg-appwarning/15'
-                  : 'border-appborder bg-appinset/70 hover:bg-appinset'
-              }`}
-            >
-              <p className={`text-[10px] uppercase tracking-[0.14em] ${roombaAttention ? 'text-appwarning' : 'text-apptext-dim'}`}>🤖 Roomba</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">{roombaState}</p>
-              <p className="mt-0.5 truncate text-xs text-apptext-muted">
-                {roombaAttention ? (rb?.attentionReasons[0] ?? 'Needs attention') : rb?.batteryPct != null ? `${rb.batteryPct}% battery` : 'Vacuum status'}
-              </p>
-            </Link>
-            <Link to="/notifications" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">🔔 Alerts</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">{unreadCount.data ?? '...'}<span className="text-sm font-normal text-apptext-muted"> unread</span></p>
-              <p className="mt-0.5 text-xs text-apptext-muted">Notification center</p>
-            </Link>
-            <Link to="/users" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">👥 Guests</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">{guestCount.data ?? 0}<span className="text-sm font-normal text-apptext-muted"> online</span></p>
-              <p className="mt-0.5 text-xs text-apptext-muted">On the guest network</p>
-            </Link>
-            <Link to="/maintenance" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">🛠️ Maintenance</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">{m?.openCount ?? '...'}<span className="text-sm font-normal text-apptext-muted"> open</span></p>
-              <p className="mt-0.5 text-xs text-apptext-muted">{m?.scheduledCount ?? '...'} upcoming</p>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Current weather — kept high on the page (right under the hero) since
-          it's the most glanceable live signal. Click to open the 24h forecast. */}
+      {/* Current weather — the most glanceable live signal, kept at the top.
+          Click to open the 24h forecast. */}
       {weatherLoading && !currentWx ? (
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)]">
           <div className="animate-pulse">
@@ -265,19 +194,49 @@ export default function HomeSummary() {
         </section>
       ) : null}
 
-      {/* Stat tiles */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <StatTile
-          label="Last Daily"
-          value={latestDaily ? latestDaily.total.toFixed(1) : '—'}
-          unit="kWh"
-          loading={electricUsage.isLoading}
-          icon={Icons.Bolt}
-          subtitle={latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined}
-        />
-        <StatTile label="Electric (60d)" value={elecKwh.toFixed(0)} unit="kWh" loading={electricTotal.isLoading} icon={Icons.Bolt} />
-        <StatTile label="Monthly Est." value={`$${monthlyEstimate.toFixed(2)}`} unit="/mo" loading={electricTotal.isLoading} icon={Icons.Dollar} />
-        <StatTile label="Gas (60d)" value={gasUnits.toFixed(0)} unit="units" loading={gasTotal.isLoading} icon={Icons.Calendar} />
+      {/* Snapshot: last daily electric + Roomba summary */}
+      <section className="grid gap-4 sm:grid-cols-2">
+        {/* Last daily electric */}
+        <Link
+          to="/utility"
+          className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">⚡ Last Daily Electric</p>
+            <span className="text-xs font-medium text-appaccent-text">Utility →</span>
+          </div>
+          <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">
+            {latestDaily ? latestDaily.total.toFixed(1) : '—'}
+            <span className="ml-1 text-base font-normal text-apptext-muted">kWh</span>
+          </p>
+          <p className="mt-1 text-sm text-apptext-soft">
+            {dailyLabel
+              ? `${dailyLabel} · $${(latestDaily!.total * kwhRate).toFixed(2)}`
+              : 'Syncs automatically each evening'}
+          </p>
+        </Link>
+
+        {/* Roomba summary — amber when the robot needs attention. */}
+        <Link
+          to="/roomba"
+          className={`rounded-[28px] border p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors ${
+            roombaAttention
+              ? 'border-appwarning/50 bg-appwarning/10 hover:bg-appwarning/15'
+              : 'border-appborder bg-appsurface-raised hover:border-appborder-hover'
+          }`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className={`text-[11px] font-medium uppercase tracking-[0.18em] ${roombaAttention ? 'text-appwarning' : 'text-apptext-muted'}`}>🤖 Roomba</p>
+            <span className="text-xs font-medium text-appaccent-text">Open →</span>
+          </div>
+          <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">
+            {roombaState}
+            {rb?.batteryPct != null && (
+              <span className="ml-2 text-base font-normal text-apptext-muted">{rb.batteryPct}%</span>
+            )}
+          </p>
+          <p className="mt-1 truncate text-sm text-apptext-soft">{roombaDetail}</p>
+        </Link>
       </section>
 
       {showForecast && (
@@ -288,116 +247,70 @@ export default function HomeSummary() {
         />
       )}
 
-      {/* Module cards */}
+      {/* Module cards — quick access to every section (mobile nav aid) */}
       <section className="perf-section">
         <div className="mb-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">Modules</p>
           <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-apptext">Quick access to every system.</h3>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {modules.map((m) => (
+          {modules.map((mod) => (
             <Link
-              key={m.label}
-              to={m.route}
+              key={mod.label}
+              to={mod.route}
               className="group flex items-center gap-4 rounded-[24px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] transition-colors hover:border-appborder-hover hover:bg-appinset-strong"
             >
-              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-appborder bg-appinset text-2xl">{m.icon}</span>
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-appborder bg-appinset text-2xl">{mod.icon}</span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-apptext">{m.label}</h4>
-                  <span className="shrink-0 rounded-full border border-appborder bg-appinset px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-apptext-soft">{m.pill}</span>
+                  <h4 className="text-sm font-semibold text-apptext">{mod.label}</h4>
+                  <span className="shrink-0 rounded-full border border-appborder bg-appinset px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-apptext-soft">{mod.pill}</span>
                 </div>
-                <p className="mt-1 text-xs text-apptext-muted">{m.detail}</p>
+                <p className="mt-1 text-xs text-apptext-muted">{mod.detail}</p>
               </div>
             </Link>
           ))}
         </div>
       </section>
 
-      {/* Feed: Electric usage + Recent notifications */}
-      <section className="grid gap-4 lg:grid-cols-2">
-        {/* Usage feed */}
-        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Feed</p>
-              <h3 className="mt-2 text-lg font-semibold text-apptext">Recent electric readings</h3>
-            </div>
-            <Link to="/utility" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>
+      {/* Recent notifications */}
+      <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Alerts</p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">Recent notifications</h3>
           </div>
-
-          {electricUsage.isLoading ? (
-            <div className="space-y-2 animate-pulse">
-              {[1, 2, 3].map((i) => <div key={i} className="h-12 rounded-2xl bg-appinset" />)}
-            </div>
-          ) : recentElectric.length ? (
-            <VirtualizedList
-              items={recentElectric} height={320} itemHeight={64} overscan={4} className="pr-1" contentClassName="space-y-2"
-              renderItem={(d) => {
-                const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-                return (
-                  <div key={d.date} className="flex items-center justify-between gap-4 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder">
-                    <div className="flex items-center gap-3">
-                      <span className="h-2.5 w-2.5 rounded-full bg-appsuccess shadow-[0_0_16px_var(--appsuccess)]" />
-                      <div>
-                        <p className="text-sm font-medium text-apptext">{label}</p>
-                        <p className="text-xs text-apptext-dim">CoServ · {d.count} hourly records</p>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold tabular-nums text-apptext-soft">{d.total.toFixed(2)} kWh</p>
-                      <p className="text-xs text-apptext-dim">${(d.total * kwhRate).toFixed(2)}</p>
-                    </div>
-                  </div>
-                );
-              }}
-            />
-          ) : (
-            <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset px-4 text-center text-sm text-apptext-muted">
-              No readings yet — usage syncs automatically each evening once your utility posts the day's data.
-            </div>
-          )}
+          <Link to="/notifications" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>
         </div>
 
-        {/* Notification feed */}
-        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Alerts</p>
-              <h3 className="mt-2 text-lg font-semibold text-apptext">Recent notifications</h3>
-            </div>
-            <Link to="/notifications" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>
+        {recentNotifications.isLoading ? (
+          <div className="space-y-2 animate-pulse">
+            {[1, 2, 3].map((i) => <div key={i} className="h-12 rounded-2xl bg-appinset" />)}
           </div>
-
-          {recentNotifications.isLoading ? (
-            <div className="space-y-2 animate-pulse">
-              {[1, 2, 3].map((i) => <div key={i} className="h-12 rounded-2xl bg-appinset" />)}
-            </div>
-          ) : (recentNotifications.data ?? []).length === 0 ? (
-            <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-              No notifications yet. Activity will appear here.
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
-              {(recentNotifications.data ?? []).map((n: any) => (
-                <Link
-                  key={n.id}
-                  to="/notifications"
-                  className="flex items-center gap-3 rounded-xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
-                >
-                  <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${
-                    n.severity === 'CRITICAL' ? 'bg-appdanger' : n.severity === 'WARNING' ? 'bg-appwarning' : n.severity === 'SUCCESS' ? 'bg-appsuccess' : 'bg-appaccent'
-                  }`} />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-apptext">{n.title}</p>
-                    <p className="text-xs text-apptext-dim">{n.category}</p>
-                  </div>
-                  {!n.isRead && <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-appaccent" />}
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (recentNotifications.data ?? []).length === 0 ? (
+          <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
+            No notifications yet. Activity will appear here.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {(recentNotifications.data ?? []).map((n: any) => (
+              <Link
+                key={n.id}
+                to="/notifications"
+                className="flex items-center gap-3 rounded-xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
+              >
+                <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${
+                  n.severity === 'CRITICAL' ? 'bg-appdanger' : n.severity === 'WARNING' ? 'bg-appwarning' : n.severity === 'SUCCESS' ? 'bg-appsuccess' : 'bg-appaccent'
+                }`} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm text-apptext">{n.title}</p>
+                  <p className="text-xs text-apptext-dim">{n.category}</p>
+                </div>
+                {!n.isRead && <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-appaccent" />}
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );
