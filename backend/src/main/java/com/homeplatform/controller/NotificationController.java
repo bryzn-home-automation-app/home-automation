@@ -59,6 +59,7 @@ public class NotificationController {
     public ResponseEntity<Map<String, Object>> seed(HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("userId");
         alertEngine.generateElectricAlerts(userId);
+        alertEngine.generateRoombaAlerts(userId);
         return ResponseEntity.ok(Map.of("status", "generated", "unread", service.getUnreadCount(userId)));
     }
 }

@@ -128,8 +128,9 @@ public class UserService {
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole().name());
 
-        // Generate real electric alerts from live usage data
+        // Generate real electric + roomba alerts from live data
         alertEngine.generateElectricAlerts(user.getId());
+        alertEngine.generateRoombaAlerts(user.getId());
         maintenanceService.seedSampleRecords(user.getId());
 
         // Only create guest sessions for GUEST users
