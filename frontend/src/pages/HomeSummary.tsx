@@ -9,6 +9,7 @@ import { fetchMaintenanceAnalytics } from '../api/maintenance';
 import { fetchNotifications } from '../api/notifications';
 import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
+import { fetchRoombaStatus } from '../api/roomba';
 import { fetchCurrentWeather } from '../api/weather';
 import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
 import { isHourlySource } from '../utils/usageSource';
@@ -91,10 +92,34 @@ export default function HomeSummary() {
     staleTime: 30_000,
   });
 
+  // Live Roomba snapshot — short staleTime so a running/stuck robot shows up
+  // near-live on Home (mirrors the /roomba page's polling intent, lighter).
+  const roomba = useQuery({
+    queryKey: ['roomba-status'],
+    queryFn: fetchRoombaStatus,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+
   const m = maintenance.data;
 
+  // Condense the raw V4 phase into a glanceable headline word.
+  const rb = roomba.data;
+  const roombaState = rb == null
+    ? '—'
+    : rb.running
+      ? 'Cleaning'
+      : rb.phase === 'charge'
+        ? 'Charging'
+        : rb.phase === 'evac'
+          ? 'Emptying'
+          : rb.dockText && /dock/i.test(rb.dockText)
+            ? 'Docked'
+            : 'Idle';
+  const roombaAttention = rb?.needsAttention ?? false;
+
   // ── Current weather (latest hourly reading) ──────────────────
-  const { data: currentWeather } = useQuery({
+  const { data: currentWeather, isLoading: weatherLoading } = useQuery({
     queryKey: ['weather-current'],
     queryFn: fetchCurrentWeather,
     staleTime: 300_000,
@@ -109,13 +134,15 @@ export default function HomeSummary() {
   // fresh object references — and re-render — on every parent render; only
   // rebuild when one of the underlying values actually changes.
   const modules = useMemo(() => [
-    { label: 'Electric', detail: `${electricUsage.data?.length ?? 0} records`, route: '/utility', icon: '⚡', pill: 'Live' },
-    { label: 'Gas', detail: `${gasUsage.data?.length ?? 0} records synced`, route: '/utility?view=gas', icon: '🔥', pill: 'Tracking' },
+    // Utilities are now one tab (Electric + Gas + Water) — one card, one destination.
+    { label: 'Utility', detail: `Electric · Gas · Water · ${(electricUsage.data?.length ?? 0) + (gasUsage.data?.length ?? 0)} records`, route: '/utility', icon: '⚡', pill: 'Live' },
+    { label: 'Roomba', detail: rb ? `${roombaState}${rb.batteryPct != null ? ` · ${rb.batteryPct}%` : ''}` : 'No data yet', route: '/roomba', icon: '🤖', pill: roombaAttention ? 'Attention' : rb?.running ? 'Cleaning' : 'Idle' },
     { label: 'Maintenance', detail: m ? `${m.openCount} open · ${m.completedCount} done` : 'Loading...', route: '/maintenance', icon: '🔧', pill: m ? `${m.openCount} open` : '...' },
     { label: 'Notifications', detail: `${unreadCount.data ?? 0} unread alerts`, route: '/notifications', icon: '🔔', pill: unreadCount.data ? `${unreadCount.data} new` : 'Clear' },
-    { label: 'Users', detail: `${guestCount.data ?? 0} guests online`, route: '/users', icon: '👥', pill: 'Active' },
-    { label: 'WiFi', detail: `${guestCount.data ?? 0} guests online`, route: '/wifi', icon: '📶', pill: guestCount.data ? `${guestCount.data} on` : 'Ready' },
-  ], [electricUsage.data?.length, gasUsage.data?.length, m, unreadCount.data, guestCount.data]);
+    { label: 'WiFi', detail: `Guest network${guestCount.data ? ` · ${guestCount.data} online` : ''}`, route: '/wifi', icon: '📶', pill: guestCount.data ? `${guestCount.data} on` : 'Ready' },
+    { label: 'Users', detail: 'Members, roles & approvals', route: '/users', icon: '👥', pill: 'Manage' },
+    { label: "What's New", detail: 'Latest releases & changes', route: '/updates', icon: '✨', pill: 'Updates' },
+  ], [electricUsage.data?.length, gasUsage.data?.length, m, unreadCount.data, guestCount.data, rb, roombaState, roombaAttention]);
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -126,7 +153,7 @@ export default function HomeSummary() {
           <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
             {elecKwh.toFixed(0)} kWh
           </h2>
-          <p className="mt-2 text-sm text-apptext-soft">Electric 60-day usage · ~${monthlyEstimate.toFixed(0)}/mo combined electric + gas estimate</p>
+          <p className="mt-2 text-sm text-apptext-soft">Electric usage over the last 60 days</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-xl border border-appborder bg-appinset p-3">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Rate</p>
@@ -145,10 +172,21 @@ export default function HomeSummary() {
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">At a Glance</p>
           <div className="mt-4 grid grid-cols-2 gap-3">
-            <Link to="/maintenance" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">🛠️ Maintenance</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">{m?.openCount ?? '...'}<span className="text-sm font-normal text-apptext-muted"> open</span></p>
-              <p className="mt-0.5 text-xs text-apptext-muted">{m?.scheduledCount ?? '...'} upcoming</p>
+            {/* Roomba live state — turns amber when the robot needs attention so a
+                stuck/errored vacuum is visible straight from Home. */}
+            <Link
+              to="/roomba"
+              className={`rounded-2xl border p-3 transition-colors ${
+                roombaAttention
+                  ? 'border-appwarning/50 bg-appwarning/10 hover:bg-appwarning/15'
+                  : 'border-appborder bg-appinset/70 hover:bg-appinset'
+              }`}
+            >
+              <p className={`text-[10px] uppercase tracking-[0.14em] ${roombaAttention ? 'text-appwarning' : 'text-apptext-dim'}`}>🤖 Roomba</p>
+              <p className="mt-1.5 text-lg font-semibold text-apptext">{roombaState}</p>
+              <p className="mt-0.5 truncate text-xs text-apptext-muted">
+                {roombaAttention ? (rb?.attentionReasons[0] ?? 'Needs attention') : rb?.batteryPct != null ? `${rb.batteryPct}% battery` : 'Vacuum status'}
+              </p>
             </Link>
             <Link to="/notifications" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
               <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">🔔 Alerts</p>
@@ -160,34 +198,34 @@ export default function HomeSummary() {
               <p className="mt-1.5 text-lg font-semibold text-apptext">{guestCount.data ?? 0}<span className="text-sm font-normal text-apptext-muted"> online</span></p>
               <p className="mt-0.5 text-xs text-apptext-muted">On the guest network</p>
             </Link>
-            <div className="rounded-2xl border border-appborder bg-appinset/70 p-3">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">💰 Lifetime</p>
-              <p className="mt-1.5 text-lg font-semibold text-apptext">
-                {m ? `$${m.totalLifetimeCost.toLocaleString()}` : '...'}
-              </p>
-              <p className="mt-0.5 text-xs text-apptext-muted">Maintenance spend</p>
-            </div>
+            <Link to="/maintenance" className="rounded-2xl border border-appborder bg-appinset/70 p-3 transition-colors hover:bg-appinset">
+              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">🛠️ Maintenance</p>
+              <p className="mt-1.5 text-lg font-semibold text-apptext">{m?.openCount ?? '...'}<span className="text-sm font-normal text-apptext-muted"> open</span></p>
+              <p className="mt-0.5 text-xs text-apptext-muted">{m?.scheduledCount ?? '...'} upcoming</p>
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* Stat tiles */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <StatTile
-          label="Last Daily"
-          value={latestDaily ? latestDaily.total.toFixed(1) : '—'}
-          unit="kWh"
-          loading={electricUsage.isLoading}
-          icon={Icons.Bolt}
-          subtitle={latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined}
-        />
-        <StatTile label="Electric (60d)" value={elecKwh.toFixed(0)} unit="kWh" loading={electricTotal.isLoading} icon={Icons.Bolt} />
-        <StatTile label="Monthly Est." value={`$${monthlyEstimate.toFixed(2)}`} unit="/mo" loading={electricTotal.isLoading} icon={Icons.Dollar} />
-        <StatTile label="Gas (60d)" value={gasUnits.toFixed(0)} unit="units" loading={gasTotal.isLoading} icon={Icons.Calendar} />
-      </section>
-
-      {/* Current weather card — click to open the 24-hour forecast */}
-      {currentWx && (
+      {/* Current weather — kept high on the page (right under the hero) since
+          it's the most glanceable live signal. Click to open the 24h forecast. */}
+      {weatherLoading && !currentWx ? (
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)]">
+          <div className="animate-pulse">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="h-11 w-11 rounded-2xl bg-appinset" />
+                <div className="space-y-2">
+                  <div className="h-3 w-28 rounded bg-appinset" />
+                  <div className="h-7 w-20 rounded bg-appinset" />
+                </div>
+              </div>
+              <div className="h-14 w-24 rounded-2xl bg-appinset" />
+            </div>
+            <div className="mt-4 h-16 rounded-2xl bg-appinset" />
+          </div>
+        </section>
+      ) : currentWx ? (
         <section
           role="button"
           tabIndex={0}
@@ -225,7 +263,22 @@ export default function HomeSummary() {
             <ForecastStrip hourly={currentWeather?.hourly} />
           </div>
         </section>
-      )}
+      ) : null}
+
+      {/* Stat tiles */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+        <StatTile
+          label="Last Daily"
+          value={latestDaily ? latestDaily.total.toFixed(1) : '—'}
+          unit="kWh"
+          loading={electricUsage.isLoading}
+          icon={Icons.Bolt}
+          subtitle={latestDaily ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : undefined}
+        />
+        <StatTile label="Electric (60d)" value={elecKwh.toFixed(0)} unit="kWh" loading={electricTotal.isLoading} icon={Icons.Bolt} />
+        <StatTile label="Monthly Est." value={`$${monthlyEstimate.toFixed(2)}`} unit="/mo" loading={electricTotal.isLoading} icon={Icons.Dollar} />
+        <StatTile label="Gas (60d)" value={gasUnits.toFixed(0)} unit="units" loading={gasTotal.isLoading} icon={Icons.Calendar} />
+      </section>
 
       {showForecast && (
         <ForecastModal
@@ -333,7 +386,7 @@ export default function HomeSummary() {
                   className="flex items-center gap-3 rounded-xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
                 >
                   <span className={`inline-flex h-2.5 w-2.5 shrink-0 rounded-full ${
-                    n.severity === 'CRITICAL' ? 'bg-red-400' : n.severity === 'WARNING' ? 'bg-amber-400' : n.severity === 'SUCCESS' ? 'bg-emerald-400' : 'bg-sky-400'
+                    n.severity === 'CRITICAL' ? 'bg-appdanger' : n.severity === 'WARNING' ? 'bg-appwarning' : n.severity === 'SUCCESS' ? 'bg-appsuccess' : 'bg-appaccent'
                   }`} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-apptext">{n.title}</p>
