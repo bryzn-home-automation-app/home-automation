@@ -53,7 +53,6 @@ export default memo(function App() {
   const mainTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
     { path: '/utility', label: 'Utility', icon: '⚡', end: false },
-    { path: '/water', label: 'Water', icon: '💧', end: false },
     { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
     { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
     { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },

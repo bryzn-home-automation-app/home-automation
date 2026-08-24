@@ -18,7 +18,6 @@ const Register = lazy(() => import('./pages/Register'));
 // ── Protected pages (auth required) ──
 const HomeSummary = lazy(() => import('./pages/HomeSummary'));
 const Utility = lazy(() => import('./pages/Utility'));
-const WaterUsage = lazy(() => import('./pages/WaterUsage'));
 const Roomba = lazy(() => import('./pages/Roomba'));
 const WiFiPage = lazy(() => import('./pages/WiFiPage'));
 
@@ -70,7 +69,6 @@ const LoginRoute = lazyRoute(Login, 'form');
 const RegisterRoute = lazyRoute(Register, 'form');
 const HomeSummaryRoute = lazyRoute(HomeSummary, 'stats-charts');
 const UtilityRoute = lazyRoute(Utility, 'stats-charts');
-const WaterUsageRoute = lazyRoute(WaterUsage, 'stats-charts');
 const RoombaRoute = lazyRoute(Roomba, 'stats-charts');
 const WiFiPageRoute = lazyRoute(WiFiPage, 'list');
 const NotificationsRoute = lazyRoute(NotificationsPage, 'list');
@@ -102,8 +100,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                   <Route path="utility" element={<UtilityRoute />} />
                   {/* Old split tabs now live under one Utility tab. */}
                   <Route path="electric" element={<Navigate to="/utility" replace />} />
-                  <Route path="gas" element={<Navigate to="/utility" replace />} />
-                  <Route path="water" element={<WaterUsageRoute />} />
+                  <Route path="gas" element={<Navigate to="/utility?view=gas" replace />} />
+                  <Route path="water" element={<Navigate to="/utility?view=water" replace />} />
                   <Route path="roomba" element={<RoombaRoute />} />
                   <Route path="wifi" element={<WiFiPageRoute />} />
                   <Route path="notifications" element={<NotificationsRoute />} />
