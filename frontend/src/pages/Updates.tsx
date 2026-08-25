@@ -1,6 +1,5 @@
 import { memo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { PageHeader } from '../components/PageHeader';
 import ReleaseChangeList from '../components/ReleaseChangeList';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useTheme } from '../context/ThemeContext';
@@ -41,24 +40,9 @@ export default memo(function Updates() {
   });
 
   const releases = releasesQuery.data ?? [];
-  const currentVersion = releases[0]?.version;
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <PageHeader
-        eyebrow="Release Notes"
-        title="What's New"
-        subtitle="A plain-language rundown of everything that's changed, most recent first."
-        actions={
-          currentVersion ? (
-            <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-              <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Version</p>
-              <p className="mt-1 text-sm font-semibold text-apptext">v{currentVersion}</p>
-            </div>
-          ) : undefined
-        }
-      />
-
       {releasesQuery.isLoading ? (
         <div className="animate-pulse space-y-6 sm:space-y-7">
           {[1, 2].map((i) => (

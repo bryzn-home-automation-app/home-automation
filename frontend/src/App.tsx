@@ -53,13 +53,34 @@ export default memo(function App() {
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSidebarRef = useRef<HTMLElement | null>(null);
 
-  // The shell header is shared across routes; personalize it only on the home
-  // route so other pages keep the plain "Home" title.
-  const isHome = useLocation().pathname === '/';
+  // The shell header is shared across routes, so its title must follow the
+  // active tab (otherwise every page reads "Home"). Exact match, else the
+  // longest matching path prefix, else the home default.
+  const { pathname } = useLocation();
   const welcomeName = user?.displayName || user?.username || 'there';
+  const PAGE_HEADERS: Record<string, { eyebrow: string; title: string; subtitle?: string }> = {
+    '/': { eyebrow: 'Operations Console', title: 'Home Dashboard', subtitle: `Welcome ${welcomeName}!` },
+    '/utility': { eyebrow: 'Utilities', title: 'Utility' },
+    '/roomba': { eyebrow: 'Robot Vacuum', title: 'Roomba' },
+    '/wifi': { eyebrow: 'Guest Access', title: 'Guest Wi‑Fi' },
+    '/notifications': { eyebrow: 'Alerts', title: 'Notifications' },
+    '/users': { eyebrow: 'Household', title: 'Users' },
+    '/maintenance': { eyebrow: 'Upkeep', title: 'Maintenance' },
+    '/updates': { eyebrow: 'Release Notes', title: "What's New", subtitle: "A plain-language rundown of everything that's changed, most recent first." },
+    '/profile': { eyebrow: 'Account', title: 'Profile' },
+    '/admin/guests': { eyebrow: 'Admin', title: 'Guests' },
+    '/admin/debug': { eyebrow: 'Admin', title: 'Debug' },
+    '/admin/logs': { eyebrow: 'Admin', title: 'Audit Logs' },
+  };
+  const pageHeader =
+    PAGE_HEADERS[pathname] ??
+    Object.entries(PAGE_HEADERS)
+      .filter(([k]) => k !== '/' && pathname.startsWith(k))
+      .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ??
+    PAGE_HEADERS['/'];
 
   // Default document title; per-page pages should override with their own useDocumentTitle call.
-  useDocumentTitle(isHome ? 'Home Dashboard' : 'Home');
+  useDocumentTitle(pageHeader.title);
 
   // Mobile sidebar focus trap + Escape-to-close + focus return.
   useFocusTrap(mobileMenuOpen, mobileSidebarRef, hamburgerButtonRef, () => {
@@ -326,9 +347,9 @@ export default memo(function App() {
                 </span>
               </div>
               <PageHeader
-                title={isHome ? 'Home Dashboard' : 'Home'}
-                subtitle={isHome ? `Welcome ${welcomeName}!` : undefined}
-                eyebrow="Operations Console"
+                title={pageHeader.title}
+                subtitle={pageHeader.subtitle}
+                eyebrow={pageHeader.eyebrow}
                 actions={
                   <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
                     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
