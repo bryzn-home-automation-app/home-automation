@@ -1,11 +1,11 @@
 import { memo, useCallback, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { NavLink, Outlet, Link } from 'react-router-dom';
+import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 import api from './api/client';
 import { fetchUnreadCount } from './api/notifications';
-import { jitteredInterval } from './hooks/useJitteredInterval';
+import { useJitteredInterval } from './hooks/useJitteredInterval';
 import { useFocusTrap } from './hooks/useFocusTrap';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
 import Avatar from './components/profile/Avatar';
@@ -20,19 +20,29 @@ export default memo(function App() {
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSidebarRef = useRef<HTMLElement | null>(null);
 
+  // The shell header is shared across routes; personalize it only on the home
+  // route so other pages keep the plain "Home" title.
+  const isHome = useLocation().pathname === '/';
+  const welcomeName = user?.displayName || user?.username || 'there';
+
   // Default document title; per-page pages should override with their own useDocumentTitle call.
-  useDocumentTitle('Home');
+  useDocumentTitle(isHome ? 'Home Dashboard' : 'Home');
 
   // Mobile sidebar focus trap + Escape-to-close + focus return.
   useFocusTrap(mobileMenuOpen, mobileSidebarRef, hamburgerButtonRef, () => {
     setMobileMenuOpen(false);
   });
 
+  // Memoized once per query lifecycle so the RQ poll timer isn't reset on every
+  // App re-render.
+  const healthInterval = useJitteredInterval(120_000);
+  const unreadInterval = useJitteredInterval(120_000);
+
   const health = useQuery({
     queryKey: ['health'],
     queryFn: () => api.get('/health').then((r) => r.data),
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(120_000),
+    refetchInterval: healthInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -40,7 +50,7 @@ export default memo(function App() {
     queryKey: ['notifications-unread-count'],
     queryFn: fetchUnreadCount,
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(120_000),
+    refetchInterval: unreadInterval,
     refetchIntervalInBackground: false,
     enabled: !!user,
   });
@@ -229,7 +239,7 @@ export default memo(function App() {
 
   return (
     <div
-      className="min-h-[100dvh] transition-colors duration-300"
+      className="min-h-[100dvh]"
       style={{
         background: isDark
           ? 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #07111f 0%, #08101c 42%, #050913 100%)'
@@ -286,7 +296,8 @@ export default memo(function App() {
                 </span>
               </div>
               <PageHeader
-                title="Home"
+                title={isHome ? 'Home Dashboard' : 'Home'}
+                subtitle={isHome ? `Welcome ${welcomeName}!` : undefined}
                 eyebrow="Operations Console"
                 actions={
                   <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
@@ -319,7 +330,7 @@ export default memo(function App() {
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-appborder bg-appsurface/95 backdrop-blur-md lg:hidden pb-safe">
+      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-appborder bg-appsurface lg:hidden pb-safe">
         <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-1.5">
           {/* Menu — leftmost, so the trigger sits on the same side as the
               left-anchored sidebar it opens. Hamburger (☰) reads as "menu". */}

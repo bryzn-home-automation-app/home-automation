@@ -19,7 +19,7 @@ export default function ThemePicker() {
             key={mode}
             type="button"
             onClick={() => { if (mode !== theme) toggleTheme(); }}
-            className={`rounded-full px-4 py-2 text-sm font-medium capitalize transition-all ${
+            className={`rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors ${
               theme === mode
                 ? 'border border-appaccent-border bg-appaccent-soft text-appaccent-text'
                 : 'border border-transparent text-apptext-muted hover:border-appborder hover:text-apptext-soft'
@@ -44,7 +44,7 @@ export default function ThemePicker() {
               type="button"
               onClick={() => setPalette(p.id)}
               aria-pressed={active}
-              className={`flex flex-col items-center gap-2 rounded-2xl border p-3 transition-all ${
+              className={`flex flex-col items-center gap-2 rounded-2xl border p-3 transition-colors ${
                 active
                   ? 'border-appaccent-border bg-appaccent-soft'
                   : 'border-appborder bg-appinset hover:border-appborder-hover hover:bg-appinset-strong'

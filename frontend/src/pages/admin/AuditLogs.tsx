@@ -14,7 +14,7 @@ function useActivityLog() {
   const users = useQuery({ queryKey: ['admin-users'], queryFn: fetchAllUsers });
   const sessions = useQuery({ queryKey: ['admin-guest-sessions'], queryFn: fetchGuestSessions });
 
-  return useMemo(() => {
+  const logs = useMemo(() => {
     const logs: LogEntry[] = [];
 
     for (const u of (users.data ?? [])) {
@@ -51,6 +51,8 @@ function useActivityLog() {
 
     return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   }, [users.data, sessions.data]);
+
+  return { logs, loading: users.isLoading };
 }
 
 const typeColors: Record<string, string> = {
@@ -76,9 +78,7 @@ const typeLabels: Record<string, string> = {
 };
 
 export default function AuditLogs() {
-  const logs = useActivityLog();
-  const usersLoading = useQuery({ queryKey: ['admin-users'], queryFn: fetchAllUsers }).isLoading;
-  const loading = usersLoading;
+  const { logs, loading } = useActivityLog();
 
   return (
     <div className="space-y-6 sm:space-y-7">

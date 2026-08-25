@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
@@ -11,7 +11,7 @@ import RoomCleanModal from '../components/RoomCleanModal';
 import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useAuth } from '../context/AuthContext';
 import type { RoombaStatus, RoombaRun } from '../types';
 
@@ -126,11 +126,18 @@ function presenceChip(label: string, present: boolean | null | undefined): { tex
 // ── Page ──────────────────────────────────────────────────
 
 export default memo(function Roomba() {
+  // Memoized once per query lifecycle so the RQ poll timers aren't reset on
+  // every re-render (this page re-renders on each status poll).
+  const statusInterval = useJitteredInterval(30_000, 5_000);
+  const runsInterval = useJitteredInterval(60_000);
+  const mapInterval = useJitteredInterval(300_000, 30_000);
+  const deviceInterval = useJitteredInterval(600_000, 30_000);
+
   const statusQuery = useQuery({
     queryKey: ['roomba-status'],
     queryFn: fetchRoombaStatus,
     staleTime: 20_000,
-    refetchInterval: jitteredInterval(30_000, 5_000),
+    refetchInterval: statusInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -138,7 +145,7 @@ export default memo(function Roomba() {
     queryKey: ['roomba-runs'],
     queryFn: () => fetchRoombaRuns(50),
     staleTime: 60_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: runsInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -146,7 +153,7 @@ export default memo(function Roomba() {
     queryKey: ['roomba-map'],
     queryFn: fetchRoombaMap,
     staleTime: 300_000,
-    refetchInterval: jitteredInterval(300_000, 30_000),
+    refetchInterval: mapInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -154,7 +161,7 @@ export default memo(function Roomba() {
     queryKey: ['roomba-device'],
     queryFn: fetchRoombaDevice,
     staleTime: 600_000,
-    refetchInterval: jitteredInterval(600_000, 30_000),
+    refetchInterval: deviceInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -231,12 +238,12 @@ export default memo(function Roomba() {
     setCleanMode(true);
   };
 
-  const toggleMergeRoom = (room: RoomSelection) =>
+  const toggleMergeRoom = useCallback((room: RoomSelection) =>
     setMergeSelection((prev) =>
       prev.some((r) => r.id === room.id)
         ? prev.filter((r) => r.id !== room.id)
         : [...prev, room],
-    );
+    ), []);
 
   const finishMerge = () => {
     if (mergeSelection.length < 2) return;
@@ -246,7 +253,7 @@ export default memo(function Roomba() {
 
   // Add a corner. The first corner must land inside a room (that sets the target);
   // later corners just extend the path.
-  const addSplitPoint = (point: [number, number], room: RoomSelection | null) => {
+  const addSplitPoint = useCallback((point: [number, number], room: RoomSelection | null) => {
     setSplitDraft((prev) => {
       if (!prev) {
         if (!room) return prev; // ignore clicks outside any room until one is picked
@@ -254,16 +261,16 @@ export default memo(function Roomba() {
       }
       return { ...prev, pts: [...prev.pts, point] };
     });
-  };
+  }, []);
 
-  const undoSplitPoint = () =>
+  const undoSplitPoint = useCallback(() =>
     setSplitDraft((prev) => {
       if (!prev) return prev;
       if (prev.pts.length <= 1) return null; // removing the first corner clears the room too
       return { ...prev, pts: prev.pts.slice(0, -1) };
-    });
+    }), []);
 
-  const finishSplit = () => {
+  const finishSplit = useCallback(() => {
     if (!splitDraft || splitDraft.pts.length < 2) return;
     setPendingSplit({
       roomId: splitDraft.roomId,
@@ -272,7 +279,19 @@ export default memo(function Roomba() {
     });
     setSplitMode(false);
     setSplitDraft(null);
-  };
+  }, [splitDraft]);
+
+  // Stable clean-room handler + memoized merge-id array so RoombaMap's props
+  // keep referential identity between position polls (memo(RoombaMap) holds).
+  const handleSelectCleanRoom = useCallback((room: RoomSelection) => {
+    setCleanRoom(room);
+    setCleanMode(false);
+  }, []);
+
+  const mergeSelectionIds = useMemo(
+    () => mergeSelection.map((r) => r.id),
+    [mergeSelection],
+  );
 
   const deviceLine = device
     ? [device.family || device.sku, device.series && `Series ${device.series}`,
@@ -609,13 +628,10 @@ export default memo(function Roomba() {
             onSplitFinish={finishSplit}
             onSplitUndo={undoSplitPoint}
             mergeMode={mergeMode}
-            mergeSelection={mergeSelection.map((r) => r.id)}
+            mergeSelection={mergeSelectionIds}
             onToggleMergeRoom={toggleMergeRoom}
             cleanMode={cleanMode}
-            onSelectCleanRoom={(room) => {
-              setCleanRoom(room);
-              exitCleanMode();
-            }}
+            onSelectCleanRoom={handleSelectCleanRoom}
           />
         </DeferredRender>
       </section>

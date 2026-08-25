@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode, UIEvent } from 'react';
 
 interface VirtualizedListProps<T> {
@@ -21,6 +21,17 @@ function VirtualizedListComponent<T>({
   renderItem,
 }: VirtualizedListProps<T>) {
   const [scrollTop, setScrollTop] = useState(0);
+  // Coalesce scroll events to one state update per animation frame — a raw
+  // setState per scroll tick causes a render storm (and eats the windowing win).
+  const frameRef = useRef<number | null>(null);
+  const pendingScrollRef = useRef(0);
+
+  useEffect(
+    () => () => {
+      if (frameRef.current != null) cancelAnimationFrame(frameRef.current);
+    },
+    [],
+  );
 
   const { startIndex, endIndex, offsetTop, totalHeight } = useMemo(() => {
     const visibleCount = Math.ceil(height / itemHeight);
@@ -41,7 +52,12 @@ function VirtualizedListComponent<T>({
   );
 
   const onScroll = (event: UIEvent<HTMLDivElement>) => {
-    setScrollTop(event.currentTarget.scrollTop);
+    pendingScrollRef.current = event.currentTarget.scrollTop;
+    if (frameRef.current != null) return;
+    frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = null;
+      setScrollTop(pendingScrollRef.current);
+    });
   };
 
   return (

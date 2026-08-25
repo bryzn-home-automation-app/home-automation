@@ -56,7 +56,7 @@ export default function ColorPicker({
           key={hex}
           type="button"
           onClick={() => onChange(hex)}
-          className="group relative h-9 w-9 rounded-full transition-all hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+          className="group relative h-9 w-9 rounded-full transition-transform hover:scale-125 focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
           style={{
             background: hex,
             boxShadow: selected === hex ? `0 0 0 3px var(--appbg), 0 0 0 5px ${hex}` : `0 0 0 2px var(--appbg)`,

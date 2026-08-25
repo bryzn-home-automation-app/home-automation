@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { UsageRangeSummary } from '../types';
 import { formatPeriodRange, formatSummaryDate } from '../utils/usageSummary';
 
@@ -16,7 +17,7 @@ interface UsageSummaryGridProps {
   loading?: boolean;
 }
 
-export default function UsageSummaryGrid({
+function UsageSummaryGrid({
   title,
   unitLabel,
   summaries,
@@ -103,3 +104,5 @@ export default function UsageSummaryGrid({
     </section>
   );
 }
+
+export default memo(UsageSummaryGrid);

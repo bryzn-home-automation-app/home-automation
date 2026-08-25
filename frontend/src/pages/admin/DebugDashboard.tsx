@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
-import { jitteredInterval } from '../../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 
 // Fetch config (includes version/commit hash) — shared key with useUsageData
@@ -147,6 +147,15 @@ export default function DebugDashboard() {
   // Body sent to the sync endpoints; undefined = "yesterday".
   const syncBody = preset === 'range' ? { startDate, endDate } : undefined;
 
+  // Memoized poll intervals — stable across the frequent re-renders of this
+  // dashboard so the RQ timers aren't reset each render.
+  const eventsInterval = useJitteredInterval(30_000);
+  const summaryInterval = useJitteredInterval(30_000);
+  const healthInterval = useJitteredInterval(60_000);
+  const freshnessInterval = useJitteredInterval(60_000);
+  const coverageInterval = useJitteredInterval(120_000);
+  const syncHistoryInterval = useJitteredInterval(120_000);
+
   const { data: events, isLoading: eventsLoading } = useQuery<AppEvent[]>({
     queryKey: ['admin-events', category, level],
     queryFn: async () => {
@@ -157,7 +166,7 @@ export default function DebugDashboard() {
       return data;
     },
     staleTime: 10_000,
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: eventsInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -168,7 +177,7 @@ export default function DebugDashboard() {
       return data;
     },
     staleTime: 15_000,
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: summaryInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -179,7 +188,7 @@ export default function DebugDashboard() {
       return data;
     },
     staleTime: 30_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: healthInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -196,7 +205,7 @@ export default function DebugDashboard() {
     queryKey: ['admin-freshness'],
     queryFn: async () => (await api.get('/admin/sync/freshness')).data,
     staleTime: 30_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: freshnessInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -205,7 +214,7 @@ export default function DebugDashboard() {
     queryKey: ['admin-coverage'],
     queryFn: async () => (await api.get('/admin/coverage?days=14')).data,
     staleTime: 60_000,
-    refetchInterval: jitteredInterval(120_000),
+    refetchInterval: coverageInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -214,7 +223,7 @@ export default function DebugDashboard() {
     queryKey: ['admin-sync-history'],
     queryFn: async () => (await api.get('/admin/sync/history?days=30')).data,
     staleTime: 60_000,
-    refetchInterval: jitteredInterval(120_000),
+    refetchInterval: syncHistoryInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -949,7 +958,7 @@ function SyncButton({
       type="button"
       onClick={() => trigger.mutate()}
       disabled={disabled || trigger.isPending}
-      className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-medium text-emerald-200 transition-all hover:border-emerald-300/40 hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-40"
+      className="rounded-full border border-emerald-300/20 bg-emerald-300/10 px-4 py-2 text-sm font-medium text-emerald-200 transition-colors hover:border-emerald-300/40 hover:bg-emerald-300/20 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {trigger.isPending ? '⏳ Triggering…' : trigger.isSuccess ? `✓ ${label}` : label}
     </button>

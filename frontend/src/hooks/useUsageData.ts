@@ -2,11 +2,27 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchDailyUsage, fetchRecentUsage, fetchTotalUsage } from '../api/energy';
 import { fetchMeters } from '../api/meters';
 import api from '../api/client';
-import { jitteredInterval } from './useJitteredInterval';
+import { useJitteredInterval } from './useJitteredInterval';
 import type { DailyUsagePoint, EnergyUsage, Meter } from '../types';
 
-/** Shared hook — all pages use this, React Query cache deduplicates. */
-export function useUsageData() {
+/**
+ * Shared hook — all pages use this, React Query cache deduplicates.
+ *
+ * `hourly` (default true) controls whether the two heavy raw-hourly usage
+ * queries (`fetchRecentUsage`, ~1,440 rows/meter) run. Pages that only need the
+ * pre-aggregated daily/total data (e.g. HomeSummary) pass `hourly: false` so the
+ * landing screen doesn't transfer + parse thousands of rows it never displays.
+ */
+export function useUsageData(options?: { hourly?: boolean }) {
+  const includeHourly = options?.hourly ?? true;
+
+  // CoServ only posts new rows ~every 30 min (see backend schedulers), so a
+  // 10-min poll is already well ahead of the data. Each interval is memoized
+  // (distinct staggered values) so the RQ poll timer isn't reset every render.
+  const usageInterval = useJitteredInterval(600_000);
+  const totalInterval = useJitteredInterval(600_000);
+  const dailyInterval = useJitteredInterval(600_000);
+
   // Meters
   const meters = useQuery<Meter[]>({
     queryKey: ['meters'],
@@ -31,9 +47,9 @@ export function useUsageData() {
       electricMeter
         ? fetchRecentUsage(electricMeter.id, 60)
         : Promise.resolve([]),
-    enabled: !!electricMeter,
+    enabled: !!electricMeter && includeHourly,
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: usageInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -41,9 +57,9 @@ export function useUsageData() {
     queryKey: ['energy-usage', gasMeter?.id],
     queryFn: () =>
       gasMeter ? fetchRecentUsage(gasMeter.id, 60) : Promise.resolve([]),
-    enabled: !!gasMeter,
+    enabled: !!gasMeter && includeHourly,
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: usageInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -55,7 +71,7 @@ export function useUsageData() {
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!electricMeter,
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: totalInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -68,7 +84,7 @@ export function useUsageData() {
         : Promise.resolve([]),
     enabled: !!electricMeter,
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: dailyInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -80,7 +96,7 @@ export function useUsageData() {
         : Promise.resolve({ totalKwh: 0 }),
     enabled: !!gasMeter,
     staleTime: 120_000,
-    refetchInterval: jitteredInterval(60_000),
+    refetchInterval: totalInterval,
     refetchIntervalInBackground: false,
   });
 

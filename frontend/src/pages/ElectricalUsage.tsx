@@ -9,7 +9,7 @@ import VirtualizedList from '../components/VirtualizedList';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { fetchBatchSummaries } from '../api/energy';
 import { fetchWeatherForRange } from '../api/weather';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 import { isHourlySource } from '../utils/usageSource';
 import UsageWeatherChart from '../components/UsageWeatherChart';
@@ -20,6 +20,7 @@ type LogFilter = 'daily' | 'hourly';
 export default memo(function ElectricalUsage() {
   const { electricUsage, electricTotal, electricMeter, config } = useUsageData();
   const [logFilter, setLogFilter] = useState<LogFilter>('daily');
+  const weatherInterval = useJitteredInterval(3_600_000, 60_000);
 
   // Usage visuals (trend line + monthly bars) follow the theme accent so they
   // match the palette instead of a hardcoded green (see CHART_SERIES).
@@ -117,7 +118,7 @@ export default memo(function ElectricalUsage() {
     queryFn: () => fetchWeatherForRange(weatherStart, weatherEnd),
     enabled: weatherStart !== '' && weatherEnd !== '',
     staleTime: 3_600_000,
-    refetchInterval: jitteredInterval(3_600_000, 60_000),
+    refetchInterval: weatherInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -162,7 +163,10 @@ export default memo(function ElectricalUsage() {
     staleTime: 30_000,
   });
 
-  const summaryCards = periodDefinitions.map((period, index) => {
+  // Memoized — the per-period weather reductions (O(periods × weatherDays))
+  // otherwise re-run on every render (60s usage poll, theme change, daily/hourly
+  // toggle) and hand a fresh array to the un-memoized UsageSummaryGrid.
+  const summaryCards = useMemo(() => periodDefinitions.map((period, index) => {
     const s = batchSummary.data?.[index] ??
       createEmptyUsageSummary(electricMeter?.id ?? 0, period.start, period.end);
     const periodWx = Array.from(weatherByDate.entries())
@@ -180,7 +184,7 @@ export default memo(function ElectricalUsage() {
       wxHigh,
       wxLow,
     };
-  });
+  }), [periodDefinitions, batchSummary.data, weatherByDate, electricMeter?.id]);
 
   const summaryLoading = batchSummary.isLoading;
 
@@ -346,7 +350,7 @@ export default memo(function ElectricalUsage() {
               <button
                 key={f}
                 onClick={() => setLogFilter(f)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-all ${
+                className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
                   logFilter === f
                     ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
                     : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'

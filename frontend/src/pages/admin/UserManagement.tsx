@@ -154,7 +154,7 @@ export default function UserManagement() {
                 key={key}
                 type="button"
                 onClick={() => setActiveTab(key)}
-                className={`rounded-full border px-4 py-2 text-sm font-medium transition-all ${
+                className={`rounded-full border px-4 py-2 text-sm font-medium transition-colors ${
                   activeTab === key
                     ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
                     : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'
@@ -306,7 +306,7 @@ function UserCard({
                     </span>
                   )}
                 </div>
-                {user.isOnline && <OnlineDot className="absolute -top-0.5 -right-0.5" />}
+                {user.isOnline && <OnlineDot pulse={false} className="absolute -top-0.5 -right-0.5" />}
               </div>
 
               <div className="min-w-0">

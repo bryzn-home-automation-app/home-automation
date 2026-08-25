@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 
 type Theme = 'dark' | 'light';
 
@@ -145,6 +145,25 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const palette = theme === 'light' ? lightPalette : darkPalette;
 
+  // Suppress transitions during a theme/palette swap so the whole page repaints
+  // once instead of animating every card's `transition-colors` for 300ms at
+  // once (which read as a laggy full-page repaint). Runs BEFORE the attribute
+  // effects below so the guard class is applied before the CSS vars flip; the
+  // double-rAF re-enables transitions only after the new colors have painted.
+  useEffect(() => {
+    const el = document.documentElement;
+    el.classList.add('theme-switching');
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => el.classList.remove('theme-switching'));
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+      el.classList.remove('theme-switching');
+    };
+  }, [theme, palette]);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     try {
@@ -189,19 +208,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // Stable context value — otherwise a fresh object every render forces all
+  // consumers to re-render. toggleTheme/setPalette are already useCallback'd.
+  const value = useMemo<ThemeContextValue>(
+    () => ({
+      theme,
+      toggleTheme,
+      isLight: theme === 'light',
+      isDark: theme === 'dark',
+      palette,
+      setPalette,
+    }),
+    [theme, palette, toggleTheme, setPalette],
+  );
+
   return (
-    <ThemeContext.Provider
-      value={{
-        theme,
-        toggleTheme,
-        isLight: theme === 'light',
-        isDark: theme === 'dark',
-        palette,
-        setPalette,
-      }}
-    >
-      {children}
-    </ThemeContext.Provider>
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
   );
 }
 

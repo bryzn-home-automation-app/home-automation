@@ -17,6 +17,22 @@ const TICK_PROPS = { fontSize: 11 } as const;
 const TICK_LINE_FALSE = false;
 const CARTESIAN_GRID_DASH = '3 3';
 
+// Static CSS-var theme + tooltip styles hoisted to module scope (stable identity;
+// a per-render literal would defeat Recharts' prop-identity checks).
+const CHART_THEME = {
+  grid: 'var(--appchart-grid)',
+  tick: 'var(--appchart-tick)',
+} as const;
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: 'var(--appchart-bg)',
+  border: '1px solid var(--appchart-border)',
+  borderRadius: '16px',
+  fontSize: '13px',
+  color: 'var(--apptext)',
+  boxShadow: '0 20px 50px var(--appshadow-lg)',
+} as const;
+const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
+
 interface MonthlyComparisonProps {
   data: EnergyUsage[];
   loading?: boolean;
@@ -24,32 +40,6 @@ interface MonthlyComparisonProps {
   emptyText?: string;
   unitLabel?: string;
   barColor?: string;
-}
-
-function useRechartsTheme() {
-  return {
-    tooltipBg: 'var(--appchart-bg)',
-    tooltipBorder: 'var(--appchart-border)',
-    text: 'var(--apptext)',
-    muted: 'var(--apptext-muted)',
-    grid: 'var(--appchart-grid)',
-    tick: 'var(--appchart-tick)',
-  };
-}
-
-// Memoized tooltip style — avoids object literals on every chart render
-function useTooltipStyle(t: ReturnType<typeof useRechartsTheme>) {
-  return useMemo(() => ({
-    content: {
-      backgroundColor: t.tooltipBg,
-      border: `1px solid ${t.tooltipBorder}`,
-      borderRadius: '16px',
-      fontSize: '13px',
-      color: t.text,
-      boxShadow: '0 20px 50px var(--appshadow-lg)',
-    },
-    label: { color: t.muted, marginBottom: 4 },
-  }), [t]);
 }
 
 function MonthlyComparison({
@@ -60,7 +50,31 @@ function MonthlyComparison({
   unitLabel = 'kWh',
   barColor = '#10b981',
 }: MonthlyComparisonProps) {
-  const t = useRechartsTheme();
+  const t = CHART_THEME;
+
+  // All hooks run before any early return (Rules of Hooks).
+  // Group usage by month — use only hourly records to avoid granularity mixing
+  const chartData = useMemo(() => {
+    const byMonth = new Map<string, number>();
+    data.forEach((d) => {
+      if (!isHourlySource(d.source)) return;
+      const key = new Date(d.timestamp).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+      });
+      byMonth.set(key, (byMonth.get(key) || 0) + Number(d.usageKwh));
+    });
+
+    return Array.from(byMonth.entries()).map(([month, kWh]) => ({
+      month,
+      kWh: Math.round(kWh * 100) / 100,
+    }));
+  }, [data]);
+
+  const tooltipFormatter = useMemo(
+    () => (value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Total'],
+    [unitLabel]
+  );
 
   if (loading) {
     return (
@@ -84,30 +98,6 @@ function MonthlyComparison({
       </div>
     );
   }
-
-  // Group usage by month — use only hourly records to avoid granularity mixing
-  const chartData = useMemo(() => {
-    const byMonth = new Map<string, number>();
-    data.forEach((d) => {
-      if (!isHourlySource(d.source)) return;
-      const key = new Date(d.timestamp).toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-      });
-      byMonth.set(key, (byMonth.get(key) || 0) + Number(d.usageKwh));
-    });
-
-    return Array.from(byMonth.entries()).map(([month, kWh]) => ({
-      month,
-      kWh: Math.round(kWh * 100) / 100,
-    }));
-  }, [data]);
-
-  const tooltipStyle = useTooltipStyle(t);
-  const tooltipFormatter = useMemo(
-    () => (value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Total'],
-    [unitLabel]
-  );
 
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
@@ -136,9 +126,9 @@ function MonthlyComparison({
             unit={` ${unitLabel}`}
           />
           <Tooltip
-            contentStyle={tooltipStyle.content}
+            contentStyle={TOOLTIP_CONTENT_STYLE}
             formatter={tooltipFormatter}
-            labelStyle={tooltipStyle.label}
+            labelStyle={TOOLTIP_LABEL_STYLE}
           />
           <Bar
             dataKey="kWh"

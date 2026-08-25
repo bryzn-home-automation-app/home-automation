@@ -159,7 +159,7 @@ function Timeline({ records, onSelect }: { records: MaintenanceRecord[]; onSelec
 function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: MaintenanceRecord) => void }) {
   return (
     <div
-      className="cursor-pointer rounded-2xl border border-appborder bg-appinset transition-all hover:border-appborder-hover hover:bg-appinset-strong"
+      className="cursor-pointer rounded-2xl border border-appborder bg-appinset transition-colors hover:border-appborder-hover hover:bg-appinset-strong"
       onClick={() => onSelect(r)}
     >
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] lg:items-center lg:gap-3 px-4 py-3 lg:px-5 lg:py-4">
@@ -577,7 +577,7 @@ function FormModal({ editing, onClose, onSuccess }: {
               <div className="flex gap-1.5">
                 {PRIORITIES.map((p) => (
                   <button key={p} type="button" onClick={() => setPriority(p)}
-                    className={`flex-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition-all ${priority === p ? `${PRIORITY_COLORS[p]} border-current` : 'border-appborder text-apptext-dim'}`}>{p}</button>
+                    className={`flex-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors ${priority === p ? `${PRIORITY_COLORS[p]} border-current` : 'border-appborder text-apptext-dim'}`}>{p}</button>
                 ))}
               </div>
             </div>
@@ -763,7 +763,7 @@ export default function MaintenanceDashboard() {
           <div className="flex gap-1 rounded-full border border-appborder bg-appinset p-0.5 mr-2">
             {(['cards','timeline'] as const).map((v) => (
               <button key={v} onClick={() => setView(v)}
-                className={`rounded-full px-4 py-1.5 text-xs font-semibold capitalize transition-all ${
+                className={`rounded-full px-4 py-1.5 text-xs font-semibold capitalize transition-colors ${
                   view === v ? 'bg-appaccent-soft text-appaccent-text' : 'text-apptext-muted'}`}>
                 {v === 'cards' ? '📇 Cards' : '⏳ Timeline'}
               </button>

@@ -19,6 +19,25 @@ const DOT_PROPS = { r: 3, strokeWidth: 0 } as const;
 const ACTIVE_DOT_PROPS = { r: 5, strokeWidth: 0 } as const;
 const CARTESIAN_GRID_DASH = '3 3';
 
+// Chart theme + tooltip styles are static CSS-var strings — hoisted to module
+// scope so their identity is stable (a per-render object literal would defeat
+// Recharts' prop-identity checks and re-style the tooltip every render).
+const CHART_THEME = {
+  text: 'var(--apptext)',
+  muted: 'var(--apptext-muted)',
+  grid: 'var(--appchart-grid)',
+  tick: 'var(--appchart-tick)',
+} as const;
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: 'var(--appchart-bg)',
+  border: '1px solid var(--appchart-border)',
+  borderRadius: '16px',
+  fontSize: '13px',
+  color: 'var(--apptext)',
+  boxShadow: '0 20px 50px var(--appshadow-lg)',
+} as const;
+const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
+
 interface UsageChartProps {
   data: EnergyUsage[];
   loading?: boolean;
@@ -26,32 +45,6 @@ interface UsageChartProps {
   emptyText?: string;
   unitLabel?: string;
   accentColor?: string;
-}
-
-function useRechartsTheme() {
-  return {
-    tooltipBg: 'var(--appchart-bg)',
-    tooltipBorder: 'var(--appchart-border)',
-    text: 'var(--apptext)',
-    muted: 'var(--apptext-muted)',
-    grid: 'var(--appchart-grid)',
-    tick: 'var(--appchart-tick)',
-  };
-}
-
-// Memoized tooltip style — avoids object literals on every chart render
-function useTooltipStyle(t: ReturnType<typeof useRechartsTheme>) {
-  return useMemo(() => ({
-    content: {
-      backgroundColor: t.tooltipBg,
-      border: `1px solid ${t.tooltipBorder}`,
-      borderRadius: '16px',
-      fontSize: '13px',
-      color: t.text,
-      boxShadow: '0 20px 50px var(--appshadow-lg)',
-    },
-    label: { color: t.muted, marginBottom: 4 },
-  }), [t]);
 }
 
 function buildDynamicAxis(
@@ -101,7 +94,29 @@ function UsageChart({
   unitLabel = 'kWh',
   accentColor = '#34d399',
 }: UsageChartProps) {
-  const t = useRechartsTheme();
+  const t = CHART_THEME;
+
+  // All hooks run before any early return (Rules of Hooks) — the loading/empty
+  // branches must not change the hook count between renders.
+  const chartData = useMemo(() => {
+    // Sum hourly records per date to get daily totals.
+    const byDate = new Map<string, number>();
+    for (const d of data) {
+      if (!isHourlySource(d.source)) continue;
+      const date = d.timestamp.slice(0, 10);
+      byDate.set(date, (byDate.get(date) ?? 0) + Number(d.usageKwh));
+    }
+    return Array.from(byDate.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([date, total]) => ({
+        date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        kWh: Math.round(total * 100) / 100,
+      }));
+  }, [data]);
+
+  const yAxis = useMemo(() => {
+    return buildDynamicAxis(chartData.map((d) => d.kWh), { points: 8, padRatio: 0.12, minPad: 1, floorZero: true, integerTicks: true });
+  }, [chartData]);
 
   if (loading) {
     return (
@@ -125,28 +140,6 @@ function UsageChart({
       </div>
     );
   }
-
-  const chartData = useMemo(() => {
-    // Sum hourly records per date to get daily totals.
-    const byDate = new Map<string, number>();
-    for (const d of data) {
-      if (!isHourlySource(d.source)) continue;
-      const date = d.timestamp.slice(0, 10);
-      byDate.set(date, (byDate.get(date) ?? 0) + Number(d.usageKwh));
-    }
-    return Array.from(byDate.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, total]) => ({
-        date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        kWh: Math.round(total * 100) / 100,
-      }));
-  }, [data]);
-
-  const yAxis = useMemo(() => {
-    return buildDynamicAxis(chartData.map((d) => d.kWh), { points: 8, padRatio: 0.12, minPad: 1, floorZero: true, integerTicks: true });
-  }, [chartData]);
-
-  const tooltipStyle = useTooltipStyle(t);
 
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
@@ -187,9 +180,9 @@ function UsageChart({
             ticks={yAxis.ticks}
           />
           <Tooltip
-            contentStyle={tooltipStyle.content}
+            contentStyle={TOOLTIP_CONTENT_STYLE}
             formatter={(value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Usage']}
-            labelStyle={tooltipStyle.label}
+            labelStyle={TOOLTIP_LABEL_STYLE}
           />
           <Line
             type="monotone"

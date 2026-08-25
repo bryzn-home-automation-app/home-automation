@@ -144,7 +144,9 @@ export default memo(function RoombaMap({
   onSelectCleanRoom,
 }: RoombaMapProps) {
   const geo = map?.geojson;
-  const [hoveredRoom, setHoveredRoom] = useState<string | null>(null);
+  // Room hover highlight is driven purely by CSS `:hover` on the hit-area group
+  // (see the `.roomba-roomhit` rules in index.css) — no React state, so hovering
+  // a dense map triggers zero re-renders.
   // Split ("divide a room") interaction: only the live cursor is local state —
   // the placed corners live in the parent (controlled via splitDraft).
   const [cursor, setCursor] = useState<{ vx: number; vy: number } | null>(null);
@@ -358,9 +360,9 @@ export default memo(function RoombaMap({
     queryKey: ['roomba-position'],
     queryFn: fetchRoombaPosition,
     enabled: !!running,
-    refetchInterval: running ? 1500 : false,
+    refetchInterval: running ? 2500 : false,
     refetchIntervalInBackground: false,
-    staleTime: 1000,
+    staleTime: 2000,
   });
   const position = running ? positionQuery.data ?? null : null;
 
@@ -409,139 +411,26 @@ export default memo(function RoombaMap({
     return out;
   }, [running, coverageQuery.data, model]);
 
-  if (loading) {
-    return (
-      <div
-        className={`animate-pulse rounded-[24px] border border-appborder bg-appinset ${className ?? ''}`}
-        style={{ minHeight: 320 }}
-        aria-hidden
-      />
-    );
-  }
-
-  // 204 / no map yet, or a map row with no drawable geometry.
-  if (!model || !model.hasGeometry) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-appborder bg-appinset p-8 text-center ${className ?? ''}`}
-        style={{ minHeight: 320 }}
-      >
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft">
-          <svg className="h-6 w-6 text-appaccent-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-        </div>
-        <p className="text-sm font-medium text-apptext-soft">No map yet</p>
-        <p className="max-w-xs text-xs leading-5 text-apptext-muted">
-          Your Roomba builds its floor map over the first few cleaning runs. Once it
-          has mapped a room, the layout will appear here.
-        </p>
-      </div>
-    );
-  }
-
-  const {
-    width,
-    height,
-    project,
-    unproject,
-    floorPolys,
-    rooms,
-    borderPaths,
-    dockMarkers,
-    zonePolys,
-    wallLines,
-    dockR,
-  } = model;
-  const maxDim = Math.max(width, height);
+  // ── Static SVG layers ──────────────────────────────────────────────
+  // These depend only on the map geometry + interaction state (hover/merge/mode),
+  // never on the live position or coverage. Memoizing them keeps the ~100-300
+  // floor/room/zone/wall/dock/label/hit-area nodes from being reconciled on
+  // every position poll (2.5s) and coverage poll (5s) during a running mission —
+  // only the robot dot + coverage layer re-render between polls. The stack is
+  // split around the live coverage layer to preserve z-order: base renders under
+  // coverage, overlay renders over it.
   const isSplitting = !!splitMode && !!onSplitAddPoint;
   const isMerging = !!mergeMode && !!onToggleMergeRoom;
   const isCleaning = !!cleanMode && !!onSelectCleanRoom;
-  const draftPts = isSplitting ? splitDraft ?? [] : [];
-  const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
-  // Rename clicks are disabled in the other modes, so the interactions never conflict.
   const canEdit = !!editable && !!onSelectRoom && !isSplitting && !isMerging && !isCleaning;
-  // The room hit layer is active for rename, merge selection, or clean selection.
-  const interactive = canEdit || isMerging || isCleaning;
 
-  // Convert a mouse event to viewBox (SVG user-space) coordinates via the CTM.
-  const eventToViewBox = (e: { clientX: number; clientY: number }): [number, number] | null => {
-    const svg = svgRef.current;
-    if (!svg) return null;
-    const ctm = svg.getScreenCTM();
-    if (!ctm) return null;
-    const pt = svg.createSVGPoint();
-    pt.x = e.clientX;
-    pt.y = e.clientY;
-    const local = pt.matrixTransform(ctm.inverse());
-    return [local.x, local.y];
-  };
-
-  const roomAt = (vx: number, vy: number): RoomShape | null => {
-    for (const room of rooms) {
-      if (room.id && pointInRing(vx, vy, room.outerPts)) return room;
-    }
-    return null;
-  };
-
-  const handleSplitClick = (e: ReactMouseEvent<SVGSVGElement>) => {
-    if (!isSplitting) return;
-    // The 2nd click of a double-click also fires onClick (detail === 2); ignore it
-    // so a double-click places one final corner (detail 1) and then finishes.
-    if (e.detail > 1) return;
-    const vb = eventToViewBox(e);
-    if (!vb) return;
-    const [vx, vy] = vb;
-    const room = roomAt(vx, vy);
-    onSplitAddPoint?.(unproject([vx, vy]), room ? { id: room.id as string, name: room.name } : null);
-    setCursor({ vx, vy });
-  };
-
-  const handleSplitDblClick = () => {
-    if (isSplitting && draftPts.length >= 2) onSplitFinish?.();
-  };
-
-  const handleSplitMove = (e: ReactMouseEvent<SVGSVGElement>) => {
-    if (!isSplitting || draftPts.length === 0) return;
-    const vb = eventToViewBox(e);
-    if (vb) setCursor({ vx: vb[0], vy: vb[1] });
-  };
-
-  // Live robot dot geometry, in the SAME projected space as everything else.
-  // The heading is drawn in SVG space where y grows downward, so the meter-space
-  // angle theta maps to (cos θ, −sin θ). theta is provisional (may point out the
-  // robot's back — see maps.md #1); still useful as a facing hint.
-  const robot =
-    position && Number.isFinite(position.x) && Number.isFinite(position.y)
-      ? (() => {
-          const [cx, cy] = project([position.x, position.y]);
-          const r = maxDim * 0.02;
-          const theta = typeof position.theta === 'number' ? position.theta : null;
-          const L = r * 2.4;
-          const head =
-            theta != null
-              ? { hx: cx + L * Math.cos(theta), hy: cy - L * Math.sin(theta) }
-              : null;
-          return { cx, cy, r, head };
-        })()
-      : null;
-
-  return (
-    <div
-      className={`overflow-hidden rounded-[24px] border border-appborder bg-appinset p-3 ${className ?? ''}`}
-    >
-      <svg
-        ref={svgRef}
-        viewBox={`0 0 ${width.toFixed(1)} ${height.toFixed(1)}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label={`Roomba floor plan${map?.name ? `: ${map.name}` : ''}`}
-        preserveAspectRatio="xMidYMid meet"
-        style={isSplitting ? { cursor: 'crosshair' } : undefined}
-        onClick={isSplitting ? handleSplitClick : undefined}
-        onDoubleClick={isSplitting ? handleSplitDblClick : undefined}
-        onMouseMove={isSplitting ? handleSplitMove : undefined}
-      >
+  const staticBase = useMemo(() => {
+    if (!model) return null;
+    const { floorPolys, rooms, width, height } = model;
+    const maxDim = Math.max(width, height);
+    const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
+    return (
+      <>
         {/* Floor plan — the outer walkable surface */}
         {floorPolys.map((pts, i) => (
           <polygon
@@ -554,17 +443,17 @@ export default memo(function RoombaMap({
           />
         ))}
 
-        {/* Rooms — accent-tinted regions (decorative; interaction layer is below) */}
+        {/* Rooms — accent-tinted regions (decorative; interaction layer is below).
+            The hover highlight lives on the hit-area layer via CSS, so these fills
+            depend only on merge selection. */}
         {rooms.map((room, ri) => {
           const mergeSelected = !!(mergeSet && room.id && mergeSet.has(room.id));
-          const hoverHi = canEdit && hoveredRoom != null && hoveredRoom === room.id;
-          const highlighted = mergeSelected || hoverHi;
           return room.rings.map((pts, i) => (
             <polygon
               key={`room-${ri}-${i}`}
               points={pts}
-              fill={highlighted ? 'var(--appaccent)' : 'var(--appaccent-soft)'}
-              fillOpacity={mergeSelected ? 0.34 : hoverHi ? 0.28 : 1}
+              fill={mergeSelected ? 'var(--appaccent)' : 'var(--appaccent-soft)'}
+              fillOpacity={mergeSelected ? 0.34 : 1}
               stroke={mergeSelected ? 'var(--appaccent)' : 'var(--appaccent-border)'}
               strokeWidth={maxDim * (mergeSelected ? 0.005 : 0.003)}
               strokeLinejoin="round"
@@ -572,22 +461,18 @@ export default memo(function RoombaMap({
             />
           ));
         })}
+      </>
+    );
+  }, [model, isMerging, mergeSelection]);
 
-        {/* Live cleaning coverage — traveled-through (lighter) vs vacuumed
-            (darker), painted over the light room fill so cleaned area reads as
-            progress. Drawn under walls so outlines stay crisp. */}
-        {coverageLayer.map((c, i) => (
-          <path
-            key={`cov-${i}`}
-            d={c.d}
-            fillRule="evenodd"
-            fill="var(--appaccent)"
-            fillOpacity={c.mode === 'cleaned' ? 0.5 : 0.2}
-            stroke="none"
-            style={{ pointerEvents: 'none' }}
-          />
-        ))}
-
+  const staticOverlay = useMemo(() => {
+    if (!model) return null;
+    const { rooms, borderPaths, dockMarkers, zonePolys, wallLines, width, height, dockR } = model;
+    const maxDim = Math.max(width, height);
+    const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
+    const interactive = canEdit || isMerging || isCleaning;
+    return (
+      <>
         {/* Keep-out / no-mop zones — hatched, distinct per category */}
         {zonePolys.map((z, i) => {
           const noMop = z.category.includes('NO_MOP') || z.category.includes('MOP');
@@ -694,6 +579,9 @@ export default memo(function RoombaMap({
               return (
                 <g
                   key={`roomhit-${ri}`}
+                  // CSS `:hover` on this class drives the highlight (stroke for any
+                  // interactive mode; a soft fill too when editable) — no React state.
+                  className={`roomba-roomhit${canEdit ? ' roomba-roomhit-editable' : ''}`}
                   role="button"
                   tabIndex={0}
                   aria-label={
@@ -711,15 +599,13 @@ export default memo(function RoombaMap({
                       act();
                     }
                   }}
-                  onMouseEnter={() => setHoveredRoom(room.id)}
-                  onMouseLeave={() => setHoveredRoom((h) => (h === room.id ? null : h))}
                 >
                   {room.rings.map((pts, i) => (
                     <polygon
                       key={`hit-${ri}-${i}`}
                       points={pts}
                       fill="transparent"
-                      stroke={hoveredRoom === room.id ? 'var(--appaccent)' : 'transparent'}
+                      stroke="transparent"
                       strokeWidth={maxDim * 0.005}
                       strokeLinejoin="round"
                     />
@@ -756,6 +642,155 @@ export default memo(function RoombaMap({
                 </g>
               );
             })}
+      </>
+    );
+  }, [model, isMerging, isCleaning, canEdit, mergeSelection, onToggleMergeRoom, onSelectCleanRoom, onSelectRoom]);
+
+  if (loading) {
+    return (
+      <div
+        className={`animate-pulse rounded-[24px] border border-appborder bg-appinset ${className ?? ''}`}
+        style={{ minHeight: 320 }}
+        aria-hidden
+      />
+    );
+  }
+
+  // 204 / no map yet, or a map row with no drawable geometry.
+  if (!model || !model.hasGeometry) {
+    return (
+      <div
+        className={`flex flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-appborder bg-appinset p-8 text-center ${className ?? ''}`}
+        style={{ minHeight: 320 }}
+      >
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft">
+          <svg className="h-6 w-6 text-appaccent-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-apptext-soft">No map yet</p>
+        <p className="max-w-xs text-xs leading-5 text-apptext-muted">
+          Your Roomba builds its floor map over the first few cleaning runs. Once it
+          has mapped a room, the layout will appear here.
+        </p>
+      </div>
+    );
+  }
+
+  const {
+    width,
+    height,
+    project,
+    unproject,
+    rooms,
+  } = model;
+  const maxDim = Math.max(width, height);
+  // isSplitting / isMerging / isCleaning / canEdit are computed above the early
+  // returns (needed by the memoized static layers). The static room/zone/wall/
+  // dock/label/hit-area JSX lives in `staticBase` / `staticOverlay`; only the
+  // live coverage, robot dot and split preview render inline below.
+  const draftPts = isSplitting ? splitDraft ?? [] : [];
+
+  // Convert a mouse event to viewBox (SVG user-space) coordinates via the CTM.
+  const eventToViewBox = (e: { clientX: number; clientY: number }): [number, number] | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const local = pt.matrixTransform(ctm.inverse());
+    return [local.x, local.y];
+  };
+
+  const roomAt = (vx: number, vy: number): RoomShape | null => {
+    for (const room of rooms) {
+      if (room.id && pointInRing(vx, vy, room.outerPts)) return room;
+    }
+    return null;
+  };
+
+  const handleSplitClick = (e: ReactMouseEvent<SVGSVGElement>) => {
+    if (!isSplitting) return;
+    // The 2nd click of a double-click also fires onClick (detail === 2); ignore it
+    // so a double-click places one final corner (detail 1) and then finishes.
+    if (e.detail > 1) return;
+    const vb = eventToViewBox(e);
+    if (!vb) return;
+    const [vx, vy] = vb;
+    const room = roomAt(vx, vy);
+    onSplitAddPoint?.(unproject([vx, vy]), room ? { id: room.id as string, name: room.name } : null);
+    setCursor({ vx, vy });
+  };
+
+  const handleSplitDblClick = () => {
+    if (isSplitting && draftPts.length >= 2) onSplitFinish?.();
+  };
+
+  const handleSplitMove = (e: ReactMouseEvent<SVGSVGElement>) => {
+    if (!isSplitting || draftPts.length === 0) return;
+    const vb = eventToViewBox(e);
+    if (vb) setCursor({ vx: vb[0], vy: vb[1] });
+  };
+
+  // Live robot dot geometry, in the SAME projected space as everything else.
+  // The heading is drawn in SVG space where y grows downward, so the meter-space
+  // angle theta maps to (cos θ, −sin θ). theta is provisional (may point out the
+  // robot's back — see maps.md #1); still useful as a facing hint.
+  const robot =
+    position && Number.isFinite(position.x) && Number.isFinite(position.y)
+      ? (() => {
+          const [cx, cy] = project([position.x, position.y]);
+          const r = maxDim * 0.02;
+          const theta = typeof position.theta === 'number' ? position.theta : null;
+          const L = r * 2.4;
+          const head =
+            theta != null
+              ? { hx: cx + L * Math.cos(theta), hy: cy - L * Math.sin(theta) }
+              : null;
+          return { cx, cy, r, head };
+        })()
+      : null;
+
+  return (
+    <div
+      className={`overflow-hidden rounded-[24px] border border-appborder bg-appinset p-3 ${className ?? ''}`}
+    >
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${width.toFixed(1)} ${height.toFixed(1)}`}
+        className="h-auto w-full"
+        role="img"
+        aria-label={`Roomba floor plan${map?.name ? `: ${map.name}` : ''}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={isSplitting ? { cursor: 'crosshair' } : undefined}
+        onClick={isSplitting ? handleSplitClick : undefined}
+        onDoubleClick={isSplitting ? handleSplitDblClick : undefined}
+        onMouseMove={isSplitting ? handleSplitMove : undefined}
+      >
+        {/* Static base layers (floor + room fills) — memoized; unaffected by
+            position/coverage polls. */}
+        {staticBase}
+
+        {/* Live cleaning coverage — traveled-through (lighter) vs vacuumed
+            (darker), painted over the light room fill so cleaned area reads as
+            progress. Drawn under walls so outlines stay crisp. */}
+        {coverageLayer.map((c, i) => (
+          <path
+            key={`cov-${i}`}
+            d={c.d}
+            fillRule="evenodd"
+            fill="var(--appaccent)"
+            fillOpacity={c.mode === 'cleaned' ? 0.5 : 0.2}
+            stroke="none"
+            style={{ pointerEvents: 'none' }}
+          />
+        ))}
+
+        {/* Static overlay layers (zones, walls, dock, labels, room hit-areas) —
+            memoized; unaffected by position/coverage polls. */}
+        {staticOverlay}
 
         {/* Live robot dot + heading — same project() space, hidden when stale */}
         {robot && (
@@ -771,10 +806,17 @@ export default memo(function RoombaMap({
                 strokeLinecap="round"
               />
             )}
-            <circle cx={robot.cx} cy={robot.cy} r={robot.r * 2.4} fill="var(--appsuccess)" fillOpacity={0.18}>
-              <animate attributeName="r" values={`${robot.r * 1.8};${robot.r * 3};${robot.r * 1.8}`} dur="1.6s" repeatCount="indefinite" />
-              <animate attributeName="fill-opacity" values="0.28;0.05;0.28" dur="1.6s" repeatCount="indefinite" />
-            </circle>
+            {/* Pulsing halo — CSS transform/opacity animation (GPU-composited,
+                survives React reconciles) instead of perpetual SMIL <animate>
+                nodes that force a repaint loop and re-mount on every render. */}
+            <circle
+              className="roomba-halo"
+              cx={robot.cx}
+              cy={robot.cy}
+              r={robot.r * 2.4}
+              fill="var(--appsuccess)"
+              fillOpacity={0.18}
+            />
             <circle
               cx={robot.cx}
               cy={robot.cy}

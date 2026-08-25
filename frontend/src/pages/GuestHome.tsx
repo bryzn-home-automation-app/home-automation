@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import type { PanInfo } from 'framer-motion';
 import { fetchAllUsers, type AdminUser } from '../api/auth';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import webBackgroundImage from '../../images/web_guest_bg.png';
 import mobileBackgroundImage from '../../images/mobile_guest_bg.png';
 import chickenPng from '../../images/animals/chicken.png';
@@ -329,6 +329,7 @@ function LobbyAvatar({
   sceneWidth,
   sceneHeight,
   editMode,
+  reduceMotion,
   onMove,
   onSelect,
 }: {
@@ -338,9 +339,13 @@ function LobbyAvatar({
   sceneWidth: number;
   sceneHeight: number;
   editMode: boolean;
+  reduceMotion: boolean;
   onMove: (slotIndex: number, dxPx: number, dyPx: number) => void;
   onSelect: (member: LobbyMember) => void;
 }) {
+  // When the visitor prefers reduced motion, hold avatars still (same static
+  // branch editMode uses) instead of running a perpetual per-avatar float loop.
+  const still = editMode || reduceMotion;
   const displayName = getDisplayName(member.user);
   const zLayer = Math.round(member.spot.y) + 200;
   const baseSize = avatarBaseSize(member.spot.name) * member.spot.scale;
@@ -364,7 +369,7 @@ function LobbyAvatar({
         y: 14,
         scale: 0.82,
       }}
-      transition={editMode ? editTransition : idleTransition}
+      transition={still ? editTransition : idleTransition}
       drag={editMode}
       dragMomentum={false}
       dragElastic={0}
@@ -382,9 +387,9 @@ function LobbyAvatar({
           alt={`${member.animal.label} avatar for ${displayName}`}
           className="relative z-10 select-none object-contain"
           style={{ width: `${baseSize}px`, height: `${baseSize}px` }}
-          animate={editMode ? { y: 0, rotate: 0, scaleY: 1 } : { y: [0, -3, 0], rotate: [0, 0, 1.5, 0, -1.5, 0], scaleY: [1, 1, 0.9, 1, 1, 1] }}
+          animate={still ? { y: 0, rotate: 0, scaleY: 1 } : { y: [0, -3, 0], rotate: [0, 0, 1.5, 0, -1.5, 0], scaleY: [1, 1, 0.9, 1, 1, 1] }}
           transition={
-            editMode
+            still
               ? { duration: 0 }
               : {
                   repeat: Infinity,
@@ -407,7 +412,7 @@ function LobbyAvatar({
         <div className="absolute inset-0 rounded-3xl opacity-0 blur-xl transition-opacity duration-200 group-hover:opacity-100" style={{ backgroundColor: 'rgba(255,255,255,0.45)' }} />
       </motion.button>
 
-      {!editMode && (
+      {!still && (
         <motion.div
           key={`step-${sceneSeed}-${member.user.id}`}
           className="absolute left-1/2 top-[62%] h-0.5 -translate-x-1/2 rounded-full bg-white/85"
@@ -466,6 +471,8 @@ export default function GuestHome() {
   const [selected, setSelected] = useState<LobbyMember | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [snapshotStatus, setSnapshotStatus] = useState<string | null>(null);
+  const reduceMotion = useReducedMotion() ?? false;
+  const lobbyInterval = useJitteredInterval(30_000);
   const isMobileScene = useIsMobileScene();
   const [desktopSpots, setDesktopSpots] = useState<HangoutSpot[]>(() => cloneSpots(DESKTOP_SCENE.spots));
   const [mobileSpots, setMobileSpots] = useState<HangoutSpot[]>(() => cloneSpots(MOBILE_SCENE.spots));
@@ -495,7 +502,7 @@ export default function GuestHome() {
     queryKey: ['all-users-guest-lobby'],
     queryFn: fetchAllUsers,
     staleTime: 25_000,
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: lobbyInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -633,13 +640,18 @@ export default function GuestHome() {
           <AnimatePresence>
             {lobbyMembers.map((member, index) => (
               <LobbyAvatar
-                key={`${member.user.id}-${sceneSeed}`}
+                // Key by slot, NOT sceneSeed — otherwise every avatar unmounts
+                // and re-plays its enter animation on each 22s scene refresh
+                // (a 15-element animation storm). Keyed by slot, a refresh
+                // updates members in place.
+                key={member.slotIndex}
                 member={member}
                 index={index}
                 sceneSeed={sceneSeed}
                 sceneWidth={activeScene.width}
                 sceneHeight={activeScene.height}
                 editMode={editMode}
+                reduceMotion={reduceMotion}
                 onMove={moveSpot}
                 onSelect={setSelected}
               />

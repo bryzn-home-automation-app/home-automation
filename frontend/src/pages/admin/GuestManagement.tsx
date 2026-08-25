@@ -3,7 +3,7 @@ import {
   fetchGuestSessions,
   expireGuestSessions,
 } from '../../api/auth';
-import { jitteredInterval } from '../../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 
 function timeAgo(iso: string): string {
   const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -21,11 +21,12 @@ function formatDate(iso: string) {
 
 export default function GuestManagement() {
   const queryClient = useQueryClient();
+  const sessionsInterval = useJitteredInterval(30_000);
 
   const sessions = useQuery({
     queryKey: ['admin-guest-sessions'],
     queryFn: fetchGuestSessions,
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: sessionsInterval,
     refetchIntervalInBackground: false,
   });
 

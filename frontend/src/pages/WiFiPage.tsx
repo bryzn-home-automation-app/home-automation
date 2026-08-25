@@ -5,7 +5,7 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { fetchGuestSessions, fetchGuestSessionCount, fetchGuestInviteCode, type GuestSession } from '../api/auth';
 import OnlineDot from '../components/profile/OnlineDot';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 function timeAgo(iso: string): string {
   const seconds = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
@@ -75,11 +75,14 @@ export default function WiFiPage() {
   const ssid = import.meta.env.VITE_WIFI_SSID ?? '';
   const password = import.meta.env.VITE_WIFI_PASSWORD ?? '';
 
+  const guestSessionsInterval = useJitteredInterval(30_000);
+  const guestCountInterval = useJitteredInterval(30_000);
+
   const guestSessions = useQuery({
     queryKey: ['guest-sessions'],
     queryFn: fetchGuestSessions,
     staleTime: 30_000,
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: guestSessionsInterval,
     refetchIntervalInBackground: false,
     enabled: isAdmin,
   });
@@ -88,7 +91,7 @@ export default function WiFiPage() {
     queryKey: ['guest-session-count'],
     queryFn: fetchGuestSessionCount,
     staleTime: 30_000,
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: guestCountInterval,
     refetchIntervalInBackground: false,
     enabled: !isAdmin,
   });

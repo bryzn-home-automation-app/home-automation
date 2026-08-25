@@ -37,6 +37,27 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.1.0", "stable", LocalDate.of(2026, 8, 24),
+                    "Faster and smoother",
+                    "A big tune-up under the hood: the whole app feels quicker and lighter, the "
+                            + "live vacuum map stays smooth while it cleans, and the home screen now "
+                            + "welcomes you by name.",
+                    List.of(
+                            change("improved", "The app feels noticeably faster. It now does far less "
+                                    + "background work, so screens and charts respond more quickly and "
+                                    + "scrolling stays smooth."),
+                            change("improved", "The home screen greets you by name and loads lighter — "
+                                    + "it no longer pulls in data it doesn’t need just to show the summary."),
+                            change("improved", "Watching the robot vacuum clean is much smoother now, "
+                                    + "especially in homes with lots of mapped rooms."),
+                            change("improved", "Switching between light and dark mode — or changing the "
+                                    + "accent color — is now instant, with no flicker across the page."),
+                            change("improved", "Scrolling on a phone is smoother; the bottom menu bar no "
+                                    + "longer causes stutter."),
+                            change("improved", "Long lists like notifications stay responsive while you "
+                                    + "type to search or as new alerts arrive."),
+                            change("fixed", "Fixed a rare glitch where the usage charts could fail to "
+                                    + "appear right after opening a page."))),
             define("1.0.0", "beta", LocalDate.of(2026, 8, 22),
                     "Welcome to HomeOS",
                     "The first release of our home dashboard — one place to see the house at a glance, "

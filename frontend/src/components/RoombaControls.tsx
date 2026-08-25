@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { sendRoombaCommand, fetchRoombaCommands } from '../api/roomba';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import type { RoombaStatus } from '../types';
 
 const BUTTONS: { command: string; label: string; icon: string }[] = [
@@ -30,11 +30,12 @@ function statusTone(s: string): string {
 export default function RoombaControls({ status }: { status: RoombaStatus | null }) {
   const qc = useQueryClient();
   const [note, setNote] = useState<string | null>(null);
+  const commandsInterval = useJitteredInterval(8000);
 
   const commandsQuery = useQuery({
     queryKey: ['roomba', 'commands'],
     queryFn: fetchRoombaCommands,
-    refetchInterval: jitteredInterval(8000),
+    refetchInterval: commandsInterval,
     refetchIntervalInBackground: false,
   });
 

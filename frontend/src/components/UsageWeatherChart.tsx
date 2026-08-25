@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import type { EnergyUsage } from '../types';
 import { fetchWeatherForRange } from '../api/weather';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { isHourlySource } from '../utils/usageSource';
 import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
 
@@ -160,6 +160,7 @@ function UsageWeatherChart({
   endDate,
 }: UsageWeatherChartProps) {
   const [range, setRange] = useState<TimeRangeKey>('24h');
+  const weatherInterval = useJitteredInterval(3_600_000, 60_000);
 
   // Per-palette line colors: usage tracks the theme accent, temperature is a
   // contrasting hue chosen per palette (see CHART_SERIES). Re-derives whenever
@@ -180,7 +181,7 @@ function UsageWeatherChart({
     queryFn: () => fetchWeatherForRange(dateStart, dateEnd),
     enabled: weatherEnabled,
     staleTime: 3_600_000,
-    refetchInterval: jitteredInterval(3_600_000, 60_000),
+    refetchInterval: weatherInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -290,8 +291,15 @@ function UsageWeatherChart({
       return result;
     }
 
-    // Daily data: take the last N entries directly
-    if (!rangeConfig || !isFinite(rangeConfig.count)) return chartData;
+    // Daily data: take the last N entries directly. For unbounded ranges
+    // (all/month) cap the series with an even stride so the line never renders
+    // more than MAX_CHART_POINTS SVG segments as history grows.
+    if (!rangeConfig || !isFinite(rangeConfig.count)) {
+      const MAX_CHART_POINTS = 500;
+      if (chartData.length <= MAX_CHART_POINTS) return chartData;
+      const step = (chartData.length - 1) / (MAX_CHART_POINTS - 1);
+      return Array.from({ length: MAX_CHART_POINTS }, (_, i) => chartData[Math.round(i * step)]);
+    }
     return chartData.slice(-rangeConfig.count);
   }, [chartData, hourlyData, range, useHourly]);
 
@@ -410,7 +418,7 @@ function UsageWeatherChart({
           <button
             key={r.key}
             onClick={() => setRange(r.key)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
               range === r.key
                 ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
                 : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'

@@ -10,6 +10,10 @@ export default defineConfig({
       output: {
         manualChunks: {
           recharts: ['recharts'],
+          // Heavy, route-specific vendors split out for long-term caching:
+          // framer-motion is only used by GuestHome, qrcode only by WiFiPage.
+          'framer-motion': ['framer-motion'],
+          qrcode: ['qrcode'],
         },
       },
     },

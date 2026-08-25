@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { memo, useDeferredValue, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchNotifications,
@@ -6,7 +6,7 @@ import {
   markAllRead,
   type Notification,
 } from '../api/notifications';
-import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 const CATEGORIES = [
   { key: '', label: 'All', icon: '📋' },
@@ -55,7 +55,9 @@ function timeAgo(iso: string): string {
   return `${Math.floor(s / 86400)}d ago`;
 }
 
-const NotificationRow = ({ n }: { n: Notification }) => {
+// Memoized — the list re-renders on the 30s poll and on every search keystroke;
+// unchanged rows should skip reconciliation.
+const NotificationRow = memo(({ n }: { n: Notification }) => {
   const queryClient = useQueryClient();
   const readMut = useMutation({
     mutationFn: (id: number) => markRead(id),
@@ -100,7 +102,8 @@ const NotificationRow = ({ n }: { n: Notification }) => {
       </div>
     </div>
   );
-};
+});
+NotificationRow.displayName = 'NotificationRow';
 
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
@@ -108,6 +111,10 @@ export default function NotificationsPage() {
   const [severityFilter, setSeverityFilter] = useState('');
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [search, setSearch] = useState('');
+  // Defer the search filter so typing stays responsive — the (potentially 100-row)
+  // re-filter + list reconcile runs at a lower priority instead of on every keystroke.
+  const deferredSearch = useDeferredValue(search);
+  const notifInterval = useJitteredInterval(30_000);
 
   const params = useMemo(() => ({
     category: categoryFilter || undefined,
@@ -119,7 +126,7 @@ export default function NotificationsPage() {
   const notifications = useQuery({
     queryKey: ['notifications', params],
     queryFn: () => fetchNotifications(params),
-    refetchInterval: jitteredInterval(30_000),
+    refetchInterval: notifInterval,
     refetchIntervalInBackground: false,
   });
 
@@ -136,13 +143,13 @@ export default function NotificationsPage() {
 
   // Client-side search filter
   const filtered = useMemo(() => {
-    if (!search.trim()) return data;
-    const q = search.toLowerCase();
+    if (!deferredSearch.trim()) return data;
+    const q = deferredSearch.toLowerCase();
     return data.filter((n) =>
       n.title.toLowerCase().includes(q) ||
       (n.message && n.message.toLowerCase().includes(q))
     );
-  }, [data, search]);
+  }, [data, deferredSearch]);
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -170,7 +177,7 @@ export default function NotificationsPage() {
               type="button"
               onClick={() => markAllMut.mutate()}
               disabled={markAllMut.isPending || unread === 0}
-              className="rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3 text-sm font-semibold text-appaccent-text transition-all hover:bg-appaccent-soft/80 disabled:opacity-40"
+              className="rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3 text-sm font-semibold text-appaccent-text transition-colors hover:bg-appaccent-soft/80 disabled:opacity-40"
             >
               Mark all read
             </button>
@@ -188,7 +195,7 @@ export default function NotificationsPage() {
                 key={c.key}
                 type="button"
                 onClick={() => setCategoryFilter(c.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-all ${
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
                   categoryFilter === c.key
                     ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
                     : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover hover:text-apptext-soft'
@@ -206,7 +213,7 @@ export default function NotificationsPage() {
                 key={s.key}
                 type="button"
                 onClick={() => setSeverityFilter(s.key)}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                   severityFilter === s.key
                     ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
                     : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'
@@ -220,7 +227,7 @@ export default function NotificationsPage() {
             <button
               type="button"
               onClick={() => setUnreadOnly(!unreadOnly)}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-all ${
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                 unreadOnly
                   ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
                   : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'

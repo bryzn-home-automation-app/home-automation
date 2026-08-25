@@ -384,6 +384,51 @@ body {
   contain-intrinsic-size: 1px 720px;
 }
 
+/* While a theme/palette swap is in flight (class toggled by ThemeProvider),
+   kill all transitions so the page repaints once instead of animating every
+   card's `transition-colors` for 300ms simultaneously. */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
+}
+
+/* Roomba live-position halo — GPU-composited pulse (scale + opacity) instead of
+   SMIL <animate>. transform-box:fill-box anchors the scale to the circle's own
+   center in SVG space. */
+.roomba-halo {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: roomba-halo-pulse 1.6s ease-in-out infinite;
+}
+@keyframes roomba-halo-pulse {
+  0%,
+  100% {
+    transform: scale(0.75);
+    fill-opacity: 0.28;
+  }
+  50% {
+    transform: scale(1.25);
+    fill-opacity: 0.05;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .roomba-halo {
+    animation: none;
+  }
+}
+
+/* Roomba room hover — pure CSS so hovering a room highlights it without any
+   React re-render. Stroke shows in every interactive mode; the soft fill only
+   in editable (rename) mode, matching the previous state-driven behavior. */
+.roomba-roomhit:hover > polygon {
+  stroke: var(--appaccent);
+}
+.roomba-roomhit-editable:hover > polygon {
+  fill: var(--appaccent);
+  fill-opacity: 0.18;
+}
+
 #root {
   /* dvh, not vh — mobile browser toolbars shrink the visual viewport, and
      100vh overflows it (pushing centered auth cards under the URL bar). */

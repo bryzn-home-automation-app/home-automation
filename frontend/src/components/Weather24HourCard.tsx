@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchWeatherForRange } from '../api/weather';
 import { getWeatherEmoji } from '../utils/weather';
@@ -89,25 +90,31 @@ export default function Weather24HourCard({
     staleTime: 60_000,
   });
 
+  // Derived stats — memoized (before any early return, per Rules of Hooks) so
+  // the last-24h filter + hi/lo/avg/precip reductions don't re-run every render.
+  const derived = useMemo(() => {
+    if (!data) return null;
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const last24h = data.hourly.filter((h) => h.time >= cutoff && h.temperature > 0);
+    if (last24h.length < 2) return null;
+    const temps = last24h.map((h) => h.temperature);
+    return {
+      last24h,
+      hi: Math.max(...temps),
+      lo: Math.min(...temps),
+      avg: temps.reduce((s, t) => s + t, 0) / temps.length,
+      nowHour: last24h[last24h.length - 1],
+      precip: last24h.reduce((s, h) => s + h.precipitation, 0),
+    };
+  }, [data]);
+
   if (!enabled || isError) return null;
   if (isLoading) return <Skeleton />;
-  if (!data) return null;
+  if (!data || !derived) return null;
 
-  // Take the last 24 hours of hourly data
-  const now = new Date();
-  const cutoff = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-  const last24h = data.hourly.filter((h) => h.time >= cutoff && h.temperature > 0);
-
-  if (last24h.length < 2) return null;
-
-  const temps = last24h.map((h) => h.temperature);
-  const hi = Math.max(...temps);
-  const lo = Math.min(...temps);
-  const avg = temps.reduce((s, t) => s + t, 0) / temps.length;
+  const { last24h, hi, lo, avg, nowHour, precip } = derived;
   const current = data.current;
-  const nowHour = last24h[last24h.length - 1];
   const humidity = nowHour?.humidity;
-  const precip = last24h.reduce((s, h) => s + h.precipitation, 0);
   const emoji = getWeatherEmoji(nowHour?.weatherCode ?? 0);
 
   return (

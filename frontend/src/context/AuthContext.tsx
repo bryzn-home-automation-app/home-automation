@@ -2,6 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
   useState,
   useCallback,
   useRef,
@@ -130,23 +131,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        token,
-        isLoading,
-        isAdmin: user?.role === 'ADMIN',
-        isUser: user?.role === 'USER',
-        isGuest: user?.role === 'GUEST',
-        login,
-        logout,
-        refreshUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  // Stable context value — a fresh object every render would re-render every
+  // consumer. login/logout/refreshUser are already useCallback'd.
+  const value = useMemo<AuthContextValue>(
+    () => ({
+      user,
+      token,
+      isLoading,
+      isAdmin: user?.role === 'ADMIN',
+      isUser: user?.role === 'USER',
+      isGuest: user?.role === 'GUEST',
+      login,
+      logout,
+      refreshUser,
+    }),
+    [user, token, isLoading, login, logout, refreshUser],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

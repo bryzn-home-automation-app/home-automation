@@ -10,31 +10,29 @@ import { fetchGuestSessionCount } from '../api/auth';
 import { fetchRoombaStatus, fetchRoombaRuns } from '../api/roomba';
 import { fetchCurrentWeather } from '../api/weather';
 import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
-import { isHourlySource } from '../utils/usageSource';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 export default function HomeSummary() {
-  const { electricUsage, gasUsage, config } = useUsageData();
+  // Home only needs pre-aggregated daily data, so skip the heavy raw-hourly
+  // fetches — no reason to transfer ~2,880 rows the landing screen never shows.
+  const { electricDaily, config } = useUsageData({ hourly: false });
   const [showForecast, setShowForecast] = useState(false);
+  const roombaInterval = useJitteredInterval(60_000);
 
   const kwhRate = config.data?.kwhRate ?? 0.1171;
 
-  // Latest complete daily electric total — sum hourly records per date, take
-  // the most recent day that has a near-complete set of readings.
+  // Latest complete daily electric total. The backend already aggregates hourly
+  // readings into ~60 daily points (electricDaily), so we just pick the most
+  // recent day with a near-complete set of readings — no per-render reduction
+  // over ~2,880 raw hourly rows.
   const latestDaily = useMemo(() => {
-    const byDate = new Map<string, { total: number; count: number }>();
-    for (const d of electricUsage.data ?? []) {
-      if (!isHourlySource(d.source)) continue;
-      const date = d.timestamp.slice(0, 10);
-      const entry = byDate.get(date) ?? { total: 0, count: 0 };
-      entry.total += Number(d.usageKwh);
-      entry.count++;
-      byDate.set(date, entry);
-    }
-    const complete = Array.from(byDate.entries())
-      .filter(([, v]) => v.count >= 18)
-      .sort(([a], [b]) => b.localeCompare(a));
-    return complete.length > 0 ? { date: complete[0][0], total: complete[0][1].total } : null;
-  }, [electricUsage.data]);
+    const complete = (electricDaily.data ?? [])
+      .filter((d) => d.readingCount >= 18)
+      .sort((a, b) => b.date.localeCompare(a.date));
+    return complete.length > 0
+      ? { date: complete[0].date, total: complete[0].totalKwh }
+      : null;
+  }, [electricDaily.data]);
 
   // ── Cross-module data (module cards + notifications feed) ──
   const maintenance = useQuery({
@@ -66,7 +64,7 @@ export default function HomeSummary() {
     queryKey: ['roomba-status'],
     queryFn: fetchRoombaStatus,
     staleTime: 15_000,
-    refetchInterval: 30_000,
+    refetchInterval: roombaInterval,
   });
   const roombaRuns = useQuery({
     queryKey: ['roomba-runs', { limit: 1 }],
@@ -107,14 +105,14 @@ export default function HomeSummary() {
   // Module cards — the primary purpose of Home on mobile: quick jump to every
   // section for anyone not using the sidebar.
   const modules = useMemo(() => [
-    { label: 'Utility', detail: `Electric · Gas · Water · ${(electricUsage.data?.length ?? 0) + (gasUsage.data?.length ?? 0)} records`, route: '/utility', icon: '⚡', pill: 'Live' },
+    { label: 'Utility', detail: 'Electric · Gas · Water', route: '/utility', icon: '⚡', pill: 'Live' },
     { label: 'Roomba', detail: rb ? `${roombaState}${rb.batteryPct != null ? ` · ${rb.batteryPct}%` : ''}` : 'No data yet', route: '/roomba', icon: '🤖', pill: roombaAttention ? 'Attention' : rb?.running ? 'Cleaning' : 'Idle' },
     { label: 'Maintenance', detail: m ? `${m.openCount} open · ${m.completedCount} done` : 'Loading...', route: '/maintenance', icon: '🔧', pill: m ? `${m.openCount} open` : '...' },
     { label: 'Notifications', detail: `${unreadCount.data ?? 0} unread alerts`, route: '/notifications', icon: '🔔', pill: unreadCount.data ? `${unreadCount.data} new` : 'Clear' },
     { label: 'WiFi', detail: `Guest network${guestCount.data ? ` · ${guestCount.data} online` : ''}`, route: '/wifi', icon: '📶', pill: guestCount.data ? `${guestCount.data} on` : 'Ready' },
     { label: 'Users', detail: 'Members, roles & approvals', route: '/users', icon: '👥', pill: 'Manage' },
     { label: "What's New", detail: 'Latest releases & changes', route: '/updates', icon: '✨', pill: 'Updates' },
-  ], [electricUsage.data?.length, gasUsage.data?.length, m, unreadCount.data, guestCount.data, rb, roombaState, roombaAttention]);
+  ], [m, unreadCount.data, guestCount.data, rb, roombaState, roombaAttention]);
 
   const dailyLabel = latestDaily
     ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
