@@ -1,4 +1,4 @@
-import { memo, useCallback, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
@@ -12,6 +12,39 @@ import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
 import { PageHeader } from './components/PageHeader';
 import ReleaseNotesModal from './components/ReleaseNotesModal';
+
+/**
+ * Live date/time for the sidebar. Isolated so its per-minute tick re-renders
+ * only this leaf, never the whole app shell. Aligns to the minute boundary
+ * rather than polling every second, so there are no wasted renders.
+ */
+function SidebarClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    const timeout = setTimeout(() => {
+      setNow(new Date());
+      interval = setInterval(() => setNow(new Date()), 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const weekday = now.toLocaleDateString(undefined, { weekday: 'short' });
+  const monthDay = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+  return (
+    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
+      <p className="truncate text-[10px] uppercase tracking-[0.14em] text-apptext-muted">
+        {weekday} {monthDay}
+      </p>
+      <p className="mt-1 text-xs font-semibold text-apptext tabular-nums">{time}</p>
+    </div>
+  );
+}
 
 export default memo(function App() {
   const { toggleTheme, isDark } = useTheme();
@@ -117,12 +150,7 @@ export default memo(function App() {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Status</p>
-          <p className="mt-1 text-xs font-semibold text-apptext">
-            {backendUp ? 'API Up' : 'API Down'}
-          </p>
-        </div>
+        <SidebarClock />
         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
           <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Role</p>
           <p className="mt-1 text-xs font-semibold text-apptext">{user ? user.role : 'Guest'}</p>
@@ -194,18 +222,20 @@ export default memo(function App() {
             onClick={closeMenu}
             className="group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 transition-colors hover:border-appborder hover:bg-appinset"
           >
-            <div className="relative shrink-0">
+            <div className="shrink-0">
               <Avatar
                 displayName={user.displayName}
                 avatarUrl={user.avatarUrl}
                 accentColor={user.accentColor || '#34d399'}
                 size={36}
               />
-              <OnlineDot className="absolute -top-0.5 -right-0.5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-apptext">{user.displayName}</p>
-              <p className="text-xs text-apptext-dim">@{user.username} · Profile &amp; theme</p>
+              <p className="flex items-center gap-1.5 text-sm font-semibold text-apptext">
+                <span className="truncate">{user.displayName}</span>
+                <OnlineDot className="shrink-0" />
+              </p>
+              <p className="truncate text-xs text-apptext-dim">@{user.username} · Profile &amp; Theme</p>
             </div>
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-appborder bg-appinset text-sm transition-colors group-hover:border-appborder-hover group-hover:bg-appinset-strong">⚙️</span>
           </Link>
