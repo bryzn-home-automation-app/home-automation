@@ -287,7 +287,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
   const docs = r.documents ? JSON.parse(r.documents || '[]') as string[] : [];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-[5vh] overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[5vh] overflow-y-auto" onClick={onClose}>
       <div className="my-8 w-full max-w-2xl rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="mb-6 flex items-start justify-between gap-4">
@@ -525,7 +525,7 @@ function FormModal({ editing, onClose, onSuccess }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 backdrop-blur-sm p-4 pt-[3vh] overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[3vh] overflow-y-auto" onClick={onClose}>
       <div className="my-4 w-full max-w-xl rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-apptext">{editing ? 'Edit Record' : 'Add Maintenance'}</h3>

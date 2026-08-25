@@ -37,6 +37,14 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.1.1", "stable", LocalDate.of(2026, 8, 24),
+                    "Smoother pop-ups",
+                    "A quick follow-up to v1.1.0 that makes the app's pop-up windows feel snappy.",
+                    List.of(
+                            change("fixed", "Editing your profile — changing your accent color or adding a "
+                                    + "photo — is smooth again; the pop-up no longer lags or stutters."),
+                            change("fixed", "Other pop-up windows (maintenance, Wi‑Fi, and the admin tools) "
+                                    + "open and respond more smoothly too."))),
             define("1.1.0", "stable", LocalDate.of(2026, 8, 24),
                     "Faster and smoother",
                     "A big tune-up under the hood: the whole app feels quicker and lighter, the "

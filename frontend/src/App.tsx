@@ -235,7 +235,7 @@ export default memo(function App() {
                 <span className="truncate">{user.displayName}</span>
                 <OnlineDot className="shrink-0" />
               </p>
-              <p className="truncate text-xs text-apptext-dim">@{user.username} · Profile &amp; Theme</p>
+              <p className="truncate text-xs text-apptext-dim">@{user.username}</p>
             </div>
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-appborder bg-appinset text-sm transition-colors group-hover:border-appborder-hover group-hover:bg-appinset-strong">⚙️</span>
           </Link>
@@ -297,7 +297,7 @@ export default memo(function App() {
             <>
               {/* Backdrop */}
               <div
-                className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+                className="fixed inset-0 z-40 bg-black/60 lg:hidden"
                 onClick={closeMenu}
               />
               {/* Slide-in panel */}
