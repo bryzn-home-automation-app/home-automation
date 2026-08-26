@@ -42,7 +42,7 @@ public class ReleaseSeeder implements CommandLineRunner {
                     "Start a clean exactly how you want it — the whole house or just the rooms "
                             + "you pick, at the strength and number of passes you choose.",
                     List.of(
-                            change("new", "New “Clean…” button on the robot’s floor plan: choose the whole "
+                            change("new", "New “Clean” option in the robot controls: choose the whole "
                                     + "house or hand-pick specific rooms, then set the suction strength, number "
                                     + "of passes, and (on the combo robot) vacuum / mop / both before it sets off."),
                             change("improved", "The robot returns to its dock automatically when the clean is "

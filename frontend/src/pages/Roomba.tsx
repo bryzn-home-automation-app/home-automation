@@ -481,7 +481,7 @@ export default memo(function Roomba() {
       </section>
 
       {/* ── Admin controls ────────────────────────────────── */}
-      {isAdmin && <RoombaControls status={status} />}
+      {isAdmin && <RoombaControls status={status} onClean={() => setShowClean(true)} />}
 
       {/* ── Maintenance / detail strip ────────────────────── */}
       {status &&
@@ -521,14 +521,6 @@ export default memo(function Roomba() {
           </div>
           {isAdmin && mapQuery.data && (
             <div className="flex shrink-0 flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => setShowClean(true)}
-                disabled={status != null && !status.online}
-                className="rounded-xl border border-appaccent-border bg-appaccent-soft px-3 py-2 text-xs font-semibold text-appaccent-text transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                ▶ Clean…
-              </button>
               <button
                 type="button"
                 onClick={() => (cleanMode ? exitCleanMode() : enterCleanMode())}

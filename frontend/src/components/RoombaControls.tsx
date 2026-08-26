@@ -26,8 +26,16 @@ function statusTone(s: string): string {
   }
 }
 
-/** ADMIN-only control panel. Commands are queued server-side; the poller executes them. */
-export default function RoombaControls({ status }: { status: RoombaStatus | null }) {
+/** ADMIN-only control panel. Commands are queued server-side; the poller executes them.
+ *  The "Clean" button opens the clean dialog (scope + options) via `onClean` rather
+ *  than firing a bare full-clean start. */
+export default function RoombaControls({
+  status,
+  onClean,
+}: {
+  status: RoombaStatus | null;
+  onClean?: () => void;
+}) {
   const qc = useQueryClient();
   const [note, setNote] = useState<string | null>(null);
   const commandsInterval = useJitteredInterval(8000);
@@ -71,7 +79,9 @@ export default function RoombaControls({ status }: { status: RoombaStatus | null
             key={b.command}
             type="button"
             disabled={mutation.isPending || offline}
-            onClick={() => mutation.mutate(b.command)}
+            onClick={() =>
+              b.command === 'start' && onClean ? onClean() : mutation.mutate(b.command)
+            }
             className="flex flex-col items-center gap-1 rounded-2xl border border-appborder bg-appinset px-3 py-3 text-xs font-medium text-apptext-soft transition-colors hover:border-appborder-hover hover:bg-appinset-strong disabled:cursor-not-allowed disabled:opacity-50"
           >
             <span className="text-lg leading-none">{b.icon}</span>

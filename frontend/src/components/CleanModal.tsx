@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { cleanRoombaRooms, fetchRoombaCommands } from '../api/roomba';
+import { cleanRoombaRooms, fetchRoombaCommands, sendRoombaCommand } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 
 const SUCTION: { value: string; label: string }[] = [
@@ -62,8 +62,12 @@ export default function CleanModal({ rooms, onClose }: Props) {
   );
 
   const mutation = useMutation({
+    // With no mapped rooms (e.g. a robot that hasn't built a map yet), a whole-house
+    // clean falls back to a plain full-clean start; options need a map to target rooms.
     mutationFn: () =>
-      cleanRoombaRooms(roomIds, suction || undefined, passes || undefined, mode || undefined),
+      roomIds.length === 0
+        ? sendRoombaCommand('start')
+        : cleanRoombaRooms(roomIds, suction || undefined, passes || undefined, mode || undefined),
     onSuccess: (cmd) => setCommandId(cmd.id),
   });
 
@@ -89,7 +93,9 @@ export default function CleanModal({ rooms, onClose }: Props) {
   const submitting =
     mutation.isPending || (commandId != null && !isTerminalStatus(status ?? undefined));
   const done = status === 'OK';
-  const canStart = roomIds.length > 0 && !submitting && !done;
+  // Whole-house is always startable (falls back to a plain start when unmapped);
+  // a selection needs at least one room chosen.
+  const canStart = (scope === 'all' || roomIds.length > 0) && !submitting && !done;
 
   const toggleRoom = (id: string) =>
     setSelected((prev) => {
@@ -101,7 +107,9 @@ export default function CleanModal({ rooms, onClose }: Props) {
 
   const selectLabel =
     scope === 'all'
-      ? `the whole house · ${rooms.length} room${rooms.length === 1 ? '' : 's'}`
+      ? rooms.length > 0
+        ? `the whole house · ${rooms.length} room${rooms.length === 1 ? '' : 's'}`
+        : 'the whole house'
       : `${roomIds.length} room${roomIds.length === 1 ? '' : 's'} selected`;
 
   return (
