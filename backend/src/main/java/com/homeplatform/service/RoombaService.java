@@ -350,6 +350,71 @@ public class RoombaService {
         return toCommandResponse(commandRepo.save(cmd));
     }
 
+    /**
+     * Validate + enqueue a multi-room clean (region clean over N rooms). "Clean
+     * everything" is every mapped room; "clean selection" is a chosen subset. The
+     * poller builds the safety-critical START/RID/map_id RoutineCommand with one
+     * region per room. {@code arg} carries JSON
+     * {room_ids:[...], suction?:1-4, passes?:"one"|"two", mode?:2|4|6}.
+     */
+    public RoombaCommandResponse enqueueClean(List<String> roomIds, String suction, String passes,
+                                              String mode, String requestedBy) {
+        if (roomIds == null || roomIds.isEmpty()) {
+            throw new IllegalArgumentException("at least one room is required");
+        }
+        ObjectNode payload = mapper.createObjectNode();
+        var idArray = payload.putArray("room_ids");
+        roomIds.stream()
+                .filter(id -> id != null && !id.isBlank())
+                .map(String::trim)
+                .distinct()
+                .forEach(idArray::add);
+        if (idArray.isEmpty()) {
+            throw new IllegalArgumentException("at least one valid room is required");
+        }
+
+        if (suction != null && !suction.isBlank()) {
+            Integer level = SUCTION_LEVELS.get(suction.trim().toLowerCase());
+            if (level == null) {
+                throw new IllegalArgumentException("Unsupported suction level: " + suction);
+            }
+            payload.put("suction", level);
+        }
+        if (passes != null && !passes.isBlank()) {
+            String p = passes.trim().toLowerCase();
+            if (!p.equals("one") && !p.equals("two")) {
+                throw new IllegalArgumentException("Unsupported passes: " + passes);
+            }
+            payload.put("passes", p);
+        }
+        if (mode != null && !mode.isBlank()) {
+            Integer m = OPERATING_MODES.get(mode.trim().toLowerCase());
+            if (m == null) {
+                throw new IllegalArgumentException("Unsupported mode: " + mode);
+            }
+            payload.put("mode", m);
+        }
+
+        String arg;
+        try {
+            arg = mapper.writeValueAsString(payload);
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Could not encode clean request");
+        }
+
+        String robotId = statusRepo.findTopByOrderByUpdatedAtDesc()
+                .map(RoombaStatus::getRobotId).orElse(null);
+        RoombaCommand cmd = RoombaCommand.builder()
+                .robotId(robotId)
+                .command("clean_rooms")
+                .arg(arg)
+                .status("PENDING")
+                .requestedBy(requestedBy)
+                .createdAt(LocalDateTime.now(ZoneOffset.UTC))
+                .build();
+        return toCommandResponse(commandRepo.save(cmd));
+    }
+
     public List<RoombaCommandResponse> recentCommands() {
         return commandRepo.findTop20ByOrderByIdDesc().stream()
                 .map(this::toCommandResponse).toList();

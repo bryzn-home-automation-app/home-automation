@@ -144,3 +144,23 @@ export async function cleanRoombaRoom(
   });
   return res.data;
 }
+
+/**
+ * Clean a set of rooms (ADMIN only) with optional suction/passes/mode — pass
+ * every mapped room id to clean everything, or a subset to clean a selection.
+ * Same confirmed region-clean mechanism as {@link cleanRoombaRoom}, over N rooms.
+ */
+export async function cleanRoombaRooms(
+  roomIds: string[],
+  suction?: string,
+  passes?: string,
+  mode?: string,
+): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/clean', {
+    roomIds,
+    suction,
+    passes,
+    mode,
+  });
+  return res.data;
+}

@@ -743,11 +743,12 @@ RENAME_ROOM = "rename_room"
 SPLIT_ROOM = "split_room"
 MERGE_ROOMS = "merge_rooms"
 CLEAN_ROOM = "clean_room"
+CLEAN_ROOMS = "clean_rooms"
 
 # Commands that (may) start a mission. After one, the poller polls at the fast
 # cadence for a short window so mission start — and thus the live dot + coverage
 # capture — is picked up within seconds instead of on the next full poll cycle.
-MISSION_START_COMMANDS = {"start", "resume", CLEAN_ROOM}
+MISSION_START_COMMANDS = {"start", "resume", CLEAN_ROOM, CLEAN_ROOMS}
 FAST_POLL_INTERVAL = 10   # seconds — poll cadence while a mission runs or was just commanded
 FAST_POLL_WINDOW = 180    # seconds — how long to fast-poll after a mission-starting command
 
@@ -921,6 +922,41 @@ async def _apply_map_edit(robot, p2map_id, cmd, state):
     return True, "applied; map updating shortly" if result.is_partial else "applied"
 
 
+def _clean_command_params(params):
+    """Build CommandParams (suction/passes/mode) from a clean payload dict, or None
+    when the caller supplied none. Shared by the single- and multi-room cleans.
+
+    suction: 1-4 -> suction_level; passes: "one"/"two" -> two_pass/no_auto_passes;
+    mode: vendor codec 2=vacuum/4=mop/6=vac+mop -> operating_mode.
+    """
+    from roombapy_prime.models.mission_control import CommandParams
+
+    cp_kwargs = {}
+    suction = params.get("suction")
+    if suction is not None:
+        try:
+            lvl = int(suction)
+            if 1 <= lvl <= 4:
+                cp_kwargs["suction_level"] = lvl
+        except (ValueError, TypeError):
+            pass
+    passes = params.get("passes")
+    if passes == "two":
+        cp_kwargs["two_pass"] = True
+    elif passes == "one":
+        cp_kwargs["two_pass"] = False
+        cp_kwargs["no_auto_passes"] = True
+    mode = params.get("mode")
+    if mode is not None:
+        try:
+            m = int(mode)
+            if m in (2, 4, 6):  # vendor codec: vacuum / mop / vac+mop
+                cp_kwargs["operating_mode"] = m
+        except (ValueError, TypeError):
+            pass
+    return CommandParams(**cp_kwargs) if cp_kwargs else None
+
+
 async def _clean_room(robot, conninfo, arg):
     """Clean ONE specific room (region clean). CONFIRMED working on a Combo 105.
 
@@ -954,30 +990,7 @@ async def _clean_room(robot, conninfo, arg):
         # Required: a null map_id turns a room clean into a whole-house clean.
         return False, "no active map"
 
-    cp_kwargs = {}
-    suction = params.get("suction")
-    if suction is not None:
-        try:
-            lvl = int(suction)
-            if 1 <= lvl <= 4:
-                cp_kwargs["suction_level"] = lvl
-        except (ValueError, TypeError):
-            pass
-    passes = params.get("passes")
-    if passes == "two":
-        cp_kwargs["two_pass"] = True
-    elif passes == "one":
-        cp_kwargs["two_pass"] = False
-        cp_kwargs["no_auto_passes"] = True
-    mode = params.get("mode")
-    if mode is not None:
-        try:
-            m = int(mode)
-            if m in (2, 4, 6):  # vendor codec: vacuum / mop / vac+mop
-                cp_kwargs["operating_mode"] = m
-        except (ValueError, TypeError):
-            pass
-    cparams = CommandParams(**cp_kwargs) if cp_kwargs else None
+    cparams = _clean_command_params(params)
 
     region = Region(region_id=str(room_id), region_type=RegionType.RID, params=cparams)
     cmd = RoutineCommand(
@@ -989,6 +1002,54 @@ async def _clean_room(robot, conninfo, arg):
     )
     ok = await robot.send_routine_command_via_cmd_topic(cmd)
     return (True, "clean started") if ok else (False, "broker rejected")
+
+
+async def _clean_rooms(robot, conninfo, arg):
+    """Clean a SET of rooms (multi-region clean). "Clean all" is just every mapped
+    room in the list; "clean selection" is the chosen subset. Same safety-critical
+    START/RID/map_id shape as _clean_room (a null map_id or CLEAN type would turn
+    this into a whole-house clean), only with N regions instead of one.
+
+    `arg` JSON: {room_ids: [str, ...], suction?: 1-4, passes?: "one"|"two", mode?: 2|4|6}.
+    """
+    from roombapy_prime.models.mission_control import (
+        MissionCommandType,
+        Region,
+        RegionType,
+        RoutineCommand,
+    )
+
+    try:
+        params = json.loads(arg or "{}")
+    except (ValueError, TypeError):
+        return False, "bad clean payload"
+    room_ids = params.get("room_ids")
+    if not isinstance(room_ids, list) or not room_ids:
+        return False, "missing room_ids"
+
+    p2map_id = await _active_p2map_id(robot)
+    if not p2map_id:
+        # Required: a null map_id turns a region clean into a whole-house clean.
+        return False, "no active map"
+
+    cparams = _clean_command_params(params)
+    regions = [
+        Region(region_id=str(r), region_type=RegionType.RID, params=cparams)
+        for r in room_ids
+        if r
+    ]
+    if not regions:
+        return False, "no valid rooms"
+
+    cmd = RoutineCommand(
+        command_type=MissionCommandType.START,  # NOT CLEAN
+        asset_id=robot.blid,
+        map_id=p2map_id,                          # NOT None
+        regions=regions,
+        initiator="rmtApp",                       # mandatory (presence, not value)
+    )
+    ok = await robot.send_routine_command_via_cmd_topic(cmd)
+    return (True, f"clean started ({len(regions)} room(s))") if ok else (False, "broker rejected")
 
 
 async def process_commands(robot, conninfo, state):
@@ -1023,6 +1084,9 @@ async def process_commands(robot, conninfo, state):
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             elif command == CLEAN_ROOM:
                 ok, detail = await _clean_room(robot, conninfo, arg)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
+            elif command == CLEAN_ROOMS:
+                ok, detail = await _clean_rooms(robot, conninfo, arg)
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")

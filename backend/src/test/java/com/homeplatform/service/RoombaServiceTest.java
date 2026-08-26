@@ -400,6 +400,64 @@ class RoombaServiceTest {
     }
 
     @Nested
+    @DisplayName("enqueueClean")
+    class EnqueueClean {
+
+        @BeforeEach
+        void echoSave() {
+            when(commandRepo.save(any(RoombaCommand.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+        }
+
+        @Test
+        @DisplayName("encodes a room_ids array and the clean_rooms command")
+        void multiRoom() {
+            RoombaCommandResponse r = service.enqueueClean(
+                    java.util.List.of("12", "7"), null, null, null, "user:1");
+            assertEquals("clean_rooms", r.command());
+            assertTrue(r.arg().contains("\"room_ids\":[\"12\",\"7\"]"), r.arg());
+        }
+
+        @Test
+        @DisplayName("maps suction, passes, and operating mode to wire values")
+        void allConfig() {
+            RoombaCommandResponse r = service.enqueueClean(
+                    java.util.List.of("12"), "High", "two", "vacmop", null);
+            assertTrue(r.arg().contains("\"suction\":3"), r.arg());
+            assertTrue(r.arg().contains("\"passes\":\"two\""), r.arg());
+            assertTrue(r.arg().contains("\"mode\":6"), r.arg());
+        }
+
+        @Test
+        @DisplayName("trims and de-dupes room ids, dropping blanks")
+        void cleansIds() {
+            RoombaCommandResponse r = service.enqueueClean(
+                    java.util.List.of(" 12 ", "12", "  ", "7"), null, null, null, null);
+            assertTrue(r.arg().contains("\"room_ids\":[\"12\",\"7\"]"), r.arg());
+        }
+
+        @Test
+        @DisplayName("rejects an empty room list")
+        void empty() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueClean(java.util.List.of(), null, null, null, null));
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueClean(java.util.List.of("  "), null, null, null, null));
+        }
+
+        @Test
+        @DisplayName("rejects an unknown suction, passes, or mode value")
+        void badConfig() {
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueClean(java.util.List.of("12"), "ludicrous", null, null, null));
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueClean(java.util.List.of("12"), null, "three", null, null));
+            assertThrows(IllegalArgumentException.class,
+                    () -> service.enqueueClean(java.util.List.of("12"), null, null, "steam", null));
+        }
+    }
+
+    @Nested
     @DisplayName("getPosition")
     class GetPosition {
 

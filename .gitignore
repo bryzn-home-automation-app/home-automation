@@ -22,6 +22,11 @@ dist/
 # Docker
 .env
 docker-compose.override.yml
+# Local-only NUC infra (Caddy reverse-proxy config). The docker-compose.yml
+# edits that add caddy/adguard are kept local via `git update-index
+# --skip-worktree docker-compose.yml` on the NUC (a tracked file can't be
+# gitignored).
+caddy/
 
 # OS
 .DS_Store

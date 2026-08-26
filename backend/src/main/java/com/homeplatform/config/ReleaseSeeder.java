@@ -37,6 +37,16 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.1.2", "stable", LocalDate.of(2026, 8, 25),
+                    "Clean your way",
+                    "Start a clean exactly how you want it — the whole house or just the rooms "
+                            + "you pick, at the strength and number of passes you choose.",
+                    List.of(
+                            change("new", "New “Clean…” button on the robot’s floor plan: choose the whole "
+                                    + "house or hand-pick specific rooms, then set the suction strength, number "
+                                    + "of passes, and (on the combo robot) vacuum / mop / both before it sets off."),
+                            change("improved", "The robot returns to its dock automatically when the clean is "
+                                    + "done, same as always."))),
             define("1.1.1", "stable", LocalDate.of(2026, 8, 24),
                     "Smoother pop-ups",
                     "A quick follow-up to v1.1.0 that makes the app's pop-up windows feel snappy.",

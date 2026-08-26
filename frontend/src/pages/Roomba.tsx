@@ -8,6 +8,7 @@ import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
 import RoomMergeModal from '../components/RoomMergeModal';
 import RoomCleanModal from '../components/RoomCleanModal';
+import CleanModal, { type CleanRoomOption } from '../components/CleanModal';
 import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
@@ -206,6 +207,8 @@ export default memo(function Roomba() {
   // Clean mode: tap a room to open its clean-config dialog.
   const [cleanMode, setCleanMode] = useState(false);
   const [cleanRoom, setCleanRoom] = useState<RoomSelection | null>(null);
+  // "Start a clean" dialog (whole-house or a room selection, with options).
+  const [showClean, setShowClean] = useState(false);
   // Run history: the run whose detail popup is open.
   const [selectedRun, setSelectedRun] = useState<RoombaRun | null>(null);
 
@@ -292,6 +295,18 @@ export default memo(function Roomba() {
     () => mergeSelection.map((r) => r.id),
     [mergeSelection],
   );
+
+  // Mapped rooms (id + name) for the "Start a clean" dialog's room picker.
+  const cleanRooms = useMemo<CleanRoomOption[]>(() => {
+    const feats = mapQuery.data?.geojson?.rooms?.features ?? [];
+    return feats
+      .filter((f) => f.id != null)
+      .map((f) => {
+        const raw = (f.properties?.name ?? f.properties?.room_name) as unknown;
+        const name = typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+        return { id: String(f.id), name };
+      });
+  }, [mapQuery.data]);
 
   const deviceLine = device
     ? [device.family || device.sku, device.series && `Series ${device.series}`,
@@ -506,6 +521,14 @@ export default memo(function Roomba() {
           </div>
           {isAdmin && mapQuery.data && (
             <div className="flex shrink-0 flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShowClean(true)}
+                disabled={status != null && !status.online}
+                className="rounded-xl border border-appaccent-border bg-appaccent-soft px-3 py-2 text-xs font-semibold text-appaccent-text transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                ▶ Clean…
+              </button>
               <button
                 type="button"
                 onClick={() => (cleanMode ? exitCleanMode() : enterCleanMode())}
@@ -753,6 +776,9 @@ export default memo(function Roomba() {
       )}
 
       {/* Admin clean-a-room config */}
+      {isAdmin && showClean && (
+        <CleanModal rooms={cleanRooms} onClose={() => setShowClean(false)} />
+      )}
       {isAdmin && cleanRoom && (
         <RoomCleanModal room={cleanRoom} onClose={() => setCleanRoom(null)} />
       )}
