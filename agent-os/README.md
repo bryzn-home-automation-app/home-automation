@@ -209,11 +209,37 @@ governor falls back to self-tracking measured tokens — it never blocks on the
 signal.
 
 **Wiring the actual stop-and-resume.** The `scheduler` seam is where the governor
-meets your runtime. In Claude Code on the web, book the resume with a scheduled
-trigger / wake-up that starts a new session whose first action is
-`ai.resumeGoverned()`; locally, a cron job or an `at`-style timer at `resumeAt`
-does the same. `resumeGoverned()` is safe to call any time — before the reset it
-just reports the time remaining, so a periodic trigger works as well as a one-shot.
+meets your runtime. Two adapters ship with it:
+
+- `fileScheduler(path)` — writes the resume request to a JSON file a waker polls
+  (`{ resumeAt, command, payload }`). A cron job / Claude Code trigger reads it at
+  `resumeAt` and runs the resume. `readResumeRequest` / `clearResumeRequest` help
+  the waker consume it.
+- `callbackScheduler(fn)` — for a host that can book a timer directly (e.g. an
+  SDK/MCP call that creates a scheduled trigger): `fn(resumeAtMs, payload)`.
+
+```js
+const { createAgentOS, fileScheduler } = require('@agent-os/core');
+const ai = createAgentOS({
+  modelClient,
+  governor: { budgetTokens: 200_000, scheduler: fileScheduler('.agent-os/resume-request.json') },
+});
+```
+
+`examples/governed-job.js` is a complete, resumable job — the exact script a
+scheduled wake-up runs. It resumes checkpointed work if the window has reset,
+otherwise starts fresh, so the same command is safe to run every time:
+
+```bash
+# The waker (cron / trigger) just re-runs this each window:
+node examples/governed-job.js --root .agent-os --request "big multi-part job"
+```
+
+In Claude Code on the web, book the resume with a scheduled trigger / wake-up that
+runs that command (or calls `ai.resumeGoverned()`); locally, a cron job or an
+`at` timer at `resumeAt` does the same. `resumeGoverned()` is safe to call any
+time — before the reset it just reports the time remaining, so a periodic trigger
+works as well as a one-shot.
 
 CLI:
 

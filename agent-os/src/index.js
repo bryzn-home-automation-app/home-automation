@@ -14,6 +14,7 @@ const { GENERAL_PURPOSE, DEFAULT_SPECIALISTS, STARTER_ROSTER } = require('./agen
 const { UsageGovernor } = require('./governor/UsageGovernor');
 const { runGoverned, resumeGoverned } = require('./governor/runGoverned');
 const { parseRateLimitHeaders, HeaderUsageTracker, fileUsageProbe } = require('./governor/usageProbe');
+const { fileScheduler, readResumeRequest, clearResumeRequest, callbackScheduler } = require('./governor/schedulers');
 
 /**
  * Assemble a fully wired Agent OS instance around a physical-memory root.
@@ -91,6 +92,10 @@ module.exports = {
   parseRateLimitHeaders,
   HeaderUsageTracker,
   fileUsageProbe,
+  fileScheduler,
+  readResumeRequest,
+  clearResumeRequest,
+  callbackScheduler,
   GENERAL_PURPOSE,
   DEFAULT_SPECIALISTS,
   STARTER_ROSTER,
