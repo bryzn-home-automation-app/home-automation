@@ -11,6 +11,7 @@
  *   agent-os run "<request>"
  *   agent-os routines [add "<name>" "<request>" [--every ms] [--trigger e] | run <id> | due | prune <id>]
  *   agent-os review [--since <iso>] [--json]
+ *   agent-os governor [status | record <tokens> | resume | reset]
  *   agent-os stats
  *   agent-os measure                 # summarize measurement history
  *   agent-os skills                  # list skills
@@ -144,6 +145,19 @@ async function main() {
       console.log(flags.json ? JSON.stringify(report, null, 2) : os.review.render(report));
       break;
     }
+    case 'governor': {
+      const sub = positional[0];
+      if (sub === 'record') {
+        console.log(JSON.stringify(os.governor.record(Number(positional[1]) || 0), null, 2));
+      } else if (sub === 'reset') {
+        console.log(JSON.stringify(os.governor.startNewWindow(), null, 2));
+      } else if (sub === 'resume') {
+        console.log(JSON.stringify(await os.resumeGoverned(), null, 2));
+      } else {
+        console.log(JSON.stringify(os.governor.status(), null, 2));
+      }
+      break;
+    }
     case 'stats':
       console.log(JSON.stringify(os.memory.stats(), null, 2));
       break;
@@ -170,7 +184,7 @@ function usage(hint) {
   if (hint) console.error(`usage: agent-os ${hint}`);
   else {
     console.error(
-      'usage: agent-os <remember|consider|compile|run|routines|review|stats|measure|skills|decay> [args] [--root dir]'
+      'usage: agent-os <remember|consider|compile|run|routines|review|governor|stats|measure|skills|decay> [args] [--root dir]'
     );
   }
   process.exitCode = 1;

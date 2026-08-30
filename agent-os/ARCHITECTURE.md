@@ -186,6 +186,41 @@ Measurement log (ran + token/cost impact), episodic memory (produced + skipped),
 and the Routine run log. It flags routines that did not fire in the window as
 **prune candidates**. It only reports and recommends; pruning stays a human action.
 
+### Usage Governor — stay inside the 5-hour window
+`UsageGovernor` (`src/governor/UsageGovernor.js`) keeps long work inside a rolling
+usage window (e.g. the 5-hour Claude session window) and resumes it automatically
+when the window resets:
+
+```
+< conserve%   → normal    run freely
+conserve–90%  → conserve   avoid starting large/irreversible work
+≥ prepare%    → prepare    finish safe step → save state → stop gracefully
+                           → schedule resume → (5h reset) → restore → continue
+```
+
+The live usage signal is **pluggable** because a running agent cannot read
+Anthropic's server-side usage meter directly:
+
+- **Default (self-tracking):** the governor accumulates the tokens it is told
+  about (`record(usage)`) against a configurable `budgetTokens` and derives the
+  fraction itself. No external meter required.
+- **Injected probe:** if the host can read the real percentage (the Claude Code
+  CLI surfaces it), pass `usageProbe: () => ({ fraction, resetAt })` and it takes
+  over — the same thresholds and stop/resume flow run on real numbers.
+
+`runGoverned(request)` executes subtasks one at a time; after each it records
+usage and re-checks the phase. At the prepare threshold it finishes the current
+(safe) step, writes a **resume checkpoint** (the remaining task queue) to disk,
+stops, and calls the injected `scheduler(resumeAt, payload)` to book the resume.
+Because the checkpoint is on disk, `resumeGoverned()` — running in a *fresh*
+session after the window resets — restores the queue and continues automatically.
+If called before the reset it reports the time remaining rather than resuming
+early. The window auto-rolls once its reset time passes.
+
+The `scheduler` seam is where this binds to a real environment: a one-shot timer
+at `resumeAt`, a cron/`Routine`, or (in Claude Code on the web) a scheduled
+trigger / wake-up that starts a new session which calls `resumeGoverned()`.
+
 ### Memory Consolidator — closing the loop
 After each task: reinforce the salience of memories that were actually used, record
 an **episodic** event of what happened, and (optionally) run a `factExtractor` to

@@ -11,6 +11,8 @@ const { RoutineEngine } = require('./routines/RoutineEngine');
 const { ReviewEngine } = require('./review/ReviewEngine');
 const { reversibilityGuard, classifyReversibility } = require('./agents/guardrails');
 const { GENERAL_PURPOSE, DEFAULT_SPECIALISTS, STARTER_ROSTER } = require('./agents/registry');
+const { UsageGovernor } = require('./governor/UsageGovernor');
+const { runGoverned, resumeGoverned } = require('./governor/runGoverned');
 
 /**
  * Assemble a fully wired Agent OS instance around a physical-memory root.
@@ -45,8 +47,9 @@ function createAgentOS(options = {}) {
 
   const routines = new RoutineEngine(config, { orchestrator, skills });
   const review = new ReviewEngine(config, { memory, measurement, routines, orchestrator });
+  const governor = new UsageGovernor(config, options.governor || {});
 
-  return {
+  const os = {
     config,
     memory,
     compiler,
@@ -56,9 +59,17 @@ function createAgentOS(options = {}) {
     orchestrator,
     routines,
     review,
+    governor,
     /** Convenience: run a request through the orchestrator. */
     run: (request, runOptions) => orchestrator.run(request, runOptions),
   };
+
+  /** Run a request under the Usage Governor (stops + schedules resume near the cap). */
+  os.runGoverned = (request, runOptions) => runGoverned({ orchestrator, governor }, request, runOptions);
+  /** Resume checkpointed work when the window has reset. */
+  os.resumeGoverned = (runOptions) => resumeGoverned({ orchestrator, governor }, runOptions);
+
+  return os;
 }
 
 module.exports = {
@@ -73,6 +84,9 @@ module.exports = {
   ReviewEngine,
   reversibilityGuard,
   classifyReversibility,
+  UsageGovernor,
+  runGoverned,
+  resumeGoverned,
   GENERAL_PURPOSE,
   DEFAULT_SPECIALISTS,
   STARTER_ROSTER,

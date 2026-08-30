@@ -26,6 +26,9 @@ const modelClient = async ({ messages, agent }) => {
   return { text: `(${agent}) acknowledged; used ${inputTokens} input tokens of compiled context`, usage: { inputTokens, outputTokens: 20 } };
 };
 
+// A model client with fixed per-task token usage, for the governor showcase.
+const fixedUsage = (tokens) => async () => ({ text: 'ok', usage: { inputTokens: tokens, outputTokens: 0 } });
+
 async function main() {
   const ai = createAgentOS({ root, model: 'claude-sonnet', modelClient });
 
@@ -113,6 +116,27 @@ async function main() {
 
   console.log('\n=== Weekly review ===');
   console.log(guarded.review.render());
+
+  // --- Usage Governor: stop near the cap, resume when the window resets -------
+  console.log('\n=== Usage Governor ===');
+  const windowMs = 5 * 3600 * 1000;
+  let clockNow = Date.now();
+  const govOpts = (clock) => ({
+    budgetTokens: 400, prepareAt: 0.9, windowMs, clock,
+    scheduler: async (resumeAt) => console.log(`  scheduled resume at ${new Date(resumeAt).toISOString()}`),
+  });
+
+  // Session 1: work until the governor decides to wind down.
+  const s1 = createAgentOS({ root, modelClient: fixedUsage(200), governor: govOpts(() => clockNow) });
+  const stopped = await s1.runGoverned('step a\nand then step b\nand then step c\nand then step d');
+  console.log(`  status: ${stopped.status} at ${(stopped.governor.fraction * 100).toFixed(0)}% — ` +
+    `did ${stopped.completed.length}, deferred ${stopped.remaining.length}`);
+
+  // Session 2: a fresh process AFTER the 5-hour reset restores + continues.
+  clockNow += windowMs + 1000;
+  const s2 = createAgentOS({ root, modelClient: fixedUsage(200), governor: govOpts(() => clockNow) });
+  const resumed = await s2.resumeGoverned();
+  console.log(`  resumed: ${resumed.resumed}, now ${resumed.status}, finished the remaining ${resumed.completed.length} steps`);
 
   fs.rmSync(root, { recursive: true, force: true });
 }

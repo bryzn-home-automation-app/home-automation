@@ -123,6 +123,61 @@ agent-os routines run <id>
 agent-os review                       # weekly report + prune candidates
 ```
 
+## Staying inside the 5-hour usage window
+
+The **Usage Governor** watches consumption, winds work down gracefully as the
+window fills, checkpoints state, and resumes automatically when the window resets:
+
+```
+< conserve%   normal     run freely
+conserve–90%  conserve   avoid starting large / irreversible work
+≥ prepare%    prepare    finish safe step → save → stop → schedule resume
+                         → (5h reset) → restore → continue
+```
+
+> **One honest caveat:** a running agent can't read Anthropic's server-side usage
+> meter. The governor either **self-tracks** tokens against a budget you set, or
+> takes a **real percentage you feed it** via `usageProbe`. Everything downstream
+> — stop, checkpoint, schedule, resume — is identical either way.
+
+```js
+const ai = createAgentOS({
+  modelClient,
+  governor: {
+    // Option A — self-track: set the window's token budget.
+    budgetTokens: 200_000,
+    // Option B — feed the real number if your harness knows it:
+    // usageProbe: () => ({ fraction: readClaudeUsagePct(), resetAt: windowResetIso }),
+    prepareAt: 0.9, conserveAt: 0.8, windowMs: 5 * 3600 * 1000,
+    scheduler: async (resumeAt) => scheduleResume(resumeAt), // book the wake-up
+  },
+});
+
+// Run under the governor. It stops near the cap and checkpoints the rest.
+const out = await ai.runGoverned('big multi-part job\nand then part two\nand then part three');
+if (out.status === 'stopped') {
+  console.log('deferred', out.remaining, '→ resume at', out.resumePlan.resumeAt);
+}
+
+// In a FRESH session after the window resets (called by your scheduled wake-up):
+const resumed = await ai.resumeGoverned();   // restores the queue and continues
+```
+
+**Wiring the actual stop-and-resume.** The `scheduler` seam is where the governor
+meets your runtime. In Claude Code on the web, book the resume with a scheduled
+trigger / wake-up that starts a new session whose first action is
+`ai.resumeGoverned()`; locally, a cron job or an `at`-style timer at `resumeAt`
+does the same. `resumeGoverned()` is safe to call any time — before the reset it
+just reports the time remaining, so a periodic trigger works as well as a one-shot.
+
+CLI:
+
+```bash
+agent-os governor status          # phase, fraction, window reset time
+agent-os governor record 1500     # add measured tokens to the window
+agent-os governor resume          # continue checkpointed work if the window reset
+```
+
 ## Wiring in the real Claude
 
 The `modelClient` is any async function returning `{ text, usage }`:
@@ -241,6 +296,7 @@ agent-os/
 │   ├── agents/                     Orchestrator, Agent (+ charter), registry, guardrails
 │   ├── routines/                   RoutineEngine (demonstrated task + schedule/trigger)
 │   ├── review/                     ReviewEngine (weekly: ran / produced / skipped / prune)
+│   ├── governor/                   UsageGovernor + runGoverned (5h-window stop/resume)
 │   ├── consolidator/               MemoryConsolidator (close the loop)
 │   ├── measurement/                MeasurementEngine (baseline vs actual)
 │   └── util/                       tokens, ids, logger
