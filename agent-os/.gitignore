@@ -1,0 +1,5 @@
+# Runtime physical memory / skills / measurements — per-machine state, not source.
+.agent-os/
+# Node
+node_modules/
+npm-debug.log*

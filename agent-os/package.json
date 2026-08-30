@@ -1,0 +1,28 @@
+{
+  "name": "@agent-os/core",
+  "version": "0.1.0",
+  "description": "A portable Agent Operating System for Claude: physical memory, agent orchestration, skills, context compilation, and token-efficiency measurement.",
+  "type": "commonjs",
+  "main": "src/index.js",
+  "bin": {
+    "agent-os": "bin/agent-os.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "demo": "node examples/demo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "agent",
+    "claude",
+    "memory",
+    "context",
+    "orchestration",
+    "llm",
+    "tokens"
+  ],
+  "license": "MIT",
+  "dependencies": {}
+}
