@@ -163,6 +163,51 @@ if (out.status === 'stopped') {
 const resumed = await ai.resumeGoverned();   // restores the queue and continues
 ```
 
+### Feeding it the real 5-hour usage (Claude Code / Max subscription)
+
+There is no public REST "usage %" endpoint — the claude.ai usage tab is an
+internal endpoint. The supported signal is the `anthropic-ratelimit-*` **response
+headers** on your subscription's API traffic (the same ones Claude Code reads to
+warn you); they carry remaining-vs-limit and a reset time. Two adapters turn that
+into the governor's probe:
+
+**A — the toolkit makes the calls.** Have your SDK-backed `modelClient` return the
+response `headers` (from the TS SDK's `.withResponse()`), wrap it with
+`HeaderUsageTracker`, and hand the governor its probe:
+
+```js
+const { createAgentOS, HeaderUsageTracker } = require('@agent-os/core');
+const tracker = new HeaderUsageTracker();
+
+const rawClient = async ({ messages }) => {
+  const { data, response } = await client.messages.create({ /* ... */ }).withResponse();
+  return { text: /* ...from data... */, usage: data.usage, headers: response.headers };
+};
+
+const ai = createAgentOS({
+  modelClient: tracker.wrap(rawClient),   // captures headers on every call
+  governor: { usageProbe: tracker.probe() },
+});
+```
+
+The header names for the unified 5-hour window aren't documented, so the parser
+tries several candidates and returns the `raw` headers it saw — log
+`tracker.latest.raw` once to confirm which ones your account sends, then pin them
+with `new HeaderUsageTracker({ headerNames: { remaining: [...], limit: [...], reset: [...] } })`.
+
+**B — Claude Code makes the calls** (the toolkit never sees the responses). Have a
+small hook write `{ "fraction": 0.83, "resetAt": "..." }` to a file (from
+`claude usage` output or an OTEL export), and point the governor at it:
+
+```js
+const { fileUsageProbe } = require('@agent-os/core');
+const ai = createAgentOS({ governor: { usageProbe: fileUsageProbe('.agent-os/usage.json') } });
+```
+
+Either way, if the probe ever returns `null` (no reading yet, stale file), the
+governor falls back to self-tracking measured tokens — it never blocks on the
+signal.
+
 **Wiring the actual stop-and-resume.** The `scheduler` seam is where the governor
 meets your runtime. In Claude Code on the web, book the resume with a scheduled
 trigger / wake-up that starts a new session whose first action is

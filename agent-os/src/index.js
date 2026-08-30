@@ -13,6 +13,7 @@ const { reversibilityGuard, classifyReversibility } = require('./agents/guardrai
 const { GENERAL_PURPOSE, DEFAULT_SPECIALISTS, STARTER_ROSTER } = require('./agents/registry');
 const { UsageGovernor } = require('./governor/UsageGovernor');
 const { runGoverned, resumeGoverned } = require('./governor/runGoverned');
+const { parseRateLimitHeaders, HeaderUsageTracker, fileUsageProbe } = require('./governor/usageProbe');
 
 /**
  * Assemble a fully wired Agent OS instance around a physical-memory root.
@@ -87,6 +88,9 @@ module.exports = {
   UsageGovernor,
   runGoverned,
   resumeGoverned,
+  parseRateLimitHeaders,
+  HeaderUsageTracker,
+  fileUsageProbe,
   GENERAL_PURPOSE,
   DEFAULT_SPECIALISTS,
   STARTER_ROSTER,
