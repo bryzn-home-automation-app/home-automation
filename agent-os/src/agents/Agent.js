@@ -19,9 +19,27 @@ class Agent {
     this.persona = def.persona || `You are the ${def.role} agent.`;
     this.tierWeights = def.tierWeights || {};
     this.keywords = (def.keywords || []).map((k) => k.toLowerCase());
+    // A charter is the agent's written mandate (per the build playbook): what it
+    // owns, what "good" looks like, and what it never does without asking. The
+    // last drives the approval guard; all three surface in the weekly review.
+    this.charter = {
+      owns: (def.charter && def.charter.owns) || def.owns || [],
+      goodLooksLike: (def.charter && def.charter.goodLooksLike) || def.goodLooksLike || [],
+      neverWithoutAsking: (def.charter && def.charter.neverWithoutAsking) || def.neverWithoutAsking || [],
+    };
     this.compiler = deps.compiler;
     this.modelClient = deps.modelClient;
     this.measurement = deps.measurement;
+  }
+
+  /** Render persona + charter as the agent's system framing. */
+  _personaWithCharter() {
+    const c = this.charter;
+    const lines = [];
+    if (c.owns.length) lines.push(`You own: ${c.owns.join('; ')}.`);
+    if (c.goodLooksLike.length) lines.push(`Good looks like: ${c.goodLooksLike.join('; ')}.`);
+    if (c.neverWithoutAsking.length) lines.push(`Never do without asking: ${c.neverWithoutAsking.join('; ')}.`);
+    return lines.length ? `${this.persona}\n\nCharter — ${lines.join(' ')}` : this.persona;
   }
 
   /** How well this agent fits a task goal, in [0, ∞). Higher wins. */
@@ -44,9 +62,10 @@ class Agent {
       budget: task.budget,
     });
 
-    // Prepend this agent's persona to the compiled system message.
+    // Prepend this agent's persona (and charter, if any) to the system message.
+    const persona = this._personaWithCharter();
     const messages = compiled.messages.map((m, i) =>
-      i === 0 ? { ...m, content: `${this.persona}\n\n${m.content}` } : m
+      i === 0 ? { ...m, content: `${persona}\n\n${m.content}` } : m
     );
 
     let response;

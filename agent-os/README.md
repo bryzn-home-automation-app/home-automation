@@ -74,6 +74,55 @@ node bin/agent-os.js skills
 
 ---
 
+## Build & scale your agent team
+
+You don't need 20 bots. The pattern scales down cleanly, and the Agent OS gives you
+a primitive for each step of the playbook:
+
+1. **Start with one general-purpose bot** as your future Chief of Staff; give it
+   small, verifiable errands. → `createAgentOS({ orchestrator: { specialists: STARTER_ROSTER } })`
+2. **Add your first specialist** for whatever eats your week, with a **charter**:
+   what it owns, what good looks like, what it never does without asking.
+   → each agent def carries `charter: { owns, goodLooksLike, neverWithoutAsking }`
+3. **Connect only the tools that specialist needs** — you can widen later, but you
+   can't easily narrow a beta's blast radius. → the `modelClient` / `stepRunner`
+   you inject is the only surface a specialist can touch.
+4. **Teach one recurring, multi-tool task by demonstration**, then make it a
+   routine. → `skills.learnFromDemonstration(...)` then `routines.fromSkill(id, { schedule })`
+5. **Set the approval line by reversibility** — bots finish anything undoable;
+   external/financial/permanent waits for you. → `createAgentOS({ approvalByReversibility: true })`
+6. **Review weekly**, then prune routines you would not miss.
+   → `review.render()` and `routines.prune(id)`
+
+```js
+// Two bots, one routine, a clear approval line.
+const { createAgentOS, STARTER_ROSTER } = require('@agent-os/core');
+
+const ai = createAgentOS({
+  modelClient,
+  approvalByReversibility: true,                 // deploy/delete/send/pay → waits for you
+  orchestrator: {
+    specialists: STARTER_ROSTER,                 // chief-of-staff + engineering
+    approver: async ({ task }) => askHuman(task) // your approval UI
+  },
+});
+
+const skill = ai.skills.learnFromDemonstration({ name: 'Nightly sync', steps: [...] });
+ai.routines.fromSkill(skill.id, { name: 'Nightly sync', schedule: { intervalMs: 86_400_000 } });
+
+// ...a week later:
+console.log(ai.review.render());                 // what each bot ran / produced / skipped
+```
+
+From the CLI:
+
+```bash
+agent-os routines add "Nightly research" "research the codebase" --every 86400000
+agent-os routines due                 # what should fire now
+agent-os routines run <id>
+agent-os review                       # weekly report + prune candidates
+```
+
 ## Wiring in the real Claude
 
 The `modelClient` is any async function returning `{ text, usage }`:
@@ -189,7 +238,9 @@ agent-os/
 │   ├── memory/                     MemoryEngine + file store + MemoryPolicy (admission gate)
 │   ├── context/                    ContextCompiler (retrieve→…→budget)
 │   ├── skills/                     SkillsEngine + Skill (learn-from-demonstration)
-│   ├── agents/                     Orchestrator, Agent, specialist registry
+│   ├── agents/                     Orchestrator, Agent (+ charter), registry, guardrails
+│   ├── routines/                   RoutineEngine (demonstrated task + schedule/trigger)
+│   ├── review/                     ReviewEngine (weekly: ran / produced / skipped / prune)
 │   ├── consolidator/               MemoryConsolidator (close the loop)
 │   ├── measurement/                MeasurementEngine (baseline vs actual)
 │   └── util/                       tokens, ids, logger

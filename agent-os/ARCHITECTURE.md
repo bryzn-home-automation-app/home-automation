@@ -145,9 +145,46 @@ works whether the executor is a shell, an HTTP client, or another agent.
 Holds no domain knowledge; it coordinates. **Plan** a request into subtasks
 (default heuristic planner, or inject an LLM planner) → **route** each to the
 best-fit specialist by keyword overlap → **guardrail** (sensitive/irreversible
-tasks pause for human approval; auto-deny by default) → **execute** → **consolidate**.
-Specialists (Engineering / Research / QA by default, fully replaceable) each bias
-the compiler's tier weights toward the memories their role cares about.
+tasks pause for human approval; auto-deny by default) → **execute** → **consolidate**
+(including skips, so the weekly review sees them). Specialists (Engineering /
+Research / QA by default, fully replaceable) each bias the compiler's tier weights
+toward the memories their role cares about.
+
+### Charters — each agent's written mandate
+Every agent carries a **charter**: `owns` (what it is responsible for),
+`goodLooksLike` (the bar for a good result), and `neverWithoutAsking` (the actions
+that must pause for a human). The charter is prepended to the agent's system
+framing so the model operates inside its mandate, feeds the approval guard, and
+surfaces in the weekly review. This is the playbook's *"write its charter: what it
+owns, what good looks like, what it never does without asking."*
+
+### Approval line by reversibility
+`reversibilityGuard()` (`src/agents/guardrails.js`) implements *"bots finish
+anything undoable on their own, and anything external, financial, or permanent
+waits for you."* It flags a task when the goal matches an **external / financial /
+permanent** action, or matches the routed agent's `neverWithoutAsking` charter
+line. Reversible work is auto-approved; irreversible work goes to the `approver`
+(auto-deny until a host wires one up — safe by default). Opt in with
+`createAgentOS({ approvalByReversibility: true })`; every decision is explainable
+via `classifyReversibility()` (category + matched phrases).
+
+### Routines — a demonstrated task on a schedule or trigger
+A **Routine** (`src/routines/RoutineEngine.js`) binds a unit of work — a learned
+Skill or an Orchestrator request — to a firing condition: a `schedule`
+(`{ intervalMs }`) and/or a `trigger` (a named event). This is the playbook's
+*"teach one recurring, multi-tool task by demonstration and turn it into one
+routine with a schedule or trigger."* The library has no daemon (it stays portable
+and side-effect free); the host drives firing via `due(now, { event })` /
+`runDue(...)`. Every run appends to a run log so the review can report it, and
+`prune(id)` removes routines you would not miss.
+
+### Weekly review
+`ReviewEngine` (`src/review/ReviewEngine.js`) reconstructs the playbook's weekly
+cadence — *"ask each bot what it ran, what it produced, and what it skipped, then
+prune routines you would not miss"* — from records the system already keeps: the
+Measurement log (ran + token/cost impact), episodic memory (produced + skipped),
+and the Routine run log. It flags routines that did not fire in the window as
+**prune candidates**. It only reports and recommends; pruning stays a human action.
 
 ### Memory Consolidator — closing the loop
 After each task: reinforce the salience of memories that were actually used, record

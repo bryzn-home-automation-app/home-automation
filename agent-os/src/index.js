@@ -7,6 +7,10 @@ const { SkillsEngine } = require('./skills/SkillsEngine');
 const { MeasurementEngine } = require('./measurement/MeasurementEngine');
 const { MemoryConsolidator } = require('./consolidator/MemoryConsolidator');
 const { Orchestrator } = require('./agents/Orchestrator');
+const { RoutineEngine } = require('./routines/RoutineEngine');
+const { ReviewEngine } = require('./review/ReviewEngine');
+const { reversibilityGuard, classifyReversibility } = require('./agents/guardrails');
+const { GENERAL_PURPOSE, DEFAULT_SPECIALISTS, STARTER_ROSTER } = require('./agents/registry');
 
 /**
  * Assemble a fully wired Agent OS instance around a physical-memory root.
@@ -27,10 +31,20 @@ function createAgentOS(options = {}) {
   const measurement = new MeasurementEngine(config);
   const consolidator = new MemoryConsolidator(config, memory, options.consolidator || {});
 
+  // Approval line by reversibility (opt-in). When the host asks for it, default
+  // the guard so anything external/financial/permanent waits for a human.
+  const orchestratorOptions = { ...(options.orchestrator || {}) };
+  if (options.approvalByReversibility && !orchestratorOptions.needsApproval) {
+    orchestratorOptions.needsApproval = reversibilityGuard(options.reversibility || {});
+  }
+
   const orchestrator = new Orchestrator(
     { compiler, memory, skills, measurement, consolidator, modelClient: options.modelClient },
-    options.orchestrator || {}
+    orchestratorOptions
   );
+
+  const routines = new RoutineEngine(config, { orchestrator, skills });
+  const review = new ReviewEngine(config, { memory, measurement, routines, orchestrator });
 
   return {
     config,
@@ -40,6 +54,8 @@ function createAgentOS(options = {}) {
     measurement,
     consolidator,
     orchestrator,
+    routines,
+    review,
     /** Convenience: run a request through the orchestrator. */
     run: (request, runOptions) => orchestrator.run(request, runOptions),
   };
@@ -53,5 +69,12 @@ module.exports = {
   MeasurementEngine,
   MemoryConsolidator,
   Orchestrator,
+  RoutineEngine,
+  ReviewEngine,
+  reversibilityGuard,
+  classifyReversibility,
+  GENERAL_PURPOSE,
+  DEFAULT_SPECIALISTS,
+  STARTER_ROSTER,
   resolveConfig,
 };

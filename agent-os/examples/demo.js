@@ -89,6 +89,31 @@ async function main() {
   console.log('\n=== Measurement summary ===');
   console.log(JSON.stringify(result.summary, null, 2));
 
+  // --- Approval line by reversibility + a routine + weekly review -----------
+  console.log('\n=== Approval line by reversibility ===');
+  const guarded = createAgentOS({
+    root,
+    modelClient,
+    approvalByReversibility: true,
+    orchestrator: { approver: async ({ task }) => { console.log(`  (would ask a human about: "${task.goal}")`); return false; } },
+  });
+  const g = await guarded.run('refactor the sync helper\nand then deploy the backend to production');
+  for (const r of g.results) {
+    console.log(`  ${r.skipped ? 'WAIT ' : 'DONE '} ${r.goal}${r.skipped ? `  → ${r.skipped}` : ''}`);
+  }
+
+  console.log('\n=== Routine (demonstrated task + schedule) ===');
+  const routine = guarded.routines.register({
+    name: 'Nightly module research',
+    request: 'research how the code modules fit together',
+    schedule: { intervalMs: 86400000 },
+  });
+  const entry = await guarded.routines.run(routine.id);
+  console.log(`  ran "${routine.name}" → ${entry.status}, avoided ${entry.produced.tokensAvoided} tokens`);
+
+  console.log('\n=== Weekly review ===');
+  console.log(guarded.review.render());
+
   fs.rmSync(root, { recursive: true, force: true });
 }
 

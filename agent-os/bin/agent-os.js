@@ -9,6 +9,8 @@
  *   agent-os consider <tier> "<content>" [--key k] [--confidence 0.8]   # admission-gated
  *   agent-os compile "<goal>" [--budget 2000] [--tags a,b]
  *   agent-os run "<request>"
+ *   agent-os routines [add "<name>" "<request>" [--every ms] [--trigger e] | run <id> | due | prune <id>]
+ *   agent-os review [--since <iso>] [--json]
  *   agent-os stats
  *   agent-os measure                 # summarize measurement history
  *   agent-os skills                  # list skills
@@ -109,6 +111,39 @@ async function main() {
       }
       break;
     }
+    case 'routines': {
+      const sub = positional[0];
+      if (sub === 'add') {
+        const [, name, request] = positional;
+        if (!name || !request) return usage('routines add "<name>" "<request>" [--every <ms>] [--trigger <event>]');
+        const r = os.routines.register({
+          name,
+          request,
+          schedule: flags.every ? { intervalMs: Number(flags.every) } : null,
+          trigger: flags.trigger || null,
+        });
+        console.log(`registered routine ${r.id} (${r.name})`);
+      } else if (sub === 'run') {
+        const entry = await os.routines.run(positional[1]);
+        console.log(JSON.stringify(entry, null, 2));
+      } else if (sub === 'due') {
+        console.log(JSON.stringify(os.routines.due(Date.now(), { event: flags.event }).map((r) => r.name), null, 2));
+      } else if (sub === 'prune') {
+        console.log(os.routines.prune(positional[1]) ? 'pruned' : 'not found');
+      } else {
+        for (const r of os.routines.list()) {
+          const when = r.schedule ? `every ${r.schedule.intervalMs}ms` : r.trigger ? `on ${r.trigger}` : 'manual';
+          console.log(`${r.id}  ${r.name}  (${when}, runs: ${r.runCount}${r.enabled ? '' : ', disabled'})`);
+        }
+        if (!os.routines.list().length) console.log('(no routines) — add one: agent-os routines add "<name>" "<request>"');
+      }
+      break;
+    }
+    case 'review': {
+      const report = os.review.weekly(flags.since ? { since: flags.since } : {});
+      console.log(flags.json ? JSON.stringify(report, null, 2) : os.review.render(report));
+      break;
+    }
     case 'stats':
       console.log(JSON.stringify(os.memory.stats(), null, 2));
       break;
@@ -135,7 +170,7 @@ function usage(hint) {
   if (hint) console.error(`usage: agent-os ${hint}`);
   else {
     console.error(
-      'usage: agent-os <remember|consider|compile|run|stats|measure|skills|decay> [args] [--root dir]'
+      'usage: agent-os <remember|consider|compile|run|routines|review|stats|measure|skills|decay> [args] [--root dir]'
     );
   }
   process.exitCode = 1;

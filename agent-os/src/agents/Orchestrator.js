@@ -81,10 +81,20 @@ class Orchestrator {
     const subtasks = goals.map((goal) => ({ goal, tags: options.tags || [], budget: options.budget }));
     const results = [];
 
+    const consolidate = (task, result) => {
+      // Consolidate what happened — including skips — back into episodic memory,
+      // so the weekly review can report what each bot ran AND what it skipped.
+      if (this.consolidator && options.consolidate !== false) {
+        this.consolidator.consolidate({ task, result });
+      }
+    };
+
     for (const task of subtasks) {
       const agent = this.route(task.goal);
       if (!agent) {
-        results.push({ goal: task.goal, skipped: 'no matching agent' });
+        const result = { goal: task.goal, skipped: 'no matching agent' };
+        results.push(result);
+        consolidate(task, result);
         continue;
       }
 
@@ -92,18 +102,16 @@ class Orchestrator {
       if (this.needsApproval(task, agent)) {
         const approved = await this.approver({ task, agent: agent.name });
         if (!approved) {
-          results.push({ goal: task.goal, agent: agent.name, skipped: 'approval denied' });
+          const result = { goal: task.goal, agent: agent.name, skipped: 'approval denied' };
+          results.push(result);
+          consolidate(task, result);
           continue;
         }
       }
 
       const result = await agent.handle(task);
       results.push(result);
-
-      // Consolidate what happened back into episodic memory for next time.
-      if (this.consolidator && options.consolidate !== false) {
-        this.consolidator.consolidate({ task, result });
-      }
+      consolidate(task, result);
     }
 
     const summary = this.measurement ? this.measurement.summarize(results) : null;
