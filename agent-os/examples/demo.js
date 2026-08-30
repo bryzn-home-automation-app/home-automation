@@ -53,6 +53,22 @@ async function main() {
   console.log('Physical memory seeded:', JSON.stringify(ai.memory.stats()));
   console.log('Skills:', ai.skills.list().map((s) => s.name).join(', '), '\n');
 
+  // --- Memory admission policy: not everything deserves durable storage ------
+  console.log('=== Admission policy (memory.consider) ===');
+  const candidates = [
+    { tier: 'semantic', content: 'The nginx reverse proxy listens on port 80 in front of the SPA.' }, // material
+    { tier: 'semantic', content: 'Thanks, sounds good!' },                                            // filler
+    { tier: 'semantic', content: 'Let me go check the scheduler code next.' },                        // reasoning
+    { tier: 'project', content: 'The token maybe expires, probably after an hour I think.' },         // speculation
+    { tier: 'project', content: 'Currently working on the hourly sync; next step is aggregation.' },  // stale state
+    { tier: 'semantic', content: 'Postgres runs on port 5432; usage tables are append-only with source + ingestion_batch_id.' }, // duplicate
+  ];
+  for (const c of candidates) {
+    const v = ai.memory.consider(c);
+    console.log(`  ${v.decision.padEnd(8)} [${(v.reasons || []).join(',')}]  "${c.content.slice(0, 52)}${c.content.length > 52 ? '…' : ''}"`);
+  }
+  console.log('  → durable memory after gating:', JSON.stringify(ai.memory.stats()), '\n');
+
   // --- Run a multi-part request ---
   const request =
     'research how the sync writes to the database\n' +

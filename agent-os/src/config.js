@@ -46,6 +46,17 @@ const DEFAULTS = {
   pricing: DEFAULT_MODEL_PRICING,
   // Working-memory time-to-live in ms (records older than this are pruned).
   workingTtlMs: 1000 * 60 * 60 * 6, // 6 hours
+  // Memory admission policy — what is allowed to become durable memory.
+  // "Would retrieving this later materially improve an agent's ability to
+  //  perform a task?" If not, it stays episodic or is discarded.
+  policy: {
+    minWords: 4, // shorter than this reads as filler
+    minKeywords: 2, // durable facts need at least this much substance
+    hedgeDensity: 0.12, // hedge words / total words above this = speculation
+    minConfidence: 0.5, // explicit candidate.confidence below this = speculation
+    dedupeJaccard: 0.85, // keyword overlap at/above this = duplicate fact
+    promoteThreshold: 2, // materiality score needed to promote to a durable tier
+  },
 };
 
 const TIERS = ['semantic', 'episodic', 'procedural', 'project', 'preference', 'working'];
@@ -72,6 +83,7 @@ function resolveConfig(options = {}) {
     root,
     tierWeights: { ...DEFAULTS.tierWeights, ...(fileConfig.tierWeights || {}), ...(options.tierWeights || {}) },
     pricing: { ...DEFAULT_MODEL_PRICING, ...(fileConfig.pricing || {}), ...(options.pricing || {}) },
+    policy: { ...DEFAULTS.policy, ...(fileConfig.policy || {}), ...(options.policy || {}) },
   };
 
   merged.paths = {

@@ -74,6 +74,34 @@ class MemoryEngine {
     return record;
   }
 
+  /**
+   * Admission-gated write. Runs the candidate through the MemoryPolicy and only
+   * then decides whether to promote it to a durable tier, downgrade it to
+   * episodic history, or discard it. This is the path Claude output should take;
+   * `remember()` stays the unconditional low-level write for deliberate inserts.
+   *
+   * @returns {{ decision, tier, reasons, materiality, record }}
+   */
+  consider(candidate, options = {}) {
+    if (!this._policy) {
+      const { MemoryPolicy } = require('./MemoryPolicy');
+      this._policy = new MemoryPolicy(this.config, this.config.policyOptions || {});
+    }
+    const verdict = this._policy.evaluate(candidate, {
+      existingDurable: options.existingDurable || this._durableRecords(),
+    });
+    let record = null;
+    if (verdict.decision !== 'discard') {
+      record = this.remember({ ...candidate, tier: verdict.tier });
+    }
+    return { ...verdict, record };
+  }
+
+  _durableRecords() {
+    const { DURABLE_TIERS } = require('./MemoryPolicy');
+    return [...DURABLE_TIERS].flatMap((t) => this.store.read(t));
+  }
+
   /** Read all records for a tier (or every tier when omitted). */
   all(tier) {
     if (tier) return this.store.read(tier);

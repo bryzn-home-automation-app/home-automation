@@ -6,6 +6,7 @@
  *
  * Usage:
  *   agent-os remember <tier> "<content>" [--tags a,b] [--key k] [--salience 0.7]
+ *   agent-os consider <tier> "<content>" [--key k] [--confidence 0.8]   # admission-gated
  *   agent-os compile "<goal>" [--budget 2000] [--tags a,b]
  *   agent-os run "<request>"
  *   agent-os stats
@@ -61,6 +62,28 @@ async function main() {
       console.log(`remembered ${rec.id} in ${rec.tier}`);
       break;
     }
+    case 'consider': {
+      // Run a candidate through the admission policy WITHOUT the low-level
+      // guarantee of `remember` — this is the gate: promote / episodic / discard.
+      const [tier, content] = positional;
+      if (!tier || !content) return usage('consider <tier> "<content>" [--key k] [--confidence 0.8]');
+      const verdict = os.memory.consider({
+        tier,
+        content,
+        tags: list(flags.tags),
+        key: flags.key || null,
+        confidence: flags.confidence != null ? Number(flags.confidence) : undefined,
+        source: 'cli',
+      });
+      console.log(JSON.stringify({
+        decision: verdict.decision,
+        tier: verdict.tier,
+        reasons: verdict.reasons,
+        materiality: verdict.materiality,
+        storedId: verdict.record ? verdict.record.id : null,
+      }, null, 2));
+      break;
+    }
     case 'compile': {
       const [goal] = positional;
       if (!goal) return usage('compile "<goal>"');
@@ -112,7 +135,7 @@ function usage(hint) {
   if (hint) console.error(`usage: agent-os ${hint}`);
   else {
     console.error(
-      'usage: agent-os <remember|compile|run|stats|measure|skills|decay> [args] [--root dir]'
+      'usage: agent-os <remember|consider|compile|run|stats|measure|skills|decay> [args] [--root dir]'
     );
   }
   process.exitCode = 1;

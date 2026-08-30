@@ -46,8 +46,12 @@ class MemoryConsolidator {
       },
     });
 
-    // 3. Promote durable facts, if an extractor is configured.
+    // 3. Promote durable facts, if an extractor is configured — but only the
+    //    ones that clear the admission policy. Not every candidate deserves
+    //    permanent storage; the gate discards filler/duplicates and downgrades
+    //    transient or low-confidence claims to episodic history.
     const facts = [];
+    const rejected = [];
     if (this.factExtractor) {
       let extracted = [];
       try {
@@ -56,12 +60,21 @@ class MemoryConsolidator {
         log.warn(`factExtractor threw: ${err.message}`);
       }
       for (const f of extracted) {
-        if (f && f.content) facts.push(this.memory.remember({ tier: f.tier || 'semantic', ...f, source: 'consolidator' }));
+        if (!f || !f.content) continue;
+        const verdict = this.memory.consider({ tier: f.tier || 'semantic', ...f, source: 'consolidator' });
+        if (verdict.decision === 'discard') {
+          rejected.push({ content: f.content, reasons: verdict.reasons });
+        } else {
+          facts.push({ ...verdict.record, admittedAs: verdict.decision, reasons: verdict.reasons });
+        }
       }
     }
 
-    log.debug(`consolidated task "${task.goal}" -> episode ${episode.id}, ${facts.length} facts, ${usedIds.length} reinforced`);
-    return { episode, facts, reinforced: usedIds.length };
+    log.debug(
+      `consolidated task "${task.goal}" -> episode ${episode.id}, ` +
+        `${facts.length} admitted, ${rejected.length} rejected, ${usedIds.length} reinforced`
+    );
+    return { episode, facts, rejected, reinforced: usedIds.length };
   }
 }
 

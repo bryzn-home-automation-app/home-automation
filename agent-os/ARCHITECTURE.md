@@ -43,6 +43,8 @@ Engineering   Research        QA               src/agents/Agent.js + registry.js
                 ▼
        MEMORY CONSOLIDATOR                       src/consolidator/MemoryConsolidator.js
                 │   reinforce used memories · record episode · promote facts
+                │        └── through the ADMISSION POLICY (src/memory/MemoryPolicy.js):
+                │            promote durable · downgrade to episodic · discard filler/dupes
                 ▼
        MEASUREMENT ENGINE                        src/measurement/MeasurementEngine.js
                     baseline vs actual tokens · tokens avoided · cost · latency · quality
@@ -90,6 +92,47 @@ Deterministic six-stage pipeline turning large memory into a small context:
 Every compile emits a `report` (kept vs. candidate counts, tokens used vs.
 baseline, dropped duplicates, conflicts, compile time) so selection is auditable
 and measurable.
+
+### Memory admission policy — what is *not* allowed to become memory
+Not every Claude response deserves permanent storage. The **admission policy**
+(`src/memory/MemoryPolicy.js`) is the gate in front of durable memory. Its litmus
+test is a single question:
+
+> **"Would retrieving this later materially improve an agent's ability to perform a task?"**
+> If not, it stays in episodic history or is discarded.
+
+Every candidate is sorted into one of three outcomes:
+
+| Outcome | Meaning | Goes to |
+|---------|---------|---------|
+| **promote** | material, durable knowledge | its intended durable tier |
+| **episodic** | has substance but is transient/uncertain | episodic history (the low-bar catch-all) |
+| **discard** | filler or an exact duplicate | dropped entirely |
+
+What it keeps out of durable memory, and why each is caught:
+
+| Rejected | Detected by | Result |
+|----------|-------------|--------|
+| conversational filler | acknowledgement phrases / all-filler-word content / too few words | **discard** |
+| duplicate facts | exact content or keyword-Jaccard ≥ 0.85 vs. existing durable memory | **discard** |
+| temporary reasoning / one-off intermediate thoughts | intent-narration markers ("let me…", "I'll now…", "next I…") | **episodic** |
+| low-confidence speculation | hedge density over threshold, or an explicit low `confidence` | **episodic** |
+| stale task state | status markers ("currently working on", "TODO", "next step is") | **episodic** |
+| not material | fails to clear the materiality score for a durable tier | **episodic** or **discard** |
+
+Durable tiers (semantic/project/procedural/preference) face this **high bar**;
+`episodic` and `working` face only the filler check — they are *meant* to hold the
+transient stuff. Materiality is scored from durable signals (a conflict `key`,
+definitional/relational phrasing, concrete identifiers like ports/paths/`snake_case`,
+decision/preference tags, keyword richness) minus penalties for the soft rejects
+above. The gate is deterministic and every verdict lists its `reasons` + a
+`materiality` score, so admission is fully auditable. A host may inject a
+`classifier` (e.g. an LLM judge, or a redaction rule) that gets the final say.
+
+The engine exposes this as `memory.consider(candidate)` — the path Claude output
+should take. `memory.remember(candidate)` stays the unconditional low-level write
+for deliberate, trusted inserts. The Memory Consolidator routes all extracted
+facts through `consider()`, so learning never silently bloats durable memory.
 
 ### Skills Engine — reusable, learnable workflows
 Skills are declarative JSON (name, trigger keywords, ordered steps) stored under

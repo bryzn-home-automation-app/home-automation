@@ -64,6 +64,7 @@ const { context, report } = ai.compiler.compile({ goal: 'debug the postgres conn
 
 ```bash
 node bin/agent-os.js remember semantic "Postgres runs on 5432" --tags db
+node bin/agent-os.js consider semantic "Thanks, will do!"   # → discard (filler)
 node bin/agent-os.js compile "debug the database" --budget 1500
 node bin/agent-os.js run "research the sync and verify auth"
 node bin/agent-os.js stats
@@ -119,6 +120,38 @@ Records decay in salience over time and are reinforced when used, so relevance i
 self-maintaining. Records that share a conflict `key` are resolved to a single
 winner at compile time (highest salience, then newest), with the conflict logged.
 
+## What should *not* become memory
+
+Not every Claude response deserves permanent storage. The **admission policy**
+gates durable memory with one question:
+
+> *"Would retrieving this later materially improve an agent's ability to perform a task?"*
+> If not, it stays in episodic history or is discarded.
+
+Use `memory.consider()` (not `remember()`) for Claude-generated content — it sorts
+each candidate into **promote** (durable), **episodic** (transient but useful), or
+**discard** (filler / duplicate):
+
+```js
+ai.memory.consider({ tier: 'semantic', content: 'The backend runs on port 8080.' });
+// → { decision: 'promote',  tier: 'semantic',  reasons: ['material'] }
+
+ai.memory.consider({ tier: 'semantic', content: 'Thanks, sounds good!' });
+// → { decision: 'discard',  tier: null,        reasons: ['filler'] }
+
+ai.memory.consider({ tier: 'semantic', content: 'Let me go check the scheduler next.' });
+// → { decision: 'episodic', tier: 'episodic',  reasons: ['temporary-reasoning'] }
+```
+
+Kept out of durable memory: conversational filler and exact duplicates
+(**discarded**); temporary reasoning, one-off intermediate thoughts, low-confidence
+speculation, and stale task state (**downgraded to episodic**). Durable tiers face
+this bar; `episodic`/`working` face only the filler check — they exist to hold the
+transient stuff. Every verdict is auditable (`reasons` + `materiality`), tunable via
+the `policy` config block, and overridable with a host `classifier` (e.g. an LLM
+judge or a redaction rule). The consolidator routes all learned facts through this
+gate automatically. From the CLI: `agent-os consider <tier> "<content>"`.
+
 ---
 
 ## Configuration
@@ -132,7 +165,15 @@ Pass options to `createAgentOS()` or drop a `.agent-os/config.json`:
   "workingTtlMs": 21600000,       // working-memory lifetime (6h)
   "model": "claude-sonnet",
   "tierWeights": { "working": 1.3, "preference": 1.2 },
-  "pricing": { "claude-sonnet": { "input": 3.0, "output": 15.0 } }
+  "pricing": { "claude-sonnet": { "input": 3.0, "output": 15.0 } },
+  "policy": {                     // memory admission gate (see below)
+    "minWords": 4,
+    "minKeywords": 2,
+    "hedgeDensity": 0.12,         // hedges / words above this = speculation
+    "minConfidence": 0.5,
+    "dedupeJaccard": 0.85,        // keyword overlap at/above this = duplicate
+    "promoteThreshold": 2         // materiality needed for a durable tier
+  }
 }
 ```
 
@@ -145,7 +186,7 @@ agent-os/
 ├── src/
 │   ├── index.js                    createAgentOS() — wires everything together
 │   ├── config.js                   config resolution, tier list, pricing
-│   ├── memory/                     MemoryEngine + file store (physical memory)
+│   ├── memory/                     MemoryEngine + file store + MemoryPolicy (admission gate)
 │   ├── context/                    ContextCompiler (retrieve→…→budget)
 │   ├── skills/                     SkillsEngine + Skill (learn-from-demonstration)
 │   ├── agents/                     Orchestrator, Agent, specialist registry
