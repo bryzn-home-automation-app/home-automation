@@ -762,6 +762,19 @@ def _fetch_pending(conninfo, limit=5):
         ).fetchall()
 
 
+def _has_pending(conninfo):
+    """Cheap existence check — is there at least one PENDING command waiting?
+    Fail-open (treat DB errors as 'nothing pending' so a transient DB blip never
+    forces a reconnect)."""
+    try:
+        with psycopg.connect(conninfo, autocommit=True) as conn:
+            return conn.execute(
+                "SELECT 1 FROM roomba_commands WHERE status = 'PENDING' LIMIT 1"
+            ).fetchone() is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _mark_command(conninfo, cmd_id, status, detail=None, terminal=True):
     with psycopg.connect(conninfo, autocommit=True) as conn:
         if terminal:
@@ -1123,9 +1136,29 @@ async def main():
         last_poll = 0.0
         while True:
             try:
+                just_connected = False
                 if robot is None:
                     robot = await connect_robot(session, email, password, country, blid, state)
                     last_poll = 0.0  # poll immediately after (re)connect
+                    just_connected = True
+                # Send commands over a guaranteed-fresh connection. The cloud MQTT link
+                # can silently go "zombie" as its auth token ages (~hourly) — it accepts
+                # publishes but never delivers them — and send_simple_command reports OK
+                # on enqueue, not delivery, so a command sent on a stale link is marked
+                # OK yet never reaches the robot ("not reacting to commands"). Commands
+                # are user-initiated and rare, so when one is queued we reconnect first
+                # (unless we just connected this tick) to force a live link before sending.
+                if not just_connected and _has_pending(conninfo):
+                    log.info("pending command(s) — reconnecting for a fresh cloud link before sending")
+                    await _cancel_live_task(live_task)
+                    live_task = None
+                    state.mission_running = False
+                    try:
+                        await robot.disconnect()
+                    except Exception:
+                        pass
+                    robot = await connect_robot(session, email, password, country, blid, state)
+                    last_poll = 0.0
                 # Commands are latency-sensitive → checked every tick; status polls on interval.
                 await process_commands(robot, conninfo, state)
                 now = time.monotonic()
