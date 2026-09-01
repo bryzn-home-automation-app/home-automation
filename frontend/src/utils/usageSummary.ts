@@ -1,4 +1,12 @@
-import type { EnergyUsage, UsageRangeSummary } from '../types';
+import type { DailyUsagePoint, EnergyUsage, UsageRangeSummary } from '../types';
+
+/**
+ * A day is only "complete" enough to trust its total once it has most of its
+ * 24 hourly rows. The current day (still syncing) and any day CoServ under-posted
+ * fall below this and must be excluded from trend/average math, or they read as
+ * artificial dips. Matches the >=18 guard used by the daily usage-log table.
+ */
+export const COMPLETE_DAY_MIN_HOURS = 18;
 
 export interface UsagePeriodDefinition {
   key: 'month' | 'quarter' | 'year' | 'lifetime';
@@ -135,6 +143,43 @@ export function summarizeUsageRange(
       usageKwh: Number(lowest.usageKwh),
     },
   };
+}
+
+/**
+ * Server-pre-aggregated daily points -> the `{ date, kWh }` series the daily
+ * trend chart plots. Uses the authoritative per-day total (COALESCE(SUM(...)) of
+ * hourly rows, computed in one GROUP BY on the backend) directly — no client-side
+ * summation and, crucially, no point-cap downsampling that would understate each
+ * day's total. Sorted ascending by date so the line reads left-to-right.
+ */
+export function dailyTrendSeries(
+  points: DailyUsagePoint[]
+): Array<{ date: string; kWh: number }> {
+  return [...points]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((p) => ({ date: p.date, kWh: Math.round(Number(p.totalKwh) * 100) / 100 }));
+}
+
+/**
+ * Average of daily totals over the trailing `days` window, counting only days
+ * that are complete (>= `minReadings` hourly rows). Excluding partial days — the
+ * still-syncing current day especially — stops the 7/30-day averages from being
+ * dragged down by a day that only has a handful of hours so far.
+ */
+export function averageCompleteDailyKwh(
+  points: DailyUsagePoint[],
+  days: number,
+  minReadings = COMPLETE_DAY_MIN_HOURS,
+  now = new Date()
+): number {
+  const threshold = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+  const matching = points.filter(
+    (p) => p.readingCount >= minReadings && p.date >= threshold
+  );
+  if (!matching.length) return 0;
+  return matching.reduce((sum, p) => sum + Number(p.totalKwh), 0) / matching.length;
 }
 
 export function formatSummaryDate(timestamp?: string | null) {

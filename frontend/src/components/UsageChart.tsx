@@ -40,6 +40,14 @@ const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } a
 
 interface UsageChartProps {
   data: EnergyUsage[];
+  /**
+   * Pre-aggregated daily totals ({ date: 'YYYY-MM-DD', kWh }). When provided,
+   * the chart plots these directly instead of summing `data` — the correct input
+   * for a DAILY trend, since `data` may be point-capped hourly rows whose partial
+   * per-day sums understate each day (see ElectricalUsage). `data` is still used
+   * for the loading/empty checks so the existing callers behave identically.
+   */
+  dailyPoints?: Array<{ date: string; kWh: number }>;
   loading?: boolean;
   title?: string;
   emptyText?: string;
@@ -88,6 +96,7 @@ function buildDynamicAxis(
 
 function UsageChart({
   data,
+  dailyPoints,
   loading,
   title = 'Daily Usage',
   emptyText = 'No usage data yet — readings sync automatically each evening.',
@@ -99,7 +108,14 @@ function UsageChart({
   // All hooks run before any early return (Rules of Hooks) — the loading/empty
   // branches must not change the hook count between renders.
   const chartData = useMemo(() => {
-    // Sum hourly records per date to get daily totals.
+    // Preferred path: caller supplies authoritative pre-aggregated daily totals.
+    if (dailyPoints) {
+      return dailyPoints.map((p) => ({
+        date: new Date(p.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        kWh: Math.round(p.kWh * 100) / 100,
+      }));
+    }
+    // Fallback: sum hourly records per date to get daily totals.
     const byDate = new Map<string, number>();
     for (const d of data) {
       if (!isHourlySource(d.source)) continue;
@@ -112,7 +128,7 @@ function UsageChart({
         date: new Date(date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
         kWh: Math.round(total * 100) / 100,
       }));
-  }, [data]);
+  }, [data, dailyPoints]);
 
   const yAxis = useMemo(() => {
     return buildDynamicAxis(chartData.map((d) => d.kWh), { points: 8, padRatio: 0.12, minPad: 1, floorZero: true, integerTicks: true });
@@ -127,7 +143,7 @@ function UsageChart({
     );
   }
 
-  if (!data.length) {
+  if (dailyPoints ? !dailyPoints.length : !data.length) {
     return (
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
