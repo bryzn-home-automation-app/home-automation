@@ -10,7 +10,7 @@ import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { fetchBatchSummaries } from '../api/energy';
 import { fetchWeatherForRange } from '../api/weather';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
-import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
+import { buildUsagePeriods, createEmptyUsageSummary, dailyTrendSeries, averageCompleteDailyKwh } from '../utils/usageSummary';
 import { isHourlySource } from '../utils/usageSource';
 import UsageWeatherChart from '../components/UsageWeatherChart';
 import { useTheme, CHART_SERIES } from '../context/ThemeContext';
@@ -18,7 +18,7 @@ import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 type LogFilter = 'daily' | 'hourly';
 
 export default memo(function ElectricalUsage() {
-  const { electricUsage, electricTotal, electricMeter, config } = useUsageData();
+  const { electricUsage, electricTotal, electricMeter, config, electricDaily } = useUsageData();
   const [logFilter, setLogFilter] = useState<LogFilter>('daily');
   const weatherInterval = useJitteredInterval(3_600_000, 60_000);
 
@@ -48,13 +48,14 @@ export default memo(function ElectricalUsage() {
     return Number.isNaN(ms) ? 0 : ms;
   };
 
-  const MAX_CHART_POINTS = 500;
-  const chartData = useMemo(() => {
-    const sorted = [...realData].sort((a, b) => timestampMs(a.timestamp) - timestampMs(b.timestamp));
-    if (sorted.length <= MAX_CHART_POINTS) return sorted;
-    const step = (sorted.length - 1) / (MAX_CHART_POINTS - 1);
-    return Array.from({ length: MAX_CHART_POINTS }, (_, i) => sorted[Math.round(i * step)]);
-  }, [realData]);
+  // Daily trend line is driven by the server's pre-aggregated per-day totals
+  // (a single GROUP BY on the backend), NOT a client-side sum of point-capped
+  // hourly rows — the latter downsampled ~1,440 hourly rows to 500 before summing,
+  // so each day showed only ~1/3 of its real kWh (see git history / ISSUES).
+  const trendPoints = useMemo(
+    () => dailyTrendSeries(electricDaily.data ?? []),
+    [electricDaily.data]
+  );
 
   // ── Daily aggregates from hourly data ──────────────────────────
   const dailyFromHourly = useMemo(() => {
@@ -89,15 +90,11 @@ export default memo(function ElectricalUsage() {
   }, [dailyFromHourly, hourlyCountByDate]);
 
   // ── 7-day and 30-day averages ──────────────────────────────────
-  const computeDailyAvg = (days: number): number => {
-    const threshold = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-    const matching = dailyFromHourly.filter((d) => d.date >= threshold);
-    if (matching.length === 0) return 0;
-    return matching.reduce((s, d) => s + d.total, 0) / matching.length;
-  };
-
-  const avg7 = useMemo(() => computeDailyAvg(7), [dailyFromHourly]);
-  const avg30 = useMemo(() => computeDailyAvg(30), [dailyFromHourly]);
+  // Count only COMPLETE days (>= COMPLETE_DAY_MIN_HOURS hourly rows) from the
+  // server's daily aggregates, so the still-syncing current day and any
+  // under-posted day don't get averaged in as if they were full days.
+  const avg7 = useMemo(() => averageCompleteDailyKwh(electricDaily.data ?? [], 7), [electricDaily.data]);
+  const avg30 = useMemo(() => averageCompleteDailyKwh(electricDaily.data ?? [], 30), [electricDaily.data]);
 
   // ── Date periods for summaries ─────────────────────────────────
   const todayDate = new Date().toISOString().split('T')[0];
@@ -300,7 +297,8 @@ export default memo(function ElectricalUsage() {
       <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DeferredRender minHeight={360}>
           <UsageChart
-            data={chartData}
+            data={realData}
+            dailyPoints={trendPoints}
             loading={loading}
             title="Electric usage trend"
             emptyText="No electric usage data yet — readings sync automatically each evening once your utility posts the day's data."
