@@ -11,6 +11,7 @@ import RoomCleanModal from '../components/RoomCleanModal';
 import CleanModal, { type CleanRoomOption } from '../components/CleanModal';
 import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
+import RoombaSchedules from '../components/RoombaSchedules';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useAuth } from '../context/AuthContext';
@@ -482,6 +483,9 @@ export default memo(function Roomba() {
 
       {/* ── Admin controls ────────────────────────────────── */}
       {isAdmin && <RoombaControls status={status} onClean={() => setShowClean(true)} />}
+
+      {/* ── Automation / recurring schedules (admin) ──────── */}
+      {isAdmin && <RoombaSchedules rooms={cleanRooms} />}
 
       {/* ── Maintenance / detail strip ────────────────────── */}
       {status &&

@@ -263,6 +263,41 @@ export interface RoombaCommand {
   processedAt: string | null;
 }
 
+/**
+ * A recurring cleaning schedule (ADMIN only). {@link time} is local "HH:mm";
+ * {@link daysOfWeek} are ISO-8601 day numbers (1 = Monday … 7 = Sunday).
+ * {@link targetType} is 'WHOLE_HOUSE' (every mapped room) or 'ROOMS' (a subset).
+ */
+export interface RoombaSchedule {
+  id: number;
+  name: string;
+  enabled: boolean;
+  daysOfWeek: number[];
+  time: string;
+  targetType: 'WHOLE_HOUSE' | 'ROOMS';
+  roomIds: string[];
+  roomLabels: string[];
+  suction: string | null;
+  passes: string | null;
+  mode: string | null;
+  lastFiredAt: string | null;
+  createdAt: string;
+}
+
+/** Create/update payload for a cleaning schedule. */
+export interface RoombaScheduleInput {
+  name: string;
+  enabled: boolean;
+  daysOfWeek: number[];
+  time: string;
+  targetType: 'WHOLE_HOUSE' | 'ROOMS';
+  roomIds?: string[];
+  roomLabels?: string[];
+  suction?: string;
+  passes?: string;
+  mode?: string;
+}
+
 // ── Minimal GeoJSON (only what the map renderer consumes) ──
 
 export type GeoPosition = number[]; // [x, y] in meters
