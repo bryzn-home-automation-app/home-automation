@@ -6,6 +6,8 @@ import type {
   RoombaMap,
   RoombaPosition,
   RoombaRun,
+  RoombaSchedule,
+  RoombaScheduleInput,
   RoombaStatus,
 } from '../types';
 
@@ -163,4 +165,43 @@ export async function cleanRoombaRooms(
     mode,
   });
   return res.data;
+}
+
+// ── Recurring cleaning schedules (ADMIN only) ──────────────
+
+/** All cleaning schedules, newest first (ADMIN only). */
+export async function fetchRoombaSchedules(): Promise<RoombaSchedule[]> {
+  const res = await api.get<RoombaSchedule[]>('/roomba/schedules');
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/** Create a recurring cleaning schedule (ADMIN only). */
+export async function createRoombaSchedule(input: RoombaScheduleInput): Promise<RoombaSchedule> {
+  const res = await api.post<RoombaSchedule>('/roomba/schedules', input);
+  return res.data;
+}
+
+/** Update an existing cleaning schedule (ADMIN only). */
+export async function updateRoombaSchedule(
+  id: number,
+  input: RoombaScheduleInput,
+): Promise<RoombaSchedule> {
+  const res = await api.put<RoombaSchedule>(`/roomba/schedules/${id}`, input);
+  return res.data;
+}
+
+/** Enable or disable a schedule without editing the rest of it (ADMIN only). */
+export async function setRoombaScheduleEnabled(
+  id: number,
+  enabled: boolean,
+): Promise<RoombaSchedule> {
+  const res = await api.post<RoombaSchedule>(
+    `/roomba/schedules/${id}/${enabled ? 'enable' : 'disable'}`,
+  );
+  return res.data;
+}
+
+/** Delete a schedule (ADMIN only). */
+export async function deleteRoombaSchedule(id: number): Promise<void> {
+  await api.delete(`/roomba/schedules/${id}`);
 }

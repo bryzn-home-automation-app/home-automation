@@ -415,6 +415,51 @@ public class RoombaService {
         return toCommandResponse(commandRepo.save(cmd));
     }
 
+    /**
+     * Room ids of every mapped room in the current floor plan (empty when the
+     * robot hasn't built a map yet). Parses the stored geojson bundle's
+     * {@code rooms.features[].id} — the same list the frontend's "Start a clean"
+     * dialog derives client-side for a whole-house clean.
+     */
+    public List<String> mappedRoomIds() {
+        return mapRepo.findTopByOrderByUpdatedAtDesc().map(m -> {
+            List<String> ids = new ArrayList<>();
+            JsonNode root = parseJson(m.getGeojson());
+            if (root == null) {
+                return ids;
+            }
+            JsonNode features = root.path("rooms").path("features");
+            if (features.isArray()) {
+                for (JsonNode f : features) {
+                    JsonNode idNode = f.get("id");
+                    if (idNode != null && !idNode.isNull()) {
+                        String id = idNode.asText();
+                        if (id != null && !id.isBlank()) {
+                            ids.add(id);
+                        }
+                    }
+                }
+            }
+            return ids;
+        }).orElseGet(List::of);
+    }
+
+    /**
+     * Enqueue a whole-house clean using the exact scope logic the manual "Start a
+     * clean" dialog uses: clean every mapped room via {@code clean_rooms}, or —
+     * when no map/rooms exist yet — fall back to a plain full-clean {@code start}.
+     * Reused by the schedule scheduler so a scheduled whole-house clean goes
+     * through the identical, hardware-tested command path.
+     */
+    public RoombaCommandResponse enqueueWholeHouseClean(String suction, String passes,
+                                                        String mode, String requestedBy) {
+        List<String> ids = mappedRoomIds();
+        if (ids.isEmpty()) {
+            return enqueueCommand("start", null, requestedBy);
+        }
+        return enqueueClean(ids, suction, passes, mode, requestedBy);
+    }
+
     public List<RoombaCommandResponse> recentCommands() {
         return commandRepo.findTop20ByOrderByIdDesc().stream()
                 .map(this::toCommandResponse).toList();
