@@ -569,6 +569,7 @@ export default function DebugDashboard() {
             disabled={preset === 'range' && !!rangeError}
           />
           <SyncButton label="🔔 Generate Alerts" endpoint="/admin/sync/alerts" />
+          <SyncButton label="📈 Retrain Forecast" endpoint="/admin/sync/forecast" />
         </div>
         <p className="mt-2 text-[10px] text-apptext-dim">
           Syncs run in the background — watch the Diagnostic Log for results.

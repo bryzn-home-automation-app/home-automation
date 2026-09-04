@@ -435,7 +435,8 @@ public class ForecastService {
 
     private List<DailyDataPoint> loadTrainingData() {
         try {
-            return jdbc.query("""
+            // Try hourly data first (more granular, HAVING >= 18 readings/day)
+            List<DailyDataPoint> data = jdbc.query("""
                 SELECT
                     h.timestamp::date AS day,
                     SUM(h.usage_kwh) AS total_kwh,
@@ -449,27 +450,62 @@ public class ForecastService {
                 GROUP BY h.timestamp::date, w.avg_temp_f, w.high_temp_f, w.low_temp_f
                 HAVING COUNT(h.*) >= 18
                 ORDER BY day
-                """, (rs, rowNum) -> {
-                LocalDate date = rs.getDate("day").toLocalDate();
-                double kwh = rs.getDouble("total_kwh");
-                double avgTemp = rs.getDouble("avg_temp_f");
-                double cdd = Math.max(0, avgTemp - COMFORT_BASE);
-                double hdd = Math.max(0, COMFORT_BASE - avgTemp);
-                return new DailyDataPoint(date, kwh, avgTemp, cdd, hdd, date.getDayOfWeek());
-            });
+                """, (rs, rowNum) -> mapDataPoint(rs));
+
+            if (data.size() >= MIN_DATA_POINTS) {
+                return data;
+            }
+
+            // Fall back to daily electric_usage table
+            log.info("ForecastService: hourly data insufficient ({} pts), falling back to daily electric_usage", data.size());
+            return jdbc.query("""
+                SELECT
+                    e.timestamp::date AS day,
+                    SUM(e.usage_kwh) AS total_kwh,
+                    w.avg_temp_f,
+                    w.high_temp_f,
+                    w.low_temp_f,
+                    COUNT(e.*) AS readings
+                FROM electric_usage e
+                JOIN weather_observations w ON e.timestamp::date = w.observation_date
+                WHERE e.usage_kwh > 0 AND w.avg_temp_f IS NOT NULL
+                GROUP BY e.timestamp::date, w.avg_temp_f, w.high_temp_f, w.low_temp_f
+                ORDER BY day
+                """, (rs, rowNum) -> mapDataPoint(rs));
         } catch (Exception e) {
             log.error("ForecastService: failed to load training data", e);
             return List.of();
         }
     }
 
+    private DailyDataPoint mapDataPoint(java.sql.ResultSet rs) throws java.sql.SQLException {
+        LocalDate date = rs.getDate("day").toLocalDate();
+        double kwh = rs.getDouble("total_kwh");
+        double avgTemp = rs.getDouble("avg_temp_f");
+        double cdd = Math.max(0, avgTemp - COMFORT_BASE);
+        double hdd = Math.max(0, COMFORT_BASE - avgTemp);
+        return new DailyDataPoint(date, kwh, avgTemp, cdd, hdd, date.getDayOfWeek());
+    }
+
     private Double queryDailyKwh(String date) {
         try {
-            return jdbc.queryForObject("""
+            // Try hourly table first
+            Double result = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(usage_kwh), 0)
                 FROM hourly_electric_usage
                 WHERE timestamp::date = ?::date AND usage_kwh > 0
                 HAVING COUNT(*) >= 18
+                """, Double.class, date);
+            if (result != null) return result;
+        } catch (Exception e) {
+            // No hourly data for this date — fall through
+        }
+        try {
+            return jdbc.queryForObject("""
+                SELECT COALESCE(SUM(usage_kwh), 0)
+                FROM electric_usage
+                WHERE timestamp::date = ?::date AND usage_kwh > 0
+                HAVING COUNT(*) >= 1
                 """, Double.class, date);
         } catch (Exception e) {
             return null;
