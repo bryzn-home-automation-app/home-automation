@@ -13,6 +13,7 @@ import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary, dailyTrendSeries, averageCompleteDailyKwh } from '../utils/usageSummary';
 import { isHourlySource } from '../utils/usageSource';
 import UsageWeatherChart from '../components/UsageWeatherChart';
+import ForecastChart from '../components/ForecastChart';
 import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 
 type LogFilter = 'daily' | 'hourly';
@@ -328,6 +329,10 @@ export default memo(function ElectricalUsage() {
           />
         </DeferredRender>
       )}
+
+      <DeferredRender minHeight={400}>
+        <ForecastChart />
+      </DeferredRender>
 
       <UsageSummaryGrid
         title="Electric highs, lows, and rolling period totals"

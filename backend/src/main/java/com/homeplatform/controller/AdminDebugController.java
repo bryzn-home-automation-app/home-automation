@@ -5,6 +5,7 @@ import com.homeplatform.model.AppEvent;
 import com.homeplatform.service.AlertEngine;
 import com.homeplatform.service.AppEventService;
 import com.homeplatform.service.DailySyncScheduler;
+import com.homeplatform.service.ForecastScheduler;
 import com.homeplatform.service.HourlySyncScheduler;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
@@ -56,6 +57,7 @@ public class AdminDebugController {
     private final DailySyncScheduler dailySyncScheduler;
     private final HourlySyncScheduler hourlySyncScheduler;
     private final AlertEngine alertEngine;
+    private final ForecastScheduler forecastScheduler;
     /** Single-threaded so manual daily + hourly syncs serialize (no overlapping browser logins). */
     private final ExecutorService syncExecutor = Executors.newSingleThreadExecutor();
     private static final Set<String> SENSITIVE_COLUMNS = Set.of(
@@ -66,12 +68,14 @@ public class AdminDebugController {
     public AdminDebugController(AppEventService appEventService, DataSource dataSource,
                                 DailySyncScheduler dailySyncScheduler,
                                 HourlySyncScheduler hourlySyncScheduler,
-                                AlertEngine alertEngine) {
+                                AlertEngine alertEngine,
+                                ForecastScheduler forecastScheduler) {
         this.appEventService = appEventService;
         this.dataSource = dataSource;
         this.dailySyncScheduler = dailySyncScheduler;
         this.hourlySyncScheduler = hourlySyncScheduler;
         this.alertEngine = alertEngine;
+        this.forecastScheduler = forecastScheduler;
     }
 
     /** Require ADMIN role — mirrors AdminController pattern. */
@@ -376,6 +380,19 @@ public class AdminDebugController {
         try {
             alertEngine.generateForAllUsers();
             return ResponseEntity.ok(Map.of("status", "triggered", "type", "alerts"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Manually retrain the forecast model and generate predictions. */
+    @PostMapping("/sync/forecast")
+    public ResponseEntity<Map<String, Object>> triggerForecast(HttpServletRequest request) {
+        requireAdmin(request);
+        try {
+            forecastScheduler.runManualRetrain();
+            return ResponseEntity.ok(Map.of("status", "triggered", "type", "forecast"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", e.getMessage()));
