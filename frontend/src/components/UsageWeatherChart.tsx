@@ -204,21 +204,30 @@ function UsageWeatherChart({
 
   // ── Electric usage aggregation maps ──
   const { byDate, byHour } = useMemo(() => {
-    const dateMap = new Map<string, number>();
+    const hourlyDateMap = new Map<string, number>();
+    const dailyDateMap = new Map<string, number>();
     const hourMap = new Map<string, number>();
     for (const d of usageData) {
       if (typeof d.timestamp !== 'string' || d.timestamp.length < 10) continue;
       const usage = Number(d.usageKwh);
       if (Number.isNaN(usage)) continue;
       const date = d.timestamp.slice(0, 10);
-      dateMap.set(date, (dateMap.get(date) ?? 0) + usage);
       if (isHourlySource(d.source)) {
+        hourlyDateMap.set(date, (hourlyDateMap.get(date) ?? 0) + usage);
         const normalized = d.timestamp.replace(' ', 'T');
         if (normalized.length >= 13) {
           const hourKey = normalized.substring(0, 13);
           hourMap.set(hourKey, (hourMap.get(hourKey) ?? 0) + usage);
         }
+      } else {
+        dailyDateMap.set(date, (dailyDateMap.get(date) ?? 0) + usage);
       }
+    }
+    // Prefer hourly sum per date; fall back to daily record when no hourly data exists
+    const dateMap = new Map<string, number>();
+    const allDates = new Set([...hourlyDateMap.keys(), ...dailyDateMap.keys()]);
+    for (const date of allDates) {
+      dateMap.set(date, hourlyDateMap.get(date) ?? dailyDateMap.get(date) ?? 0);
     }
     return { byDate: dateMap, byHour: hourMap };
   }, [usageData]);
@@ -265,7 +274,7 @@ function UsageWeatherChart({
           avgTemp: h.temperature,
           apparentTemp: h.apparentTemperature,
           humidity: h.humidity,
-          kWh: byHour.get(h.time.substring(0, 13)) ?? byDate.get(h.time.slice(0, 10)) ?? null,
+          kWh: byHour.get(h.time.substring(0, 13)) ?? null,
         };
       });
   }, [weather, byDate, byHour, range]);
