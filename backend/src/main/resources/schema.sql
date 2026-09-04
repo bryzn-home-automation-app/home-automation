@@ -453,3 +453,54 @@ CREATE INDEX IF NOT EXISTS idx_maintenance_user       ON maintenance_records (us
 CREATE INDEX IF NOT EXISTS idx_maintenance_status     ON maintenance_records (user_id, status);
 CREATE INDEX IF NOT EXISTS idx_maintenance_category   ON maintenance_records (user_id, category);
 CREATE INDEX IF NOT EXISTS idx_maintenance_completed  ON maintenance_records (user_id, completed_date DESC);
+
+-- ============================================================
+-- Electric Usage Forecast — self-improving prediction model
+-- ============================================================
+
+-- Trained model snapshots. Each nightly retrain inserts a new row; the latest
+-- row (by created_at) is the active model. Old rows are kept for accuracy
+-- trending and never deleted (append-only).
+CREATE TABLE IF NOT EXISTS forecast_model (
+    id                  SERIAL PRIMARY KEY,
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW(),
+    data_points_used    INTEGER        NOT NULL,
+    r_squared           NUMERIC(8,6),
+    mae                 NUMERIC(10,3),
+    mape                NUMERIC(8,4),
+    intercept           NUMERIC(12,6)  NOT NULL,
+    cdd_coeff           NUMERIC(12,6)  NOT NULL,
+    hdd_coeff           NUMERIC(12,6)  NOT NULL,
+    dow_adjustments     JSONB          NOT NULL DEFAULT '{}',
+    hourly_profiles     JSONB          NOT NULL DEFAULT '{}',
+    seasonal_factors    JSONB          NOT NULL DEFAULT '{}',
+    training_start      DATE,
+    training_end        DATE
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_model_created ON forecast_model (created_at DESC);
+
+-- Daily forecast snapshots. One row per (forecast_date, target_date) pair.
+-- forecast_date = when the prediction was made; target_date = what day it
+-- predicts. actual_kwh is NULL until backfilled the next night.
+CREATE TABLE IF NOT EXISTS forecast_snapshot (
+    id                  SERIAL PRIMARY KEY,
+    model_id            INTEGER        NOT NULL REFERENCES forecast_model(id),
+    forecast_date       DATE           NOT NULL,
+    target_date         DATE           NOT NULL,
+    predicted_kwh       NUMERIC(10,3)  NOT NULL,
+    actual_kwh          NUMERIC(10,3),
+    predicted_cost      NUMERIC(10,2),
+    actual_cost         NUMERIC(10,2),
+    weather_high        NUMERIC(5,2),
+    weather_low         NUMERIC(5,2),
+    weather_avg         NUMERIC(5,2),
+    cdd                 NUMERIC(8,4),
+    hdd                 NUMERIC(8,4),
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW(),
+    UNIQUE (forecast_date, target_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_snapshot_target   ON forecast_snapshot (target_date);
+CREATE INDEX IF NOT EXISTS idx_forecast_snapshot_forecast ON forecast_snapshot (forecast_date);
+CREATE INDEX IF NOT EXISTS idx_forecast_snapshot_model    ON forecast_snapshot (model_id);

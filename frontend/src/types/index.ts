@@ -357,6 +357,69 @@ export interface RoombaMapGeoJson {
   policyZones?: GeoFeatureCollection | null;
 }
 
+// ── Forecast ─────────────────────────────────────────────
+
+export interface ForecastDailyPoint {
+  date: string;
+  predictedKwh: number;
+  predictedCost: number;
+  lowerBound: number;
+  upperBound: number;
+  weatherHigh: number | null;
+  weatherLow: number | null;
+  weatherAvg: number | null;
+  cdd: number | null;
+  hdd: number | null;
+  confidencePct: number;
+}
+
+export interface ForecastSnapshot {
+  targetDate: string;
+  predictedKwh: number;
+  actualKwh: number | null;
+  predictedCost: number;
+  actualCost: number | null;
+}
+
+export interface ForecastResponse {
+  status: string;
+  message?: string;
+  modelId?: number;
+  dataPointsUsed?: number;
+  rSquared?: number;
+  forecasts?: ForecastDailyPoint[];
+  snapshots?: ForecastSnapshot[];
+}
+
+export interface ForecastAccuracyPoint {
+  date: string;
+  predicted: number;
+  actual: number;
+  error: number;
+}
+
+export interface ForecastAccuracy {
+  dataPoints: number;
+  mae: number;
+  rmse: number;
+  mape: number;
+  trailingDays: number;
+  points: ForecastAccuracyPoint[];
+}
+
+export interface ForecastHourlyPoint {
+  hour: number;
+  predictedKwh: number;
+  predictedCost: number;
+}
+
+export interface ForecastHourlyResponse {
+  status: string;
+  date: string;
+  avgTemp: number;
+  hours?: ForecastHourlyPoint[];
+}
+
 /** GET /api/roomba/map (or null = 204, no map built yet). */
 export interface RoombaMap {
   robotId: string;
