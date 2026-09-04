@@ -102,6 +102,14 @@ public class ForecastService {
         double[] coeffs = olsRegression(kwhArr, xArr);
         double intercept = coeffs[0], cddCoeff = coeffs[1], hddCoeff = coeffs[2];
 
+        // Guard: singular matrix produces NaN/Inf — fall back to mean-based model
+        if (!Double.isFinite(intercept) || !Double.isFinite(cddCoeff) || !Double.isFinite(hddCoeff)) {
+            log.warn("ForecastService: OLS produced non-finite coefficients — falling back to mean model");
+            intercept = Arrays.stream(kwhArr).average().orElse(0);
+            cddCoeff = 0;
+            hddCoeff = 0;
+        }
+
         // R-squared
         double meanY = Arrays.stream(kwhArr).average().orElse(0);
         double ssTot = 0, ssRes = 0;
@@ -149,8 +157,9 @@ public class ForecastService {
         // Phase 2: Hourly load shape profiles
         Map<String, Object> hourlyProfiles = buildHourlyProfiles(data);
 
-        // Phase 3: Seasonal factors
-        Map<String, Double> seasonalFactors = buildSeasonalFactors(data, intercept, cddCoeff, hddCoeff);
+        // Phase 3: Seasonal factors — computed from DOW-adjusted residuals so the
+        // two corrections don't double-count day-of-week effects.
+        Map<String, Double> seasonalFactors = buildSeasonalFactors(data, intercept, cddCoeff, hddCoeff, dowAdj);
 
         LocalDate start = data.get(0).date;
         LocalDate end = data.get(data.size() - 1).date;
@@ -279,7 +288,11 @@ public class ForecastService {
                     .cdd(f.cdd != null ? BigDecimal.valueOf(f.cdd) : null)
                     .hdd(f.hdd != null ? BigDecimal.valueOf(f.hdd) : null)
                     .build();
-            snapshotRepo.save(snap);
+            try {
+                snapshotRepo.save(snap);
+            } catch (org.springframework.dao.DataIntegrityViolationException e) {
+                log.debug("Snapshot already exists for {} -> {}", today, target);
+            }
         }
     }
 
@@ -288,7 +301,7 @@ public class ForecastService {
         int filled = 0;
         for (ForecastSnapshot snap : pending) {
             Double actual = queryDailyKwh(snap.getTargetDate().toString());
-            if (actual != null && actual > 0) {
+            if (actual != null) {
                 snap.setActualKwh(BigDecimal.valueOf(actual));
                 snap.setActualCost(BigDecimal.valueOf(actual * kwhRate));
                 snapshotRepo.save(snap);
@@ -374,10 +387,13 @@ public class ForecastService {
     // ── Phase 3: Seasonal factors ───────────────────────────
 
     private Map<String, Double> buildSeasonalFactors(List<DailyDataPoint> data,
-                                                      double intercept, double cddCoeff, double hddCoeff) {
+                                                      double intercept, double cddCoeff, double hddCoeff,
+                                                      Map<String, Double> dowAdj) {
         Map<Integer, List<Double>> monthRatios = new HashMap<>();
         for (DailyDataPoint dp : data) {
             double predicted = intercept + cddCoeff * dp.cdd + hddCoeff * dp.hdd;
+            Double dowFactor = dowAdj.get(dp.dow.name());
+            if (dowFactor != null && dowFactor > 0) predicted *= dowFactor;
             if (predicted > 0) {
                 monthRatios.computeIfAbsent(dp.date.getMonthValue(), k -> new ArrayList<>())
                         .add(dp.kwh / predicted);
@@ -519,9 +535,13 @@ public class ForecastService {
 
         double[] result = new double[n];
         for (int i = n - 1; i >= 0; i--) {
+            if (Math.abs(aug[i][i]) < 1e-12) {
+                result[i] = 0;
+                continue;
+            }
             result[i] = aug[i][n];
             for (int j = i + 1; j < n; j++) result[i] -= aug[i][j] * result[j];
-            if (Math.abs(aug[i][i]) > 1e-12) result[i] /= aug[i][i];
+            result[i] /= aug[i][i];
         }
         return result;
     }

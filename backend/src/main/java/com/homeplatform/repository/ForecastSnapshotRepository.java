@@ -19,9 +19,10 @@ public interface ForecastSnapshotRepository extends JpaRepository<ForecastSnapsh
     @Query("""
         SELECT s FROM ForecastSnapshot s
         WHERE s.actualKwh IS NOT NULL
+          AND s.targetDate >= :since
         ORDER BY s.targetDate DESC
         """)
-    List<ForecastSnapshot> findRecentWithActuals();
+    List<ForecastSnapshot> findRecentWithActuals(LocalDate since);
 
     @Query("""
         SELECT s FROM ForecastSnapshot s

@@ -65,8 +65,7 @@ public class ForecastScheduler {
                 for (var d : wx.daily()) {
                     LocalDate date = LocalDate.parse(d.date());
                     if (!date.isBefore(today) && !date.isAfter(forecastEnd)) {
-                        double avg = d.meanTemperature() > 0 ? d.meanTemperature()
-                                : (d.maxTemperature() + d.minTemperature()) / 2;
+                        double avg = (d.maxTemperature() + d.minTemperature()) / 2;
                         forecastDays.add(new WeatherForecastDay(date, d.maxTemperature(), d.minTemperature(), avg));
                     }
                 }
