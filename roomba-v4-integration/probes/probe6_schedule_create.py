@@ -132,9 +132,11 @@ async def main() -> int:
         if not (isinstance(versions, list) and versions):
             print("ABORT: no active map -- cannot get a map_id/room_id for the command.")
             return 3
-        p2map_id = versions[0].get("p2map_id") or versions[0].get("p2mapId")
-        link = await robot.get_map_geojson_link(p2map_id)
-        url = link.get("url") if isinstance(link, dict) else None
+        v0 = versions[0]
+        p2map_id = v0.get("p2map_id") or v0.get("p2mapId")
+        map_version = v0.get("active_p2mapv_id")
+        link = await robot.get_map_geojson_link(p2map_id, map_version)
+        url = link.get("map_url") if isinstance(link, dict) else None
         if not url:
             print("ABORT: could not get a map bundle download URL.")
             return 3
