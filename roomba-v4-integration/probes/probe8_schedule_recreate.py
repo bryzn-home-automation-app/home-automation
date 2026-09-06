@@ -192,13 +192,32 @@ async def main() -> int:
             await robot.disconnect()
             return 0
 
-        try:
-            result = await robot.create_schedules(household_id, [schedule_a, schedule_b])
-            print("\ncreate_schedules() response:")
-            print(_dump(result))
-        except Exception as e:
-            print(f"\ncreate_schedules() FAILED: {type(e).__name__}: {e}")
-            return 5
+        # CONFIRMED ON HARDWARE (2026-09-06): passing multiple ScheduleOptions in
+        # one create_schedules() call does NOT create multiple schedules -- only
+        # the LAST item in the list was persisted (get_schedules() afterward
+        # showed just one household_schedule_id). The type signature
+        # (schedules: list[ScheduleOptions]) suggests batch-create; it isn't one.
+        # One create_schedules() call per schedule is the only way confirmed to
+        # work -- exactly the "a confirmed send proves delivery, never intent"
+        # trap this project's own control.md warns about, just for batching
+        # rather than a single malformed command.
+        only = None
+        for arg in sys.argv:
+            if arg.startswith("--only="):
+                only = arg.split("=", 1)[1].strip().upper()
+        candidates = [("A", schedule_a), ("B", schedule_b)]
+        if only:
+            candidates = [(l, s) for l, s in candidates if l == only]
+            print(f"\n--only={only}: creating just schedule {only}.")
+
+        for label, schedule in candidates:
+            try:
+                result = await robot.create_schedules(household_id, [schedule])
+                print(f"\ncreate_schedules() response (schedule {label}):")
+                print(_dump(result))
+            except Exception as e:
+                print(f"\ncreate_schedules() FAILED (schedule {label}): {type(e).__name__}: {e}")
+                return 5
 
         readback = await robot.get_schedules(household_id)
         print("\nget_schedules() read-back:")
