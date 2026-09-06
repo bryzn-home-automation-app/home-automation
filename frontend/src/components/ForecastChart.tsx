@@ -38,6 +38,83 @@ function formatDateLabel(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+// Monday-first display order, independent of the java.time.DayOfWeek enum's
+// own Monday-first .name() ordering (kept explicit here since this is a
+// display concern, not something to couple to the backend's iteration order).
+const DOW_DISPLAY_ORDER = [
+  'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY',
+] as const;
+const DOW_SHORT_LABEL: Record<string, string> = {
+  MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu',
+  FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun',
+};
+
+/**
+ * Learned per-weekday multiplier on top of the weather-only prediction
+ * (ForecastService's dowAdjustments) — e.g. THURSDAY: 1.08 means Thursdays
+ * run ~8% above what weather alone would predict for that day. Diverges from
+ * a 1.0 (average) center line so above/below reads at a glance.
+ */
+function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, number> }) {
+  const entries = DOW_DISPLAY_ORDER
+    .filter((day) => dowAdjustments[day] != null)
+    .map((day) => ({ day, factor: dowAdjustments[day] }));
+  if (entries.length === 0) return null;
+
+  const maxDeviation = Math.max(0.1, ...entries.map((e) => Math.abs(e.factor - 1)));
+
+  return (
+    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+      <div className="mb-4">
+        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+          Learned Pattern
+        </p>
+        <h3 className="mt-2 text-lg font-semibold text-apptext">
+          Usage by Day of Week
+        </h3>
+        <p className="mt-1 text-xs text-apptext-muted">
+          How much each weekday runs above or below what weather alone would
+          predict, learned from your own history — not an assumption that
+          every day is equal.
+        </p>
+      </div>
+      <div className="space-y-2">
+        {entries.map(({ day, factor }) => {
+          const pct = (factor - 1) * 100;
+          const above = pct >= 0;
+          const widthPct = (Math.abs(pct) / (maxDeviation * 100)) * 50;
+          return (
+            <div key={day} className="flex items-center gap-3">
+              <span className="w-9 shrink-0 text-xs font-medium text-apptext-soft">
+                {DOW_SHORT_LABEL[day]}
+              </span>
+              <div className="relative h-5 flex-1 rounded-full bg-appinset">
+                {/* Center line at 1.0 (average) */}
+                <div className="absolute left-1/2 top-0 h-full w-px bg-appborder" />
+                <div
+                  className="absolute top-0 h-full rounded-full"
+                  style={{
+                    width: `${widthPct}%`,
+                    left: above ? '50%' : `${50 - widthPct}%`,
+                    backgroundColor: above ? '#22c55e' : '#f59e0b',
+                    opacity: 0.75,
+                  }}
+                />
+              </div>
+              <span
+                className="w-12 shrink-0 text-right text-xs font-semibold"
+                style={{ color: above ? '#22c55e' : '#f59e0b' }}
+              >
+                {above ? '+' : ''}{pct.toFixed(0)}%
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 type ForecastRange = '7d' | '14d';
 
 function ForecastChart() {
@@ -295,6 +372,9 @@ function ForecastChart() {
           </ResponsiveContainer>
         )}
       </div>
+
+      {/* Day-of-week learned pattern */}
+      {forecast.dowAdjustments && <DowAdjustmentCard dowAdjustments={forecast.dowAdjustments} />}
 
       {/* Accuracy trend (if we have graded predictions) */}
       {accuracy && accuracy.points.length > 2 && (

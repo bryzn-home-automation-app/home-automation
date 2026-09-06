@@ -372,6 +372,10 @@ export interface ForecastResponse {
   modelId?: number;
   dataPointsUsed?: number;
   rSquared?: number;
+  /** Learned per-weekday multiplier on top of the weather-only prediction —
+   *  e.g. THURSDAY: 1.08 means Thursdays run ~8% above what weather alone
+   *  would predict, keyed by java.time.DayOfWeek names (MONDAY..SUNDAY). */
+  dowAdjustments?: Record<string, number>;
   forecasts?: ForecastDailyPoint[];
   snapshots?: ForecastSnapshot[];
 }

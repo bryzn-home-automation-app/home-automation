@@ -77,6 +77,7 @@ public class ForecastController {
         result.put("modelId", model.getId());
         result.put("dataPointsUsed", model.getDataPointsUsed());
         result.put("rSquared", model.getRSquared());
+        result.put("dowAdjustments", model.getDowAdjustments());
         result.put("forecasts", forecasts);
         result.put("snapshots", snapshots.stream().map(s -> {
             Map<String, Object> m = new LinkedHashMap<>();
