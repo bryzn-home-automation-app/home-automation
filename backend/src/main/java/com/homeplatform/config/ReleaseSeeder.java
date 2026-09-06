@@ -37,6 +37,32 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.2.0", "stable", LocalDate.of(2026, 9, 6),
+                    "Smarter forecasts, real schedules",
+                    "The electric usage forecast got noticeably smarter this round, and the "
+                            + "robot vacuum's cleaning schedules now write to the robot itself, so "
+                            + "they show up correctly in the official iRobot app too.",
+                    List.of(
+                            change("new", "A new chart on the Electric tab shows which days of the "
+                                    + "week you tend to use more or less power than the weather alone "
+                                    + "would predict — the forecast's learned pattern, not a guess."),
+                            change("improved", "The 7-day and 14-day forecast views now actually show "
+                                    + "that many days — they used to cap out at two, no matter which "
+                                    + "view was picked."),
+                            change("improved", "Yesterday's real usage now shows up in the forecast a "
+                                    + "day sooner than before."),
+                            change("improved", "The forecast's shaded confidence range is noticeably "
+                                    + "narrower and easier to read at a glance."),
+                            change("new", "Robot vacuum cleaning schedules now write to the robot's "
+                                    + "own memory, so a schedule set here also appears — correctly — "
+                                    + "in the official iRobot app."),
+                            change("fixed", "Robot vacuum commands (start, stop, clean a room, and so "
+                                    + "on) are more reliable, thanks to the app making sure it has a "
+                                    + "fresh connection to the robot before sending one."),
+                            change("fixed", "Corrected how the daily electric usage trend and rolling "
+                                    + "averages were being calculated."),
+                            change("fixed", "The electric usage chart no longer shows a misleading "
+                                    + "daily total when only part of a day's hourly data has arrived."))),
             define("1.1.2", "stable", LocalDate.of(2026, 8, 25),
                     "Clean your way",
                     "Start a clean exactly how you want it — the whole house or just the rooms "
