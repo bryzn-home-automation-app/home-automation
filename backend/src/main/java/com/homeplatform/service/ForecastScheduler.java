@@ -37,7 +37,17 @@ public class ForecastScheduler {
         this.appEventService = appEventService;
     }
 
-    @Scheduled(cron = "0 30 0 * * *", zone = "America/Chicago")
+    // 23:45 CT -- 15 min after DailySyncScheduler's last sync attempt of the day
+    // (7:00 AM-11:30 PM CT, on the half hour). This used to run at 00:30 AM, which
+    // is BEFORE that day's own sync window even opens: at 00:30 on day D, the most
+    // recent day DailySyncScheduler could have finished syncing is D-2 (D-1's sync
+    // doesn't happen until 7 AM-11:30 PM *on* day D itself), so backfillActuals()
+    // could only ever fill through D-2 -- a 2-day-old "actual" cutoff even though
+    // D-1's usage typically lands in Postgres by ~10 AM on day D. Running at 23:45
+    // on day D instead means D-1's data (synced earlier that same day) is already
+    // there, cutting the visible lag to the unavoidable minimum of 1 day (today
+    // isn't over, so it can never show as "actual" yet).
+    @Scheduled(cron = "0 45 23 * * *", zone = "America/Chicago")
     public void nightlyRetrain() {
         log.info("ForecastScheduler: starting nightly retrain cycle");
 

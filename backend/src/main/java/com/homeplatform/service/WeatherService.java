@@ -15,6 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 
 @Service
@@ -106,7 +107,7 @@ public class WeatherService {
         if (isHistorical) {
             url = buildArchiveUrl(lat, lon, start, end);
         } else {
-            url = buildForecastUrl(lat, lon);
+            url = buildForecastUrl(lat, lon, end);
         }
 
         log.debug("Open-Meteo request: {}", url);
@@ -114,9 +115,15 @@ public class WeatherService {
         return mapper.readTree(json);
     }
 
-    private String buildForecastUrl(double lat, double lon) {
-        // forecast_days=2 so a rolling "next 24 hours" from any time of day is
-        // always fully covered (forecast_days=1 stops at tonight's midnight).
+    private String buildForecastUrl(double lat, double lon, LocalDate end) {
+        // forecast_days must cover through `end` — this was hardcoded to 2 (enough
+        // for getCurrentWeather()'s rolling "next 24 hours" use, since forecast_days=1
+        // stops at tonight's midnight) but this same builder is also used for the
+        // 7-day/14-day AI forecast request, which needs the API to actually return
+        // that many days. A caller asking for `end` = today+14 got only 2 real
+        // WeatherDay entries back — capped to Open-Meteo's own max of 16.
+        LocalDate today = LocalDate.now();
+        int forecastDays = (int) Math.max(2, Math.min(16, ChronoUnit.DAYS.between(today, end) + 1));
         return String.format(Locale.US,
                 "%s?latitude=%.4f&longitude=%.4f" +
                 "&current=temperature_2m,apparent_temperature,relative_humidity_2m,precipitation,wind_speed_10m,weather_code" +
@@ -127,8 +134,8 @@ public class WeatherService {
                 "&wind_speed_unit=mph" +
                 "&timezone=America/Chicago" +
                 "&past_days=%d" +
-                "&forecast_days=2",
-                FORECAST_URL, lat, lon, PAST_DAYS);
+                "&forecast_days=%d",
+                FORECAST_URL, lat, lon, PAST_DAYS, forecastDays);
     }
 
     private String buildArchiveUrl(double lat, double lon, LocalDate start, LocalDate end) {

@@ -418,17 +418,28 @@ public class ForecastService {
         int month = targetDate.getMonthValue();
         boolean hasSeasonal = model.getSeasonalFactors().containsKey(String.valueOf(month));
 
-        // Base confidence from data volume: 50% at 7 days, 80% at 60 days, 92% at 180 days, caps at 95%
-        double base = Math.min(0.95, 0.40 + 0.55 * (1 - Math.exp(-dataPoints / 80.0)));
+        // Base confidence from data volume: ramps faster and starts higher than
+        // before (was 50% at 7 days / 80% at 60 days, which put a ~43-point model
+        // at R²=0.27 down around confidence=0.49 -> a +/-51%-of-prediction band,
+        // visibly too wide against the chart's actual scatter). Narrowed per
+        // Bryan's explicit "make the band a bit tighter" ask (2026-09-06): now
+        // ~70% at 7 days, ~87% at 45 days, caps at 95%.
+        double base = Math.min(0.95, 0.55 + 0.40 * (1 - Math.exp(-dataPoints / 45.0)));
 
-        // Penalty if this month hasn't been seen in training data
-        if (!hasSeasonal) base *= 0.75;
+        // Penalty if this month hasn't been seen in training data (softened from
+        // 0.75 -- still a real penalty, just not as harsh).
+        if (!hasSeasonal) base *= 0.85;
 
-        // Bonus from model fit
+        // Bonus from model fit -- softened floor (was 0.7) so a middling R² (this
+        // is a simple weather-only OLS regression; real daily usage has a lot of
+        // human-behavior variance it can't explain) doesn't single-handedly blow
+        // the band back open the way it did before.
         double r2 = model.getRSquared() != null ? model.getRSquared().doubleValue() : 0;
-        base *= (0.7 + 0.3 * r2);
+        base *= (0.82 + 0.18 * r2);
 
-        return Math.max(0.20, Math.min(0.95, base));
+        // Floor raised from 0.20 -> 0.35: caps the worst-case band at +/-65% of the
+        // prediction instead of +/-80%, even for a brand-new/low-fit model.
+        return Math.max(0.35, Math.min(0.95, base));
     }
 
     // ── Training data loader ────────────────────────────────
