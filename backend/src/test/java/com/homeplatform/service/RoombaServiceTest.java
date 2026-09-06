@@ -13,6 +13,7 @@ import com.homeplatform.model.RoombaStatus;
 import com.homeplatform.repository.RoombaCommandRepository;
 import com.homeplatform.repository.RoombaDeviceRepository;
 import com.homeplatform.repository.RoombaMapRepository;
+import com.homeplatform.repository.RoombaNativeScheduleRepository;
 import com.homeplatform.repository.RoombaPositionRepository;
 import com.homeplatform.repository.RoombaCoverageRepository;
 import com.homeplatform.model.RoombaCoverage;
@@ -41,6 +42,7 @@ class RoombaServiceTest {
     private RoombaDeviceRepository deviceRepo;
     private RoombaPositionRepository positionRepo;
     private RoombaCoverageRepository coverageRepo;
+    private RoombaNativeScheduleRepository nativeScheduleRepo;
     private RoombaService service;
 
     @BeforeEach
@@ -52,8 +54,10 @@ class RoombaServiceTest {
         deviceRepo = mock(RoombaDeviceRepository.class);
         positionRepo = mock(RoombaPositionRepository.class);
         coverageRepo = mock(RoombaCoverageRepository.class);
+        nativeScheduleRepo = mock(RoombaNativeScheduleRepository.class);
         service = new RoombaService(
-                statusRepo, runRepo, mapRepo, commandRepo, deviceRepo, positionRepo, coverageRepo);
+                statusRepo, runRepo, mapRepo, commandRepo, deviceRepo, positionRepo, coverageRepo,
+                nativeScheduleRepo);
     }
 
     @Nested

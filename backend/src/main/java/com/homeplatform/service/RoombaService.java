@@ -14,6 +14,7 @@ import com.homeplatform.dto.RoombaStatusResponse;
 import com.homeplatform.model.RoombaCommand;
 import com.homeplatform.model.RoombaDevice;
 import com.homeplatform.model.RoombaMap;
+import com.homeplatform.model.RoombaNativeSchedule;
 import com.homeplatform.model.RoombaRun;
 import com.homeplatform.model.RoombaStatus;
 import com.homeplatform.repository.RoombaCommandRepository;
@@ -21,6 +22,8 @@ import com.homeplatform.repository.RoombaDeviceRepository;
 import com.homeplatform.repository.RoombaMapRepository;
 import com.homeplatform.repository.RoombaCoverageRepository;
 import com.homeplatform.dto.RoombaCoverageResponse;
+import com.homeplatform.dto.RoombaNativeScheduleResponse;
+import com.homeplatform.repository.RoombaNativeScheduleRepository;
 import com.homeplatform.repository.RoombaPositionRepository;
 import com.homeplatform.repository.RoombaRunRepository;
 import com.homeplatform.repository.RoombaStatusRepository;
@@ -57,7 +60,7 @@ public class RoombaService {
 
     /** Control commands the poller knows how to execute. */
     private static final Set<String> ALLOWED_COMMANDS =
-            Set.of("start", "stop", "pause", "resume", "dock", "find", "evac", "favorite");
+            Set.of("start", "stop", "pause", "resume", "dock", "find", "evac", "favorite", "list_schedules");
 
     /** Suction level name → SuctionLevel int (1..4). Null/absent = robot default. */
     private static final java.util.Map<String, Integer> SUCTION_LEVELS = java.util.Map.of(
@@ -82,6 +85,7 @@ public class RoombaService {
     private final RoombaDeviceRepository deviceRepo;
     private final RoombaPositionRepository positionRepo;
     private final RoombaCoverageRepository coverageRepo;
+    private final RoombaNativeScheduleRepository nativeScheduleRepo;
 
     public RoombaService(RoombaStatusRepository statusRepo,
                          RoombaRunRepository runRepo,
@@ -89,7 +93,8 @@ public class RoombaService {
                          RoombaCommandRepository commandRepo,
                          RoombaDeviceRepository deviceRepo,
                          RoombaPositionRepository positionRepo,
-                         RoombaCoverageRepository coverageRepo) {
+                         RoombaCoverageRepository coverageRepo,
+                         RoombaNativeScheduleRepository nativeScheduleRepo) {
         this.statusRepo = statusRepo;
         this.runRepo = runRepo;
         this.mapRepo = mapRepo;
@@ -97,6 +102,7 @@ public class RoombaService {
         this.deviceRepo = deviceRepo;
         this.positionRepo = positionRepo;
         this.coverageRepo = coverageRepo;
+        this.nativeScheduleRepo = nativeScheduleRepo;
     }
 
     /**
@@ -498,6 +504,59 @@ public class RoombaService {
                 .filter(c -> c.getUpdatedAt() != null && c.getUpdatedAt().isAfter(cutoff))
                 .map(c -> new RoombaCoverageResponse(
                         c.getRobotId(), c.getMissionId(), parseJson(c.getCoverage()), iso(c.getUpdatedAt())));
+    }
+
+    /**
+     * Real (robot/cloud-side) schedules, newest-added first. The poller fully
+     * replaces this table's contents on each "list_schedules" run, so this always
+     * reflects exactly what get_schedules() last returned — including schedules
+     * deleted natively (app or probe script), which simply stop appearing here.
+     */
+    public List<RoombaNativeScheduleResponse> getNativeSchedules() {
+        return nativeScheduleRepo.findAllByOrderByIdAsc().stream()
+                .map(this::toNativeScheduleResponse)
+                .toList();
+    }
+
+    private RoombaNativeScheduleResponse toNativeScheduleResponse(RoombaNativeSchedule s) {
+        JsonNode options = parseJson(s.getOptions());
+        String name = options != null && options.hasNonNull("name") ? options.get("name").asText() : null;
+        String frequency = options != null && options.hasNonNull("frequency") ? options.get("frequency").asText() : null;
+        boolean enabled = options != null && options.path("enabled").asBoolean(false);
+
+        List<Integer> days = new ArrayList<>();
+        Integer hour = null;
+        Integer minute = null;
+        JsonNode start = options != null ? options.path("start") : null;
+        if (start != null && start.isObject()) {
+            if (start.has("hour") && !start.get("hour").isNull()) hour = start.get("hour").asInt();
+            if (start.has("min") && !start.get("min").isNull()) minute = start.get("min").asInt();
+            for (JsonNode d : start.path("day")) {
+                days.add(d.asInt());
+            }
+        }
+
+        int roomCount = 0;
+        java.util.LinkedHashSet<Integer> modes = new java.util.LinkedHashSet<>();
+        JsonNode commands = options != null ? options.path("commands") : null;
+        if (commands != null && commands.isArray()) {
+            for (JsonNode entry : commands) {
+                JsonNode regions = entry.path("command").path("regions");
+                if (regions.isArray()) {
+                    roomCount += regions.size();
+                    for (JsonNode region : regions) {
+                        JsonNode mode = region.path("params").path("operatingMode");
+                        if (!mode.isMissingNode() && !mode.isNull()) {
+                            modes.add(mode.asInt());
+                        }
+                    }
+                }
+            }
+        }
+
+        return new RoombaNativeScheduleResponse(
+                s.getHouseholdScheduleId(), name, frequency, days, hour, minute,
+                enabled, roomCount, new ArrayList<>(modes), iso(s.getUpdatedAt()));
     }
 
     // --- mapping ---

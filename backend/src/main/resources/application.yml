@@ -13,9 +13,8 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.PostgreSQLDialect
   # Dedicated scheduler pool so @Scheduled jobs run concurrently. Without this the
-  # default pool size is 1, and the Roomba minute-tick (RoombaScheduleScheduler)
-  # could be head-of-line blocked by a long CoServ sync on the shared thread, run
-  # late past the minute boundary, and silently skip a scheduled clean.
+  # default pool size is 1, and a fast-cadence job could be head-of-line blocked
+  # by a long-running one (e.g. a CoServ sync) on the shared thread.
   task:
     scheduling:
       pool:

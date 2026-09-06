@@ -299,6 +299,28 @@ public class UsageStorageMigration implements ApplicationRunner {
                 updated_at    TIMESTAMP         NOT NULL DEFAULT NOW()
             )
             """);
+
+        // Native (real, robot/cloud-side) schedules -- one row per household_schedule_id,
+        // full ScheduleOptions kept as JSONB so display fields can be derived without a
+        // migration every time roombapy-prime's model gains a field. Poller REPLACES this
+        // table's full contents each time it runs the "list_schedules" command (delete +
+        // reinsert in one transaction) so a schedule deleted natively (via the app or a
+        // probe script) disappears here too, not just ones created through this app.
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_native_schedule (
+                id                      SERIAL PRIMARY KEY,
+                household_schedule_id   VARCHAR(160) NOT NULL UNIQUE,
+                robot_id                VARCHAR(64),
+                options                 JSONB        NOT NULL,
+                updated_at              TIMESTAMP    NOT NULL DEFAULT NOW()
+            )
+            """);
+
+        // Superseded by roomba_native_schedule (2026-09-06): this table backed an
+        // app-side-only "scheduler" that fired a plain start command at the right time
+        // but never wrote the robot's own native schedule, so nothing it created ever
+        // showed up in the iRobot app. Drop it now that real native schedules work.
+        jdbcTemplate.execute("DROP TABLE IF EXISTS roomba_schedules");
     }
 
     private void migrateLegacyRows(String tableName) {

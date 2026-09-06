@@ -4,10 +4,9 @@ import type {
   RoombaCommand,
   RoombaDevice,
   RoombaMap,
+  RoombaNativeSchedule,
   RoombaPosition,
   RoombaRun,
-  RoombaSchedule,
-  RoombaScheduleInput,
   RoombaStatus,
 } from '../types';
 
@@ -167,41 +166,24 @@ export async function cleanRoombaRooms(
   return res.data;
 }
 
-// ── Recurring cleaning schedules (ADMIN only) ──────────────
+// ── Native (real, robot/cloud-side) schedules ──────────────
+//
+// Replaces the old app-side-only scheduler (fetchRoombaSchedules/create/update/
+// enable/delete) that fired a plain "start" at the right time but never wrote
+// the robot's own schedule, so nothing it made ever showed up in the iRobot
+// app. This reads what get_schedules() actually reports.
 
-/** All cleaning schedules, newest first (ADMIN only). */
-export async function fetchRoombaSchedules(): Promise<RoombaSchedule[]> {
-  const res = await api.get<RoombaSchedule[]>('/roomba/schedules');
+/** Real schedules as last read from the robot/cloud. Empty until a refresh
+ *  has run at least once. */
+export async function fetchRoombaNativeSchedules(): Promise<RoombaNativeSchedule[]> {
+  const res = await api.get<RoombaNativeSchedule[]>('/roomba/native-schedules');
   return Array.isArray(res.data) ? res.data : [];
 }
 
-/** Create a recurring cleaning schedule (ADMIN only). */
-export async function createRoombaSchedule(input: RoombaScheduleInput): Promise<RoombaSchedule> {
-  const res = await api.post<RoombaSchedule>('/roomba/schedules', input);
+/** Re-read schedules from the robot/cloud into our table (ADMIN only). Creating
+ *  or deleting a native schedule isn't built into the app yet — see
+ *  roomba-v4-integration/probes/probe6-8 for the tooling that does it today. */
+export async function refreshRoombaNativeSchedules(): Promise<RoombaCommand> {
+  const res = await api.post<RoombaCommand>('/admin/roomba/command', { command: 'list_schedules' });
   return res.data;
-}
-
-/** Update an existing cleaning schedule (ADMIN only). */
-export async function updateRoombaSchedule(
-  id: number,
-  input: RoombaScheduleInput,
-): Promise<RoombaSchedule> {
-  const res = await api.put<RoombaSchedule>(`/roomba/schedules/${id}`, input);
-  return res.data;
-}
-
-/** Enable or disable a schedule without editing the rest of it (ADMIN only). */
-export async function setRoombaScheduleEnabled(
-  id: number,
-  enabled: boolean,
-): Promise<RoombaSchedule> {
-  const res = await api.post<RoombaSchedule>(
-    `/roomba/schedules/${id}/${enabled ? 'enable' : 'disable'}`,
-  );
-  return res.data;
-}
-
-/** Delete a schedule (ADMIN only). */
-export async function deleteRoombaSchedule(id: number): Promise<void> {
-  await api.delete(`/roomba/schedules/${id}`);
 }

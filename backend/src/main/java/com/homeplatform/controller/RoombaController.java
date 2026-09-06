@@ -3,6 +3,7 @@ package com.homeplatform.controller;
 import com.homeplatform.dto.RoombaCoverageResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
 import com.homeplatform.dto.RoombaMapResponse;
+import com.homeplatform.dto.RoombaNativeScheduleResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
@@ -71,5 +72,16 @@ public class RoombaController {
         return service.getPosition()
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
+     * Real (robot/cloud-side) schedules — what the iRobot app itself reads, not an
+     * app-side approximation. Empty until a "list_schedules" command has run at
+     * least once (see {@code POST /api/admin/roomba/command} with
+     * {@code {"command":"list_schedules"}} to refresh on demand).
+     */
+    @GetMapping("/native-schedules")
+    public ResponseEntity<List<RoombaNativeScheduleResponse>> getNativeSchedules() {
+        return ResponseEntity.ok(service.getNativeSchedules());
     }
 }

@@ -264,38 +264,23 @@ export interface RoombaCommand {
 }
 
 /**
- * A recurring cleaning schedule (ADMIN only). {@link time} is local "HH:mm";
- * {@link daysOfWeek} are ISO-8601 day numbers (1 = Monday … 7 = Sunday).
- * {@link targetType} is 'WHOLE_HOUSE' (every mapped room) or 'ROOMS' (a subset).
+ * A REAL (robot/cloud-side) cleaning schedule, as last read from
+ * get_schedules() — not an app-side approximation. {@link days} are ISO-8601
+ * day numbers (1 = Monday … 7 = Sunday, confirmed on hardware). {@link
+ * operatingModes} are the distinct vendor mode codes used across the
+ * schedule's rooms (2 = vacuum, 4 = mop, 6 = vac+mop).
  */
-export interface RoombaSchedule {
-  id: number;
-  name: string;
+export interface RoombaNativeSchedule {
+  householdScheduleId: string;
+  name: string | null;
+  frequency: string | null;
+  days: number[];
+  hour: number | null;
+  minute: number | null;
   enabled: boolean;
-  daysOfWeek: number[];
-  time: string;
-  targetType: 'WHOLE_HOUSE' | 'ROOMS';
-  roomIds: string[];
-  roomLabels: string[];
-  suction: string | null;
-  passes: string | null;
-  mode: string | null;
-  lastFiredAt: string | null;
-  createdAt: string;
-}
-
-/** Create/update payload for a cleaning schedule. */
-export interface RoombaScheduleInput {
-  name: string;
-  enabled: boolean;
-  daysOfWeek: number[];
-  time: string;
-  targetType: 'WHOLE_HOUSE' | 'ROOMS';
-  roomIds?: string[];
-  roomLabels?: string[];
-  suction?: string;
-  passes?: string;
-  mode?: string;
+  roomCount: number;
+  operatingModes: number[];
+  updatedAt: string;
 }
 
 // ── Minimal GeoJSON (only what the map renderer consumes) ──

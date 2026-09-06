@@ -744,6 +744,7 @@ SPLIT_ROOM = "split_room"
 MERGE_ROOMS = "merge_rooms"
 CLEAN_ROOM = "clean_room"
 CLEAN_ROOMS = "clean_rooms"
+LIST_SCHEDULES = "list_schedules"
 
 # Commands that (may) start a mission. After one, the poller polls at the fast
 # cadence for a short window so mission start — and thus the live dot + coverage
@@ -1065,6 +1066,43 @@ async def _clean_rooms(robot, conninfo, arg):
     return (True, f"clean started ({len(regions)} room(s))") if ok else (False, "broker rejected")
 
 
+def _replace_native_schedules(conninfo, robot_id, schedules):
+    """Full replace, not upsert: schedules deleted natively (app or a probe
+    script) must disappear here too, not just linger from a previous read.
+    `schedules` is a list of (household_schedule_id, options_dict)."""
+    with psycopg.connect(conninfo, autocommit=False) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM roomba_native_schedule")
+            for household_schedule_id, options in schedules:
+                cur.execute(
+                    "INSERT INTO roomba_native_schedule "
+                    "(household_schedule_id, robot_id, options, updated_at) "
+                    "VALUES (%s, %s, %s, NOW())",
+                    (household_schedule_id, robot_id, Json(options)),
+                )
+        conn.commit()
+
+
+async def _list_schedules(robot, conninfo):
+    """Read the robot's REAL (cloud-side) schedules and fully replace
+    roomba_native_schedule with what get_schedules() reports right now."""
+    household_id = await robot.get_household_id()
+    if not household_id:
+        return False, "no household_id"
+    resp = await robot.get_schedules(household_id)
+    rows = []
+    for sched_list in getattr(resp, "household_schedules", None) or []:
+        household_schedule_id = getattr(sched_list, "household_schedule_id", None)
+        if not household_schedule_id:
+            continue
+        for entry in getattr(sched_list, "schedules", None) or []:
+            options = entry.get("options") if isinstance(entry, dict) else None
+            if isinstance(options, dict):
+                rows.append((household_schedule_id, options))
+    _replace_native_schedules(conninfo, robot.blid, rows)
+    return True, f"{len(rows)} schedule(s)"
+
+
 async def process_commands(robot, conninfo, state):
     """Execute PENDING control commands through the shared robot connection. 'OK' means
     the broker accepted it — NOT that the robot necessarily acted (phantom-mission case)."""
@@ -1100,6 +1138,9 @@ async def process_commands(robot, conninfo, state):
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             elif command == CLEAN_ROOMS:
                 ok, detail = await _clean_rooms(robot, conninfo, arg)
+                _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
+            elif command == LIST_SCHEDULES:
+                ok, detail = await _list_schedules(robot, conninfo)
                 _mark_command(conninfo, cmd_id, "OK" if ok else "FAILED", detail)
             else:
                 _mark_command(conninfo, cmd_id, "FAILED", f"unknown command: {command}")
