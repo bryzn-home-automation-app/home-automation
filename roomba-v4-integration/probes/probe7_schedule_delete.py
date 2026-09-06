@@ -3,7 +3,14 @@ Native schedule DELETE probe -- cleans up a schedule created by
 probe6_schedule_create.py (or any other schedule_id you point it at).
 
 Usage:
-    .venv\Scripts\python probes\probe7_schedule_delete.py <schedule_id>
+    .venv\Scripts\python probes\probe7_schedule_delete.py <household_schedule_id>
+
+CONFIRMED ON HARDWARE (2026-09-06): pass the OUTER id -- the
+`household_schedule_id` field / the schedules-list entry's own top-level
+`schedule_id` (e.g. "hh_irbt.hh...._QM897WZEP1Pz_s") -- NOT the nested
+`options.schedule_id`, which carries a robot-suffixed variant of the same id
+(e.g. "..._QM897WZEP1Pz_s_B138") and 500s the delete endpoint. Both look like
+plausible "the id" at a glance; only the un-suffixed outer one works.
 
 Prints get_schedules() before and after so the delete is visibly confirmed,
 not just "no exception raised."
