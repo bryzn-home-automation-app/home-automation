@@ -83,7 +83,7 @@ export default memo(function WaterUsage() {
         <StatTile
           label="Latest Usage"
           value={latestBill?.usageThousands != null ? latestBill.usageThousands.toFixed(0) : '—'}
-          unit="gal (×1k)"
+          unit="gal"
           loading={loading}
           icon={Icons.Bolt}
         />
@@ -112,7 +112,7 @@ export default memo(function WaterUsage() {
             loading={loading}
             title="Water usage trend"
             emptyText="Water usage data will appear here once a bill has been synced from Gmail."
-            unitLabel="gal (×1k)"
+            unitLabel="gal"
             accentColor="#22d3ee"
           />
         </DeferredRender>
@@ -122,7 +122,7 @@ export default memo(function WaterUsage() {
             loading={loading}
             title="Monthly water comparison"
             emptyText="Monthly water comparisons need more billing history."
-            unitLabel="gal (×1k)"
+            unitLabel="gal"
             barColor="#06b6d4"
           />
         </DeferredRender>
@@ -138,7 +138,7 @@ export default memo(function WaterUsage() {
 
       <UsageSummaryGrid
         title="Water highs, lows, and rolling period totals"
-        unitLabel="gal (×1k)"
+        unitLabel="gal"
         summaries={summaryCards}
       />
 
@@ -158,7 +158,7 @@ export default memo(function WaterUsage() {
               <thead>
                 <tr className="border-b border-appborder text-left text-apptext-muted">
                   <th className="py-2 pr-3 font-medium">Period</th>
-                  <th className="py-2 pr-3 font-medium">Usage (gal ×1k)</th>
+                  <th className="py-2 pr-3 font-medium">Usage (gal)</th>
                   <th className="py-2 pr-3 font-medium">Water</th>
                   <th className="py-2 pr-3 font-medium">Sewer</th>
                   <th className="py-2 pr-3 font-medium">Refuse</th>
