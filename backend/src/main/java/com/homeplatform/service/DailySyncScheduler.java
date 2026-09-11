@@ -1,7 +1,9 @@
 package com.homeplatform.service;
 
+import com.homeplatform.event.UsageIngestedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -56,7 +58,7 @@ public class DailySyncScheduler {
     private final DataSource dataSource;
     private final AppEventService appEventService;
     private final AlertEngine alertEngine;
-    private final ForecastScheduler forecastScheduler;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** Consecutive ticks that found every lookback day already populated. Reset on rollover or a fresh gap. */
     private int consecutiveCompleteChecks = 0;
@@ -69,11 +71,11 @@ public class DailySyncScheduler {
     private LocalDate standDownFor = null;
 
     public DailySyncScheduler(DataSource dataSource, AppEventService appEventService, AlertEngine alertEngine,
-                               ForecastScheduler forecastScheduler) {
+                               ApplicationEventPublisher eventPublisher) {
         this.dataSource = dataSource;
         this.appEventService = appEventService;
         this.alertEngine = alertEngine;
-        this.forecastScheduler = forecastScheduler;
+        this.eventPublisher = eventPublisher;
     }
 
     /** Every 30 min from 7:00 AM to 11:30 PM CT. Same window as hourly but
@@ -121,15 +123,7 @@ public class DailySyncScheduler {
                 "Starting daily sync for " + label);
 
         runSync(dailyCommand(start, yesterday), label);
-
-        // The reading may have just landed in electric_usage — backfill it onto the
-        // forecast chart's actual line and retrain immediately instead of waiting for
-        // ForecastScheduler's 23:45 cron. No-ops if nothing new was actually written.
-        try {
-            forecastScheduler.retrainIfNewActuals();
-        } catch (Exception e) {
-            log.error("DailySyncScheduler: forecast retrain trigger failed", e);
-        }
+        publishIngested();
     }
 
     /**
@@ -150,6 +144,22 @@ public class DailySyncScheduler {
                 : List.of("node", "/scripts/sync.js", "--granularity", "daily", "--start", start, "--end", end);
 
         runSync(command, label);
+        publishIngested();
+    }
+
+    /**
+     * Notify downstream consumers (e.g. {@link ForecastScheduler}) that a sync attempt
+     * just completed, so the actual line and projection update within this sync cycle
+     * instead of waiting for the nightly cron. Safe to call unconditionally — listeners
+     * are expected to no-op when nothing new actually landed (e.g. CoServ hasn't posted
+     * yet). Failures are logged and swallowed so a listener issue can't break the sync.
+     */
+    private void publishIngested() {
+        try {
+            eventPublisher.publishEvent(new UsageIngestedEvent("DailySyncScheduler"));
+        } catch (Exception e) {
+            log.error("DailySyncScheduler: failed to publish ingestion event", e);
+        }
     }
 
     /** Build the sync.js invocation for a (possibly single-day) date range. */

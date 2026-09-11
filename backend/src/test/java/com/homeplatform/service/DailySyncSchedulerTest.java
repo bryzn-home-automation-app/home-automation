@@ -3,6 +3,7 @@ package com.homeplatform.service;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import javax.sql.DataSource;
 import java.time.LocalDate;
@@ -27,8 +28,8 @@ class DailySyncSchedulerTest {
         int scanCalls = 0;
         int syncCalls = 0;
 
-        TestScheduler(AppEventService events, AlertEngine alerts, ForecastScheduler forecastScheduler) {
-            super(mock(DataSource.class), events, alerts, forecastScheduler);
+        TestScheduler(AppEventService events, AlertEngine alerts, ApplicationEventPublisher eventPublisher) {
+            super(mock(DataSource.class), events, alerts, eventPublisher);
         }
 
         @Override
@@ -52,7 +53,7 @@ class DailySyncSchedulerTest {
 
     @BeforeEach
     void setUp() {
-        scheduler = new TestScheduler(mock(AppEventService.class), mock(AlertEngine.class), mock(ForecastScheduler.class));
+        scheduler = new TestScheduler(mock(AppEventService.class), mock(AlertEngine.class), mock(ApplicationEventPublisher.class));
     }
 
     @Test

@@ -1,7 +1,9 @@
 package com.homeplatform.service;
 
+import com.homeplatform.event.UsageIngestedEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -66,6 +68,7 @@ public class HourlySyncScheduler {
     private final DataSource dataSource;
     private final AppEventService appEventService;
     private final AlertEngine alertEngine;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** Consecutive ticks that found every lookback day already complete. Reset on rollover or a fresh gap. */
     private int consecutiveCompleteChecks = 0;
@@ -79,10 +82,12 @@ public class HourlySyncScheduler {
 
     public HourlySyncScheduler(DataSource dataSource,
                                AppEventService appEventService,
-                               AlertEngine alertEngine) {
+                               AlertEngine alertEngine,
+                               ApplicationEventPublisher eventPublisher) {
         this.dataSource = dataSource;
         this.appEventService = appEventService;
         this.alertEngine = alertEngine;
+        this.eventPublisher = eventPublisher;
     }
 
     /** Every 30 min from 7:15 AM to 11:45 PM CT. Staggered 15 min from DailySync. */
@@ -161,6 +166,7 @@ public class HourlySyncScheduler {
                 }
                 // Generate alerts with whatever data we have
                 alertEngine.generateForAllUsers();
+                publishIngested();
             } else {
                 appEventService.log("sync", "WARN", "HourlySyncScheduler",
                         "Hourly sync exited " + exitCode + " for " + label, details);
@@ -206,10 +212,25 @@ public class HourlySyncScheduler {
                 log.warn("HourlySyncScheduler manual stderr: {}", details);
             }
             alertEngine.generateForAllUsers();
+            publishIngested();
         } catch (Exception e) {
             log.error("HourlySyncScheduler manual sync failed", e);
             appEventService.error("sync", "HourlySyncScheduler",
                     "Hourly sync " + label + " failed", e.getMessage());
+        }
+    }
+
+    /**
+     * Notify downstream consumers (e.g. {@link ForecastScheduler}) that a sync attempt
+     * just completed. Safe to call unconditionally — listeners are expected to no-op
+     * when nothing new actually landed. Failures are logged and swallowed so a listener
+     * issue can't break the sync.
+     */
+    private void publishIngested() {
+        try {
+            eventPublisher.publishEvent(new UsageIngestedEvent("HourlySyncScheduler"));
+        } catch (Exception e) {
+            log.error("HourlySyncScheduler: failed to publish ingestion event", e);
         }
     }
 

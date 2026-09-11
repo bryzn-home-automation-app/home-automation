@@ -1,12 +1,14 @@
 package com.homeplatform.service;
 
 import com.homeplatform.dto.WeatherResponse;
+import com.homeplatform.event.UsageIngestedEvent;
 import com.homeplatform.model.ForecastModel;
 import com.homeplatform.service.ForecastService.DailyForecast;
 import com.homeplatform.service.ForecastService.WeatherForecastDay;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -57,12 +59,18 @@ public class ForecastScheduler {
     }
 
     /**
-     * Called from {@link DailySyncScheduler} right after a sync attempt, so the
-     * actual line and projection update within the sync cycle instead of waiting
+     * Reacts to any ingestion path completing a sync attempt (daily or hourly,
+     * scheduled or manually triggered — see {@link UsageIngestedEvent}), so the
+     * actual line and projection update within that sync cycle instead of waiting
      * for the 23:45 nightly cron. No-ops (no retrain, no weather call) when
      * nothing new was backfilled — e.g. a tick where CoServ hasn't posted yet.
      */
-    public void retrainIfNewActuals() {
+    @EventListener
+    public void onUsageIngested(UsageIngestedEvent event) {
+        retrainIfNewActuals();
+    }
+
+    void retrainIfNewActuals() {
         int filled = forecastService.backfillActuals();
         if (filled == 0) return;
         log.info("ForecastScheduler: {} new actual reading(s) landed — retraining immediately", filled);
