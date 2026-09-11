@@ -76,6 +76,7 @@ interface ConfigCheckResult { checks: ConfigCheckItem[]; }
 const CATEGORIES = [
   { key: 'all', label: 'All' },
   { key: 'sync', label: 'Sync' },
+  { key: 'forecast', label: 'Forecast' },
   { key: 'system', label: 'System' },
   { key: 'db', label: 'DB' },
   { key: 'api', label: 'API' },
@@ -100,6 +101,7 @@ const levelBadge = (level: string) => {
 const categoryBadge = (cat: string) => {
   const colors: Record<string, string> = {
     sync: 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300',
+    forecast: 'bg-fuchsia-300/10 border-fuchsia-300/20 text-fuchsia-300',
     system: 'bg-violet-300/10 border-violet-300/20 text-violet-300',
     db: 'bg-amber-300/10 border-amber-300/20 text-amber-300',
     api: 'bg-sky-300/10 border-sky-300/20 text-sky-300',
@@ -237,6 +239,14 @@ export default function DebugDashboard() {
   // Sync-specific events
   const syncEvents = useMemo(
     () => (events ?? []).filter((e) => e.category === 'sync'),
+    [events],
+  );
+
+  // Forecast events — includes every UsageIngestedEvent ForecastScheduler
+  // received (even the no-op "nothing new yet" ones), so it's never a silent
+  // question whether the forecast system heard about a new reading.
+  const forecastEvents = useMemo(
+    () => (events ?? []).filter((e) => e.category === 'forecast'),
     [events],
   );
 
@@ -680,6 +690,36 @@ export default function DebugDashboard() {
           </div>
         </section>
       )}
+      {/* Forecast Events */}
+      {forecastEvents.length > 0 && (
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+          <div className="mb-4">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+            <h3 className="mt-2 text-lg font-semibold text-apptext">Events Received</h3>
+            <p className="mt-1 text-xs text-apptext-dim">
+              Every ingestion event the forecast system has reacted to — including no-ops where a sync
+              tick fired but no new actual reading had landed yet.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {forecastEvents.slice(0, 6).map((e) => (
+              <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
+                    {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
+                  </span>
+                  <span className="text-xs text-apptext-dim">
+                    {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                  </span>
+                </div>
+                <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
+                <p className="mt-1 text-[10px] text-apptext-dim">{e.source}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* DB Explorer */}
       <DbExplorer />
 

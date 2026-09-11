@@ -62,18 +62,24 @@ public class ForecastScheduler {
      * Reacts to any ingestion path completing a sync attempt (daily or hourly,
      * scheduled or manually triggered — see {@link UsageIngestedEvent}), so the
      * actual line and projection update within that sync cycle instead of waiting
-     * for the 23:45 nightly cron. No-ops (no retrain, no weather call) when
-     * nothing new was backfilled — e.g. a tick where CoServ hasn't posted yet.
+     * for the 23:45 nightly cron. Every received event is logged (visible on the
+     * Debug Dashboard's Forecast Events panel) even when it's a no-op — e.g. a
+     * tick where CoServ hasn't posted yet — so "did the forecast system hear
+     * about the new reading" is never a silent question.
      */
     @EventListener
     public void onUsageIngested(UsageIngestedEvent event) {
-        retrainIfNewActuals();
-    }
-
-    void retrainIfNewActuals() {
         int filled = forecastService.backfillActuals();
-        if (filled == 0) return;
-        log.info("ForecastScheduler: {} new actual reading(s) landed — retraining immediately", filled);
+        if (filled == 0) {
+            appEventService.info("forecast", "ForecastScheduler",
+                    "Received ingestion event from " + event.source() + " — no new actuals to backfill");
+            return;
+        }
+        log.info("ForecastScheduler: {} new actual reading(s) landed (source={}) — retraining immediately",
+                filled, event.source());
+        appEventService.info("forecast", "ForecastScheduler",
+                "Received ingestion event from " + event.source() + " — backfilled " + filled
+                        + " actual(s), retraining");
         runRetrainCycle("Immediate", filled);
     }
 
