@@ -1,36 +1,64 @@
 import { memo, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
 import StatTile, { Icons } from '../components/StatTile';
-import UsageChart from '../components/UsageChart';
-import MonthlyComparison from '../components/MonthlyComparison';
-import type { EnergyUsage, WaterBill } from '../types';
 import DeferredRender from '../components/DeferredRender';
-import UsageSummaryGrid from '../components/UsageSummaryGrid';
-import { buildUsagePeriods, summarizeUsageRange } from '../utils/usageSummary';
-import WeatherContextCard from '../components/WeatherContextCard';
-import Weather24HourCard from '../components/Weather24HourCard';
+import type { WaterBill } from '../types';
 import { fetchWaterBills } from '../api/waterBills';
 
-/** Map itemized water bills (one row/billing period) into the EnergyUsage shape
- *  the shared chart/summary components expect, so those components don't need
- *  a water-specific variant. `usageKwh` carries `usageThousands`; `cost` carries
- *  `totalDue`. */
-function billsToUsageRecords(bills: WaterBill[]): EnergyUsage[] {
-  return bills.map((bill) => ({
-    id: bill.id,
-    meterId: 99,
-    timestamp: bill.billingDate ?? bill.billingPeriodEnd,
-    usageKwh: bill.usageThousands ?? 0,
-    cost: bill.totalDue,
-    source: bill.source,
-    sourceProvider: bill.sourceProvider,
-    ingestionBatchId: bill.ingestionBatchId,
-    processingVersion: bill.processingVersion,
-    createdAt: bill.createdAt,
-  }));
-}
+const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
+const TICK_PROPS = { fontSize: 11 } as const;
+const CHART_THEME = {
+  grid: 'var(--appchart-grid)',
+  tick: 'var(--appchart-tick)',
+} as const;
+const TOOLTIP_CONTENT_STYLE = {
+  backgroundColor: 'var(--appchart-bg)',
+  border: '1px solid var(--appchart-border)',
+  borderRadius: '16px',
+  fontSize: '13px',
+  color: 'var(--apptext)',
+  boxShadow: '0 20px 50px var(--appshadow-lg)',
+} as const;
+const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
+const LEGEND_STYLE = { fontSize: 12 } as const;
+
+const CHARGE_SERIES = [
+  { key: 'water', label: 'Water', color: '#22d3ee' },
+  { key: 'sewer', label: 'Sewer', color: '#0ea5e9' },
+  { key: 'refuse', label: 'Refuse', color: '#6366f1' },
+  { key: 'tax', label: 'Tax', color: '#a855f7' },
+  { key: 'stormwater', label: 'Stormwater', color: '#14b8a6' },
+] as const;
 
 const money = (n?: number) => (n == null ? '—' : `$${n.toFixed(2)}`);
+
+function periodLabel(bill: WaterBill) {
+  return new Date(`${bill.billingPeriodStart}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    year: '2-digit',
+  });
+}
+
+function EmptyChart({ title, emptyText }: { title: string; emptyText: string }) {
+  return (
+    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+      <h3 className="mb-4 text-lg font-semibold text-apptext">{title}</h3>
+      <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
+        {emptyText}
+      </div>
+    </div>
+  );
+}
 
 export default memo(function WaterUsage() {
   const waterBills = useQuery({
@@ -49,25 +77,32 @@ export default memo(function WaterUsage() {
   const loading = waterBills.isLoading;
   const hasData = bills.length > 0;
 
-  const data = useMemo(() => billsToUsageRecords(bills), [bills]);
-
   const latestBill = bills[0];
   const avgMonthlyBill = hasData ? bills.reduce((s, b) => s + b.totalDue, 0) / bills.length : 0;
 
-  const periodDefinitions = useMemo(
-    () => buildUsagePeriods(bills[bills.length - 1]?.billingPeriodStart),
-    [bills]
+  // Oldest -> newest for left-to-right chronological reading.
+  const chronological = useMemo(() => [...bills].reverse(), [bills]);
+
+  const usageChartData = useMemo(
+    () =>
+      chronological.map((bill) => ({
+        period: periodLabel(bill),
+        gallons: bill.usageThousands ?? 0,
+      })),
+    [chronological]
   );
 
-  const summaryCards = useMemo(
+  const chargesChartData = useMemo(
     () =>
-      periodDefinitions.map((period) => ({
-        label: period.label,
-        rangeStart: period.displayStart,
-        rangeEnd: period.displayEnd,
-        summary: summarizeUsageRange(99, data, period.start, period.end),
+      chronological.map((bill) => ({
+        period: periodLabel(bill),
+        water: bill.waterCharge ?? 0,
+        sewer: bill.sewerCharge ?? 0,
+        refuse: bill.refuseCharge ?? 0,
+        tax: bill.taxCharge ?? 0,
+        stormwater: bill.stormwaterCharge ?? 0,
       })),
-    [data, periodDefinitions]
+    [chronological]
   );
 
   return (
@@ -96,51 +131,61 @@ export default memo(function WaterUsage() {
         />
       </section>
 
-      {/* Weather Context */}
-      {periodDefinitions.length > 0 && (
-        <WeatherContextCard
-          startDate={periodDefinitions[0].start}
-          endDate={periodDefinitions[0].end}
-          showPrecipitation
-        />
-      )}
-
       <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
         <DeferredRender minHeight={360}>
-          <UsageChart
-            data={data}
-            loading={loading}
-            title="Water usage trend"
-            emptyText="Water usage data will appear here once a bill has been synced from Gmail."
-            unitLabel="gal"
-            accentColor="#22d3ee"
-          />
+          {!hasData && !loading ? (
+            <EmptyChart
+              title="Usage by billing period"
+              emptyText='No water bills synced yet. Bills are pulled from the "Water Bill" Gmail label once a day.'
+            />
+          ) : (
+            <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <h3 className="mb-4 text-lg font-semibold text-apptext">Usage by billing period</h3>
+              <ResponsiveContainer width="100%" height={280} debounce={80}>
+                <BarChart data={usageChartData} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
+                  <XAxis dataKey="period" tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} />
+                  <YAxis tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} unit=" gal" />
+                  <Tooltip
+                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    formatter={(value: number) => [`${value.toFixed(0)} gal`, 'Usage']}
+                  />
+                  <Bar dataKey="gallons" fill="#22d3ee" radius={[10, 10, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </DeferredRender>
         <DeferredRender minHeight={360}>
-          <MonthlyComparison
-            data={data}
-            loading={loading}
-            title="Monthly water comparison"
-            emptyText="Monthly water comparisons need more billing history."
-            unitLabel="gal"
-            barColor="#06b6d4"
-          />
+          {!hasData && !loading ? (
+            <EmptyChart
+              title="Charges breakdown"
+              emptyText="Itemized Water/Sewer/Refuse/Tax/Stormwater charges will appear here once a bill has been synced."
+            />
+          ) : (
+            <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <h3 className="mb-4 text-lg font-semibold text-apptext">Charges breakdown</h3>
+              <ResponsiveContainer width="100%" height={280} debounce={80}>
+                <BarChart data={chargesChartData} margin={CHART_MARGIN}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
+                  <XAxis dataKey="period" tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} />
+                  <YAxis tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} unit="$" />
+                  <Tooltip
+                    contentStyle={TOOLTIP_CONTENT_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
+                  />
+                  <Legend wrapperStyle={LEGEND_STYLE} />
+                  {CHARGE_SERIES.map((s) => (
+                    <Bar key={s.key} dataKey={s.key} name={s.label} stackId="charges" fill={s.color} isAnimationActive={false} maxBarSize={48} />
+                  ))}
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </DeferredRender>
       </section>
-
-      {/* 24-Hour Weather Detail */}
-      {periodDefinitions.length > 0 && (
-        <Weather24HourCard
-          startDate={periodDefinitions[0].start}
-          endDate={periodDefinitions[0].end}
-        />
-      )}
-
-      <UsageSummaryGrid
-        title="Water highs, lows, and rolling period totals"
-        unitLabel="gal"
-        summaries={summaryCards}
-      />
 
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <h3 className="mb-2 text-lg font-semibold text-apptext">
