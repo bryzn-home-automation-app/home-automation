@@ -49,23 +49,42 @@ public class ForecastScheduler {
     // isn't over, so it can never show as "actual" yet).
     @Scheduled(cron = "0 45 23 * * *", zone = "America/Chicago")
     public void nightlyRetrain() {
-        log.info("ForecastScheduler: starting nightly retrain cycle");
+        runRetrainCycle("Nightly", forecastService.backfillActuals());
+    }
+
+    public void runManualRetrain() {
+        runRetrainCycle("Manual", forecastService.backfillActuals());
+    }
+
+    /**
+     * Called from {@link DailySyncScheduler} right after a sync attempt, so the
+     * actual line and projection update within the sync cycle instead of waiting
+     * for the 23:45 nightly cron. No-ops (no retrain, no weather call) when
+     * nothing new was backfilled — e.g. a tick where CoServ hasn't posted yet.
+     */
+    public void retrainIfNewActuals() {
+        int filled = forecastService.backfillActuals();
+        if (filled == 0) return;
+        log.info("ForecastScheduler: {} new actual reading(s) landed — retraining immediately", filled);
+        runRetrainCycle("Immediate", filled);
+    }
+
+    private void runRetrainCycle(String trigger, int filled) {
+        log.info("ForecastScheduler: starting {} retrain cycle", trigger.toLowerCase());
 
         try {
-            // 1. Backfill yesterday's actuals into any pending snapshots
-            int filled = forecastService.backfillActuals();
             log.info("ForecastScheduler: backfilled {} actuals", filled);
 
-            // 2. Retrain the model
+            // Retrain the model
             ForecastModel model = forecastService.trainModel();
             if (model == null) {
                 log.warn("ForecastScheduler: not enough data to train — skipping forecast generation");
                 appEventService.info("forecast", "ForecastScheduler",
-                        "Nightly retrain skipped — not enough data points yet");
+                        trigger + " retrain skipped — not enough data points yet");
                 return;
             }
 
-            // 3. Generate 7-day forecast using weather predictions
+            // Generate 7-day forecast using weather predictions
             LocalDate today = LocalDate.now();
             LocalDate forecastEnd = today.plusDays(7);
             WeatherResponse wx = weatherService.getWeatherForDateRange(lat, lon, today, forecastEnd);
@@ -84,7 +103,7 @@ public class ForecastScheduler {
             if (forecastDays.isEmpty()) {
                 log.warn("ForecastScheduler: no forecast weather available");
                 appEventService.warn("forecast", "ForecastScheduler",
-                        "Nightly retrain completed model #" + model.getId()
+                        trigger + " retrain completed model #" + model.getId()
                                 + " but weather forecast unavailable — no predictions saved");
                 return;
             }
@@ -94,20 +113,17 @@ public class ForecastScheduler {
 
             log.info("ForecastScheduler: saved {} forecast snapshots, backfilled {} actuals", forecasts.size(), filled);
             appEventService.info("forecast", "ForecastScheduler",
-                    String.format("Nightly cycle complete — model #%d (R²=%.4f, %d pts), %d forecasts saved, %d actuals backfilled",
+                    String.format("%s cycle complete — model #%d (R²=%.4f, %d pts), %d forecasts saved, %d actuals backfilled",
+                            trigger,
                             model.getId(),
                             model.getRSquared() != null ? model.getRSquared().doubleValue() : 0,
                             model.getDataPointsUsed(),
                             forecasts.size(), filled));
 
         } catch (Exception e) {
-            log.error("ForecastScheduler: nightly retrain failed", e);
+            log.error("ForecastScheduler: {} retrain failed", trigger.toLowerCase(), e);
             appEventService.error("forecast", "ForecastScheduler",
-                    "Nightly retrain failed", e.getMessage());
+                    trigger + " retrain failed", e.getMessage());
         }
-    }
-
-    public void runManualRetrain() {
-        nightlyRetrain();
     }
 }

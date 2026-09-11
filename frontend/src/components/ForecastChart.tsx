@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 import { fetchForecast, fetchForecastAccuracy } from '../api/forecast';
 import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import StatTile, { Icons } from './StatTile';
 
 const chartTheme = {
@@ -122,17 +123,22 @@ function ForecastChart() {
   const days = range === '14d' ? 14 : 7;
   const { theme, palette } = useTheme();
   const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
+  const forecastInterval = useJitteredInterval(600_000);
 
   const { data: forecast, isLoading } = useQuery({
     queryKey: ['forecast', days],
     queryFn: () => fetchForecast(days),
     staleTime: 600_000,
+    refetchInterval: forecastInterval,
+    refetchIntervalInBackground: false,
   });
 
   const { data: accuracy } = useQuery({
     queryKey: ['forecast-accuracy'],
     queryFn: () => fetchForecastAccuracy(30),
     staleTime: 600_000,
+    refetchInterval: forecastInterval,
+    refetchIntervalInBackground: false,
   });
 
   const chartData = useMemo(() => {

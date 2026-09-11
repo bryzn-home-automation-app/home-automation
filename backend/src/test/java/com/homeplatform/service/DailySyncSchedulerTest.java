@@ -27,8 +27,8 @@ class DailySyncSchedulerTest {
         int scanCalls = 0;
         int syncCalls = 0;
 
-        TestScheduler(AppEventService events, AlertEngine alerts) {
-            super(mock(DataSource.class), events, alerts);
+        TestScheduler(AppEventService events, AlertEngine alerts, ForecastScheduler forecastScheduler) {
+            super(mock(DataSource.class), events, alerts, forecastScheduler);
         }
 
         @Override
@@ -52,7 +52,7 @@ class DailySyncSchedulerTest {
 
     @BeforeEach
     void setUp() {
-        scheduler = new TestScheduler(mock(AppEventService.class), mock(AlertEngine.class));
+        scheduler = new TestScheduler(mock(AppEventService.class), mock(AlertEngine.class), mock(ForecastScheduler.class));
     }
 
     @Test

@@ -56,6 +56,7 @@ public class DailySyncScheduler {
     private final DataSource dataSource;
     private final AppEventService appEventService;
     private final AlertEngine alertEngine;
+    private final ForecastScheduler forecastScheduler;
 
     /** Consecutive ticks that found every lookback day already populated. Reset on rollover or a fresh gap. */
     private int consecutiveCompleteChecks = 0;
@@ -67,10 +68,12 @@ public class DailySyncScheduler {
      */
     private LocalDate standDownFor = null;
 
-    public DailySyncScheduler(DataSource dataSource, AppEventService appEventService, AlertEngine alertEngine) {
+    public DailySyncScheduler(DataSource dataSource, AppEventService appEventService, AlertEngine alertEngine,
+                               ForecastScheduler forecastScheduler) {
         this.dataSource = dataSource;
         this.appEventService = appEventService;
         this.alertEngine = alertEngine;
+        this.forecastScheduler = forecastScheduler;
     }
 
     /** Every 30 min from 7:00 AM to 11:30 PM CT. Same window as hourly but
@@ -118,6 +121,15 @@ public class DailySyncScheduler {
                 "Starting daily sync for " + label);
 
         runSync(dailyCommand(start, yesterday), label);
+
+        // The reading may have just landed in electric_usage — backfill it onto the
+        // forecast chart's actual line and retrain immediately instead of waiting for
+        // ForecastScheduler's 23:45 cron. No-ops if nothing new was actually written.
+        try {
+            forecastScheduler.retrainIfNewActuals();
+        } catch (Exception e) {
+            log.error("DailySyncScheduler: forecast retrain trigger failed", e);
+        }
     }
 
     /**
