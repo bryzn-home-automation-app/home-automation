@@ -349,6 +349,39 @@ INSERT INTO utility_providers (name, type, portal_url, is_active)
 VALUES ('CoServ', 'ELECTRIC', 'https://myaccount.coserv.com', TRUE)
 ON CONFLICT DO NOTHING;
 
+-- Water bill storage. Itemized (unlike utility_bills' single `amount`) because the
+-- City of Lewisville bill breaks out Water/Sewer/Refuse/Tax/Stormwater separately and
+-- the app needs to show that breakdown, not just a total.
+CREATE TABLE IF NOT EXISTS water_bills (
+    id                    SERIAL PRIMARY KEY,
+    account_id            INTEGER        NOT NULL REFERENCES utility_accounts(id),
+    billing_period_start  DATE           NOT NULL,
+    billing_period_end    DATE           NOT NULL,
+    billing_date          DATE,
+    due_date              DATE,
+    usage_thousands       NUMERIC(10,3),
+    water_charge          NUMERIC(10,2),
+    sewer_charge          NUMERIC(10,2),
+    refuse_charge         NUMERIC(10,2),
+    tax_charge            NUMERIC(10,2),
+    stormwater_charge     NUMERIC(10,2),
+    ach_discount          NUMERIC(10,2),
+    total_due             NUMERIC(10,2)  NOT NULL,
+    source                VARCHAR(100)   NOT NULL DEFAULT 'Gmail Water Bill PDF',
+    source_provider       VARCHAR(50)    NOT NULL DEFAULT 'gmail-water-bill',
+    ingestion_batch_id    UUID           NOT NULL,
+    processing_version    VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at            TIMESTAMP      NOT NULL DEFAULT NOW(),
+    UNIQUE (account_id, billing_period_start, billing_period_end)
+);
+
+CREATE INDEX IF NOT EXISTS idx_water_bills_account ON water_bills (account_id);
+CREATE INDEX IF NOT EXISTS idx_water_bills_batch   ON water_bills (ingestion_batch_id);
+
+INSERT INTO utility_providers (name, type, portal_url, is_active)
+VALUES ('City of Lewisville', 'WATER', 'https://payments.dentoncountyfwsd.com', TRUE)
+ON CONFLICT DO NOTHING;
+
 -- ============================================================
 -- User Management & Access Control
 -- ============================================================

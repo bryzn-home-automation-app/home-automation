@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y curl gnupg \
     && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean && rm -rf /var/lib/apt/lists/* \
-    && npm install -g playwright pg adm-zip \
+    && npm install -g playwright pg adm-zip googleapis pdf-parse \
     && npx -y playwright install --with-deps chromium
 
 ENV NODE_PATH=/usr/lib/node_modules

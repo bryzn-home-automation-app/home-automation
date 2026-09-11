@@ -52,13 +52,15 @@ function loadSecrets() {
   const envPath = path.join(__dirname, '..', '.env');
   if (fs.existsSync(envPath)) {
     fs.readFileSync(envPath, 'utf8').split('\n').forEach(line => {
-      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|KWH_RATE)\s*=\s*(.+)/);
+      const m = line.match(/^(COSERV_(?:USERNAME|PASSWORD)|POSTGRES_(?:DB|USER|PASSWORD|HOST|PORT)|KWH_RATE|GMAIL_(?:CLIENT_ID|CLIENT_SECRET|REFRESH_TOKEN|WATER_BILL_LABEL)|WATER_(?:ACCOUNT_NUMBER|SERVICE_ADDRESS))\s*=\s*(.+)/);
       if (m) s[m[1]] = m[2].trim();
     });
   }
   for (const k of ['COSERV_USERNAME', 'COSERV_PASSWORD',
                    'POSTGRES_DB', 'POSTGRES_USER', 'POSTGRES_PASSWORD',
-                   'POSTGRES_HOST', 'POSTGRES_PORT', 'KWH_RATE']) {
+                   'POSTGRES_HOST', 'POSTGRES_PORT', 'KWH_RATE',
+                   'GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN', 'GMAIL_WATER_BILL_LABEL',
+                   'WATER_ACCOUNT_NUMBER', 'WATER_SERVICE_ADDRESS']) {
     if (process.env[k]) s[k] = process.env[k];
   }
   return s;

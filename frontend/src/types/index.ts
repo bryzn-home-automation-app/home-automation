@@ -63,6 +63,28 @@ export interface UtilityBill {
   createdAt: string;
 }
 
+/** Itemized water bill parsed from the Gmail-forwarded PDF. Append-only. */
+export interface WaterBill {
+  id: number;
+  billingPeriodStart: string;
+  billingPeriodEnd: string;
+  billingDate?: string;
+  dueDate?: string;
+  usageThousands?: number;
+  waterCharge?: number;
+  sewerCharge?: number;
+  refuseCharge?: number;
+  taxCharge?: number;
+  stormwaterCharge?: number;
+  achDiscount?: number;
+  totalDue: number;
+  source: string;
+  sourceProvider: string;
+  ingestionBatchId: string;
+  processingVersion: string;
+  createdAt: string;
+}
+
 export interface IntegrationAdapter {
   key: string;
   name: string;

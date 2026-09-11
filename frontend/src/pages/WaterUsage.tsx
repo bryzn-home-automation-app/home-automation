@@ -1,62 +1,62 @@
 import { memo, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
 import MonthlyComparison from '../components/MonthlyComparison';
-import type { EnergyUsage } from '../types';
+import type { EnergyUsage, WaterBill } from '../types';
 import DeferredRender from '../components/DeferredRender';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { buildUsagePeriods, summarizeUsageRange } from '../utils/usageSummary';
 import WeatherContextCard from '../components/WeatherContextCard';
 import Weather24HourCard from '../components/Weather24HourCard';
+import { fetchWaterBills } from '../api/waterBills';
 
-/** Generate mock water usage data for the past 30 days. */
-function generateMockWaterData(): EnergyUsage[] {
-  const records: EnergyUsage[] = [];
-  const now = new Date();
-  let id = 1;
-
-  for (let i = 60; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    d.setHours(0, 0, 0, 0);
-
-    // Simulate realistic water usage: 80-250 gallons/day, higher on weekends
-    const dayOfWeek = d.getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const base = isWeekend ? 180 : 120;
-    const variance = Math.random() * 70;
-
-    records.push({
-      id: id++,
-      meterId: 99,
-      timestamp: d.toISOString(),
-      usageKwh: Math.round((base + variance) * 10) / 10, // gallons, reused field
-      cost: 0,
-      source: 'Mock Water Data',
-      sourceProvider: 'water',
-      ingestionBatchId: 'mock',
-      processingVersion: 'mock',
-      createdAt: d.toISOString(),
-    });
-  }
-
-  return records;
+/** Map itemized water bills (one row/billing period) into the EnergyUsage shape
+ *  the shared chart/summary components expect, so those components don't need
+ *  a water-specific variant. `usageKwh` carries `usageThousands`; `cost` carries
+ *  `totalDue`. */
+function billsToUsageRecords(bills: WaterBill[]): EnergyUsage[] {
+  return bills.map((bill) => ({
+    id: bill.id,
+    meterId: 99,
+    timestamp: bill.billingDate ?? bill.billingPeriodEnd,
+    usageKwh: bill.usageThousands ?? 0,
+    cost: bill.totalDue,
+    source: bill.source,
+    sourceProvider: bill.sourceProvider,
+    ingestionBatchId: bill.ingestionBatchId,
+    processingVersion: bill.processingVersion,
+    createdAt: bill.createdAt,
+  }));
 }
 
-export default memo(function WaterUsage() {
-  const data = useMemo(() => generateMockWaterData(), []);
+const money = (n?: number) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
-  const totalGal = data.reduce((s, d) => s + d.usageKwh, 0);
-  const avgDaily = totalGal / data.length;
-  const today = new Date().toISOString().split('T')[0];
-  const todayGal =
-    data
-      .filter((d) => d.timestamp.startsWith(today))
-      .reduce((s, d) => s + d.usageKwh, 0) ?? 0;
+export default memo(function WaterUsage() {
+  const waterBills = useQuery({
+    queryKey: ['water-bills'],
+    queryFn: fetchWaterBills,
+    staleTime: 30_000,
+  });
+
+  const bills = useMemo(
+    () =>
+      [...(waterBills.data ?? [])].sort(
+        (a, b) => new Date(b.billingPeriodStart).getTime() - new Date(a.billingPeriodStart).getTime()
+      ),
+    [waterBills.data]
+  );
+  const loading = waterBills.isLoading;
+  const hasData = bills.length > 0;
+
+  const data = useMemo(() => billsToUsageRecords(bills), [bills]);
+
+  const latestBill = bills[0];
+  const avgMonthlyBill = hasData ? bills.reduce((s, b) => s + b.totalDue, 0) / bills.length : 0;
 
   const periodDefinitions = useMemo(
-    () => buildUsagePeriods(data[0]?.timestamp),
-    [data]
+    () => buildUsagePeriods(bills[bills.length - 1]?.billingPeriodStart),
+    [bills]
   );
 
   const summaryCards = useMemo(
@@ -72,45 +72,27 @@ export default memo(function WaterUsage() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
-      <div className="rounded-[28px] border border-cyan-300/35 bg-cyan-300/18 p-4">
-        <p className="text-xs text-apptext-muted">
-          🚰 Mock data — water utility integration coming in Phase 2
-        </p>
-      </div>
-
-      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-        <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
-          Water Module Preview
-        </p>
-        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-          Prototype the future water dashboard before the live integration lands.
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-apptext-soft sm:text-base">
-          This mock view keeps the same component language as the live energy modules, so the eventual rollout stays consistent and low-friction.
-        </p>
-      </section>
-
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4">
         <StatTile
-          label="Today"
-          value={todayGal.toFixed(0)}
-          unit="gal"
-          loading={false}
+          label="Latest Bill"
+          value={latestBill ? latestBill.totalDue.toFixed(2) : '—'}
+          unit="$"
+          loading={loading}
           icon={Icons.Calendar}
         />
         <StatTile
-          label="60-Day Total"
-          value={totalGal.toFixed(0)}
-          unit="gal"
-          loading={false}
-          icon={Icons.Calendar}
-        />
-        <StatTile
-          label="Daily Average"
-          value={avgDaily.toFixed(0)}
-          unit="gal/day"
-          loading={false}
+          label="Latest Usage"
+          value={latestBill?.usageThousands != null ? latestBill.usageThousands.toFixed(0) : '—'}
+          unit="gal (×1k)"
+          loading={loading}
           icon={Icons.Bolt}
+        />
+        <StatTile
+          label="Avg Monthly Bill"
+          value={hasData ? avgMonthlyBill.toFixed(2) : '—'}
+          unit="$"
+          loading={loading}
+          icon={Icons.Calendar}
         />
       </section>
 
@@ -127,20 +109,20 @@ export default memo(function WaterUsage() {
         <DeferredRender minHeight={360}>
           <UsageChart
             data={data}
-            loading={false}
+            loading={loading}
             title="Water usage trend"
-            emptyText="Water usage data will appear here once the integration is connected."
-            unitLabel="gal"
+            emptyText="Water usage data will appear here once a bill has been synced from Gmail."
+            unitLabel="gal (×1k)"
             accentColor="#22d3ee"
           />
         </DeferredRender>
         <DeferredRender minHeight={360}>
           <MonthlyComparison
             data={data}
-            loading={false}
+            loading={loading}
             title="Monthly water comparison"
-            emptyText="Monthly water comparisons need more historical data."
-            unitLabel="gal"
+            emptyText="Monthly water comparisons need more billing history."
+            unitLabel="gal (×1k)"
             barColor="#06b6d4"
           />
         </DeferredRender>
@@ -156,21 +138,58 @@ export default memo(function WaterUsage() {
 
       <UsageSummaryGrid
         title="Water highs, lows, and rolling period totals"
-        unitLabel="gal"
+        unitLabel="gal (×1k)"
         summaries={summaryCards}
       />
 
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <h3 className="mb-2 text-lg font-semibold text-apptext">
-          Water Utility Integration
+          Billing History
         </h3>
-        <p className="text-sm leading-6 text-apptext-muted">
-          Water usage tracking will use the same adapter pattern as CoServ.
-          Once your water provider offers a customer portal (or CSV export),
-          a new adapter can be built using the <code className="text-apptext-soft">IntegrationAdapter</code> interface.
-          Data will flow into the same provider-agnostic data model with
-          append-only storage and the same dashboard charts.
-        </p>
+        {!hasData && !loading && (
+          <p className="text-sm leading-6 text-apptext-muted">
+            No water bills synced yet. Bills are pulled from the "Water Bill" Gmail
+            label once a day.
+          </p>
+        )}
+        {hasData && (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr className="border-b border-appborder text-left text-apptext-muted">
+                  <th className="py-2 pr-3 font-medium">Period</th>
+                  <th className="py-2 pr-3 font-medium">Usage (gal ×1k)</th>
+                  <th className="py-2 pr-3 font-medium">Water</th>
+                  <th className="py-2 pr-3 font-medium">Sewer</th>
+                  <th className="py-2 pr-3 font-medium">Refuse</th>
+                  <th className="py-2 pr-3 font-medium">Tax</th>
+                  <th className="py-2 pr-3 font-medium">Stormwater</th>
+                  <th className="py-2 pr-3 font-medium">Discount</th>
+                  <th className="py-2 pr-3 font-medium">Total Due</th>
+                  <th className="py-2 font-medium">Due Date</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bills.map((bill) => (
+                  <tr key={bill.id} className="border-b border-appborder/50 text-apptext">
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {bill.billingPeriodStart} → {bill.billingPeriodEnd}
+                    </td>
+                    <td className="py-2 pr-3">{bill.usageThousands?.toFixed(0) ?? '—'}</td>
+                    <td className="py-2 pr-3">{money(bill.waterCharge)}</td>
+                    <td className="py-2 pr-3">{money(bill.sewerCharge)}</td>
+                    <td className="py-2 pr-3">{money(bill.refuseCharge)}</td>
+                    <td className="py-2 pr-3">{money(bill.taxCharge)}</td>
+                    <td className="py-2 pr-3">{money(bill.stormwaterCharge)}</td>
+                    <td className="py-2 pr-3">{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</td>
+                    <td className="py-2 pr-3 font-semibold">{money(bill.totalDue)}</td>
+                    <td className="py-2 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

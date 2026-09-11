@@ -7,7 +7,10 @@
     "sync:dry-run": "node scripts/sync.js --dry-run",
     "sync:daily": "node scripts/sync.js --granularity daily",
     "sync:hourly": "node scripts/sync.js --granularity hourly",
-    "test": "node --test test/sync.test.js test/legacy/sync-green-button.test.js test/legacy/sync-hourly.test.js",
+    "sync:water-bill": "node scripts/sync-water-bill.js",
+    "sync:water-bill:dry-run": "node scripts/sync-water-bill.js --dry-run",
+    "gmail:authorize": "node scripts/gmail-authorize.js",
+    "test": "node --test test/sync.test.js test/sync-water-bill.test.js test/legacy/sync-green-button.test.js test/legacy/sync-hourly.test.js",
     "test:live": "node test/coserv-live-test.js"
   },
   "devDependencies": {
@@ -15,6 +18,8 @@
   },
   "dependencies": {
     "adm-zip": "^0.6.0",
+    "googleapis": "^144.0.0",
+    "pdf-parse": "^1.1.1",
     "pg": "^8.22.0"
   }
 }
