@@ -17,7 +17,8 @@ import java.util.UUID;
  * constraint on (account_id, billing_period_start, billing_period_end).
  */
 @Entity
-@Table(name = "water_bills")
+@Table(name = "water_bills", uniqueConstraints = @UniqueConstraint(
+        columnNames = {"account_id", "billing_period_start", "billing_period_end"}))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
