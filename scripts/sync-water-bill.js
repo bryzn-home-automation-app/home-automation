@@ -113,8 +113,8 @@ async function upsertWaterBill(client, accountId, bill, batchId) {
        account_id, billing_period_start, billing_period_end, billing_date, due_date,
        usage_thousands, water_charge, sewer_charge, refuse_charge, tax_charge,
        stormwater_charge, ach_discount, total_due,
-       source, source_provider, ingestion_batch_id, processing_version
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+       source, source_provider, ingestion_batch_id, processing_version, created_at
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
      ON CONFLICT (account_id, billing_period_start, billing_period_end) DO UPDATE SET
        billing_date = EXCLUDED.billing_date,
        due_date = EXCLUDED.due_date,
