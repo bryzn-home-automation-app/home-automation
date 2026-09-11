@@ -8,6 +8,7 @@ import { fetchNotifications } from '../api/notifications';
 import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
 import { fetchRoombaStatus, fetchRoombaRuns } from '../api/roomba';
+import { fetchWaterBills } from '../api/waterBills';
 import { fetchCurrentWeather } from '../api/weather';
 import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
@@ -71,6 +72,19 @@ export default function HomeSummary() {
     queryFn: () => fetchRoombaRuns(1),
     staleTime: 60_000,
   });
+
+  const waterBills = useQuery({
+    queryKey: ['water-bills'],
+    queryFn: fetchWaterBills,
+    staleTime: 60_000,
+  });
+  const latestWaterBill = useMemo(() => {
+    const bills = waterBills.data ?? [];
+    if (!bills.length) return null;
+    return [...bills].sort(
+      (a, b) => new Date(b.billingPeriodStart).getTime() - new Date(a.billingPeriodStart).getTime()
+    )[0];
+  }, [waterBills.data]);
 
   const m = maintenance.data;
 
@@ -192,8 +206,8 @@ export default function HomeSummary() {
         </section>
       ) : null}
 
-      {/* Snapshot: last daily electric + Roomba summary */}
-      <section className="grid gap-4 sm:grid-cols-2">
+      {/* Snapshot: last daily electric + Roomba + last water bill */}
+      <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {/* Last daily electric */}
         <Link
           to="/utility"
@@ -234,6 +248,25 @@ export default function HomeSummary() {
             )}
           </p>
           <p className="mt-1 truncate text-sm text-apptext-soft">{roombaDetail}</p>
+        </Link>
+
+        {/* Last water bill */}
+        <Link
+          to="/utility?view=water"
+          className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">💧 Last Water Bill</p>
+            <span className="text-xs font-medium text-appaccent-text">Utility →</span>
+          </div>
+          <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">
+            {latestWaterBill ? `$${latestWaterBill.totalDue.toFixed(2)}` : '—'}
+          </p>
+          <p className="mt-1 text-sm text-apptext-soft">
+            {latestWaterBill
+              ? `Due ${latestWaterBill.dueDate ?? '—'}${latestWaterBill.usageThousands != null ? ` · ${latestWaterBill.usageThousands.toFixed(0)} gal` : ''}`
+              : 'Syncs automatically each day'}
+          </p>
         </Link>
       </section>
 
