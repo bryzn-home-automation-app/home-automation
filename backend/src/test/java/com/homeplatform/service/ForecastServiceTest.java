@@ -2,10 +2,14 @@ package com.homeplatform.service;
 
 import com.homeplatform.service.ForecastService.AnomalyClass;
 import com.homeplatform.service.ForecastService.AnomalyScore;
+import com.homeplatform.service.ForecastService.DriftAssessment;
+import com.homeplatform.service.ForecastService.DriftState;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -225,5 +229,109 @@ class ForecastServiceTest {
         assertEquals(0.0, s.z(), EPS);
         assertEquals(AnomalyClass.NORMAL, s.classification());
         assertFalse(Double.isNaN(s.z()));
+    }
+
+    // ── Drift / regime-change detection (Phase 2) ─────────────────────────
+
+    private static final double HIST_MAE = 10.5; // matches the doc's current in-sample MAE example
+    private static final LocalDate ASOF = LocalDate.of(2026, 9, 11);
+
+    @Test
+    @DisplayName("small noisy residuals with no streak -> NORMAL")
+    void driftNormalCase() {
+        List<Double> residuals = List.of(1.0, -2.0, 1.5, -1.0, 2.0, -1.5, 1.0); // newest-first
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, residuals, Map.of());
+        assertEquals(DriftState.NORMAL, a.state());
+        assertTrue(a.maeRatio() < 1.5, "ratio should be well under the drift threshold: " + a.maeRatio());
+    }
+
+    @Test
+    @DisplayName("doc's noisy-but-zero-bias example (+18,-20,+21,-19,+20) -> ANOMALOUS, not drifting")
+    void driftAnomalousNoStreak() {
+        List<Double> residuals = List.of(18.0, -20.0, 21.0, -19.0, 20.0); // newest-first
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, residuals, Map.of());
+        assertEquals(DriftState.ANOMALOUS, a.state());
+        assertEquals(1, a.streakLength(), "alternating signs break the streak immediately");
+        assertTrue(a.maeRatio() > 1.5, "large errors should clear the magnitude threshold: " + a.maeRatio());
+    }
+
+    @Test
+    @DisplayName("doc's consistent-positive-bias example (+18,+21,+19,+23,+20) -> DRIFT_SUSPECTED")
+    void driftSuspectedConsistentBias() {
+        List<Double> residuals = List.of(18.0, 21.0, 19.0, 23.0, 20.0); // newest-first, all positive
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, residuals, Map.of());
+        assertEquals(DriftState.DRIFT_SUSPECTED, a.state());
+        assertEquals(5, a.streakLength());
+        assertEquals(1, a.streakSign());
+        assertEquals(20.2, a.recentMae(), 1e-9);
+        assertTrue(a.maeRatio() > ForecastService.DRIFT_MAE_RATIO_THRESHOLD
+                        && a.maeRatio() < ForecastService.REGIME_MAE_RATIO_THRESHOLD,
+                "ratio should sit between drift and regime thresholds: " + a.maeRatio());
+    }
+
+    @Test
+    @DisplayName("longer, larger same-direction run -> REGIME_CHANGE_SUSPECTED")
+    void driftRegimeChangeSuspected() {
+        // 7-in-a-row positive residuals, ratio well above the regime threshold.
+        List<Double> residuals = List.of(28.0, 30.0, 27.0, 29.0, 31.0, 28.0, 29.0); // newest-first
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, residuals, Map.of());
+        assertEquals(DriftState.REGIME_CHANGE_SUSPECTED, a.state());
+        assertEquals(7, a.streakLength());
+        assertTrue(a.maeRatio() >= ForecastService.REGIME_MAE_RATIO_THRESHOLD,
+                "ratio should clear the regime threshold: " + a.maeRatio());
+    }
+
+    @Test
+    @DisplayName("too few graded samples caps the verdict at ANOMALOUS even with a huge same-direction ratio")
+    void driftInsufficientSamplesCapsAtAnomalous() {
+        List<Double> residuals = List.of(50.0, 45.0); // only 2 samples, both positive, huge ratio
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, residuals, Map.of());
+        assertEquals(DriftState.ANOMALOUS, a.state());
+        assertNotEquals(DriftState.REGIME_CHANGE_SUSPECTED, a.state());
+        assertNotEquals(DriftState.DRIFT_SUSPECTED, a.state());
+    }
+
+    @Test
+    @DisplayName("empty residual window -> NORMAL, no NaN propagation crash")
+    void driftEmptyWindowIsNormal() {
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, List.of(), Map.of());
+        assertEquals(DriftState.NORMAL, a.state());
+        assertEquals(0, a.sampleCount());
+    }
+
+    @Test
+    @DisplayName("context window MAE ratios are carried through but don't affect the primary-window state")
+    void driftContextRatiosCarried() {
+        List<Double> primary = List.of(18.0, 21.0, 19.0, 23.0, 20.0);
+        Map<Integer, List<Double>> context = Map.of(
+                3, List.of(18.0, 21.0, 19.0),
+                14, List.of(18.0, 21.0, 19.0, 23.0, 20.0, 5.0, -3.0));
+        DriftAssessment a = ForecastService.computeDriftAssessment(ASOF, HIST_MAE, primary, context);
+        assertEquals(DriftState.DRIFT_SUSPECTED, a.state());
+        assertEquals(2, a.contextMaeRatios().size());
+        assertTrue(a.contextMaeRatios().get(3) > 1.5);
+    }
+
+    @Test
+    @DisplayName("computeStreak: leading zero residual yields no streak")
+    void computeStreakZeroBreaksImmediately() {
+        int[] streak = ForecastService.computeStreak(List.of(0.0, 5.0, 6.0));
+        assertEquals(0, streak[0]);
+        assertEquals(0, streak[1]);
+    }
+
+    @Test
+    @DisplayName("computeStreak: sign flip stops the run at the flip")
+    void computeStreakStopsAtSignFlip() {
+        int[] streak = ForecastService.computeStreak(List.of(5.0, 6.0, -1.0, 7.0));
+        assertEquals(2, streak[0]);
+        assertEquals(1, streak[1]);
+    }
+
+    @Test
+    @DisplayName("mae(): empty list is NaN, non-empty averages absolute values")
+    void maeHelper() {
+        assertTrue(Double.isNaN(ForecastService.mae(List.of())));
+        assertEquals(3.0, ForecastService.mae(List.of(-1.0, 2.0, 6.0)), EPS);
     }
 }

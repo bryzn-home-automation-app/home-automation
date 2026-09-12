@@ -64,6 +64,35 @@ public class ForecastService {
     static final double ANOMALY_Z_THRESHOLD = 2.0;
     static final double SEVERE_Z_THRESHOLD  = 3.5;
 
+    // ── Drift-detection tuning (Phase 2) ─────────────────────────
+    // Windows over graded (predicted vs. actual) ForecastSnapshots, freshest
+    // prediction per target day — same invariant as computeIntervalSigma(). The
+    // doc suggests 3/5/7/14 days; we use the 7-day window as the primary trigger
+    // (long enough to separate noise from a real streak, short enough to react
+    // within a week) and keep 3/5/14 as supporting context in the returned
+    // record for a later dashboard, without wiring them into the state machine.
+    static final int DRIFT_PRIMARY_WINDOW_DAYS = 7;
+    static final int[] DRIFT_CONTEXT_WINDOW_DAYS = {3, 5, 14};
+    // Need at least this many graded days in the primary window before trusting
+    // a drift/regime verdict at all -- otherwise 2 bad days out of 2 look like a
+    // 100% streak. Below this, the state can only be NORMAL or ANOMALOUS.
+    static final int DRIFT_MIN_SAMPLES = 4;
+
+    // MAE ratio = recent-window robust MAE / historical (in-sample) MAE.
+    // Deliberately loose starting points per the doc's "avoid hardcoding overly
+    // aggressive thresholds initially": 1.5x is a real but plausible bad week,
+    // 2.0x is meaningfully worse than the model's own fit error.
+    static final double DRIFT_MAE_RATIO_THRESHOLD  = 1.5;
+    static final double REGIME_MAE_RATIO_THRESHOLD = 2.0;
+
+    // Directional streak = consecutive freshest-per-day residuals (newest-first)
+    // sharing the same sign. 3 same-direction days out of a 7-day window is
+    // already a majority and worth flagging as suspected drift; 5+ in a row is
+    // a strong, unlikely-by-chance run (doc's example: +18,+21,+19,+23,+20) that
+    // graduates to a regime-change suspicion.
+    static final int DRIFT_STREAK_THRESHOLD  = 3;
+    static final int REGIME_STREAK_THRESHOLD = 5;
+
     @Value("${app.kwh-rate:0.12}")
     private double kwhRate;
 
@@ -420,6 +449,166 @@ public class ForecastService {
         else if (absZ >= ANOMALY_Z_THRESHOLD) cls = AnomalyClass.ANOMALOUS;
         else                                   cls = AnomalyClass.NORMAL;
         return new AnomalyScore(actual, predicted, residual, Math.abs(residual), robustScale, z, cls);
+    }
+
+    // ── Drift / regime-change detection (Phase 2) ────────────────
+
+    /**
+     * DB-querying entry point: assesses whether recent forecast errors look
+     * like an isolated anomaly, a suspected drift, or a suspected regime
+     * change, using the same freshest-prediction-per-target-day graded
+     * {@link ForecastSnapshot} pattern as {@link #computeIntervalSigma}. Does
+     * NOT feed back into training or retraining — purely diagnostic. Logs a
+     * WARN app event (category "forecast") when the state is non-NORMAL so it
+     * surfaces in the Debug Dashboard's Forecast Events panel.
+     */
+    public DriftAssessment assessDrift(LocalDate asOf) {
+        Optional<ForecastModel> modelOpt = getActiveModel();
+        if (modelOpt.isEmpty()) {
+            return new DriftAssessment(asOf, 0, Double.NaN, Double.NaN, Double.NaN,
+                    Double.NaN, 0, 0, Map.of(), DriftState.NORMAL);
+        }
+        ForecastModel model = modelOpt.get();
+        double historicalMae = model.getMae() != null ? model.getMae().doubleValue() : Double.NaN;
+
+        int maxWindow = DRIFT_PRIMARY_WINDOW_DAYS;
+        for (int w : DRIFT_CONTEXT_WINDOW_DAYS) maxWindow = Math.max(maxWindow, w);
+
+        List<ForecastSnapshot> graded;
+        try {
+            graded = snapshotRepo.findRecentWithActuals(asOf.minusDays(maxWindow));
+        } catch (Exception e) {
+            log.warn("ForecastService: drift-assessment query failed: {}", e.getMessage());
+            graded = List.of();
+        }
+
+        // Freshest prediction per target day, restricted to <= asOf (no leakage
+        // from snapshots the caller shouldn't be able to see yet).
+        Map<LocalDate, ForecastSnapshot> freshest = new HashMap<>();
+        for (ForecastSnapshot s : graded) {
+            if (s.getActualKwh() == null || s.getPredictedKwh() == null) continue;
+            if (s.getTargetDate().isAfter(asOf)) continue;
+            freshest.merge(s.getTargetDate(), s,
+                    (a, b) -> a.getForecastDate().isAfter(b.getForecastDate()) ? a : b);
+        }
+
+        List<LocalDate> datesDesc = new ArrayList<>(freshest.keySet());
+        datesDesc.sort(Comparator.reverseOrder());
+
+        List<Double> residualsNewestFirst = new ArrayList<>(datesDesc.size());
+        for (LocalDate d : datesDesc) {
+            ForecastSnapshot s = freshest.get(d);
+            residualsNewestFirst.add(s.getActualKwh().doubleValue() - s.getPredictedKwh().doubleValue());
+        }
+
+        List<Double> primary = residualsNewestFirst.stream()
+                .limit(DRIFT_PRIMARY_WINDOW_DAYS).collect(Collectors.toList());
+        Map<Integer, List<Double>> contextByWindow = new LinkedHashMap<>();
+        for (int w : DRIFT_CONTEXT_WINDOW_DAYS) {
+            contextByWindow.put(w, residualsNewestFirst.stream().limit(w).collect(Collectors.toList()));
+        }
+
+        DriftAssessment assessment = computeDriftAssessment(asOf, historicalMae, primary, contextByWindow);
+
+        if (assessment.state() != DriftState.NORMAL) {
+            appEventService.warn("forecast", "ForecastService", String.format(
+                    "Drift assessment: %s — historical MAE=%.2f kWh, recent %d-day MAE=%.2f kWh (ratio %.2fx), " +
+                    "median residual=%+.2f kWh, streak=%d day(s) %s",
+                    assessment.state(), assessment.historicalMae(), DRIFT_PRIMARY_WINDOW_DAYS,
+                    assessment.recentMae(), assessment.maeRatio(), assessment.medianSignedResidual(),
+                    assessment.streakLength(),
+                    assessment.streakSign() > 0 ? "positive" : assessment.streakSign() < 0 ? "negative" : "mixed"));
+        }
+        return assessment;
+    }
+
+    /**
+     * Pure drift computation given a historical (in-sample) MAE and the
+     * primary-window residuals (newest-first, {@code actual - predicted}) plus
+     * a map of window-size -> residuals for supporting context ratios (not
+     * used in the state decision itself, carried for a later dashboard).
+     * Stateless/testable — no DB access.
+     */
+    static DriftAssessment computeDriftAssessment(LocalDate asOf, double historicalMae,
+                                                   List<Double> primaryResidualsNewestFirst,
+                                                   Map<Integer, List<Double>> contextResidualsByWindow) {
+        int sampleCount = primaryResidualsNewestFirst.size();
+        double recentMae = mae(primaryResidualsNewestFirst);
+        double maeRatio = (historicalMae > 0 && Double.isFinite(recentMae)) ? recentMae / historicalMae : Double.NaN;
+        double medianSignedResidual = median(primaryResidualsNewestFirst);
+        int[] streak = computeStreak(primaryResidualsNewestFirst);
+
+        DriftState state = sampleCount == 0
+                ? DriftState.NORMAL
+                : classifyDriftState(sampleCount, maeRatio, streak[0], streak[1]);
+
+        Map<Integer, Double> contextRatios = new LinkedHashMap<>();
+        for (var e : contextResidualsByWindow.entrySet()) {
+            double m = mae(e.getValue());
+            contextRatios.put(e.getKey(),
+                    (historicalMae > 0 && Double.isFinite(m)) ? m / historicalMae : Double.NaN);
+        }
+
+        return new DriftAssessment(asOf, sampleCount, historicalMae, recentMae, maeRatio,
+                medianSignedResidual, streak[0], streak[1], contextRatios, state);
+    }
+
+    /**
+     * State machine over the primary-window metrics. Deliberately conservative
+     * per the doc's "avoid hardcoding overly aggressive thresholds initially":
+     * <ul>
+     *   <li>Fewer than {@link #DRIFT_MIN_SAMPLES} graded days: too little
+     *       evidence to claim a persistent pattern either way — at most
+     *       ANOMALOUS (magnitude only), never DRIFT/REGIME.</li>
+     *   <li>A same-direction streak of {@link #DRIFT_STREAK_THRESHOLD}+ days is
+     *       drift-worthy on its own (directional consistency is the signal,
+     *       independent of how big the ratio is yet).</li>
+     *   <li>Promotion to REGIME_CHANGE_SUSPECTED additionally requires both a
+     *       longer streak ({@link #REGIME_STREAK_THRESHOLD}) AND a bigger ratio
+     *       ({@link #REGIME_MAE_RATIO_THRESHOLD}) than plain drift — sustained
+     *       AND large, not just one or the other.</li>
+     *   <li>No qualifying streak but the recent MAE ratio alone clears
+     *       {@link #DRIFT_MAE_RATIO_THRESHOLD}: ANOMALOUS (big errors, no
+     *       evidence yet they're one-directional).</li>
+     * </ul>
+     */
+    static DriftState classifyDriftState(int sampleCount, double maeRatio, int streakLength, int streakSign) {
+        boolean magnitudeAnomalous = Double.isFinite(maeRatio) && maeRatio >= DRIFT_MAE_RATIO_THRESHOLD;
+
+        if (sampleCount < DRIFT_MIN_SAMPLES) {
+            return magnitudeAnomalous ? DriftState.ANOMALOUS : DriftState.NORMAL;
+        }
+
+        boolean directionalStreak = streakSign != 0 && streakLength >= DRIFT_STREAK_THRESHOLD;
+        if (directionalStreak) {
+            boolean regime = streakLength >= REGIME_STREAK_THRESHOLD && maeRatio >= REGIME_MAE_RATIO_THRESHOLD;
+            return regime ? DriftState.REGIME_CHANGE_SUSPECTED : DriftState.DRIFT_SUSPECTED;
+        }
+
+        return magnitudeAnomalous ? DriftState.ANOMALOUS : DriftState.NORMAL;
+    }
+
+    /** Mean absolute value of a residual list; NaN for empty. */
+    static double mae(List<Double> residuals) {
+        if (residuals.isEmpty()) return Double.NaN;
+        return residuals.stream().mapToDouble(Math::abs).average().orElse(Double.NaN);
+    }
+
+    /**
+     * Length and sign of the leading same-direction run in a newest-first
+     * residual list. Returns {@code {length, sign}} where sign is +1/-1, or
+     * {@code {0, 0}} if the list is empty or the newest residual is exactly 0.
+     */
+    static int[] computeStreak(List<Double> residualsNewestFirst) {
+        if (residualsNewestFirst.isEmpty()) return new int[]{0, 0};
+        int sign = (int) Math.signum(residualsNewestFirst.get(0));
+        if (sign == 0) return new int[]{0, 0};
+        int len = 0;
+        for (double r : residualsNewestFirst) {
+            if ((int) Math.signum(r) == sign) len++;
+            else break;
+        }
+        return new int[]{len, sign};
     }
 
     @SuppressWarnings("unchecked")
@@ -941,4 +1130,27 @@ public class ForecastService {
     public record AnomalyScore(
             double actual, double predicted, double residual, double absResidual,
             double robustScale, double z, AnomalyClass classification) {}
+
+    /**
+     * Persistent-anomaly / regime-change state (Phase 2). NORMAL and ANOMALOUS
+     * mirror the doc's "one weird day" case; DRIFT_SUSPECTED and
+     * REGIME_CHANGE_SUSPECTED mirror "this keeps happening" / "the model's
+     * assumptions may no longer be valid". Diagnostic only — never drives
+     * training or the retrain schedule.
+     */
+    public enum DriftState { NORMAL, ANOMALOUS, DRIFT_SUSPECTED, REGIME_CHANGE_SUSPECTED }
+
+    /**
+     * Result of a drift assessment as of {@code asOf}. {@code maeRatio} and
+     * {@code medianSignedResidual}/{@code streakLength}/{@code streakSign} are
+     * computed over the primary {@link #DRIFT_PRIMARY_WINDOW_DAYS}-day window;
+     * {@code contextMaeRatios} carries the doc's other suggested windows
+     * ({@link #DRIFT_CONTEXT_WINDOW_DAYS}) for a later dashboard — they do not
+     * influence {@code state}. {@code streakSign} is +1/-1 for a same-direction
+     * run, 0 if the newest residual is exactly zero or there's no data.
+     */
+    public record DriftAssessment(
+            LocalDate asOf, int sampleCount, double historicalMae, double recentMae, double maeRatio,
+            double medianSignedResidual, int streakLength, int streakSign,
+            Map<Integer, Double> contextMaeRatios, DriftState state) {}
 }
