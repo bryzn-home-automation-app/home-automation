@@ -37,6 +37,32 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.3.0", "stable", LocalDate.of(2026, 9, 12),
+                    "A forecast that reacts faster and looks better",
+                    "The electric usage forecast now updates within minutes of a new "
+                            + "reading instead of waiting for the next day, the shaded "
+                            + "confidence range is easier to see and no longer disappears "
+                            + "for yesterday, and a few screens got a visual tidy-up.",
+                    List.of(
+                            change("improved", "The forecast's actual-usage line and projection now "
+                                    + "update within minutes of a new electric reading arriving, "
+                                    + "instead of waiting for the overnight refresh."),
+                            change("improved", "The forecast is more resistant to a single unusual day "
+                                    + "(a huge spike or an oddly quiet one) throwing off future "
+                                    + "projections — one weird reading no longer skews the trend the "
+                                    + "way it used to."),
+                            change("improved", "The shaded confidence range now reacts faster to how "
+                                    + "accurate recent predictions have actually been, instead of "
+                                    + "barely moving over time."),
+                            change("fixed", "The confidence range is easier to see, and its color key "
+                                    + "is brighter and easier to read."),
+                            change("fixed", "Fixed a gap where yesterday's confidence range would "
+                                    + "briefly vanish from the chart before yesterday's real reading "
+                                    + "had arrived."),
+                            change("improved", "Section titles throughout the app are a bit larger and "
+                                    + "easier to read."),
+                            change("fixed", "The Water tab's bill amounts now show a $ sign at full "
+                                    + "size instead of a tiny one tacked on after the number."))),
             define("1.2.0", "stable", LocalDate.of(2026, 9, 6),
                     "Smarter forecasts, real schedules",
                     "The electric usage forecast got noticeably smarter this round, and the "
