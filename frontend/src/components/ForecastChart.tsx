@@ -424,7 +424,10 @@ function ForecastChart() {
                 tickLine={false}
                 unit=" kWh"
               />
-              <Tooltip contentStyle={TOOLTIP_CONTENT_STYLE} />
+              <Tooltip
+                contentStyle={TOOLTIP_CONTENT_STYLE}
+                formatter={(value: number) => [`${Math.round(value)} kWh`, 'Prediction Error']}
+              />
               <Line
                 type="monotone"
                 dataKey="error"
