@@ -842,7 +842,7 @@ export default function DebugDashboard() {
                       <td className="py-2 pr-3 text-right tabular-nums text-apptext">{d.actual.toFixed(1)}</td>
                       <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">{d.predicted.toFixed(1)}</td>
                       <td className={`py-2 pr-3 text-right tabular-nums ${d.residual > 0 ? 'text-amber-300' : d.residual < 0 ? 'text-sky-300' : 'text-apptext-soft'}`}>
-                        {d.residual > 0 ? '+' : ''}{d.residual.toFixed(1)}
+                        {d.residual > 0 ? '+' : ''}{Math.round(d.residual)}
                       </td>
                       <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">
                         {d.anomalyScore != null ? d.anomalyScore.toFixed(2) : '—'}
