@@ -234,8 +234,6 @@ export default memo(function WaterUsage() {
                       {bill.pdfPath ? (
                         <a
                           href={`/uploads/${bill.pdfPath}`}
-                          target="_blank"
-                          rel="noreferrer"
                           className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                         >
                           View Bill
