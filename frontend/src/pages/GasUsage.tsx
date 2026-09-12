@@ -8,8 +8,6 @@ import DeferredRender from '../components/DeferredRender';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { fetchBatchSummaries } from '../api/energy';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
-import WeatherContextCard from '../components/WeatherContextCard';
-import Weather24HourCard from '../components/Weather24HourCard';
 import CoservBillingHistory from '../components/CoservBillingHistory';
 
 export default memo(function GasUsage() {
@@ -36,6 +34,24 @@ export default memo(function GasUsage() {
     [realData]
   );
   const hasData = realData.length > 0;
+
+  // CoServ reports gas as monthly billing figures, not hourly readings, so
+  // there's no `source` label UsageChart/MonthlyComparison recognize as
+  // "hourly" — their default aggregation path filters every gas record out
+  // and silently renders an empty chart. Each gas record is already one
+  // reading for one day, so it's passed straight through instead.
+  const gasDailyPoints = useMemo(
+    () => chartData.map((d) => ({ date: d.timestamp.slice(0, 10), kWh: Number(d.usageKwh) })),
+    [chartData]
+  );
+  const gasMonthlyPoints = useMemo(() => {
+    const byMonth = new Map<string, number>();
+    for (const d of chartData) {
+      const key = new Date(d.timestamp).toLocaleDateString('en-US', { year: 'numeric', month: 'short' });
+      byMonth.set(key, (byMonth.get(key) ?? 0) + Number(d.usageKwh));
+    }
+    return Array.from(byMonth.entries()).map(([month, kWh]) => ({ month, kWh: Math.round(kWh * 100) / 100 }));
+  }, [chartData]);
 
   const periodDefinitions = useMemo(
     () => buildUsagePeriods(config.data?.dataStartDate),
@@ -126,21 +142,13 @@ export default memo(function GasUsage() {
         />
       </section>
 
-      {/* Weather Context */}
-      {periodDefinitions.length > 0 && (
-        <WeatherContextCard
-          startDate={periodDefinitions[0].start}
-          endDate={periodDefinitions[0].end}
-          showHDD
-        />
-      )}
-
       {/* Charts */}
       {hasData ? (
         <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
           <DeferredRender minHeight={360}>
             <UsageChart
               data={chartData}
+              dailyPoints={gasDailyPoints}
               loading={loading}
               title="Gas usage trend"
               emptyText="No gas usage data is available yet."
@@ -151,6 +159,7 @@ export default memo(function GasUsage() {
           <DeferredRender minHeight={360}>
             <MonthlyComparison
               data={realData}
+              monthlyPoints={gasMonthlyPoints}
               loading={loading}
               title="Monthly gas comparison"
               emptyText="More gas history is needed for month-over-month comparison."
@@ -171,14 +180,6 @@ export default memo(function GasUsage() {
             Data is pulled automatically during each sync.
           </p>
         </section>
-      )}
-
-      {/* 24-Hour Weather Detail */}
-      {periodDefinitions.length > 0 && (
-        <Weather24HourCard
-          startDate={periodDefinitions[0].start}
-          endDate={periodDefinitions[0].end}
-        />
       )}
 
       <UsageSummaryGrid

@@ -114,6 +114,14 @@ public class EnergyUsageService {
             double avg = ((Number) row.get("avg_kwh")).doubleValue();
             long count = ((Number) row.get("day_count")).longValue();
 
+            // hourly_electric_usage only ever holds electric rows, so a gas
+            // meter always matches zero rows here — that's a successful query
+            // with an empty result, not a SQL exception, so it falls through
+            // the catch block below unless we check for it explicitly.
+            if (count == 0) {
+                return getSummaryViaJpa(meterId, start, end);
+            }
+
             var highest = row.get("highest_ts") != null
                     ? new UsageRangeSummaryResponse.UsagePoint(
                         ((java.sql.Timestamp) row.get("highest_ts")).toLocalDateTime(),
