@@ -44,6 +44,26 @@ public class ForecastService {
     private static final double BAND_Z             = 1.28;  // ~80% prediction interval (normal)
     private static final double MAE_TO_STD         = 1.2533; // sqrt(pi/2): in-sample MAE -> std-equiv fallback
 
+    // ── Robust-statistics tuning ────────────────────────────────
+    // MAD (median absolute deviation) scaled by this constant is a consistent,
+    // outlier-resistant estimator of the standard deviation for normally
+    // distributed data. Used both for the robust regression's residual scale and
+    // the confidence-band residual scale (replacing the old squared-error RMS,
+    // which let a single extreme residual dominate).
+    private static final double MAD_TO_STD   = 1.4826;
+    // Huber tuning constant (residuals beyond HUBER_K robust-sigmas get their
+    // influence tapered as k/|u| instead of contributing full least-squares
+    // weight). 1.345 gives ~95% efficiency vs OLS under normal noise.
+    private static final double HUBER_K      = 1.345;
+    private static final int    IRLS_MAX_ITERS = 4;
+
+    // ── Anomaly-scoring thresholds (robust z of residual/robust-scale) ──
+    // Named (not inlined) so a later drift-detection phase can tune them without
+    // hunting through the classifier. |z| below ANOMALY normal; ANOMALY..SEVERE
+    // is unusual-but-plausible; above SEVERE is a hard outlier.
+    static final double ANOMALY_Z_THRESHOLD = 2.0;
+    static final double SEVERE_Z_THRESHOLD  = 3.5;
+
     @Value("${app.kwh-rate:0.12}")
     private double kwhRate;
 
@@ -110,7 +130,13 @@ public class ForecastService {
             return null;
         }
 
-        // Phase 1: CDD/HDD multiple regression via OLS
+        // Phase 1: CDD/HDD multiple regression, fit robustly (Huber IRLS) on the
+        // FULL history. A single extreme day (doc's example: expected 65, actual
+        // 140) no longer drags the intercept/CDD/HDD coefficients — it keeps full
+        // least-squares influence only while within HUBER_K robust-sigmas, then
+        // its leverage is tapered. The original actual values are untouched: the
+        // down-weighting lives only inside the fit, so every historical kwh stays
+        // queryable for diagnostics / anomaly scoring.
         double[] kwhArr = new double[data.size()];
         double[][] xArr = new double[data.size()][2];
         for (int i = 0; i < data.size(); i++) {
@@ -119,7 +145,7 @@ public class ForecastService {
             xArr[i][1] = data.get(i).hdd;
         }
 
-        double[] coeffs = olsRegression(kwhArr, xArr);
+        double[] coeffs = robustRegression(kwhArr, xArr);
         double intercept = coeffs[0], cddCoeff = coeffs[1], hddCoeff = coeffs[2];
 
         // Guard: singular matrix produces NaN/Inf — fall back to mean-based model
@@ -168,10 +194,14 @@ public class ForecastService {
                 dowRatios.computeIfAbsent(dp.dow, k -> new ArrayList<>()).add(dp.kwh / predicted);
             }
         }
+        // Robust DOW factor: MEDIAN of the actual/predicted ratios per weekday,
+        // not the arithmetic mean. Per-weekday samples are tiny (~7 with 49 total
+        // points), so one bizarre Monday would otherwise permanently skew the
+        // Monday multiplier; the median shrugs it off.
         Map<String, Double> dowAdj = new HashMap<>();
         for (var e : dowRatios.entrySet()) {
-            double avg = e.getValue().stream().mapToDouble(d -> d).average().orElse(1.0);
-            dowAdj.put(e.getKey().name(), round4(avg));
+            double med = median(e.getValue());
+            dowAdj.put(e.getKey().name(), round4(Double.isNaN(med) ? 1.0 : med));
         }
 
         // Phase 2: Hourly load shape profiles
@@ -317,7 +347,7 @@ public class ForecastService {
                 long age = Math.max(0, ChronoUnit.DAYS.between(s.getTargetDate(), today));
                 residualAge.add(new double[]{resid, age});
             }
-            double sigma = recencyWeightedStd(residualAge, BAND_HALFLIFE_DAYS);
+            double sigma = recencyWeightedRobustSigma(residualAge, BAND_HALFLIFE_DAYS);
             if (Double.isFinite(sigma) && sigma > 0) return sigma;
         }
 
@@ -329,20 +359,67 @@ public class ForecastService {
     }
 
     /**
-     * Exponentially recency-weighted RMS of residuals. Each element is
-     * {@code [residual, ageDays]}; weight is {@code 0.5^(ageDays/halfLifeDays)}.
-     * With uniform ages this reduces to plain RMS. OLS residuals sum to ~0, so
-     * RMS about zero is the appropriate spread estimate. Pure/stateless for unit
-     * testing.
+     * Exponentially recency-weighted <em>robust</em> residual scale (a
+     * std-equivalent). Each element is {@code [residual, ageDays]}; weight is
+     * {@code 0.5^(ageDays/halfLifeDays)}.
+     *
+     * <p>This replaces the former squared-error RMS. Squaring let a single
+     * extreme residual dominate the aggregate, so one fluke day would keep the
+     * band inflated for most of a week. Instead we take the recency-weighted
+     * MEDIAN of the absolute residuals (spread about zero, matching the OLS
+     * assumption that residuals sum to ~0) and scale it by {@link #MAD_TO_STD}
+     * to be std-equivalent. A lone spike sits at the tail of the sorted
+     * magnitudes and never becomes the weighted median, so it barely moves the
+     * estimate — yet a persistently elevated run shifts the whole distribution
+     * and the median rises with it. Pure/stateless for unit testing.
      */
-    static double recencyWeightedStd(List<double[]> residualAge, double halfLifeDays) {
-        double wSum = 0, wErr2 = 0;
+    static double recencyWeightedRobustSigma(List<double[]> residualAge, double halfLifeDays) {
+        if (residualAge.isEmpty()) return Double.NaN;
+        List<double[]> absWeighted = new ArrayList<>(residualAge.size());
         for (double[] ra : residualAge) {
             double w = Math.pow(0.5, ra[1] / halfLifeDays);
-            wSum += w;
-            wErr2 += w * ra[0] * ra[0];
+            absWeighted.add(new double[]{Math.abs(ra[0]), w});
         }
-        return wSum > 0 ? Math.sqrt(wErr2 / wSum) : Double.NaN;
+        double wMedian = weightedMedian(absWeighted);
+        return Double.isNaN(wMedian) ? Double.NaN : MAD_TO_STD * wMedian;
+    }
+
+    // ── Anomaly scoring ─────────────────────────────────────────
+
+    /**
+     * Score a single graded observation (actual vs. predicted) against the
+     * model's current robust residual scale. Convenience entry point that pulls
+     * the scale from {@link #computeIntervalSigma} — the same recency-weighted
+     * robust spread that drives the confidence band — so "how wide is the band"
+     * and "how anomalous is this day" stay on one consistent yardstick.
+     *
+     * <p>Not persisted and not exposed via any endpoint yet — that's later
+     * dashboard/drift work. It is a real, callable, unit-testable method so a
+     * follow-up phase can query it (e.g. to feed drift-state detection) rather
+     * than re-deriving the scale.
+     */
+    public AnomalyScore scoreObservation(ForecastModel model, LocalDate asOf, double actual, double predicted) {
+        double scale = computeIntervalSigma(model, asOf);
+        return scoreAnomaly(actual, predicted, scale);
+    }
+
+    /**
+     * Robust z-score of a residual and its classification. {@code robustScale}
+     * is the std-equivalent robust spread (e.g. from
+     * {@link #recencyWeightedRobustSigma}); a non-positive/non-finite scale means
+     * "no usable spread yet" and yields a {@code z} of 0 / NORMAL rather than a
+     * divide-by-zero. Sign convention: residual = actual - predicted (positive =
+     * consumed more than forecast). Pure/stateless for unit testing.
+     */
+    static AnomalyScore scoreAnomaly(double actual, double predicted, double robustScale) {
+        double residual = actual - predicted;
+        double z = (Double.isFinite(robustScale) && robustScale > 0) ? residual / robustScale : 0.0;
+        double absZ = Math.abs(z);
+        AnomalyClass cls;
+        if (absZ >= SEVERE_Z_THRESHOLD)       cls = AnomalyClass.SEVERE;
+        else if (absZ >= ANOMALY_Z_THRESHOLD) cls = AnomalyClass.ANOMALOUS;
+        else                                   cls = AnomalyClass.NORMAL;
+        return new AnomalyScore(actual, predicted, residual, Math.abs(residual), robustScale, z, cls);
     }
 
     @SuppressWarnings("unchecked")
@@ -638,9 +715,65 @@ public class ForecastService {
         }
     }
 
-    // ── OLS multiple regression ─────────────────────────────
+    // ── Robust / OLS multiple regression ────────────────────
 
-    private static double[] olsRegression(double[] y, double[][] x) {
+    /**
+     * Huber-loss robust regression via IRLS (iteratively reweighted least
+     * squares). Seeds from plain OLS, then repeats: compute residuals → robust
+     * residual scale via MAD → Huber-weight each point (full weight within
+     * {@link #HUBER_K} robust-sigmas, tapered as k/|u| beyond) → refit as a
+     * weighted OLS. Converges in a few passes; capped at {@link #IRLS_MAX_ITERS}.
+     * Falls back to the OLS seed if the residual scale collapses (near-perfect
+     * fit) or a weighted refit goes non-finite. Does not mutate {@code y}.
+     */
+    static double[] robustRegression(double[] y, double[][] x) {
+        double[] coeffs = olsRegression(y, x);
+        int n = y.length;
+        for (int j = 0; j < coeffs.length; j++) {
+            if (!Double.isFinite(coeffs[j])) return coeffs; // OLS already degenerate; guard handles it upstream
+        }
+
+        for (int iter = 0; iter < IRLS_MAX_ITERS; iter++) {
+            double[] resid = new double[n];
+            for (int i = 0; i < n; i++) {
+                double pred = coeffs[0];
+                for (int j = 0; j < x[i].length; j++) pred += coeffs[j + 1] * x[i][j];
+                resid[i] = y[i] - pred;
+            }
+
+            double scale = madScale(resid);
+            if (!(scale > 1e-9)) break; // residuals essentially zero -> nothing to down-weight
+
+            double[] w = new double[n];
+            for (int i = 0; i < n; i++) {
+                double u = Math.abs(resid[i]) / scale;
+                w[i] = u <= HUBER_K ? 1.0 : HUBER_K / u;
+            }
+
+            double[] next = weightedOlsRegression(y, x, w);
+            boolean finite = true;
+            double delta = 0;
+            for (int j = 0; j < next.length; j++) {
+                if (!Double.isFinite(next[j])) { finite = false; break; }
+                delta += Math.abs(next[j] - coeffs[j]);
+            }
+            if (!finite) break; // keep last good estimate
+            coeffs = next;
+            if (delta < 1e-6) break; // converged
+        }
+        return coeffs;
+    }
+
+    static double[] olsRegression(double[] y, double[][] x) {
+        return weightedOlsRegression(y, x, null); // uniform weights
+    }
+
+    /**
+     * Weighted OLS: solves (X'WX) b = X'Wy with a diagonal weight matrix W.
+     * {@code weights == null} means all-ones (plain OLS). Intercept column is
+     * prepended internally.
+     */
+    private static double[] weightedOlsRegression(double[] y, double[][] x, double[] weights) {
         int n = y.length;
         int p = x[0].length;
         // X with intercept column prepended
@@ -650,21 +783,27 @@ public class ForecastService {
             System.arraycopy(x[i], 0, xm[i], 1, p);
         }
 
-        // X'X
+        // X'WX
         double[][] xtx = new double[p + 1][p + 1];
         for (int i = 0; i < p + 1; i++) {
             for (int j = 0; j < p + 1; j++) {
                 double sum = 0;
-                for (int k = 0; k < n; k++) sum += xm[k][i] * xm[k][j];
+                for (int k = 0; k < n; k++) {
+                    double wk = weights == null ? 1.0 : weights[k];
+                    sum += wk * xm[k][i] * xm[k][j];
+                }
                 xtx[i][j] = sum;
             }
         }
 
-        // X'y
+        // X'Wy
         double[] xty = new double[p + 1];
         for (int i = 0; i < p + 1; i++) {
             double sum = 0;
-            for (int k = 0; k < n; k++) sum += xm[k][i] * y[k];
+            for (int k = 0; k < n; k++) {
+                double wk = weights == null ? 1.0 : weights[k];
+                sum += wk * xm[k][i] * y[k];
+            }
             xty[i] = sum;
         }
 
@@ -718,6 +857,59 @@ public class ForecastService {
         return BigDecimal.valueOf(v).setScale(4, RoundingMode.HALF_UP).doubleValue();
     }
 
+    // ── Robust-stat helpers ─────────────────────────────────
+
+    /** Plain median of a list; NaN for an empty list. Does not mutate the input. */
+    static double median(List<Double> values) {
+        if (values.isEmpty()) return Double.NaN;
+        double[] a = values.stream().mapToDouble(Double::doubleValue).toArray();
+        return median(a);
+    }
+
+    /** Plain median of an array; NaN for empty. Sorts a defensive copy. */
+    static double median(double[] values) {
+        if (values.length == 0) return Double.NaN;
+        double[] a = values.clone();
+        Arrays.sort(a);
+        int n = a.length;
+        return (n % 2 == 1) ? a[n / 2] : (a[n / 2 - 1] + a[n / 2]) / 2.0;
+    }
+
+    /**
+     * Robust scale of residuals: {@code MAD_TO_STD * median(|r_i - median(r)|)}.
+     * Std-equivalent under normal noise but resistant to a handful of outliers.
+     */
+    static double madScale(double[] residuals) {
+        if (residuals.length == 0) return Double.NaN;
+        double med = median(residuals);
+        double[] absDev = new double[residuals.length];
+        for (int i = 0; i < residuals.length; i++) absDev[i] = Math.abs(residuals[i] - med);
+        return MAD_TO_STD * median(absDev);
+    }
+
+    /**
+     * Weighted median of {@code [value, weight]} pairs: the value at which the
+     * cumulative weight (over values sorted ascending) first reaches half of the
+     * total weight. With uniform weights this reduces to the plain median.
+     * Non-positive weights are ignored; NaN if no positive weight remains.
+     */
+    static double weightedMedian(List<double[]> valueWeight) {
+        List<double[]> pts = new ArrayList<>();
+        double total = 0;
+        for (double[] vw : valueWeight) {
+            if (vw[1] > 0) { pts.add(vw); total += vw[1]; }
+        }
+        if (pts.isEmpty()) return Double.NaN;
+        pts.sort(Comparator.comparingDouble(a -> a[0]));
+        double half = total / 2.0;
+        double cum = 0;
+        for (double[] p : pts) {
+            cum += p[1];
+            if (cum >= half) return p[0];
+        }
+        return pts.get(pts.size() - 1)[0]; // fallthrough (floating-point guard)
+    }
+
     // ── Value types ─────────────────────────────────────────
 
     record DailyDataPoint(LocalDate date, double kwh, double avgTemp, double cdd, double hdd, DayOfWeek dow) {}
@@ -737,4 +929,16 @@ public class ForecastService {
             int trailingDays, List<AccuracyPoint> points) {}
 
     public record AccuracyPoint(String date, double predicted, double actual, double error) {}
+
+    /** Robust anomaly classification bands for a graded observation. */
+    public enum AnomalyClass { NORMAL, ANOMALOUS, SEVERE }
+
+    /**
+     * Result of robust anomaly scoring for one graded day. {@code z} is
+     * {@code (actual - predicted) / robustScale}; classification bands are
+     * {@link #ANOMALY_Z_THRESHOLD} / {@link #SEVERE_Z_THRESHOLD}.
+     */
+    public record AnomalyScore(
+            double actual, double predicted, double residual, double absResidual,
+            double robustScale, double z, AnomalyClass classification) {}
 }
