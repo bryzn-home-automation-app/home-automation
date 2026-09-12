@@ -6,6 +6,7 @@ import com.homeplatform.service.ForecastService.DriftAssessment;
 import com.homeplatform.service.ForecastService.DriftState;
 import com.homeplatform.service.ForecastService.HourlyAnomaly;
 import com.homeplatform.service.ForecastService.HourlyAnomalyClass;
+import com.homeplatform.service.ForecastService.IntradayForecast;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -473,5 +474,88 @@ class ForecastServiceTest {
         HourlyAnomaly a = ForecastService.classifyHourlyAnomaly(predicted, predicted + 3, actual, flatShape());
         assertEquals(HourlyAnomalyClass.NORMAL, a.classification());
         assertEquals(0, a.concentrationHours());
+    }
+
+    // ── Intraday end-of-day forecast (doc §7) ──────────────────────────────
+
+    @Test
+    @DisplayName("hoursElapsed=0: no actual data yet -> unchanged day-ahead forecast, full sigma")
+    void intradayNoDataYet() {
+        IntradayForecast f = ForecastService.computeIntradayForecast(
+                65.0, flatShape(), new double[0], 0, 10.0);
+
+        assertEquals(65.0, f.updatedEodKwh(), 0.01);
+        assertEquals(0.0, f.actualSoFar(), 1e-9);
+        assertEquals(65.0, f.expectedRemaining(), 0.01);
+        assertEquals(1.0, f.paceRatio(), 1e-9, "no expected-so-far to compare against -> no pace signal yet");
+        assertEquals(10.0, f.updatedSigma(), 1e-9, "0 hours elapsed -> sqrt(24/24)=1, full day-ahead sigma");
+        assertEquals(0, f.hoursElapsed());
+    }
+
+    @Test
+    @DisplayName("hoursElapsed=24: day complete -> updatedEodKwh equals actual total exactly, sigma ~0")
+    void intradayDayComplete() {
+        double[] actual = new double[24];
+        java.util.Arrays.fill(actual, 70.0 / 24);
+
+        IntradayForecast f = ForecastService.computeIntradayForecast(
+                65.0, flatShape(), actual, 24, 10.0);
+
+        assertEquals(70.0, f.updatedEodKwh(), 0.01);
+        assertEquals(70.0, f.actualSoFar(), 0.01);
+        assertEquals(0.0, f.expectedRemaining(), 1e-9);
+        assertEquals(0.0, f.updatedSigma(), 1e-9, "day is over -> uncertainty collapses to 0");
+        assertEquals(24, f.hoursElapsed());
+    }
+
+    @Test
+    @DisplayName("running hot mid-day: actual 40% above expected-so-far nudges EOD up, but shrinkage stops short of the naive full-ratio scale")
+    void intradayRunningHotIsShrunk() {
+        // Day-ahead 65 kWh, flat shape -> 8 elapsed hours "expected" 65*8/24 = 21.667 kWh.
+        // Actual so far is 40% hotter: 30.333 kWh.
+        double dayAhead = 65.0;
+        double expectedSoFar = dayAhead * 8 / 24; // 21.6667
+        double actualSoFar = expectedSoFar * 1.4; // 30.3333 (40% hot)
+        double[] actual = new double[8];
+        java.util.Arrays.fill(actual, actualSoFar / 8);
+
+        IntradayForecast f = ForecastService.computeIntradayForecast(
+                dayAhead, flatShape(), actual, 8, 12.0);
+
+        // Reference points: no adjustment at all vs. naively applying the full 1.4x pace to the whole remaining day.
+        double expectedRemainingNoAdjustment = dayAhead * 16 / 24;      // 43.3333
+        double expectedRemainingFullPace = expectedRemainingNoAdjustment * 1.4; // 60.6667
+        double updatedEodNoAdjustment = actualSoFar + expectedRemainingNoAdjustment; // 73.6667
+        double updatedEodFullPace = actualSoFar + expectedRemainingFullPace;         // 91.0
+
+        assertEquals(1.4, f.paceRatio(), 1e-4, "raw pace ratio should reflect the full 40% hot signal");
+        assertTrue(f.updatedEodKwh() > updatedEodNoAdjustment,
+                "hot pace should move the EOD estimate up from the frozen day-ahead total");
+        assertTrue(f.updatedEodKwh() < updatedEodFullPace,
+                "shrinkage (blend=8/24=1/3) should stop short of the naive fully-pace-adjusted total");
+        assertEquals(79.44, f.updatedEodKwh(), 0.01,
+                "expected: 30.333 actual + (43.333 * (1 + 1/3*0.4)) remaining = 79.44");
+
+        double expectedSigma = 12.0 * Math.sqrt(16.0 / 24.0); // ~9.798
+        assertEquals(expectedSigma, f.updatedSigma(), 0.01, "sigma should shrink toward the 16/24 remaining-hours fraction");
+        assertTrue(f.updatedSigma() < 12.0, "uncertainty should have narrowed from the full day-ahead sigma");
+    }
+
+    @Test
+    @DisplayName("near-zero expected-so-far falls back to paceRatio=1.0 instead of NaN/Inf")
+    void intradayDivideByZeroGuard() {
+        // Custom shape with a near-zero fraction in hour 0 (e.g. 3am, negligible expected usage).
+        java.util.List<Double> shape = new java.util.ArrayList<>(flatShape());
+        shape.set(0, 0.0001);
+        double dayAhead = 24.0;
+        // expectedSoFar for 1 elapsed hour = 24 * (0.0001/sum) ~ well under the 0.25 kWh floor.
+        double[] actual = {0.5}; // some nonzero actual despite ~0 expectation
+
+        IntradayForecast f = ForecastService.computeIntradayForecast(
+                dayAhead, shape, actual, 1, 8.0);
+
+        assertEquals(1.0, f.paceRatio(), 1e-9, "expectedSoFar too small to divide by meaningfully -> fall back to 1.0");
+        assertTrue(Double.isFinite(f.updatedEodKwh()), "must not produce NaN/Infinity");
+        assertTrue(Double.isFinite(f.updatedSigma()), "must not produce NaN/Infinity");
     }
 }

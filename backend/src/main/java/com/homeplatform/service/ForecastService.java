@@ -669,6 +669,107 @@ public class ForecastService {
         return hours;
     }
 
+    // ── Intraday end-of-day forecast (doc §7) ────────────────────
+    // Tuning for computeIntradayForecast(). Kept separate from the band/anomaly
+    // constants above since this is a different statistical job (live intraday
+    // re-estimate, not day-ahead calibration).
+    private static final double INTRADAY_MIN_EXPECTED_KWH = 0.25; // below this, pace ratio is unreliable -> treat as 1.0
+
+    /**
+     * Live, mid-day, continuously-updatable end-of-day forecast (doc §7) —
+     * distinct from the day-ahead forecast produced by {@link #generateHourlyForecast}.
+     * Pure and stateless: no DB access, no model mutation, safe to call on every
+     * hourly sync.
+     *
+     * <p>Core mechanic: {@code updatedEod = actualSoFar + expectedRemaining}, but
+     * naively freezing the remaining hours at their day-ahead prediction
+     * under-reacts when the day is actually running hot or cold. Instead:
+     * <ol>
+     *   <li>{@code expectedSoFar} = sum of the day-ahead per-hour predictions
+     *       ({@code dayAheadForecastKwh * shape[h]}) for the elapsed hours.</li>
+     *   <li>{@code paceRatio = actualSoFar / expectedSoFar} — how hot (&gt;1) or
+     *       cold (&lt;1) the day is running vs. the day-ahead shape. Guarded: if
+     *       {@code expectedSoFar} is below {@link #INTRADAY_MIN_EXPECTED_KWH}
+     *       (e.g. the first hour or two overnight, where expected usage is
+     *       ~0 and the ratio is division-by-near-zero noise), {@code paceRatio}
+     *       falls back to {@code 1.0} (no information yet).</li>
+     *   <li><b>Shrinkage</b>: the remaining hours are NOT scaled by the raw
+     *       {@code paceRatio}. Early in the day, 1-2 known hours are a noisy
+     *       sample of the whole day (morning routine, weather blip, etc.) and
+     *       shouldn't swing the whole EOD estimate. We blend the ratio toward
+     *       {@code 1.0} (no adjustment) with weight {@code hoursElapsed / 24} —
+     *       a simple, monotonically increasing "fraction of the day observed"
+     *       confidence proxy: at hour 1 the blend is ~4% (barely nudged off the
+     *       day-ahead prediction), at hour 12 it's 50% pace-adjusted, and by
+     *       hour 20+ it's 83-100% pace-adjusted, matching the doc's own example
+     *       of the EOD estimate moving gradually (65 -&gt; 68 -&gt; 72 -&gt; 70) rather
+     *       than swinging fully on the first couple of hours. Formally:
+     *       {@code adjustedPace = 1 + (hoursElapsed/24) * (paceRatio - 1)}.</li>
+     *   <li>Each remaining hour's day-ahead prediction is scaled by
+     *       {@code adjustedPace} and summed into {@code expectedRemaining}.</li>
+     * </ol>
+     *
+     * <p><b>Uncertainty</b>: {@code dayAheadSigma} is treated as the std-dev of
+     * the WHOLE day's total (from {@link #computeIntervalSigma}). This is a
+     * simplifying assumption, stated plainly rather than dressed up as more
+     * rigorous than it is: if each remaining hour's deviation from its own
+     * expectation is roughly independent and comparably sized, the variance of
+     * the sum over the remaining hours is proportional to the count of
+     * remaining hours, so the remaining-hours std scales with
+     * {@code sqrt(hoursRemaining / 24)}. At {@code hoursElapsed == 0} this is
+     * {@code sqrt(24/24) = 1} (full day-ahead uncertainty); at
+     * {@code hoursElapsed == 24} it is {@code sqrt(0/24) = 0} (the day is over,
+     * the total is now a known fact, not an estimate). A non-positive/absent
+     * {@code dayAheadSigma} (e.g. {@code computeIntervalSigma}'s cold-start
+     * sentinel {@code -1}) is passed through unscaled rather than manufacturing
+     * a fake number.
+     *
+     * @param dayAheadForecastKwh the original day-ahead total prediction for the day
+     * @param expectedShape the 24-fraction normalized hourly shape (same input as
+     *                       {@link #generateHourlyForecast}); flat 1/24 substituted if absent/invalid
+     * @param actualHourlySoFar actual kWh for hours {@code [0, hoursElapsed)}; may be shorter/null, missing hours read as 0
+     * @param hoursElapsed how many hours of the day have completed (clamped to [0, 24])
+     * @param dayAheadSigma the day-ahead confidence-band sigma (kWh) for the whole day, from {@link #computeIntervalSigma}
+     */
+    public static IntradayForecast computeIntradayForecast(
+            double dayAheadForecastKwh, List<Double> expectedShape, double[] actualHourlySoFar,
+            int hoursElapsed, double dayAheadSigma) {
+
+        double[] shape = normalizedShapeOrFlat(expectedShape);
+        int elapsed = Math.max(0, Math.min(24, hoursElapsed));
+
+        double expectedSoFar = 0;
+        for (int h = 0; h < elapsed; h++) expectedSoFar += dayAheadForecastKwh * shape[h];
+
+        double actualSoFar = 0;
+        if (actualHourlySoFar != null) {
+            for (int h = 0; h < elapsed && h < actualHourlySoFar.length; h++) {
+                actualSoFar += actualHourlySoFar[h];
+            }
+        }
+
+        double paceRatio = (expectedSoFar > INTRADAY_MIN_EXPECTED_KWH) ? (actualSoFar / expectedSoFar) : 1.0;
+
+        double blend = elapsed / 24.0;
+        double adjustedPace = 1.0 + blend * (paceRatio - 1.0);
+
+        double expectedRemaining = 0;
+        for (int h = elapsed; h < 24; h++) {
+            expectedRemaining += dayAheadForecastKwh * shape[h] * adjustedPace;
+        }
+
+        double updatedEodKwh = actualSoFar + expectedRemaining;
+
+        int hoursRemaining = 24 - elapsed;
+        double updatedSigma = (Double.isFinite(dayAheadSigma) && dayAheadSigma > 0)
+                ? dayAheadSigma * Math.sqrt(hoursRemaining / 24.0)
+                : dayAheadSigma;
+
+        return new IntradayForecast(
+                round2(updatedEodKwh), round2(actualSoFar), round2(expectedRemaining),
+                round4(paceRatio), round4(updatedSigma), elapsed);
+    }
+
     /**
      * Classify the SHAPE of a daily anomaly from its hourly breakdown (doc §8):
      * why was the daily forecast wrong — a one-off spike, a whole-day baseline
@@ -1268,6 +1369,19 @@ public class ForecastService {
             Double cdd, Double hdd, double confidencePct) {}
 
     public record HourlyForecast(int hour, double predictedKwh, double predictedCost) {}
+
+    /**
+     * Result of {@link #computeIntradayForecast} (doc §7). {@code updatedEodKwh}
+     * is {@code actualSoFar + expectedRemaining} with remaining hours
+     * pace-adjusted and shrunk toward the day-ahead prediction; {@code paceRatio}
+     * is the raw {@code actualSoFar/expectedSoFar} (1.0 if {@code expectedSoFar}
+     * was too small to divide by meaningfully); {@code updatedSigma} is the
+     * day-ahead sigma scaled by {@code sqrt(hoursRemaining/24)}. Diagnostic/
+     * computational only — not persisted, not wired into any scheduler.
+     */
+    public record IntradayForecast(
+            double updatedEodKwh, double actualSoFar, double expectedRemaining,
+            double paceRatio, double updatedSigma, int hoursElapsed) {}
 
     /** Shape of a daily anomaly explained by its hourly breakdown (doc §8). */
     public enum HourlyAnomalyClass {
