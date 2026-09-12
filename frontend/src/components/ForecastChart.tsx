@@ -186,7 +186,23 @@ function ForecastChart() {
       });
     }
 
-    return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+    const sorted = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
+
+    // Anchor the band to the last known actual: without this, the band's first
+    // point jumps straight to its full width, leaving a visible seam between the
+    // actual line and the start of the band instead of the two meeting. A
+    // zero-width point at the last actual gives the Area a starting vertex to
+    // flare out from, connecting the two with no gap.
+    let lastActualIdx = -1;
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].actual != null) lastActualIdx = i;
+    }
+    if (lastActualIdx >= 0 && sorted[lastActualIdx].confidenceBand == null) {
+      const anchor = sorted[lastActualIdx].actual as number;
+      sorted[lastActualIdx] = { ...sorted[lastActualIdx], confidenceBand: [anchor, anchor] };
+    }
+
+    return sorted;
   }, [forecast]);
 
   const predictedColor = series.usage;
