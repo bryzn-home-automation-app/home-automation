@@ -33,7 +33,14 @@ const SOURCE = 'CoServ SmartHub PDF';
 const SOURCE_PROVIDER = 'coserv-smarthub-bill';
 const PROCESSING_VERSION = '1.0';
 const PROVIDER_NAME = 'CoServ';
-const UPLOADS_BILLS_DIR = path.join(__dirname, '..', 'uploads', 'bills');
+// This script runs inside the backend container (see CoservBillSyncScheduler's
+// ProcessBuilder), where /scripts and the uploads volume are two independent
+// bind mounts — NOT siblings on disk. So the uploads dir must NOT be derived
+// from this script's own __dirname (that would resolve to /uploads, which
+// doesn't exist); it has to match the backend's actual mount point, the same
+// one StaticResourceConfig serves from (uploads_data:/app/uploads in
+// docker-compose.yml).
+const UPLOADS_BILLS_DIR = '/app/uploads/bills';
 
 // ─── Args ───────────────────────────────────────────────────────
 function parseArgs(argv) {
