@@ -318,7 +318,7 @@ function ForecastChart() {
             Predicted
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-3 w-5 rounded" style={{ backgroundColor: bandColor }} />
+            <span className="inline-block h-3 w-5 rounded border" style={{ backgroundColor: series.temp, borderColor: series.temp }} />
             Confidence band
           </span>
         </div>
