@@ -52,7 +52,7 @@ function periodLabel(bill: WaterBill) {
 function EmptyChart({ title, emptyText }: { title: string; emptyText: string }) {
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-      <h3 className="mb-4 text-lg font-semibold text-apptext">{title}</h3>
+      <h3 className="mb-4 text-xl font-semibold text-apptext">{title}</h3>
       <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
         {emptyText}
       </div>
@@ -110,8 +110,8 @@ export default memo(function WaterUsage() {
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4">
         <StatTile
           label="Latest Bill"
-          value={latestBill ? latestBill.totalDue.toFixed(2) : '—'}
-          unit="$"
+          value={latestBill ? `$${latestBill.totalDue.toFixed(2)}` : '—'}
+          unit=""
           loading={loading}
           icon={Icons.Calendar}
         />
@@ -124,8 +124,8 @@ export default memo(function WaterUsage() {
         />
         <StatTile
           label="Avg Monthly Bill"
-          value={hasData ? avgMonthlyBill.toFixed(2) : '—'}
-          unit="$"
+          value={hasData ? `$${avgMonthlyBill.toFixed(2)}` : '—'}
+          unit=""
           loading={loading}
           icon={Icons.Calendar}
         />
@@ -140,7 +140,7 @@ export default memo(function WaterUsage() {
             />
           ) : (
             <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-              <h3 className="mb-4 text-lg font-semibold text-apptext">Usage by billing period</h3>
+              <h3 className="mb-4 text-xl font-semibold text-apptext">Usage by billing period</h3>
               <ResponsiveContainer width="100%" height={280} debounce={80}>
                 <BarChart data={usageChartData} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
@@ -165,7 +165,7 @@ export default memo(function WaterUsage() {
             />
           ) : (
             <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-              <h3 className="mb-4 text-lg font-semibold text-apptext">Charges breakdown</h3>
+              <h3 className="mb-4 text-xl font-semibold text-apptext">Charges breakdown</h3>
               <ResponsiveContainer width="100%" height={280} debounce={80}>
                 <BarChart data={chargesChartData} margin={CHART_MARGIN}>
                   <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
@@ -188,7 +188,7 @@ export default memo(function WaterUsage() {
       </section>
 
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <h3 className="mb-2 text-lg font-semibold text-apptext">
+        <h3 className="mb-2 text-xl font-semibold text-apptext">
           Billing History
         </h3>
         {!hasData && !loading && (
