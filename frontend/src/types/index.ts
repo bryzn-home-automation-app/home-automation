@@ -78,6 +78,7 @@ export interface WaterBill {
   stormwaterCharge?: number;
   achDiscount?: number;
   totalDue: number;
+  pdfPath?: string;
   source: string;
   sourceProvider: string;
   ingestionBatchId: string;

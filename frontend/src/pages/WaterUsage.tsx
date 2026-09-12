@@ -211,7 +211,8 @@ export default memo(function WaterUsage() {
                   <th className="py-2 pr-3 font-medium">Stormwater</th>
                   <th className="py-2 pr-3 font-medium">Discount</th>
                   <th className="py-2 pr-3 font-medium">Total Due</th>
-                  <th className="py-2 font-medium">Due Date</th>
+                  <th className="py-2 pr-3 font-medium">Due Date</th>
+                  <th className="py-2 font-medium">Bill</th>
                 </tr>
               </thead>
               <tbody>
@@ -228,7 +229,21 @@ export default memo(function WaterUsage() {
                     <td className="py-2 pr-3">{money(bill.stormwaterCharge)}</td>
                     <td className="py-2 pr-3">{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</td>
                     <td className="py-2 pr-3 font-semibold">{money(bill.totalDue)}</td>
-                    <td className="py-2 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
+                    <td className="py-2 pr-3 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
+                    <td className="py-2">
+                      {bill.pdfPath ? (
+                        <a
+                          href={`/uploads/${bill.pdfPath}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
+                        >
+                          View Bill
+                        </a>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

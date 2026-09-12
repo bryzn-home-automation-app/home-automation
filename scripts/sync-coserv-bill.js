@@ -23,24 +23,16 @@ const { chromium } = require('playwright');
 const { Client } = require('pg');
 const pdf = require('pdf-parse');
 const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
 const { loadSecrets, loginToSmartHub, ACCOUNT_NUMBER } = require('./sync');
 const { parseCoservBillText } = require('./coserv-bill-parser');
+const { saveBillPdf } = require('./bill-storage');
 
 const BILLING_HISTORY_HASH = '#/billingHistory';
 const SOURCE = 'CoServ SmartHub PDF';
 const SOURCE_PROVIDER = 'coserv-smarthub-bill';
 const PROCESSING_VERSION = '1.0';
 const PROVIDER_NAME = 'CoServ';
-// This script runs inside the backend container (see CoservBillSyncScheduler's
-// ProcessBuilder), where /scripts and the uploads volume are two independent
-// bind mounts — NOT siblings on disk. So the uploads dir must NOT be derived
-// from this script's own __dirname (that would resolve to /uploads, which
-// doesn't exist); it has to match the backend's actual mount point, the same
-// one StaticResourceConfig serves from (uploads_data:/app/uploads in
-// docker-compose.yml).
-const UPLOADS_BILLS_DIR = '/app/uploads/bills';
 
 // ─── Args ───────────────────────────────────────────────────────
 function parseArgs(argv) {
@@ -78,18 +70,6 @@ async function fetchBillPdfBuffers(secrets) {
     await browser.close();
   }
   return buffers;
-}
-
-// ─── PDF save (server-generated filename, never from page content) ────
-function saveBillPdf(buffer, accountNumber, billingPeriodEnd) {
-  fs.mkdirSync(UPLOADS_BILLS_DIR, { recursive: true });
-  const filename = `${accountNumber}_${billingPeriodEnd}.pdf`;
-  const target = path.join(UPLOADS_BILLS_DIR, filename);
-  if (!target.startsWith(UPLOADS_BILLS_DIR)) {
-    throw new Error('Refusing to write outside uploads/bills/');
-  }
-  fs.writeFileSync(target, buffer);
-  return `bills/${filename}`; // relative path stored in DB, served at /uploads/bills/<filename>
 }
 
 // ─── DB helpers ─────────────────────────────────────────────────
@@ -234,7 +214,6 @@ if (require.main === module) {
 
 module.exports = {
   parseArgs,
-  saveBillPdf,
   getOrCreateCoservBillAccount,
   upsertCoservBill,
 };

@@ -74,6 +74,10 @@ public class WaterBill {
     @Column(name = "total_due", nullable = false, precision = 10, scale = 2)
     private BigDecimal totalDue;
 
+    /** Relative path under the uploads static handler, e.g. "bills/060-0003116-003_2026-08-19.pdf". */
+    @Column(name = "pdf_path", length = 500)
+    private String pdfPath;
+
     // --- Audit / traceability metadata ---
 
     @NotBlank

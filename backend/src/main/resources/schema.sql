@@ -367,6 +367,7 @@ CREATE TABLE IF NOT EXISTS water_bills (
     stormwater_charge     NUMERIC(10,2),
     ach_discount          NUMERIC(10,2),
     total_due             NUMERIC(10,2)  NOT NULL,
+    pdf_path              VARCHAR(500),
     source                VARCHAR(100)   NOT NULL DEFAULT 'Gmail Water Bill PDF',
     source_provider       VARCHAR(50)    NOT NULL DEFAULT 'gmail-water-bill',
     ingestion_batch_id    UUID           NOT NULL,

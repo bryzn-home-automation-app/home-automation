@@ -23,6 +23,7 @@ const { Client } = require('pg');
 const crypto = require('crypto');
 const { loadSecrets } = require('./sync');
 const { parseWaterBillText } = require('./water-bill-parser');
+const { saveBillPdf } = require('./bill-storage');
 
 const SOURCE = 'Gmail Water Bill PDF';
 const SOURCE_PROVIDER = 'gmail-water-bill';
@@ -107,14 +108,14 @@ async function getOrCreateWaterAccount(client, accountNumber, serviceAddress) {
   return a.id;
 }
 
-async function upsertWaterBill(client, accountId, bill, batchId) {
+async function upsertWaterBill(client, accountId, bill, batchId, pdfPath) {
   await client.query(
     `INSERT INTO water_bills (
        account_id, billing_period_start, billing_period_end, billing_date, due_date,
        usage_thousands, water_charge, sewer_charge, refuse_charge, tax_charge,
-       stormwater_charge, ach_discount, total_due,
+       stormwater_charge, ach_discount, total_due, pdf_path,
        source, source_provider, ingestion_batch_id, processing_version, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
      ON CONFLICT (account_id, billing_period_start, billing_period_end) DO UPDATE SET
        billing_date = EXCLUDED.billing_date,
        due_date = EXCLUDED.due_date,
@@ -126,12 +127,13 @@ async function upsertWaterBill(client, accountId, bill, batchId) {
        stormwater_charge = EXCLUDED.stormwater_charge,
        ach_discount = EXCLUDED.ach_discount,
        total_due = EXCLUDED.total_due,
+       pdf_path = EXCLUDED.pdf_path,
        ingestion_batch_id = EXCLUDED.ingestion_batch_id,
        processing_version = EXCLUDED.processing_version`,
     [
       accountId, bill.billingPeriodStart, bill.billingPeriodEnd, bill.billingDate, bill.dueDate,
       bill.usageThousands, bill.waterCharge, bill.sewerCharge, bill.refuseCharge, bill.taxCharge,
-      bill.stormwaterCharge, bill.achDiscount, bill.totalDue,
+      bill.stormwaterCharge, bill.achDiscount, bill.totalDue, pdfPath,
       SOURCE, SOURCE_PROVIDER, batchId, PROCESSING_VERSION,
     ]
   );
@@ -153,7 +155,7 @@ async function main(cfg) {
   console.log('💧  Water Bill Sync (Gmail → PDF → water_bills)');
   console.log(`   Label: "${label}"`);
   console.log(`   Batch: ${batchId}`);
-  if (args.dryRun) console.log('   DRY RUN (no DB writes)');
+  if (args.dryRun) console.log('   DRY RUN (no DB writes or PDF saves)');
   console.log('');
 
   const gmail = buildGmailClient(secrets);
@@ -174,7 +176,7 @@ async function main(cfg) {
       const { text } = await pdf(buf);
       const bill = parseWaterBillText(text);
       if (bill) {
-        bills.push(bill);
+        bills.push({ bill, buf });
       } else {
         parseErrors++;
         console.warn('⚠️  A PDF did not match the expected bill template — skipped');
@@ -200,7 +202,7 @@ async function main(cfg) {
   let written = 0;
   let hadError = parseErrors > 0;
   try {
-    for (const bill of bills) {
+    for (const { bill, buf } of bills) {
       if (args.dryRun) {
         console.log(`── ${bill.billingPeriodStart} → ${bill.billingPeriodEnd} | usage ${bill.usageThousands} | ` +
           `water $${bill.waterCharge} sewer $${bill.sewerCharge} refuse $${bill.refuseCharge} ` +
@@ -213,7 +215,8 @@ async function main(cfg) {
         bill.accountNumber || secrets.WATER_ACCOUNT_NUMBER,
         secrets.WATER_SERVICE_ADDRESS
       );
-      await upsertWaterBill(client, accountId, bill, batchId);
+      const pdfPath = saveBillPdf(buf, bill.accountNumber || secrets.WATER_ACCOUNT_NUMBER, bill.billingPeriodEnd);
+      await upsertWaterBill(client, accountId, bill, batchId, pdfPath);
       written++;
     }
   } catch (e) {
