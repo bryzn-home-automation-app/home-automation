@@ -21,7 +21,7 @@ export default function IntegrationPanel() {
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
             Integration
           </p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">
+          <h3 className="mt-2 text-xl font-semibold text-apptext">
             CoServ Sync Pipeline
           </h3>
         </div>

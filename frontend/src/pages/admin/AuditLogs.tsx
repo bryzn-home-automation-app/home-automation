@@ -108,7 +108,7 @@ export default function AuditLogs() {
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
             Activity Feed
           </p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">
+          <h3 className="mt-2 text-xl font-semibold text-apptext">
             All Events
           </h3>
         </div>

@@ -205,7 +205,7 @@ export default function WiFiPage() {
           <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
             Network Details
           </p>
-          <h3 className="mt-3 text-lg font-semibold text-apptext">WiFi credentials</h3>
+          <h3 className="mt-3 text-xl font-semibold text-apptext">WiFi credentials</h3>
 
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between rounded-2xl border border-appborder bg-appinset px-4 py-3">
@@ -251,7 +251,7 @@ export default function WiFiPage() {
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Connected Guests
               </p>
-              <h3 className="mt-2 text-lg font-semibold text-apptext">
+              <h3 className="mt-2 text-xl font-semibold text-apptext">
                 {activeCount} online
               </h3>
             </div>

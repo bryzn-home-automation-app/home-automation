@@ -361,7 +361,7 @@ function UsageWeatherChart({
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Usage vs Temperature</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Usage vs Temperature</h3>
         </div>
         <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
           No electric usage data yet.
@@ -375,7 +375,7 @@ function UsageWeatherChart({
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Electric Usage vs Temperature</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
           Weather data is unavailable right now. Usage chart data is still loading normally.
@@ -390,7 +390,7 @@ function UsageWeatherChart({
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Electric Usage vs Temperature</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex items-center gap-2">
           <span

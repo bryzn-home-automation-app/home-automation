@@ -8,7 +8,7 @@ export default function ThemePicker() {
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Appearance</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Theme &amp; color palette</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Theme &amp; color palette</h3>
         </div>
       </div>
 

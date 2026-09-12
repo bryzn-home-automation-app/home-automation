@@ -468,7 +468,7 @@ export default function DebugDashboard() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Configuration</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Config sanity checks</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Config sanity checks</h3>
           </div>
           <div className="space-y-1.5">
             {configCheck.checks.map((c) => (
@@ -489,7 +489,7 @@ export default function DebugDashboard() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync reliability</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Last {syncHistory.days} days by scheduler</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Last {syncHistory.days} days by scheduler</h3>
           </div>
           <div className="space-y-2">
             {syncHistory.bySource.map((s) => (
@@ -519,7 +519,7 @@ export default function DebugDashboard() {
           <div className="mb-3 flex items-end justify-between gap-3">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Data coverage</p>
-              <h3 className="mt-2 text-lg font-semibold text-apptext">Last {coverage.days} days</h3>
+              <h3 className="mt-2 text-xl font-semibold text-apptext">Last {coverage.days} days</h3>
             </div>
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-apptext-dim">
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300" /> complete</span>
@@ -559,7 +559,7 @@ export default function DebugDashboard() {
       <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Run Sync Jobs</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Run Sync Jobs</h3>
         </div>
 
         {/* Date range selector */}
@@ -652,7 +652,7 @@ export default function DebugDashboard() {
         <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Event Feed</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Diagnostic Log</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Diagnostic Log</h3>
           </div>
           <div className="flex items-center gap-2">
             <select
@@ -731,7 +731,7 @@ export default function DebugDashboard() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync History</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Recent Sync Runs</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent Sync Runs</h3>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {syncEvents.slice(0, 6).map((e) => (
@@ -756,7 +756,7 @@ export default function DebugDashboard() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Events Received</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Events Received</h3>
             <p className="mt-1 text-xs text-apptext-dim">
               Every ingestion event the forecast system has reacted to — including no-ops where a sync
               tick fired but no new actual reading had landed yet.
@@ -787,7 +787,7 @@ export default function DebugDashboard() {
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
-              <h3 className="mt-2 text-lg font-semibold text-apptext">Accuracy &amp; Drift</h3>
+              <h3 className="mt-2 text-xl font-semibold text-apptext">Accuracy &amp; Drift</h3>
               <p className="mt-1 text-xs text-apptext-dim">
                 Why recent forecasts missed, and whether the misses look like one weird day or a model
                 that&apos;s becoming systematically wrong.
@@ -944,7 +944,7 @@ LIMIT 50`);
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">DB Explorer</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Query Console</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Query Console</h3>
         </div>
         <button
           onClick={() => setShowTables(!showTables)}

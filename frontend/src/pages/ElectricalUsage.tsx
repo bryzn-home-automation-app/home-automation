@@ -346,7 +346,7 @@ export default memo(function ElectricalUsage() {
         <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Log</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Recent electric readings</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent electric readings</h3>
           </div>
           <div className="flex items-center gap-2">
             {(['daily', 'hourly'] as LogFilter[]).map((f) => (

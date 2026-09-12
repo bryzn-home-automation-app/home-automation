@@ -79,7 +79,7 @@ export default function RoomSplitModal({ split, onClose }: Props) {
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Floor plan
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-apptext">Divide {roomLabel}</h3>
+        <h3 className="mt-2 text-xl font-semibold text-apptext">Divide {roomLabel}</h3>
         <p className="mt-2 text-sm leading-6 text-apptext-soft">
           This splits {roomLabel} in two along the line you drew, adding a new section to the map.
         </p>

@@ -309,7 +309,7 @@ export default function HomeSummary() {
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Alerts</p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Recent notifications</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent notifications</h3>
           </div>
           <Link to="/notifications" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>
         </div>

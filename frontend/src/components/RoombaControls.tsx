@@ -64,7 +64,7 @@ export default function RoombaControls({
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Admin</p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Controls</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Controls</h3>
         </div>
         {last && (
           <span className={`text-xs font-medium ${statusTone(last.status)}`}>

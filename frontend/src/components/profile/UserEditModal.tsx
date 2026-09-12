@@ -64,7 +64,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-apptext">Edit Profile</h3>
+          <h3 className="text-xl font-semibold text-apptext">Edit Profile</h3>
           <button
             type="button"
             onClick={onClose}

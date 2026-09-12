@@ -112,7 +112,7 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Cleaning run
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">{fmtDate(run.startedAt)}</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">{fmtDate(run.startedAt)}</h3>
           </div>
           <span className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium ${st.className}`}>
             {st.label}

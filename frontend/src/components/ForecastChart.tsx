@@ -70,7 +70,7 @@ function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, 
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Learned Pattern
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-apptext">
+        <h3 className="mt-2 text-xl font-semibold text-apptext">
           Usage by Day of Week
         </h3>
         <p className="mt-1 text-xs text-apptext-muted">
@@ -212,7 +212,7 @@ function ForecastChart() {
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
             AI Forecast
           </p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">
+          <h3 className="mt-2 text-xl font-semibold text-apptext">
             Electric Usage Forecast
           </h3>
         </div>
@@ -276,7 +276,7 @@ function ForecastChart() {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               AI Forecast
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">
+            <h3 className="mt-2 text-xl font-semibold text-apptext">
               Electric Usage Forecast
             </h3>
             <p className="mt-1 text-xs text-apptext-muted">
@@ -396,7 +396,7 @@ function ForecastChart() {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Self-Improvement
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">
+            <h3 className="mt-2 text-xl font-semibold text-apptext">
               Forecast Accuracy Over Time
             </h3>
             <p className="mt-1 text-xs text-apptext-muted">

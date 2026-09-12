@@ -29,7 +29,7 @@ function UsageSummaryGrid({
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Usage Insights
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-apptext">{title}</h3>
+        <h3 className="mt-2 text-xl font-semibold text-apptext">{title}</h3>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

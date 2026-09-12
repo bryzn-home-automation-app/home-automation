@@ -161,7 +161,7 @@ export default memo(function GasUsage() {
       ) : (
         <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-8 text-center shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3 text-4xl">🔥</div>
-          <h3 className="mb-2 text-lg font-semibold text-apptext">
+          <h3 className="mb-2 text-xl font-semibold text-apptext">
             No Gas Usage Yet
           </h3>
           <p className="mx-auto max-w-md text-sm leading-6 text-apptext-muted">

@@ -51,7 +51,7 @@ export default function RoombaNativeSchedules({ isAdmin }: { isAdmin: boolean })
           <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
             Real schedules
           </p>
-          <h3 className="mt-2 text-lg font-semibold text-apptext">Native Schedule</h3>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Native Schedule</h3>
         </div>
         {isAdmin && (
           <button

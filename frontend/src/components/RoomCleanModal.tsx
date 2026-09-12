@@ -93,7 +93,7 @@ export default function RoomCleanModal({ room, onClose }: Props) {
         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Clean
         </p>
-        <h3 className="mt-2 text-lg font-semibold text-apptext">Clean {roomLabel}</h3>
+        <h3 className="mt-2 text-xl font-semibold text-apptext">Clean {roomLabel}</h3>
         <p className="mt-2 text-sm leading-6 text-apptext-soft">
           Send the robot to clean just this room. It’ll return to the dock when done.
         </p>

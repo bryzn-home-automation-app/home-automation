@@ -513,7 +513,7 @@ export default memo(function Roomba() {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Floor Plan
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">
+            <h3 className="mt-2 text-xl font-semibold text-apptext">
               {mapQuery.data?.name || 'Cleaning map'}
             </h3>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
@@ -662,7 +662,7 @@ export default memo(function Roomba() {
             <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
               History
             </p>
-            <h3 className="mt-2 text-lg font-semibold text-apptext">Recent runs</h3>
+            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent runs</h3>
           </div>
           {totalRuns > 0 && (
             <span className="text-xs text-apptext-dim">
