@@ -73,6 +73,31 @@ interface SyncHistory { days: number; bySource: SyncHistoryRow[]; }
 interface ConfigCheckItem { check: string; status: 'OK' | 'WARN'; detail: string; }
 interface ConfigCheckResult { checks: ConfigCheckItem[]; }
 
+type DriftState = 'NORMAL' | 'ANOMALOUS' | 'DRIFT_SUSPECTED' | 'REGIME_CHANGE_SUSPECTED';
+type AnomalyClass = 'NORMAL' | 'ANOMALOUS' | 'SEVERE';
+interface DriftInfo {
+  state: DriftState;
+  asOf: string;
+  sampleCount: number;
+  historicalMae: number | null;
+  recentMae: number | null;
+  maeRatio: number | null;
+  recentBias: number | null;
+  streakLength: number;
+  streakSign: number;
+}
+interface DiagnosticDay {
+  date: string;
+  actual: number;
+  predicted: number;
+  residual: number;
+  absError: number;
+  anomalyScore: number | null;
+  robustScale: number | null;
+  anomalyClassification: AnomalyClass;
+}
+interface ForecastDiagnosticsResult { trailingDays: number; drift: DriftInfo; daily: DiagnosticDay[]; }
+
 const CATEGORIES = [
   { key: 'all', label: 'All' },
   { key: 'sync', label: 'Sync' },
@@ -110,6 +135,32 @@ const categoryBadge = (cat: string) => {
   };
   return colors[cat] ?? 'bg-appinset border-appborder text-apptext-muted';
 };
+
+// Drift-state badge — escalates green (calm) -> amber -> orange -> red, mirroring
+// the level/category badge palette. NORMAL is the neutral/healthy case.
+const driftStateBadge = (state: string) => {
+  switch (state) {
+    case 'REGIME_CHANGE_SUSPECTED': return 'bg-rose-300/10 border-rose-300/20 text-rose-300';
+    case 'DRIFT_SUSPECTED': return 'bg-orange-300/10 border-orange-300/20 text-orange-300';
+    case 'ANOMALOUS': return 'bg-amber-300/10 border-amber-300/20 text-amber-300';
+    default: return 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300';
+  }
+};
+
+// Per-day anomaly classification badge (NORMAL / ANOMALOUS / SEVERE).
+const anomalyClassBadge = (cls: string) => {
+  switch (cls) {
+    case 'SEVERE': return 'bg-rose-300/10 border-rose-300/20 text-rose-300';
+    case 'ANOMALOUS': return 'bg-amber-300/10 border-amber-300/20 text-amber-300';
+    default: return 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300';
+  }
+};
+
+// null/non-finite -> em dash (the backend nulls out empty-window NaN / cold-start scale).
+const fmtKwh1 = (v: number | null | undefined) =>
+  v == null || !Number.isFinite(v) ? '—' : `${v.toFixed(1)} kWh`;
+const fmtSigned1 = (v: number | null | undefined) =>
+  v == null || !Number.isFinite(v) ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
 
 // ── Date helpers (manual sync range) ────────────────────────────
 const toIsoLocal = (d: Date) =>
@@ -157,6 +208,7 @@ export default function DebugDashboard() {
   const freshnessInterval = useJitteredInterval(60_000);
   const coverageInterval = useJitteredInterval(120_000);
   const syncHistoryInterval = useJitteredInterval(120_000);
+  const diagnosticsInterval = useJitteredInterval(120_000);
 
   const { data: events, isLoading: eventsLoading } = useQuery<AppEvent[]>({
     queryKey: ['admin-events', category, level],
@@ -234,6 +286,15 @@ export default function DebugDashboard() {
     queryKey: ['admin-config-check'],
     queryFn: async () => (await api.get('/admin/config-check')).data,
     staleTime: 300_000,
+  });
+
+  // Forecast accuracy & drift diagnostics (doc §12)
+  const { data: diagnostics } = useQuery<ForecastDiagnosticsResult>({
+    queryKey: ['admin-forecast-diagnostics'],
+    queryFn: async () => (await api.get('/admin/forecast/diagnostics?days=30')).data,
+    staleTime: 60_000,
+    refetchInterval: diagnosticsInterval,
+    refetchIntervalInBackground: false,
   });
 
   // Sync-specific events
@@ -717,6 +778,90 @@ export default function DebugDashboard() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {/* Forecast Diagnostics — accuracy & drift (doc §12) */}
+      {diagnostics && (
+        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+              <h3 className="mt-2 text-lg font-semibold text-apptext">Accuracy &amp; Drift</h3>
+              <p className="mt-1 text-xs text-apptext-dim">
+                Why recent forecasts missed, and whether the misses look like one weird day or a model
+                that&apos;s becoming systematically wrong.
+              </p>
+            </div>
+            <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${driftStateBadge(diagnostics.drift.state)}`}>
+              {diagnostics.drift.state.replace(/_/g, ' ')}
+            </span>
+          </div>
+
+          {/* Drift metrics */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {[
+              { label: 'Historical MAE', value: fmtKwh1(diagnostics.drift.historicalMae) },
+              { label: 'Recent MAE', value: fmtKwh1(diagnostics.drift.recentMae) },
+              { label: 'MAE Ratio', value: diagnostics.drift.maeRatio != null ? `${diagnostics.drift.maeRatio.toFixed(2)}×` : '—' },
+              { label: 'Recent Bias', value: fmtSigned1(diagnostics.drift.recentBias) },
+            ].map((m) => (
+              <div key={m.label} className="rounded-2xl border border-appborder bg-appinset p-3">
+                <p className="text-[10px] uppercase tracking-wide text-apptext-muted">{m.label}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums text-apptext">{m.value}</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-apptext-dim">
+            {diagnostics.drift.sampleCount} graded day{diagnostics.drift.sampleCount === 1 ? '' : 's'} in the drift window
+            {diagnostics.drift.streakLength > 0 && diagnostics.drift.streakSign !== 0 && (
+              <> · {diagnostics.drift.streakLength}-day streak of usage running {diagnostics.drift.streakSign > 0 ? 'above' : 'below'} forecast</>
+            )}
+          </p>
+
+          {/* Per-day diagnostics table */}
+          {diagnostics.daily.length > 0 ? (
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead>
+                  <tr className="text-left text-[11px] uppercase tracking-wide text-apptext-muted">
+                    <th className="pb-2 pr-3 font-medium">Date</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Actual</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Predicted</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Residual</th>
+                    <th className="pb-2 pr-3 text-right font-medium">Score</th>
+                    <th className="pb-2 font-medium">Class</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {diagnostics.daily.map((d) => (
+                    <tr key={d.date} className="border-t border-appborder">
+                      <td className="py-2 pr-3 whitespace-nowrap text-apptext-soft">
+                        {new Date(`${d.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-apptext">{d.actual.toFixed(1)}</td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">{d.predicted.toFixed(1)}</td>
+                      <td className={`py-2 pr-3 text-right tabular-nums ${d.residual > 0 ? 'text-amber-300' : d.residual < 0 ? 'text-sky-300' : 'text-apptext-soft'}`}>
+                        {d.residual > 0 ? '+' : ''}{d.residual.toFixed(1)}
+                      </td>
+                      <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">
+                        {d.anomalyScore != null ? d.anomalyScore.toFixed(2) : '—'}
+                      </td>
+                      <td className="py-2">
+                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${anomalyClassBadge(d.anomalyClassification)}`}>
+                          {d.anomalyClassification}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-apptext-dim">
+              No graded forecast days in the last {diagnostics.trailingDays} days yet.
+            </p>
+          )}
         </section>
       )}
 

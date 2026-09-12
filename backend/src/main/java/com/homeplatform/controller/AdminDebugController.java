@@ -6,6 +6,7 @@ import com.homeplatform.service.AlertEngine;
 import com.homeplatform.service.AppEventService;
 import com.homeplatform.service.DailySyncScheduler;
 import com.homeplatform.service.ForecastScheduler;
+import com.homeplatform.service.ForecastService;
 import com.homeplatform.service.HourlySyncScheduler;
 import com.zaxxer.hikari.HikariDataSource;
 import com.zaxxer.hikari.HikariPoolMXBean;
@@ -58,6 +59,7 @@ public class AdminDebugController {
     private final HourlySyncScheduler hourlySyncScheduler;
     private final AlertEngine alertEngine;
     private final ForecastScheduler forecastScheduler;
+    private final ForecastService forecastService;
     /** Single-threaded so manual daily + hourly syncs serialize (no overlapping browser logins). */
     private final ExecutorService syncExecutor = Executors.newSingleThreadExecutor();
     private static final Set<String> SENSITIVE_COLUMNS = Set.of(
@@ -69,13 +71,15 @@ public class AdminDebugController {
                                 DailySyncScheduler dailySyncScheduler,
                                 HourlySyncScheduler hourlySyncScheduler,
                                 AlertEngine alertEngine,
-                                ForecastScheduler forecastScheduler) {
+                                ForecastScheduler forecastScheduler,
+                                ForecastService forecastService) {
         this.appEventService = appEventService;
         this.dataSource = dataSource;
         this.dailySyncScheduler = dailySyncScheduler;
         this.hourlySyncScheduler = hourlySyncScheduler;
         this.alertEngine = alertEngine;
         this.forecastScheduler = forecastScheduler;
+        this.forecastService = forecastService;
     }
 
     /** Require ADMIN role — mirrors AdminController pattern. */
@@ -560,6 +564,63 @@ public class AdminDebugController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * Forecast diagnostics for the dashboard (doc §12): per-day actual / predicted
+     * / residual / anomaly rows over the trailing window, plus the current drift
+     * state and its metrics (historical & recent MAE, ratio, recent bias, streak).
+     * Answers "why was yesterday's forecast wrong" and "one weird day, or is the
+     * model becoming systematically wrong". Non-finite doubles (empty-window NaN,
+     * cold-start scale) are emitted as null so the payload stays strict JSON.
+     */
+    @GetMapping("/forecast/diagnostics")
+    public ResponseEntity<Map<String, Object>> getForecastDiagnostics(HttpServletRequest request,
+            @RequestParam(defaultValue = "30") int days) {
+        requireAdmin(request);
+        int n = Math.max(1, Math.min(days, 90));
+        try {
+            var diag = forecastService.getDiagnostics(n);
+
+            var d = diag.drift();
+            Map<String, Object> drift = new LinkedHashMap<>();
+            drift.put("state", d.state().name());
+            drift.put("asOf", d.asOf().toString());
+            drift.put("sampleCount", d.sampleCount());
+            drift.put("historicalMae", num(d.historicalMae()));
+            drift.put("recentMae", num(d.recentMae()));
+            drift.put("maeRatio", num(d.maeRatio()));
+            drift.put("recentBias", num(d.medianSignedResidual()));
+            drift.put("streakLength", d.streakLength());
+            drift.put("streakSign", d.streakSign());
+
+            List<Map<String, Object>> daily = new ArrayList<>();
+            for (var row : diag.daily()) {
+                Map<String, Object> m = new LinkedHashMap<>();
+                m.put("date", row.date().toString());
+                m.put("actual", row.actual());
+                m.put("predicted", row.predicted());
+                m.put("residual", row.residual());
+                m.put("absError", row.absError());
+                m.put("anomalyScore", num(row.z()));
+                m.put("robustScale", num(row.robustScale() > 0 ? row.robustScale() : Double.NaN));
+                m.put("anomalyClassification", row.classification().name());
+                daily.add(m);
+            }
+
+            Map<String, Object> out = new LinkedHashMap<>();
+            out.put("trailingDays", diag.trailingDays());
+            out.put("drift", drift);
+            out.put("daily", daily);
+            return ResponseEntity.ok(out);
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** Emit a finite double as-is, or null for NaN/Infinity so the JSON stays strict. */
+    private static Object num(double v) {
+        return Double.isFinite(v) ? v : null;
     }
 
     /**

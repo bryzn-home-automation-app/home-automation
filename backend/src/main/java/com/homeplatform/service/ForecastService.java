@@ -175,6 +175,63 @@ public class ForecastService {
         return new AccuracyReport(count, round2(mae), round2(rmse), round2(mape), trailingDays, points);
     }
 
+    /**
+     * Assemble per-day forecast diagnostics for the Admin Debug Dashboard (doc §12):
+     * for each graded day in the trailing window, the actual vs. predicted totals,
+     * residual / absolute error, and a robust anomaly score + classification (via
+     * {@link #scoreObservation}). Bundled with a single point-in-time
+     * {@link #assessDrift} for the current drift state and its supporting metrics
+     * (historical/recent MAE, ratio, median signed residual = recent bias, streak).
+     *
+     * <p>Purely diagnostic and read-only — no persistence, training, or model
+     * mutation. Answers "why was a recent forecast wrong" (per-day rows) and "is
+     * this one weird day or is the model becoming systematically wrong" (drift).
+     * Uses the freshest prediction per target day (latest {@code forecast_date}),
+     * the same invariant as {@link #computeIntervalSigma}/{@link #assessDrift}, so
+     * the table reflects real operational skill rather than long-horizon guesses.
+     * Handles an empty data window (no graded days / no active model) by returning
+     * an empty day list alongside the (NORMAL) drift assessment.
+     */
+    public ForecastDiagnostics getDiagnostics(int trailingDays) {
+        LocalDate today = LocalDate.now();
+        DriftAssessment drift = assessDrift(today);
+
+        Optional<ForecastModel> modelOpt = getActiveModel();
+        if (modelOpt.isEmpty()) {
+            return new ForecastDiagnostics(trailingDays, today, drift, List.of());
+        }
+        ForecastModel model = modelOpt.get();
+
+        List<ForecastSnapshot> graded = snapshotRepo.findWithActualsSince(today.minusDays(trailingDays));
+
+        // Freshest prediction per target day (latest forecast_date).
+        Map<LocalDate, ForecastSnapshot> freshest = new HashMap<>();
+        for (ForecastSnapshot s : graded) {
+            if (s.getActualKwh() == null || s.getPredictedKwh() == null) continue;
+            freshest.merge(s.getTargetDate(), s,
+                    (a, b) -> a.getForecastDate().isAfter(b.getForecastDate()) ? a : b);
+        }
+
+        List<LocalDate> datesDesc = new ArrayList<>(freshest.keySet());
+        datesDesc.sort(Comparator.reverseOrder());
+
+        List<DailyDiagnostic> daily = new ArrayList<>(datesDesc.size());
+        for (LocalDate d : datesDesc) {
+            ForecastSnapshot s = freshest.get(d);
+            double actual = s.getActualKwh().doubleValue();
+            double predicted = s.getPredictedKwh().doubleValue();
+            // Score against the robust residual scale as-of that day (point-in-time
+            // yardstick — no leakage from later actuals).
+            AnomalyScore score = scoreObservation(model, d, actual, predicted);
+            daily.add(new DailyDiagnostic(
+                    d, round2(actual), round2(predicted), round2(score.residual()),
+                    round2(score.absResidual()), round4(score.z()),
+                    round4(score.robustScale()), score.classification()));
+        }
+
+        return new ForecastDiagnostics(trailingDays, today, drift, daily);
+    }
+
     // ── Training ────────────────────────────────────────────
 
     public ForecastModel trainModel() {
@@ -386,10 +443,16 @@ public class ForecastService {
             graded = List.of();
         }
 
-        // Freshest prediction per target day.
+        // Freshest prediction per target day. Excludes anything dated after
+        // `today` — harmless no-op at the original call site (always real "now",
+        // where no graded row can be future-dated), but load-bearing now that
+        // getDiagnostics() calls this with a historical `asOf`: without this
+        // guard, a future residual would be clamped to age=0 (max weight) below,
+        // leaking later data into a historical day's confidence score.
         Map<LocalDate, ForecastSnapshot> freshest = new HashMap<>();
         for (ForecastSnapshot s : graded) {
             if (s.getActualKwh() == null || s.getPredictedKwh() == null) continue;
+            if (s.getTargetDate().isAfter(today)) continue;
             freshest.merge(s.getTargetDate(), s,
                     (a, b) -> a.getForecastDate().isAfter(b.getForecastDate()) ? a : b);
         }
@@ -1406,6 +1469,27 @@ public class ForecastService {
     public record AccuracyReport(
             int dataPoints, double mae, double rmse, double mape,
             int trailingDays, List<AccuracyPoint> points) {}
+
+    /**
+     * One graded day's diagnostics row (doc §12 daily table). {@code residual} is
+     * {@code actual - predicted}; {@code z} is the robust anomaly score
+     * (residual / robustScale) from {@link #scoreObservation} and
+     * {@code classification} its NORMAL/ANOMALOUS/SEVERE band. {@code robustScale}
+     * is the point-in-time robust residual spread the score was measured against
+     * (non-positive during cold start, before enough graded history exists).
+     */
+    public record DailyDiagnostic(
+            LocalDate date, double actual, double predicted, double residual,
+            double absError, double z, double robustScale, AnomalyClass classification) {}
+
+    /**
+     * Bundle returned by {@link #getDiagnostics}: the per-day diagnostics rows
+     * (newest-first) plus one point-in-time {@link DriftAssessment} carrying the
+     * current drift state and its metrics (historical/recent MAE, ratio, median
+     * signed residual = recent bias, streak). Diagnostic only.
+     */
+    public record ForecastDiagnostics(
+            int trailingDays, LocalDate asOf, DriftAssessment drift, List<DailyDiagnostic> daily) {}
 
     public record AccuracyPoint(String date, double predicted, double actual, double error) {}
 
