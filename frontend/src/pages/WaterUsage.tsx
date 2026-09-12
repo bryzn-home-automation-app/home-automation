@@ -234,6 +234,7 @@ export default memo(function WaterUsage() {
                       {bill.pdfPath ? (
                         <a
                           href={`/uploads/${bill.pdfPath}`}
+                          download={bill.pdfPath.split('/').pop()}
                           className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                         >
                           View Bill
