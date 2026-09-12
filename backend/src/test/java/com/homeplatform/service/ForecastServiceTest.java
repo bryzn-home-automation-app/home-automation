@@ -4,6 +4,8 @@ import com.homeplatform.service.ForecastService.AnomalyClass;
 import com.homeplatform.service.ForecastService.AnomalyScore;
 import com.homeplatform.service.ForecastService.DriftAssessment;
 import com.homeplatform.service.ForecastService.DriftState;
+import com.homeplatform.service.ForecastService.HourlyAnomaly;
+import com.homeplatform.service.ForecastService.HourlyAnomalyClass;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -333,5 +335,143 @@ class ForecastServiceTest {
     void maeHelper() {
         assertTrue(Double.isNaN(ForecastService.mae(List.of())));
         assertEquals(3.0, ForecastService.mae(List.of(-1.0, 2.0, 6.0)), EPS);
+    }
+
+    // ── Robust hourly-shape aggregation (doc §6) ──────────────────────────
+
+    @Test
+    @DisplayName("robustHourlyShape uses a per-hour median, so one freak hour can't skew that hour's learned fraction")
+    void robustHourlyShapeResistsSingleHourOutlier() {
+        // Hour 18 has four normal 3 kWh evenings plus ONE space-heater night at
+        // 30 kWh; every other hour is a flat 1 kWh across five days. The mean would
+        // let that one 30 kWh reading dominate hour 18's fraction; the median (3.0)
+        // shrugs it off. Mirrors medianResistsOutlier at the hourly-shape level.
+        List<double[]> pairs = new java.util.ArrayList<>();
+        double[] hour18 = {3, 3, 3, 3, 30};
+        for (double v : hour18) pairs.add(new double[]{18, v});
+        for (int h = 0; h < 24; h++) {
+            if (h == 18) continue;
+            for (int d = 0; d < 5; d++) pairs.add(new double[]{h, 1.0});
+        }
+
+        List<Double> shape = ForecastService.robustHourlyShape(pairs);
+
+        assertEquals(24, shape.size());
+        double sum = shape.stream().mapToDouble(Double::doubleValue).sum();
+        assertEquals(1.0, sum, 1e-9, "shape must normalize to ~1");
+
+        // Median hour-18 kWh = 3.0, every other hour = 1.0 -> 23*1 + 3 = 26 total.
+        assertEquals(3.0 / 26.0, shape.get(18), 1e-9, "hour 18 uses the median 3.0, not the outlier-chasing mean");
+        assertEquals(1.0 / 26.0, shape.get(0), 1e-9);
+
+        // What the arithmetic mean would have produced for hour 18 (mean = 8.4),
+        // proving the median materially changed the answer.
+        double meanShape18 = 8.4 / (23 * 1.0 + 8.4);
+        assertTrue(shape.get(18) < meanShape18 * 0.5,
+                "median fraction must be far below the mean's outlier-inflated fraction");
+    }
+
+    @Test
+    @DisplayName("robustHourlyShape: an empty bucket yields an all-zero (unnormalizable) shape, not NaN")
+    void robustHourlyShapeEmptyBucket() {
+        List<Double> shape = ForecastService.robustHourlyShape(List.of());
+        assertEquals(24, shape.size());
+        assertTrue(shape.stream().allMatch(v -> v == 0.0));
+    }
+
+    // ── Hourly anomaly classification (doc §8) ────────────────────────────
+
+    /** Flat learned shape (1/24 each) — keeps expected = predicted/24 per hour. */
+    private static List<Double> flatShape() {
+        return java.util.Collections.nCopies(24, 1.0 / 24);
+    }
+
+    @Test
+    @DisplayName("localized spike: +30 kWh concentrated in 3 afternoon hours -> LOCALIZED_SPIKE")
+    void classifyLocalizedSpike() {
+        // Predicted 65 kWh, flat expected ~2.708/hr. Every hour lands on expectation
+        // except 14/15/16 which each run +10 kWh -> +30 daily. 3 hours hold 100% of
+        // the excess (k <= 3).
+        double predicted = 65.0;
+        double perHour = predicted / 24.0;
+        double[] actual = new double[24];
+        for (int h = 0; h < 24; h++) actual[h] = perHour;
+        actual[14] += 10; actual[15] += 10; actual[16] += 10;
+        double actualTotal = predicted + 30;
+
+        HourlyAnomaly a = ForecastService.classifyHourlyAnomaly(predicted, actualTotal, actual, flatShape());
+        assertEquals(HourlyAnomalyClass.LOCALIZED_SPIKE, a.classification());
+        assertEquals(30.0, a.dailyResidual(), 1e-9);
+        assertEquals(3, a.concentrationHours());
+        assertEquals(3, a.topHours().length);
+    }
+
+    @Test
+    @DisplayName("baseline shift: +12 kWh spread uniformly across all 24 hours -> BASELINE_SHIFT")
+    void classifyBaselineShift() {
+        // Every hour runs +0.5 kWh above expectation -> +12 daily, diffuse. Reaching
+        // 70% of the excess needs ~17 hours (>= 12), and overnight is only ~29%.
+        double predicted = 65.0;
+        double perHour = predicted / 24.0;
+        double[] actual = new double[24];
+        for (int h = 0; h < 24; h++) actual[h] = perHour + 0.5;
+        double actualTotal = predicted + 12;
+
+        HourlyAnomaly a = ForecastService.classifyHourlyAnomaly(predicted, actualTotal, actual, flatShape());
+        assertEquals(HourlyAnomalyClass.BASELINE_SHIFT, a.classification());
+        assertTrue(a.concentrationHours() >= ForecastService.HOURLY_BASELINE_MIN_HOURS,
+                "diffuse lift needs many hours to reach 70%: " + a.concentrationHours());
+        assertTrue(a.overnightShare() < ForecastService.HOURLY_OVERNIGHT_SHARE);
+    }
+
+    @Test
+    @DisplayName("persistent overnight increase: +30 kWh across five overnight hours -> OVERNIGHT_INCREASE")
+    void classifyOvernightIncrease() {
+        // Hours 0-4 each +6 kWh (=+30 daily), all in the 11pm-5am window, so the
+        // overnight share is 100% (>= 50%). Spread over 5 hours so it is not a
+        // <=3-hour localized spike.
+        double predicted = 65.0;
+        double perHour = predicted / 24.0;
+        double[] actual = new double[24];
+        for (int h = 0; h < 24; h++) actual[h] = perHour;
+        for (int h = 0; h <= 4; h++) actual[h] += 6;
+        double actualTotal = predicted + 30;
+
+        HourlyAnomaly a = ForecastService.classifyHourlyAnomaly(predicted, actualTotal, actual, flatShape());
+        assertEquals(HourlyAnomalyClass.OVERNIGHT_INCREASE, a.classification());
+        assertEquals(1.0, a.overnightShare(), 1e-9);
+        assertTrue(a.concentrationHours() > ForecastService.HOURLY_SPIKE_MAX_HOURS);
+    }
+
+    @Test
+    @DisplayName("time-of-day shift: +30 kWh across a 6-hour evening block -> TIME_OF_DAY_SHIFT")
+    void classifyTimeOfDayShift() {
+        // Hours 17-22 each +5 kWh (=+30). Six hours (> spike max 3, < baseline 12)
+        // and evening, not overnight -> the residual TIME_OF_DAY_SHIFT bucket.
+        double predicted = 65.0;
+        double perHour = predicted / 24.0;
+        double[] actual = new double[24];
+        for (int h = 0; h < 24; h++) actual[h] = perHour;
+        for (int h = 17; h <= 22; h++) actual[h] += 5;
+        double actualTotal = predicted + 30;
+
+        HourlyAnomaly a = ForecastService.classifyHourlyAnomaly(predicted, actualTotal, actual, flatShape());
+        assertEquals(HourlyAnomalyClass.TIME_OF_DAY_SHIFT, a.classification());
+        assertTrue(a.concentrationHours() > ForecastService.HOURLY_SPIKE_MAX_HOURS
+                && a.concentrationHours() < ForecastService.HOURLY_BASELINE_MIN_HOURS);
+    }
+
+    @Test
+    @DisplayName("a daily residual below the significance floor is NORMAL, not decomposed")
+    void classifyBelowFloorIsNormal() {
+        double predicted = 65.0;
+        double perHour = predicted / 24.0;
+        double[] actual = new double[24];
+        for (int h = 0; h < 24; h++) actual[h] = perHour;
+        actual[14] += 3; // +3 kWh total, under max(5, 10% of 65 = 6.5)
+
+        HourlyAnomaly a = ForecastService.classifyHourlyAnomaly(predicted, predicted + 3, actual, flatShape());
+        assertEquals(HourlyAnomalyClass.NORMAL, a.classification());
+        assertEquals(0, a.concentrationHours());
     }
 }

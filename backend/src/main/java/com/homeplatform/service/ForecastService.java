@@ -93,6 +93,31 @@ public class ForecastService {
     static final int DRIFT_STREAK_THRESHOLD  = 3;
     static final int REGIME_STREAK_THRESHOLD = 5;
 
+    // ── Hourly-anomaly classification tuning (doc §8) ────────────
+    // Explains a daily residual by SHAPE: given a day's actual hourly breakdown
+    // vs. the learned expected shape, classify WHERE the excess/deficit lives.
+    // Diagnostic only — never feeds training or the retrain schedule (doc §9).
+    //
+    // A daily residual is only worth decomposing once it clears a significance
+    // floor: the larger of an absolute kWh floor and a fraction of the predicted
+    // total (so a big house-day and a small one scale the same). Below it the day
+    // is NORMAL and we don't over-interpret hourly noise.
+    static final double HOURLY_ANOMALY_MIN_RESIDUAL_KWH  = 5.0;
+    static final double HOURLY_ANOMALY_MIN_RESIDUAL_FRAC = 0.10;
+    // Concentration is measured as: how many hours (taken largest-first) it takes
+    // to accumulate this fraction of the same-direction excess. Few hours => the
+    // anomaly is concentrated; many hours => it is spread out.
+    static final double HOURLY_CONCENTRATION_FRAC = 0.70;
+    // <=3 hours carrying 70% of the excess is a localized spike (one load/event).
+    static final int    HOURLY_SPIKE_MAX_HOURS    = 3;
+    // Needing >=12 hours (half the day) to reach 70% means the lift is diffuse:
+    // a baseline shift rather than any single daypart.
+    static final int    HOURLY_BASELINE_MIN_HOURS = 12;
+    // Overnight window (11pm–5am, 7 hours = 29% of the day). If it carries >=50%
+    // of the excess it is over-represented -> persistent-overnight-increase shape.
+    static final double HOURLY_OVERNIGHT_SHARE    = 0.50;
+    static final int[]  OVERNIGHT_HOURS = {23, 0, 1, 2, 3, 4, 5};
+
     @Value("${app.kwh-rate:0.12}")
     private double kwhRate;
 
@@ -644,6 +669,121 @@ public class ForecastService {
         return hours;
     }
 
+    /**
+     * Classify the SHAPE of a daily anomaly from its hourly breakdown (doc §8):
+     * why was the daily forecast wrong — a one-off spike, a whole-day baseline
+     * shift, a specific daypart, or a persistent overnight lift?
+     *
+     * <p>Pure and testable: takes the authoritative daily {@code actualTotal} vs.
+     * {@code predictedTotal}, the day's {@code actualHourly} kWh (length 24), and
+     * the learned normalized {@code expectedShape} (same 24-fraction list
+     * {@link #generateHourlyForecast} consumes; flat 1/24 is substituted if it is
+     * absent). Never touches the DB, the model, or training — this is dashboard
+     * explanation only (doc §9: hourly anomalies must not poison daily training).
+     *
+     * <p>Method: expected[h] = predictedTotal · shape[h]; residual[h] = actual −
+     * expected. The daily residual sets the direction of interest; each hour's
+     * same-direction excess is its contribution. Decision chain (first match wins):
+     * <ol>
+     *   <li>|dailyResidual| below the significance floor -> {@code NORMAL}.</li>
+     *   <li>&le;{@link #HOURLY_SPIKE_MAX_HOURS} hours hold
+     *       {@link #HOURLY_CONCENTRATION_FRAC} of the excess -> {@code LOCALIZED_SPIKE}.</li>
+     *   <li>overnight window holds &ge;{@link #HOURLY_OVERNIGHT_SHARE} of the
+     *       excess -> {@code OVERNIGHT_INCREASE}.</li>
+     *   <li>it takes &ge;{@link #HOURLY_BASELINE_MIN_HOURS} hours to reach the
+     *       concentration fraction -> {@code BASELINE_SHIFT}.</li>
+     *   <li>otherwise the excess sits in a mid-sized daypart -> {@code TIME_OF_DAY_SHIFT}.</li>
+     * </ol>
+     *
+     * <p>Single-day limitation (doc §8): "time-of-day shift" and "overnight
+     * increase" properly mean a pattern that <i>repeats</i> across days. From one
+     * day in isolation we can only detect that the excess is concentrated in that
+     * daypart, not that it recurs — multi-day tracking is out of scope here.
+     */
+    public static HourlyAnomaly classifyHourlyAnomaly(
+            double predictedTotal, double actualTotal,
+            double[] actualHourly, List<Double> expectedShape) {
+
+        double[] shape = normalizedShapeOrFlat(expectedShape);
+        double[] resid = new double[24];
+        for (int h = 0; h < 24; h++) {
+            double expected = predictedTotal * shape[h];
+            double actual = (actualHourly != null && h < actualHourly.length) ? actualHourly[h] : 0.0;
+            resid[h] = actual - expected;
+        }
+
+        double dailyResidual = actualTotal - predictedTotal;
+        double sign = Math.signum(dailyResidual);
+        double floor = Math.max(HOURLY_ANOMALY_MIN_RESIDUAL_KWH,
+                                HOURLY_ANOMALY_MIN_RESIDUAL_FRAC * Math.abs(predictedTotal));
+        if (sign == 0 || Math.abs(dailyResidual) < floor) {
+            return new HourlyAnomaly(HourlyAnomalyClass.NORMAL, dailyResidual, 0, 0, 0, new int[0], resid);
+        }
+
+        // Per-hour contribution in the anomaly's direction (0 if it pushes back).
+        double[] contrib = new double[24];
+        double totalExcess = 0;
+        for (int h = 0; h < 24; h++) {
+            double c = sign * resid[h];
+            contrib[h] = c > 0 ? c : 0;
+            totalExcess += contrib[h];
+        }
+        if (totalExcess <= 0) {
+            return new HourlyAnomaly(HourlyAnomalyClass.NORMAL, dailyResidual, 0, 0, 0, new int[0], resid);
+        }
+
+        Integer[] order = new Integer[24];
+        for (int h = 0; h < 24; h++) order[h] = h;
+        Arrays.sort(order, (a, b) -> Double.compare(contrib[b], contrib[a]));
+
+        // k = minimal hours (largest-first) to reach the concentration fraction.
+        double cum = 0;
+        int k = 0;
+        for (int i = 0; i < 24; i++) {
+            if (contrib[order[i]] <= 0) break;
+            cum += contrib[order[i]];
+            k++;
+            if (cum >= HOURLY_CONCENTRATION_FRAC * totalExcess) break;
+        }
+
+        double overnightExcess = 0;
+        for (int h : OVERNIGHT_HOURS) overnightExcess += contrib[h];
+        double overnightShare = overnightExcess / totalExcess;
+
+        int topN = Math.min(k, 5);
+        int[] topHours = new int[topN];
+        for (int i = 0; i < topN; i++) topHours[i] = order[i];
+
+        HourlyAnomalyClass cls;
+        if (k <= HOURLY_SPIKE_MAX_HOURS) {
+            cls = HourlyAnomalyClass.LOCALIZED_SPIKE;
+        } else if (overnightShare >= HOURLY_OVERNIGHT_SHARE) {
+            cls = HourlyAnomalyClass.OVERNIGHT_INCREASE;
+        } else if (k >= HOURLY_BASELINE_MIN_HOURS) {
+            cls = HourlyAnomalyClass.BASELINE_SHIFT;
+        } else {
+            cls = HourlyAnomalyClass.TIME_OF_DAY_SHIFT;
+        }
+
+        return new HourlyAnomaly(cls, dailyResidual, round2(totalExcess), k,
+                round4(overnightShare), topHours, resid);
+    }
+
+    /** Normalize a 24-element shape to fractions summing to 1; flat 1/24 if absent. */
+    private static double[] normalizedShapeOrFlat(List<Double> shape) {
+        double[] out = new double[24];
+        if (shape != null && shape.size() == 24) {
+            double sum = 0;
+            for (double v : shape) sum += v;
+            if (sum > 0) {
+                for (int h = 0; h < 24; h++) out[h] = shape.get(h) / sum;
+                return out;
+            }
+        }
+        Arrays.fill(out, 1.0 / 24);
+        return out;
+    }
+
     // ── Snapshot management ─────────────────────────────────
 
     public void saveForecasts(ForecastModel model, List<DailyForecast> forecasts) {
@@ -728,27 +868,43 @@ public class ForecastService {
 
         Map<String, Object> profiles = new HashMap<>();
         for (var entry : buckets.entrySet()) {
-            double[] hourTotals = new double[24];
-            int[] hourCounts = new int[24];
-            for (double[] pair : entry.getValue()) {
-                int hr = (int) pair[0];
-                hourTotals[hr] += pair[1];
-                hourCounts[hr]++;
-            }
-            List<Double> shape = new ArrayList<>();
-            double total = 0;
-            for (int h = 0; h < 24; h++) {
-                double avg = hourCounts[h] > 0 ? hourTotals[h] / hourCounts[h] : 0;
-                shape.add(avg);
-                total += avg;
-            }
-            // Normalize to fractions
-            if (total > 0) {
-                for (int h = 0; h < 24; h++) shape.set(h, shape.get(h) / total);
-            }
-            profiles.put(entry.getKey(), shape);
+            profiles.put(entry.getKey(), robustHourlyShape(entry.getValue()));
         }
         return profiles;
+    }
+
+    /**
+     * Build a normalized 24-hour consumption shape from {@code [hour, kWh]} pairs
+     * using a per-hour <b>median</b> rather than an arithmetic mean.
+     *
+     * <p>Same reasoning as Phase 1's robust day-of-week multipliers: with only
+     * ~49 daily observations a single anomalous hour on one day (e.g. a space
+     * heater running one cold night) would permanently skew that hour's learned
+     * fraction for its bucket if we averaged. The median of each hour's samples
+     * shrugs off that one bizarre reading. Reuses {@link #median(List)}.
+     *
+     * <p>Drop-in for the old mean logic: same output contract — a 24-element
+     * {@code List<Double>} of fractions summing to ~1 (0s if a bucket is empty),
+     * so {@link #generateHourlyForecast} and its flat fallback are unchanged.
+     */
+    static List<Double> robustHourlyShape(List<double[]> hourKwhPairs) {
+        List<List<Double>> byHour = new ArrayList<>(24);
+        for (int h = 0; h < 24; h++) byHour.add(new ArrayList<>());
+        for (double[] pair : hourKwhPairs) {
+            int hr = (int) pair[0];
+            if (hr >= 0 && hr < 24) byHour.get(hr).add(pair[1]);
+        }
+        List<Double> shape = new ArrayList<>(24);
+        double total = 0;
+        for (int h = 0; h < 24; h++) {
+            double m = byHour.get(h).isEmpty() ? 0.0 : median(byHour.get(h));
+            shape.add(m);
+            total += m;
+        }
+        if (total > 0) {
+            for (int h = 0; h < 24; h++) shape.set(h, shape.get(h) / total);
+        }
+        return shape;
     }
 
     private static String profileKey(double avgTemp, boolean weekend) {
@@ -1112,6 +1268,26 @@ public class ForecastService {
             Double cdd, Double hdd, double confidencePct) {}
 
     public record HourlyForecast(int hour, double predictedKwh, double predictedCost) {}
+
+    /** Shape of a daily anomaly explained by its hourly breakdown (doc §8). */
+    public enum HourlyAnomalyClass {
+        NORMAL, LOCALIZED_SPIKE, BASELINE_SHIFT, TIME_OF_DAY_SHIFT, OVERNIGHT_INCREASE
+    }
+
+    /**
+     * Result of {@link #classifyHourlyAnomaly}. {@code dailyResidual} is the
+     * authoritative actual−predicted daily total; {@code totalExcess} is the sum
+     * of same-direction per-hour contributions; {@code concentrationHours} (k) is
+     * how many hours it took to reach {@link #HOURLY_CONCENTRATION_FRAC} of that
+     * excess; {@code overnightShare} is the overnight window's fraction of it;
+     * {@code topHours} are the biggest contributors (largest-first, up to 5); and
+     * {@code hourResiduals} is the full 24-length actual−expected vector for the
+     * dashboard's per-hour drill-down. Diagnostic only.
+     */
+    public record HourlyAnomaly(
+            HourlyAnomalyClass classification, double dailyResidual, double totalExcess,
+            int concentrationHours, double overnightShare, int[] topHours,
+            double[] hourResiduals) {}
 
     public record AccuracyReport(
             int dataPoints, double mae, double rmse, double mape,
