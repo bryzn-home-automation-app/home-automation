@@ -186,13 +186,16 @@ function ForecastChart() {
 
   const predictedColor = series.usage;
   const actualColor = '#22c55e';
-  // Confidence band: a subtle tint of the (theme-aware) predicted-usage color.
-  // Dark surfaces swallow low-alpha fills, so the band needs a touch more alpha
-  // there to stay legible; light surfaces show a tint at lower alpha. The Area
-  // below pins fillOpacity={1} so this alpha is authoritative rather than being
-  // multiplied down by Recharts' default 0.6 (which rendered it near-invisible /
-  // muddy before).
-  const bandColor = hexToRgba(predictedColor, theme === 'dark' ? 0.22 : 0.16);
+  // Confidence band: a tint of the theme's CONTRASTING color (series.temp —
+  // e.g. yellow/amber against a purple usage line), not a tint of the
+  // predicted-usage color itself. A low-alpha tint of the same hue as the solid
+  // predicted line reads as a dark, muddy smudge in the tooltip's legend swatch
+  // (which shows the fill color at face value, not blended into the chart) even
+  // though the chart area itself looks fine. A contrasting hue stays legible in
+  // both places. Dark surfaces swallow low-alpha fills, so the band needs a
+  // touch more alpha there; the Area below pins fillOpacity={1} so this alpha is
+  // authoritative rather than being multiplied down by Recharts' default 0.6.
+  const bandColor = hexToRgba(series.temp, theme === 'dark' ? 0.22 : 0.16);
 
   if (isLoading) {
     return (
