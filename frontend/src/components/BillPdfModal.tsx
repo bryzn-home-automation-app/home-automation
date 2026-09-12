@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -22,11 +22,27 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [pageWidth, setPageWidth] = useState(560);
+  const viewerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setNumPages(null);
     setPageNumber(1);
     setError(null);
+  }, [url]);
+
+  // Fill the actual available width (full-screen on mobile, capped on
+  // desktop) instead of a fixed pixel width — a hardcoded width rendered
+  // far too small to read on a phone screen.
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => {
+      const width = entry.contentRect.width;
+      if (width > 0) setPageWidth(Math.min(width - 16, 900));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [url]);
 
   const close = useCallback(() => onClose(), [onClose]);
@@ -44,14 +60,14 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-label="View Bill"
       onClick={close}
     >
       <div
-        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[24px] border border-appborder bg-appsurface-raised shadow-[0_20px_60px_var(--appshadow)]"
+        className="flex h-full w-full flex-col overflow-hidden border border-appborder bg-appsurface-raised shadow-[0_20px_60px_var(--appshadow)] sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-3xl sm:rounded-[24px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between gap-3 border-b border-appborder p-4">
@@ -74,7 +90,7 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto bg-appinset p-4">
+        <div ref={viewerRef} className="flex-1 overflow-auto bg-appinset p-2 sm:p-4">
           {error ? (
             <p className="text-sm text-apptext-muted">
               Couldn't render this PDF inline ({error}). Try "Open raw PDF" above.
@@ -86,7 +102,7 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
               onLoadError={(e) => setError(e.message)}
               loading={<p className="text-sm text-apptext-muted">Loading bill…</p>}
             >
-              <Page pageNumber={pageNumber} width={560} />
+              <Page pageNumber={pageNumber} width={pageWidth} />
             </Document>
           )}
         </div>
