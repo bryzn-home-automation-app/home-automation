@@ -1,6 +1,7 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCoservBills } from '../api/coservBills';
+import BillPdfModal from './BillPdfModal';
 
 const money = (n?: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
@@ -21,6 +22,7 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
   );
   const loading = coservBills.isLoading;
   const hasData = bills.length > 0;
+  const [viewingUrl, setViewingUrl] = useState<string | null>(null);
 
   const usageLabel = service === 'electric' ? 'Usage (kWh)' : 'Usage (CCF)';
   const chargeLabel = service === 'electric' ? 'Electric Charge' : 'Gas Charge';
@@ -61,13 +63,13 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
                     <td className="py-2 pr-3 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
                     <td className="py-2">
                       {bill.pdfPath ? (
-                        <a
-                          href={`/uploads/${bill.pdfPath}`}
-                          download={bill.pdfPath.split('/').pop()}
+                        <button
+                          type="button"
+                          onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
                           className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                         >
                           View Bill
-                        </a>
+                        </button>
                       ) : (
                         '—'
                       )}
@@ -79,6 +81,7 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
           </table>
         </div>
       )}
+      <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
     </section>
   );
 });

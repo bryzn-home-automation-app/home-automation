@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -14,6 +14,7 @@ import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import type { WaterBill } from '../types';
 import { fetchWaterBills } from '../api/waterBills';
+import BillPdfModal from '../components/BillPdfModal';
 
 const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
 const TICK_PROPS = { fontSize: 11 } as const;
@@ -76,6 +77,7 @@ export default memo(function WaterUsage() {
   );
   const loading = waterBills.isLoading;
   const hasData = bills.length > 0;
+  const [viewingUrl, setViewingUrl] = useState<string | null>(null);
 
   const latestBill = bills[0];
   const avgMonthlyBill = hasData ? bills.reduce((s, b) => s + b.totalDue, 0) / bills.length : 0;
@@ -232,13 +234,13 @@ export default memo(function WaterUsage() {
                     <td className="py-2 pr-3 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
                     <td className="py-2">
                       {bill.pdfPath ? (
-                        <a
-                          href={`/uploads/${bill.pdfPath}`}
-                          download={bill.pdfPath.split('/').pop()}
+                        <button
+                          type="button"
+                          onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
                           className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                         >
                           View Bill
-                        </a>
+                        </button>
                       ) : (
                         '—'
                       )}
@@ -250,6 +252,7 @@ export default memo(function WaterUsage() {
           </div>
         )}
       </section>
+      <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
     </div>
   );
 });
