@@ -382,6 +382,37 @@ INSERT INTO utility_providers (name, type, portal_url, is_active)
 VALUES ('City of Lewisville', 'WATER', 'https://payments.dentoncountyfwsd.com', TRUE)
 ON CONFLICT DO NOTHING;
 
+-- CoServ combined electric+gas bill storage. CoServ issues one PDF statement per
+-- billing cycle covering both services (see coserv.smarthub.coop billing history),
+-- so this is one row per bill with both electric_* and gas_* columns, plus the
+-- stored PDF path so the bill can be viewed from the webapp. Itemized at the same
+-- category-total granularity as water_bills — not every individual charge line
+-- (PCRF/SCRF/PGF/etc.) from the bill's per-meter breakdown.
+CREATE TABLE IF NOT EXISTS coserv_bills (
+    id                    SERIAL PRIMARY KEY,
+    account_id            INTEGER        NOT NULL REFERENCES utility_accounts(id),
+    billing_period_start  DATE           NOT NULL,
+    billing_period_end    DATE           NOT NULL,
+    billing_date          DATE,
+    due_date              DATE,
+    electric_usage_kwh    NUMERIC(10,2),
+    electric_charge       NUMERIC(10,2),
+    gas_usage_ccf         NUMERIC(10,2),
+    gas_charge            NUMERIC(10,2),
+    current_charges       NUMERIC(10,2),
+    total_due             NUMERIC(10,2)  NOT NULL,
+    pdf_path              VARCHAR(500),
+    source                VARCHAR(100)   NOT NULL DEFAULT 'CoServ SmartHub PDF',
+    source_provider       VARCHAR(50)    NOT NULL DEFAULT 'coserv-smarthub-bill',
+    ingestion_batch_id    UUID           NOT NULL,
+    processing_version    VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at            TIMESTAMP      NOT NULL DEFAULT NOW(),
+    UNIQUE (account_id, billing_period_start, billing_period_end)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coserv_bills_account ON coserv_bills (account_id);
+CREATE INDEX IF NOT EXISTS idx_coserv_bills_batch   ON coserv_bills (ingestion_batch_id);
+
 -- ============================================================
 -- User Management & Access Control
 -- ============================================================

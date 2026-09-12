@@ -10,6 +10,7 @@ import { fetchBatchSummaries } from '../api/energy';
 import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 import WeatherContextCard from '../components/WeatherContextCard';
 import Weather24HourCard from '../components/Weather24HourCard';
+import CoservBillingHistory from '../components/CoservBillingHistory';
 
 export default memo(function GasUsage() {
   const { gasUsage, gasTotal, gasMeter, config } = useUsageData();
@@ -186,6 +187,8 @@ export default memo(function GasUsage() {
         summaries={summaryCards}
         loading={summaryLoading}
       />
+
+      <CoservBillingHistory service="gas" />
     </div>
   );
 });

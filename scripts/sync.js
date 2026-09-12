@@ -213,6 +213,25 @@ async function getOrCreateMeter(client) {
 }
 
 // ─── Login + capture auth token ─────────────────────────────────
+/**
+ * Log into SmartHub on an already-open page. Shared by captureAuthToken and
+ * any script that needs a live, logged-in page (not just the bearer token) —
+ * e.g. to click through the UI and capture a file download.
+ * Throws if login fails (still on /login after submitting).
+ */
+async function loginToSmartHub(page, secrets) {
+  await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(3000);
+  await page.locator('input[aria-label="Email"]').fill(secrets.COSERV_USERNAME);
+  await page.locator('input[aria-label="Password"]').fill(secrets.COSERV_PASSWORD);
+  await page.locator('button:has-text("Sign In")').click();
+  await page.waitForTimeout(6000);
+
+  if (page.url().includes('/login') || page.url().includes('#/login')) {
+    throw new Error('Login failed');
+  }
+}
+
 async function captureAuthToken(secrets) {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ locale: 'en-US' });
@@ -238,16 +257,11 @@ async function captureAuthToken(secrets) {
     };
   });
 
-  await page.goto(LOGIN_URL, { waitUntil: 'domcontentloaded', timeout: 30000 });
-  await page.waitForTimeout(3000);
-  await page.locator('input[aria-label="Email"]').fill(secrets.COSERV_USERNAME);
-  await page.locator('input[aria-label="Password"]').fill(secrets.COSERV_PASSWORD);
-  await page.locator('button:has-text("Sign In")').click();
-  await page.waitForTimeout(6000);
-
-  if (page.url().includes('/login') || page.url().includes('#/login')) {
+  try {
+    await loginToSmartHub(page, secrets);
+  } catch (e) {
     await browser.close();
-    throw new Error('Login failed');
+    throw e;
   }
 
   // Navigate to Usage Explorer to force secured requests (accounts/settings
@@ -483,6 +497,7 @@ module.exports = {
   // Reused by the standalone gas sync (scripts/sync-gas.js) so the auth capture
   // and async poll flow live in exactly one place.
   loadSecrets,
+  loginToSmartHub,
   captureAuthToken,
   pollUntilComplete,
   ACCOUNT_NUMBER,

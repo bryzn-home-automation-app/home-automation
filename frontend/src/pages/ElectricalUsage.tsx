@@ -15,6 +15,7 @@ import { isHourlySource } from '../utils/usageSource';
 import UsageWeatherChart from '../components/UsageWeatherChart';
 import ForecastChart from '../components/ForecastChart';
 import { useTheme, CHART_SERIES } from '../context/ThemeContext';
+import CoservBillingHistory from '../components/CoservBillingHistory';
 
 type LogFilter = 'daily' | 'hourly';
 
@@ -333,6 +334,8 @@ export default memo(function ElectricalUsage() {
       <DeferredRender minHeight={400}>
         <ForecastChart />
       </DeferredRender>
+
+      <CoservBillingHistory service="electric" />
 
       <UsageSummaryGrid
         title="Electric highs, lows, and rolling period totals"

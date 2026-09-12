@@ -85,6 +85,27 @@ export interface WaterBill {
   createdAt: string;
 }
 
+/** Combined electric+gas CoServ bill downloaded from SmartHub Billing History. Append-only. */
+export interface CoservBill {
+  id: number;
+  billingPeriodStart: string;
+  billingPeriodEnd: string;
+  billingDate?: string;
+  dueDate?: string;
+  electricUsageKwh?: number;
+  electricCharge?: number;
+  gasUsageCcf?: number;
+  gasCharge?: number;
+  currentCharges?: number;
+  totalDue: number;
+  pdfPath?: string;
+  source: string;
+  sourceProvider: string;
+  ingestionBatchId: string;
+  processingVersion: string;
+  createdAt: string;
+}
+
 export interface IntegrationAdapter {
   key: string;
   name: string;

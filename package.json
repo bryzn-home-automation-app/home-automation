@@ -10,7 +10,7 @@
     "sync:water-bill": "node scripts/sync-water-bill.js",
     "sync:water-bill:dry-run": "node scripts/sync-water-bill.js --dry-run",
     "gmail:authorize": "node scripts/gmail-authorize.js",
-    "test": "node --test test/sync.test.js test/sync-water-bill.test.js test/legacy/sync-green-button.test.js test/legacy/sync-hourly.test.js",
+    "test": "node --test test/sync.test.js test/sync-water-bill.test.js test/sync-coserv-bill.test.js test/legacy/sync-green-button.test.js test/legacy/sync-hourly.test.js",
     "test:live": "node test/coserv-live-test.js"
   },
   "devDependencies": {
