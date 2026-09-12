@@ -44,16 +44,21 @@ public class ForecastController {
 
         ForecastModel model = modelOpt.get();
 
-        // Fetch forecast weather from Open-Meteo
+        // Fetch forecast weather from Open-Meteo. Range starts at yesterday (not
+        // today) so a day that has just rolled from "today" into "yesterday" at
+        // midnight still gets a regenerated projection/band — otherwise it falls
+        // out of this range immediately and shows neither an actual (not backfilled
+        // yet) nor a band, an empty gap on the chart until the daily sync catches up.
         LocalDate today = LocalDate.now();
+        LocalDate rangeStart = today.minusDays(1);
         LocalDate end = today.plusDays(days);
-        WeatherResponse wx = weatherService.getWeatherForDateRange(lat, lon, today, end);
+        WeatherResponse wx = weatherService.getWeatherForDateRange(lat, lon, rangeStart, end);
 
         List<WeatherForecastDay> forecastDays = new ArrayList<>();
         if (wx.daily() != null) {
             for (var d : wx.daily()) {
                 LocalDate date = LocalDate.parse(d.date());
-                if (!date.isBefore(today) && !date.isAfter(end)) {
+                if (!date.isBefore(rangeStart) && !date.isAfter(end)) {
                     double avg = (d.maxTemperature() + d.minTemperature()) / 2;
                     forecastDays.add(new WeatherForecastDay(date, d.maxTemperature(), d.minTemperature(), avg));
                 }

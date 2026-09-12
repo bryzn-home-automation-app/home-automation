@@ -167,17 +167,22 @@ function ForecastChart() {
       });
     }
 
-    // Future forecasts
+    // Future forecasts (also covers yesterday — see ForecastController — so a day
+    // that just rolled from "today" into "yesterday" still gets a band instead of
+    // an empty gap while its actual hasn't been backfilled yet).
     for (const f of forecast.forecasts ?? []) {
       const existing = byDate.get(f.date);
+      const actual = existing?.actual ?? null;
       byDate.set(f.date, {
         date: f.date,
         label: formatDateLabel(f.date),
-        actual: existing?.actual ?? null,
+        actual,
         predicted: f.predictedKwh,
         lower: f.lowerBound,
         upper: f.upperBound,
-        confidenceBand: [f.lowerBound, f.upperBound],
+        // Once the real actual is known, let it stand on its own — don't keep
+        // drawing a band over an already-graded day.
+        confidenceBand: actual == null ? [f.lowerBound, f.upperBound] : null,
       });
     }
 
@@ -352,12 +357,17 @@ function ForecastChart() {
                 label={{ value: 'Today', fill: chartTheme.muted, fontSize: 10 }}
               />
 
-              {/* Confidence band */}
+              {/* Confidence band. stroke is set (not "none") so Recharts' hover
+                  tooltip — which colors its swatch from stroke, falling back to
+                  fill only when no stroke exists — shows the full-brightness
+                  theme color instead of the translucent fill used for the area
+                  wash on the chart itself. */}
               <Area
                 dataKey="confidenceBand"
                 fill={bandColor}
                 fillOpacity={1}
-                stroke="none"
+                stroke={series.temp}
+                strokeWidth={1.5}
                 isAnimationActive={false}
                 connectNulls={false}
               />
