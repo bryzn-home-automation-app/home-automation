@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -23,6 +24,25 @@ public class ForecastService {
     private static final Logger log = LoggerFactory.getLogger(ForecastService.class);
     private static final double COMFORT_BASE = 65.0;
     private static final int MIN_DATA_POINTS = 7;
+
+    // ── Recency-weighted confidence-band tuning ─────────────────
+    // The band is derived from RECENT out-of-sample forecast errors (graded
+    // snapshots: predicted vs. actual), NOT from the model's all-time in-sample
+    // fit. This makes it react quickly — the user's explicit preference: "a
+    // tighter forecast band that changes frequently but learns quickly over a
+    // broad band that slowly improves."
+    //
+    // NOTE: this recency weighting applies ONLY to the interval width. The OLS
+    // regression in trainModel() still fits on the FULL history so the mean
+    // projection keeps learning long-run seasonal/degree-day signal. The two
+    // deliberately use different memory lengths: long memory for the mean line
+    // (retain seasonal history), short memory for the band (react to recent
+    // accuracy). A single shared decay constant can't serve both.
+    private static final double BAND_HALFLIFE_DAYS = 7.0;   // errors ~2 weeks old carry ~1/4 weight
+    private static final int    BAND_WINDOW_DAYS   = 30;    // hard lookback cap on graded errors
+    private static final int    BAND_MIN_SAMPLES   = 4;     // need this many graded days to trust OOS spread
+    private static final double BAND_Z             = 1.28;  // ~80% prediction interval (normal)
+    private static final double MAE_TO_STD         = 1.2533; // sqrt(pi/2): in-sample MAE -> std-equiv fallback
 
     @Value("${app.kwh-rate:0.12}")
     private double kwhRate;
@@ -214,6 +234,12 @@ public class ForecastService {
     }
 
     public List<DailyForecast> generateForecasts(ForecastModel model, List<WeatherForecastDay> forecastWeather) {
+        // Recency-weighted residual spread (kWh) drives the band width. A single
+        // sigma is applied additively around each day's projection (homoscedastic
+        // band, consistent with the OLS assumption), rather than the old
+        // percentage-of-prediction margin gated by an all-time confidence score.
+        double sigma = computeIntervalSigma(model, LocalDate.now());
+
         List<DailyForecast> results = new ArrayList<>();
         for (WeatherForecastDay wx : forecastWeather) {
             double kwh = predict(model, wx.avgTemp, wx.date.getDayOfWeek(), wx.date.getMonthValue());
@@ -221,17 +247,102 @@ public class ForecastService {
             double cdd = Math.max(0, wx.avgTemp - COMFORT_BASE);
             double hdd = Math.max(0, COMFORT_BASE - wx.avgTemp);
 
-            // Confidence interval widens with less data
-            double confidencePct = computeConfidence(model, wx.date);
-            double margin = kwh * (1.0 - confidencePct);
+            double confidencePct;
+            double margin;
+            if (sigma > 0) {
+                // Absolute band from recent out-of-sample error.
+                margin = BAND_Z * sigma;
+                // Report an equivalent confidence for the KPI/tooltip: tight band
+                // relative to the day's projection => high confidence.
+                confidencePct = kwh > 0
+                        ? Math.max(0.05, Math.min(0.99, 1.0 - margin / kwh))
+                        : 0.05;
+            } else {
+                // Cold start: no graded history and no usable in-sample MAE — fall
+                // back to the legacy data-volume/R² confidence heuristic.
+                confidencePct = computeConfidence(model, wx.date);
+                margin = kwh * (1.0 - confidencePct);
+            }
 
+            double lower = Math.max(0, kwh - margin);
             results.add(new DailyForecast(
                     wx.date.toString(), round2(kwh), round2(cost),
-                    round2(kwh - margin), round2(kwh + margin),
+                    round2(lower), round2(kwh + margin),
                     round2(wx.highTemp), round2(wx.lowTemp), round2(wx.avgTemp),
                     round2(cdd), round2(hdd), round2(confidencePct * 100)));
         }
         return results;
+    }
+
+    /**
+     * Recency-weighted residual spread (kWh) used as the confidence-band sigma.
+     *
+     * <p>Primary signal: the model's <em>out-of-sample</em> forecast errors —
+     * graded {@link ForecastSnapshot}s where an actual reading has since arrived.
+     * For each target day we keep only the freshest prediction (latest
+     * {@code forecast_date}) so a single day isn't over-counted by its 0..N-day-
+     * ahead predictions, and so the spread reflects the model's real operational
+     * skill rather than being inflated by long-horizon guesses. Each residual is
+     * weighted by {@code 0.5^(ageDays / BAND_HALFLIFE_DAYS)}, ageDays measured
+     * from today to the target date — so the band tightens within days when
+     * recent predictions land and widens just as fast when they miss.
+     *
+     * <p>Cold-start fallback (fewer than {@link #BAND_MIN_SAMPLES} graded days):
+     * the model's in-sample MAE scaled to a std-equivalent, so the band is still
+     * defined on day one. Returns {@code -1} only when even that is unavailable,
+     * signalling the caller to use the legacy confidence heuristic.
+     */
+    double computeIntervalSigma(ForecastModel model, LocalDate today) {
+        LocalDate since = today.minusDays(BAND_WINDOW_DAYS);
+        List<ForecastSnapshot> graded;
+        try {
+            graded = snapshotRepo.findRecentWithActuals(since);
+        } catch (Exception e) {
+            log.warn("ForecastService: recent-residual query failed, using in-sample fallback: {}", e.getMessage());
+            graded = List.of();
+        }
+
+        // Freshest prediction per target day.
+        Map<LocalDate, ForecastSnapshot> freshest = new HashMap<>();
+        for (ForecastSnapshot s : graded) {
+            if (s.getActualKwh() == null || s.getPredictedKwh() == null) continue;
+            freshest.merge(s.getTargetDate(), s,
+                    (a, b) -> a.getForecastDate().isAfter(b.getForecastDate()) ? a : b);
+        }
+
+        if (freshest.size() >= BAND_MIN_SAMPLES) {
+            List<double[]> residualAge = new ArrayList<>(freshest.size());
+            for (ForecastSnapshot s : freshest.values()) {
+                double resid = s.getPredictedKwh().doubleValue() - s.getActualKwh().doubleValue();
+                long age = Math.max(0, ChronoUnit.DAYS.between(s.getTargetDate(), today));
+                residualAge.add(new double[]{resid, age});
+            }
+            double sigma = recencyWeightedStd(residualAge, BAND_HALFLIFE_DAYS);
+            if (Double.isFinite(sigma) && sigma > 0) return sigma;
+        }
+
+        // Cold-start fallback: in-sample MAE -> std-equivalent.
+        if (model.getMae() != null && model.getMae().doubleValue() > 0) {
+            return model.getMae().doubleValue() * MAE_TO_STD;
+        }
+        return -1;
+    }
+
+    /**
+     * Exponentially recency-weighted RMS of residuals. Each element is
+     * {@code [residual, ageDays]}; weight is {@code 0.5^(ageDays/halfLifeDays)}.
+     * With uniform ages this reduces to plain RMS. OLS residuals sum to ~0, so
+     * RMS about zero is the appropriate spread estimate. Pure/stateless for unit
+     * testing.
+     */
+    static double recencyWeightedStd(List<double[]> residualAge, double halfLifeDays) {
+        double wSum = 0, wErr2 = 0;
+        for (double[] ra : residualAge) {
+            double w = Math.pow(0.5, ra[1] / halfLifeDays);
+            wSum += w;
+            wErr2 += w * ra[0] * ra[0];
+        }
+        return wSum > 0 ? Math.sqrt(wErr2 / wSum) : Double.NaN;
     }
 
     @SuppressWarnings("unchecked")
@@ -413,6 +524,10 @@ public class ForecastService {
 
     // ── Confidence ──────────────────────────────────────────
 
+    // Legacy confidence heuristic. As of the recency-weighted band redesign this
+    // is only the COLD-START fallback (used when there aren't yet enough graded
+    // out-of-sample snapshots and the model has no in-sample MAE to lean on).
+    // The steady-state band comes from computeIntervalSigma() instead.
     private double computeConfidence(ForecastModel model, LocalDate targetDate) {
         int dataPoints = model.getDataPointsUsed();
         int month = targetDate.getMonthValue();
