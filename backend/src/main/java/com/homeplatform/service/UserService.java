@@ -60,7 +60,7 @@ public class UserService {
 
     @Transactional
     public AdminUserResponse register(RegisterRequest req) {
-        if (userRepo.existsByUsername(req.username())) {
+        if (userRepo.existsByUsernameIgnoreCase(req.username())) {
             throw new IllegalArgumentException("Username already taken");
         }
         if (userRepo.existsByEmail(req.email())) {
@@ -92,7 +92,7 @@ public class UserService {
             throw new IllegalStateException("Too many failed login attempts. Try again later.");
         }
 
-        User user = userRepo.findByUsername(req.username()).orElse(null);
+        User user = userRepo.findByUsernameIgnoreCase(req.username()).orElse(null);
 
         // Fail uniformly for a missing user or a wrong password — never reveal
         // which one it was.
@@ -176,7 +176,7 @@ public class UserService {
             if (req.avatarUrl() != null) user.setAvatarUrl(req.avatarUrl());
         } else {
             String username = baseUsername;
-            if (userRepo.existsByUsername(username)) {
+            if (userRepo.existsByUsernameIgnoreCase(username)) {
                 username = username + "_" + (int) (Math.random() * 9000 + 1000);
             }
             user = User.builder()
@@ -399,7 +399,7 @@ public class UserService {
 
     @Transactional
     public void seedAdminIfNeeded(String email, String username, String password, String displayName) {
-        if (!userRepo.existsByUsername(username)) {
+        if (!userRepo.existsByUsernameIgnoreCase(username)) {
             if (password == null || password.isBlank()) {
                 throw new IllegalStateException(
                         "ADMIN_PASSWORD must be set to seed the admin account '" + username

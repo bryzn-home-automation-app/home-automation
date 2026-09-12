@@ -12,11 +12,17 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUsername(String username);
 
+    /** Case-insensitive lookup — "Bryan", "bryan", "BRYAN" all resolve to the same account. */
+    Optional<User> findByUsernameIgnoreCase(String username);
+
     Optional<User> findByEmail(String email);
 
     Optional<User> findByDisplayName(String displayName);
 
     boolean existsByUsername(String username);
+
+    /** Case-insensitive existence check, used everywhere a username needs to stay globally unique regardless of case. */
+    boolean existsByUsernameIgnoreCase(String username);
 
     boolean existsByEmail(String email);
 
