@@ -1,6 +1,44 @@
-import { useState, type FormEvent, useRef } from 'react';
+import { useState, useEffect, type FormEvent, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme, KPI_TONES, hexToRgba } from '../context/ThemeContext';
+import VirtualizedList from '../components/VirtualizedList';
+
+const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)'; // matches this file's own lg: breakpoint usage
+const MOBILE_ROW_HEIGHT = 104;
+const DESKTOP_ROW_HEIGHT = 76;
+const LIST_HEIGHT = 640; // matches the old max-h-[40rem]
+
+/** Row height differs a lot between RecordCard's stacked-mobile and single-line-desktop
+ * layouts (both exist in the DOM, one hidden via CSS) — VirtualizedList needs to know
+ * which one is actually visible to size its windowing math correctly. */
+function useIsDesktopLayout() {
+  const [isDesktop, setIsDesktop] = useState(() =>
+    typeof window === 'undefined' ? true : window.matchMedia(DESKTOP_MEDIA_QUERY).matches
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia(DESKTOP_MEDIA_QUERY);
+    const onChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches);
+    setIsDesktop(media.matches);
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, []);
+
+  return isDesktop;
+}
+
+/** Debounces a fast-changing value — used to keep the search box responsive
+ * to type into while avoiding a network request (React Query refetch) per
+ * keystroke. */
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timeout = setTimeout(() => setDebounced(value), delayMs);
+    return () => clearTimeout(timeout);
+  }, [value, delayMs]);
+  return debounced;
+}
 import {
   fetchMaintenanceRecords,
   fetchMaintenanceAnalytics,
@@ -708,14 +746,18 @@ export default function MaintenanceDashboard() {
   const [filters, setFilters] = useState<{ category: string; status: string; priority: string; search: string }>({
     category: '', status: '', priority: '', search: '',
   });
+  // Debounced so typing in the search box doesn't fire a network request
+  // (and full-list re-render) on every keystroke.
+  const debouncedSearch = useDebouncedValue(filters.search, 300);
+  const isDesktopLayout = useIsDesktopLayout();
 
   const records = useQuery({
-    queryKey: ['maintenance-records', filters],
+    queryKey: ['maintenance-records', filters.category, filters.status, filters.priority, debouncedSearch],
     queryFn: () => fetchMaintenanceRecords({
       category: filters.category || undefined,
       status: filters.status || undefined,
       priority: filters.priority || undefined,
-      search: filters.search || undefined,
+      search: debouncedSearch || undefined,
       limit: 100,
     }),
   });
@@ -825,9 +867,21 @@ export default function MaintenanceDashboard() {
               <span>Completed</span>
               <span className="text-right">Priority</span>
             </div>
-            <div className="space-y-2">
-              {data.map((r) => <RecordCard key={r.id} r={r} onSelect={setSelected} />)}
-            </div>
+            <VirtualizedList
+              items={data}
+              height={Math.min(LIST_HEIGHT, data.length * (isDesktopLayout ? DESKTOP_ROW_HEIGHT : MOBILE_ROW_HEIGHT))}
+              itemHeight={isDesktopLayout ? DESKTOP_ROW_HEIGHT : MOBILE_ROW_HEIGHT}
+              overscan={4}
+              renderItem={(r) => (
+                <div
+                  key={r.id}
+                  className="pb-2"
+                  style={{ height: isDesktopLayout ? DESKTOP_ROW_HEIGHT : MOBILE_ROW_HEIGHT, overflow: 'hidden', boxSizing: 'border-box' }}
+                >
+                  <RecordCard r={r} onSelect={setSelected} />
+                </div>
+              )}
+            />
           </div>
         )}
       </section>
