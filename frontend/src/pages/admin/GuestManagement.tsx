@@ -44,7 +44,7 @@ export default function GuestManagement() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Admin
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -57,7 +57,7 @@ export default function GuestManagement() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Active Guests</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Active Guests</p>
               <p className="mt-2 text-lg font-semibold text-appsuccess">{activeCount}</p>
             </div>
             <button
@@ -66,7 +66,7 @@ export default function GuestManagement() {
               disabled={expireMut.isPending}
               className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-left transition-colors hover:bg-amber-300/20"
             >
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-muted">Maintenance</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-muted">Maintenance</p>
               <p className="mt-2 text-sm font-semibold text-amber-200">
                 {expireMut.isPending ? 'Expiring...' : 'Expire All'}
               </p>
@@ -79,7 +79,7 @@ export default function GuestManagement() {
       <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Sessions
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -134,7 +134,7 @@ export default function GuestManagement() {
                     {timeAgo(s.lastSeenAt)}
                   </div>
                   <div className="text-right">
-                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${
+                    <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${
                       s.status === 'ACTIVE'
                         ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
                         : 'border-appborder bg-appinset text-apptext-muted'

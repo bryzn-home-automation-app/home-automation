@@ -58,10 +58,10 @@ export function ForecastStrip({ hourly }: { hourly: WeatherHour[] | undefined })
             key={h.time}
             className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl border border-appborder bg-appinset px-1.5 py-2.5 sm:px-2"
           >
-            <span className="text-[10px] font-medium text-apptext-muted">{i === 0 ? 'Now' : hourLabel(h.time)}</span>
+            <span className="text-3xs font-medium text-apptext-muted">{i === 0 ? 'Now' : hourLabel(h.time)}</span>
             <span className="text-xl leading-none">{emoji}</span>
             <span className="text-sm font-semibold text-apptext">{Math.round(h.temperature)}°</span>
-            <span className={`text-[10px] font-medium tabular-nums ${pop > 0 ? 'text-sky-300' : 'text-apptext-dim'}`}>
+            <span className={`text-3xs font-medium tabular-nums ${pop > 0 ? 'text-sky-300' : 'text-apptext-dim'}`}>
               {pop > 0 ? `${pop}%` : '—'}
             </span>
           </div>
@@ -120,7 +120,7 @@ export function ForecastModal({
         {/* Header */}
         <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
             <h3 className="mt-1 text-xl font-semibold text-apptext">Next 24 hours</h3>
             {current && (
               <p className="mt-1 text-sm text-apptext-soft">
@@ -142,7 +142,7 @@ export function ForecastModal({
         {/* Temperature curve */}
         {chartData.length >= 2 && (
           <div className="mb-5 shrink-0 rounded-2xl border border-appborder bg-appinset p-3">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Temperature (°F)</p>
+            <p className="mb-2 text-3xs font-bold uppercase tracking-[0.14em] text-apptext-soft">Temperature (°F)</p>
             <ResponsiveContainer width="100%" height={140} debounce={80}>
               <AreaChart data={chartData} margin={CHART_MARGIN}>
                 <defs>
@@ -168,7 +168,7 @@ export function ForecastModal({
         {/* Hourly detail list — the single scroll region */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
           {/* Header row */}
-          <div className="mb-1 grid grid-cols-[3.5rem_2rem_1fr_auto] items-center gap-2 px-2 pb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-apptext-soft sm:grid-cols-[4rem_2.5rem_1fr_4rem_4rem_4rem]">
+          <div className="mb-1 grid grid-cols-[3.5rem_2rem_1fr_auto] items-center gap-2 px-2 pb-1 text-3xs font-bold uppercase tracking-[0.12em] text-apptext-soft sm:grid-cols-[4rem_2.5rem_1fr_4rem_4rem_4rem]">
             <span>Time</span>
             <span></span>
             <span>Temp</span>
@@ -187,7 +187,7 @@ export function ForecastModal({
                 {newDay && (
                   <div className="flex items-center gap-2 px-1 pt-2.5 pb-0.5">
                     <span className="h-px flex-1 bg-appborder" />
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-muted">{dayLabel(dateKey)}</span>
+                    <span className="text-3xs font-bold uppercase tracking-[0.14em] text-apptext-muted">{dayLabel(dateKey)}</span>
                     <span className="h-px flex-1 bg-appborder" />
                   </div>
                 )}

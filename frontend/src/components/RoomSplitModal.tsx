@@ -76,7 +76,7 @@ export default function RoomSplitModal({ split, onClose }: Props) {
         className="w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+        <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Floor plan
         </p>
         <h3 className="mt-2 text-xl font-semibold text-apptext">Divide {roomLabel}</h3>

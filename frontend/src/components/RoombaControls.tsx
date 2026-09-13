@@ -63,7 +63,7 @@ export default function RoombaControls({
     <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Admin</p>
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Admin</p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">Controls</h3>
         </div>
         {last && (
@@ -90,7 +90,7 @@ export default function RoombaControls({
         ))}
       </div>
 
-      <p className="mt-3 text-[11px] text-apptext-dim">
+      <p className="mt-3 text-2xs text-apptext-dim">
         {offline
           ? 'Robot is offline — commands are disabled until it checks in.'
           : 'A “sent” command was accepted by the robot, not guaranteed to run — watch the status to confirm.'}

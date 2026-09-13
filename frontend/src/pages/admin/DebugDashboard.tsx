@@ -335,7 +335,7 @@ export default function DebugDashboard() {
         <div className="flex items-center gap-3">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-300/20 bg-amber-300/10 text-2xl">🔧</span>
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-amber-200/70">Admin</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-amber-200/70">Admin</p>
             <h2 className="text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">Debug Dashboard <span className="text-xs font-mono text-apptext-dim ml-2">{version}</span></h2>
           </div>
         </div>
@@ -344,7 +344,7 @@ export default function DebugDashboard() {
       {/* System Health */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Database</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Database</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -359,7 +359,7 @@ export default function DebugDashboard() {
           )}
         </div>
         <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Uptime</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Uptime</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -373,7 +373,7 @@ export default function DebugDashboard() {
           )}
         </div>
         <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Heap Memory</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Heap Memory</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -383,7 +383,7 @@ export default function DebugDashboard() {
           )}
         </div>
         <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Threads</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Threads</p>
           {healthLoading ? (
             <p className="mt-2 text-sm text-apptext-muted">...</p>
           ) : (
@@ -392,7 +392,7 @@ export default function DebugDashboard() {
         </div>
         {health?.pool && (
           <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">DB Pool</p>
+            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">DB Pool</p>
             <p className={`mt-2 text-lg font-semibold ${health.pool.awaitingConnection > 0 ? 'text-rose-300' : 'text-apptext'}`}>
               {health.pool.active}<span className="text-sm text-apptext-muted"> / {health.pool.max} active</span>
             </p>
@@ -407,7 +407,7 @@ export default function DebugDashboard() {
       {/* Last sync check box */}
       {health?.lastSyncCheck && (
         <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
           <p className="mt-1 text-sm text-apptext-soft">
             {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
               month: 'short', day: 'numeric',
@@ -422,15 +422,15 @@ export default function DebugDashboard() {
       {summary && (
         <section className="grid grid-cols-3 gap-3">
           <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
+            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
             <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
           </div>
           <div className="rounded-2xl border border-rose-300/40 bg-rose-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
+            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
             <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
           </div>
           <div className="rounded-2xl border border-amber-300/40 bg-amber-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
+            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
             <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
           </div>
         </section>
@@ -444,7 +444,7 @@ export default function DebugDashboard() {
             return (
               <div key={label} className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">{label} data freshness</p>
+                  <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">{label} data freshness</p>
                   <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${b.cls}`}>
                     <span className={`h-2 w-2 rounded-full ${b.dot}`} /> {b.label}
                   </span>
@@ -467,7 +467,7 @@ export default function DebugDashboard() {
       {configCheck && configCheck.checks.length > 0 && (
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Configuration</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Configuration</p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Config sanity checks</h3>
           </div>
           <div className="space-y-1.5">
@@ -488,7 +488,7 @@ export default function DebugDashboard() {
       {syncHistory && syncHistory.bySource.length > 0 && (
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync reliability</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync reliability</p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Last {syncHistory.days} days by scheduler</h3>
           </div>
           <div className="space-y-2">
@@ -518,10 +518,10 @@ export default function DebugDashboard() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-3 flex items-end justify-between gap-3">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Data coverage</p>
+              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Data coverage</p>
               <h3 className="mt-2 text-xl font-semibold text-apptext">Last {coverage.days} days</h3>
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-apptext-dim">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-apptext-dim">
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300" /> complete</span>
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-300" /> partial</span>
               <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-300/70" /> missing</span>
@@ -537,8 +537,8 @@ export default function DebugDashboard() {
                 return (
                   <div key={d.date} title={`${d.date}\nHourly: ${d.hourlyNonZero}/${coverage.expectedHourly} non-zero\nDaily row: ${d.dailyPresent ? 'yes' : 'no'}\nWeather: ${d.weatherPresent ? 'yes' : 'no'}`}
                        className={`flex min-w-[52px] flex-1 flex-col items-center gap-1 rounded-xl border p-2 ${cell}`}>
-                    <span className="text-[10px] tabular-nums text-apptext-muted">{mm}/{dd}</span>
-                    <span className="text-xs font-semibold tabular-nums text-apptext">{d.hourlyNonZero}<span className="text-[10px] font-normal text-apptext-dim">/{coverage.expectedHourly}</span></span>
+                    <span className="text-3xs tabular-nums text-apptext-muted">{mm}/{dd}</span>
+                    <span className="text-xs font-semibold tabular-nums text-apptext">{d.hourlyNonZero}<span className="text-3xs font-normal text-apptext-dim">/{coverage.expectedHourly}</span></span>
                     <div className="flex gap-1">
                       <span title="daily row" className={`h-1.5 w-1.5 rounded-full ${d.dailyPresent ? 'bg-sky-300' : 'bg-appborder'}`} />
                       <span title="weather" className={`h-1.5 w-1.5 rounded-full ${d.weatherPresent ? 'bg-cyan-300' : 'bg-appborder'}`} />
@@ -548,7 +548,7 @@ export default function DebugDashboard() {
               })}
             </div>
           </div>
-          <p className="mt-2 text-[11px] text-apptext-dim">
+          <p className="mt-2 text-2xs text-apptext-dim">
             Top number = non-zero hourly readings (of {coverage.expectedHourly}); a day is complete at ≥{coverage.completeThreshold}.
             Dots: <span className="text-sky-300">daily row</span> · <span className="text-cyan-300">weather</span>.
           </p>
@@ -558,14 +558,14 @@ export default function DebugDashboard() {
       {/* Manual Sync Triggers */}
       <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">Run Sync Jobs</h3>
         </div>
 
         {/* Date range selector */}
         <div className="mb-4 rounded-2xl border border-appborder bg-appinset p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-dim">Range</span>
+            <span className="text-2xs font-medium uppercase tracking-[0.14em] text-apptext-dim">Range</span>
             <button
               type="button"
               onClick={() => setPreset('yesterday')}
@@ -593,7 +593,7 @@ export default function DebugDashboard() {
           {preset === 'range' && (
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-apptext-dim">
+                <label className="mb-1.5 block text-3xs font-medium uppercase tracking-[0.14em] text-apptext-dim">
                   Start date
                 </label>
                 <input
@@ -606,7 +606,7 @@ export default function DebugDashboard() {
                 />
               </div>
               <div>
-                <label className="mb-1.5 block text-[10px] font-medium uppercase tracking-[0.14em] text-apptext-dim">
+                <label className="mb-1.5 block text-3xs font-medium uppercase tracking-[0.14em] text-apptext-dim">
                   End date
                 </label>
                 <input
@@ -642,7 +642,7 @@ export default function DebugDashboard() {
           <SyncButton label="🔔 Generate Alerts" endpoint="/admin/sync/alerts" />
           <SyncButton label="📈 Retrain Forecast" endpoint="/admin/sync/forecast" />
         </div>
-        <p className="mt-2 text-[10px] text-apptext-dim">
+        <p className="mt-2 text-3xs text-apptext-dim">
           Syncs run in the background — watch the Diagnostic Log for results.
         </p>
       </section>
@@ -651,7 +651,7 @@ export default function DebugDashboard() {
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Event Feed</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Event Feed</p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Diagnostic Log</h3>
           </div>
           <div className="flex items-center gap-2">
@@ -697,26 +697,26 @@ export default function DebugDashboard() {
                 className="group cursor-pointer border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-appaccent/40"
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-[11px] tabular-nums text-apptext-muted whitespace-nowrap">
+                  <span className="text-2xs tabular-nums text-apptext-muted whitespace-nowrap">
                     {new Date(e.timestamp).toLocaleString('en-US', {
                       month: 'short', day: 'numeric',
                       hour: 'numeric', minute: '2-digit', second: '2-digit',
                     })}
                   </span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${levelBadge(e.level)}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${levelBadge(e.level)}`}>
                     {e.level}
                   </span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${categoryBadge(e.category)}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${categoryBadge(e.category)}`}>
                     {e.category}
                   </span>
-                  <span className="text-[10px] text-apptext-dim">{e.source}</span>
-                  <span className="ml-auto text-[10px] text-apptext-dim opacity-0 transition-opacity group-hover:opacity-100">
+                  <span className="text-3xs text-apptext-dim">{e.source}</span>
+                  <span className="ml-auto text-3xs text-apptext-dim opacity-0 transition-opacity group-hover:opacity-100">
                     View details →
                   </span>
                 </div>
                 <p className="mt-1 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
                 {e.details && (
-                  <p className="mt-0.5 text-[10px] leading-snug text-apptext-dim truncate" title={e.details}>
+                  <p className="mt-0.5 text-3xs leading-snug text-apptext-dim truncate" title={e.details}>
                     {e.details}
                   </p>
                 )}
@@ -730,14 +730,14 @@ export default function DebugDashboard() {
       {syncEvents.length > 0 && (
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync History</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync History</p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Recent Sync Runs</h3>
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {syncEvents.slice(0, 6).map((e) => (
               <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
                     {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
                   </span>
                   <span className="text-xs text-apptext-dim">
@@ -745,7 +745,7 @@ export default function DebugDashboard() {
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
-                <p className="mt-1 text-[10px] text-apptext-dim">{e.source}</p>
+                <p className="mt-1 text-3xs text-apptext-dim">{e.source}</p>
               </div>
             ))}
           </div>
@@ -755,7 +755,7 @@ export default function DebugDashboard() {
       {forecastEvents.length > 0 && (
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Events Received</h3>
             <p className="mt-1 text-xs text-apptext-dim">
               Every ingestion event the forecast system has reacted to — including no-ops where a sync
@@ -766,7 +766,7 @@ export default function DebugDashboard() {
             {forecastEvents.slice(0, 6).map((e) => (
               <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
                     {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
                   </span>
                   <span className="text-xs text-apptext-dim">
@@ -774,7 +774,7 @@ export default function DebugDashboard() {
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
-                <p className="mt-1 text-[10px] text-apptext-dim">{e.source}</p>
+                <p className="mt-1 text-3xs text-apptext-dim">{e.source}</p>
               </div>
             ))}
           </div>
@@ -786,7 +786,7 @@ export default function DebugDashboard() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
               <h3 className="mt-2 text-xl font-semibold text-apptext">Accuracy &amp; Drift</h3>
               <p className="mt-1 text-xs text-apptext-dim">
                 Why recent forecasts missed, and whether the misses look like one weird day or a model
@@ -807,12 +807,12 @@ export default function DebugDashboard() {
               { label: 'Recent Bias', value: fmtSigned1(diagnostics.drift.recentBias) },
             ].map((m) => (
               <div key={m.label} className="rounded-2xl border border-appborder bg-appinset p-3">
-                <p className="text-[10px] uppercase tracking-wide text-apptext-muted">{m.label}</p>
+                <p className="text-3xs uppercase tracking-wide text-apptext-muted">{m.label}</p>
                 <p className="mt-1 text-base font-semibold tabular-nums text-apptext">{m.value}</p>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-apptext-dim">
+          <p className="mt-2 text-2xs text-apptext-dim">
             {diagnostics.drift.sampleCount} graded day{diagnostics.drift.sampleCount === 1 ? '' : 's'} in the drift window
             {diagnostics.drift.streakLength > 0 && diagnostics.drift.streakSign !== 0 && (
               <> · {diagnostics.drift.streakLength}-day streak of usage running {diagnostics.drift.streakSign > 0 ? 'above' : 'below'} forecast</>
@@ -824,7 +824,7 @@ export default function DebugDashboard() {
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[520px] text-sm">
                 <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wide text-apptext-muted">
+                  <tr className="text-left text-2xs uppercase tracking-wide text-apptext-muted">
                     <th className="pb-2 pr-3 font-medium">Date</th>
                     <th className="pb-2 pr-3 text-right font-medium">Actual</th>
                     <th className="pb-2 pr-3 text-right font-medium">Predicted</th>
@@ -848,7 +848,7 @@ export default function DebugDashboard() {
                         {d.anomalyScore != null ? d.anomalyScore.toFixed(2) : '—'}
                       </td>
                       <td className="py-2">
-                        <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${anomalyClassBadge(d.anomalyClassification)}`}>
+                        <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${anomalyClassBadge(d.anomalyClassification)}`}>
                           {d.anomalyClassification}
                         </span>
                       </td>
@@ -943,7 +943,7 @@ LIMIT 50`);
     <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">DB Explorer</p>
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">DB Explorer</p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">Query Console</h3>
         </div>
         <button
@@ -974,7 +974,7 @@ LIMIT 50`);
             <button
               key={p.label}
               onClick={() => setQuery(p.query)}
-              className="rounded-full border border-sky-300/35 bg-sky-300/18 px-2.5 py-1 text-[10px] font-medium text-apptext-muted transition-colors hover:border-sky-300/50 hover:bg-sky-300/25"
+              className="rounded-full border border-sky-300/35 bg-sky-300/18 px-2.5 py-1 text-3xs font-medium text-apptext-muted transition-colors hover:border-sky-300/50 hover:bg-sky-300/25"
               title={`${tables.find(t => t.name === p.label)?.size ?? ''} · ${tables.find(t => t.name === p.label)?.columns ?? ''} cols`}
             >
               {p.label}
@@ -1068,15 +1068,15 @@ function EventDetailModal({ event, onClose }: { event: AppEvent; onClose: () => 
         <div className="flex items-start justify-between gap-3 border-b border-appborder px-6 py-5">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${levelBadge(event.level)}`}>
+              <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${levelBadge(event.level)}`}>
                 {event.level}
               </span>
-              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase ${categoryBadge(event.category)}`}>
+              <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${categoryBadge(event.category)}`}>
                 {event.category}
               </span>
               <span className="text-xs text-apptext-muted">{event.source}</span>
             </div>
-            <p className="mt-2 text-[11px] tabular-nums text-apptext-dim">
+            <p className="mt-2 text-2xs tabular-nums text-apptext-dim">
               {new Date(event.timestamp).toLocaleString('en-US', {
                 weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
                 hour: 'numeric', minute: '2-digit', second: '2-digit',
@@ -1095,14 +1095,14 @@ function EventDetailModal({ event, onClose }: { event: AppEvent; onClose: () => 
         {/* Body */}
         <div className="overflow-y-auto px-6 py-5">
           <div>
-            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-apptext-dim">Message</p>
+            <p className="text-3xs font-medium uppercase tracking-[0.16em] text-apptext-dim">Message</p>
             <p className="mt-1.5 text-sm leading-relaxed text-apptext-soft break-words">{event.message}</p>
           </div>
 
           <div className="mt-5">
-            <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-apptext-dim">Details</p>
+            <p className="text-3xs font-medium uppercase tracking-[0.16em] text-apptext-dim">Details</p>
             {event.details ? (
-              <pre className="mt-1.5 whitespace-pre-wrap break-words rounded-2xl border border-appborder bg-appinset p-4 text-[11px] leading-relaxed text-apptext-soft font-mono">
+              <pre className="mt-1.5 whitespace-pre-wrap break-words rounded-2xl border border-appborder bg-appinset p-4 text-2xs leading-relaxed text-apptext-soft font-mono">
                 {event.details}
               </pre>
             ) : (

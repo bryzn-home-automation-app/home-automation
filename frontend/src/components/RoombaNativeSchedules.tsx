@@ -48,7 +48,7 @@ export default function RoombaNativeSchedules({ isAdmin }: { isAdmin: boolean })
     <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-3">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
             Real schedules
           </p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">Native Schedule</h3>
@@ -95,7 +95,7 @@ export default function RoombaNativeSchedules({ isAdmin }: { isAdmin: boolean })
         </div>
       )}
 
-      <p className="mt-3 text-[11px] text-apptext-dim">
+      <p className="mt-3 text-2xs text-apptext-dim">
         Read-only — this mirrors exactly what the iRobot app has, including
         schedules created there directly. Adding or removing one isn't built
         into the app yet; ask for a change and it'll be done via a checked

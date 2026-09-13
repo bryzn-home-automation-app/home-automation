@@ -58,7 +58,7 @@ export default function Register() {
             </p>
 
             <div className="mt-6 rounded-2xl border border-appborder bg-appinset p-4 text-left">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Status</p>
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Status</p>
               <div className="mt-2 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-apptext-muted">Username</span>
@@ -101,7 +101,7 @@ export default function Register() {
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="email" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="email" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Email
               </label>
               <input
@@ -118,7 +118,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="regUsername" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="regUsername" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Username
               </label>
               <input
@@ -134,7 +134,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="displayName" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="displayName" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Display Name <span className="text-apptext-dim">(optional)</span>
               </label>
               <input
@@ -149,7 +149,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="regPassword" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="regPassword" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Password
               </label>
               <input
@@ -166,7 +166,7 @@ export default function Register() {
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="confirmPassword" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Confirm Password
               </label>
               <input

@@ -85,7 +85,7 @@ function initiatorLabel(v: string | null | undefined): string {
 function Detail({ label, value, tone }: { label: string; value: string; tone?: 'warn' }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim">{label}</p>
+      <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim">{label}</p>
       <p className={`mt-1 font-medium ${tone === 'warn' ? 'text-amber-300' : 'text-apptext'}`}>{value}</p>
     </div>
   );
@@ -354,13 +354,13 @@ export default memo(function Roomba() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Robot Vacuum
             </p>
             <h2 className="mt-3 flex items-center gap-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
               {status?.name || 'Roomba'}
               {running && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-appaccent-border bg-appaccent-soft px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-appaccent-text">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-appaccent-border bg-appaccent-soft px-2.5 py-1 text-2xs font-semibold uppercase tracking-[0.12em] text-appaccent-text">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-appaccent opacity-75" />
                     <span className="relative inline-flex h-2 w-2 rounded-full bg-appaccent" />
@@ -397,14 +397,14 @@ export default memo(function Roomba() {
             {status && (
               <div className="flex flex-wrap gap-2 lg:justify-end">
                 {dockChip && (
-                  <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${dockChip.className}`}>
+                  <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${dockChip.className}`}>
                     {dockChip.text}
                   </span>
                 )}
-                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${binChip.className}`}>
+                <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${binChip.className}`}>
                   {binChip.text}
                 </span>
-                <span className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${tankChip.className}`}>
+                <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${tankChip.className}`}>
                   {tankChip.text}
                 </span>
               </div>
@@ -510,7 +510,7 @@ export default memo(function Roomba() {
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Floor Plan
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -659,7 +659,7 @@ export default memo(function Roomba() {
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               History
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Recent runs</h3>
@@ -733,7 +733,7 @@ export default memo(function Roomba() {
                       <div className="py-3">
                         <div className="text-apptext-soft">{dateLabel}</div>
                         {timeLabel && (
-                          <div className="text-[11px] text-apptext-dim">{timeLabel}</div>
+                          <div className="text-2xs text-apptext-dim">{timeLabel}</div>
                         )}
                       </div>
                       <div className="py-3 text-right tabular-nums text-apptext">

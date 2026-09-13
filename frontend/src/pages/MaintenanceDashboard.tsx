@@ -99,7 +99,7 @@ function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
           className="rounded-2xl border p-4"
           style={{ borderColor: hexToRgba(c.tone, 0.55), backgroundColor: hexToRgba(c.tone, c.bgAlpha) }}
         >
-          <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">
+          <p className="flex items-center gap-1.5 text-3xs font-bold uppercase tracking-[0.14em] text-apptext-soft">
             <span>{c.icon}</span> {c.label}
           </p>
           <p className="mt-2 text-lg font-semibold text-apptext">{c.value}</p>
@@ -132,7 +132,7 @@ function Timeline({ records, onSelect }: { records: MaintenanceRecord[]; onSelec
             r.priority === 'HIGH' ? 'border-orange-400 bg-orange-400/20' :
             'border-emerald-400 bg-emerald-400/20'
           }`}>
-            <span className="text-[10px]">{STATUS_ICONS.COMPLETED}</span>
+            <span className="text-3xs">{STATUS_ICONS.COMPLETED}</span>
           </div>
           <div className="flex-1 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors group-hover:border-appborder-hover group-hover:bg-appinset-strong">
             <div className="flex items-center justify-between gap-2">
@@ -178,10 +178,10 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
             </p>
           </div>
           <div className="flex flex-col items-end gap-1 shrink-0">
-            <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>
+            <span className={`rounded-full border px-2 py-0 text-3xs font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>
               {r.priority}
             </span>
-            <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>
+            <span className={`rounded-full border px-2 py-0 text-3xs font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>
               {r.status.replace('_', ' ')}
             </span>
           </div>
@@ -207,7 +207,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <p className="truncate text-sm font-semibold text-apptext">{r.title}</p>
-              <span className={`shrink-0 rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>
+              <span className={`shrink-0 rounded-full border px-2 py-0 text-3xs font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>
                 {r.status.replace('_', ' ')}
               </span>
             </div>
@@ -221,7 +221,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Dates column */}
-        <div className="hidden flex-col gap-0.5 text-[12px] lg:flex">
+        <div className="hidden flex-col gap-0.5 text-xs lg:flex">
           {r.startedDate ? (
             <span className="font-medium text-apptext-soft">🔧 {formatDate(r.startedDate)}</span>
           ) : r.scheduledDate ? (
@@ -237,7 +237,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Requested by */}
-        <div className="hidden text-[12px] truncate lg:block">
+        <div className="hidden text-xs truncate lg:block">
           {r.requestedBy ? (
             <span className="rounded-full border border-appborder bg-appinset px-2 py-0.5 text-apptext-muted">👤 {r.requestedBy}</span>
           ) : (
@@ -246,7 +246,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
         </div>
 
         {/* Completed by */}
-        <div className="hidden text-[12px] truncate lg:block">
+        <div className="hidden text-xs truncate lg:block">
           {r.completedBy ? (
             <span className="rounded-full border border-sky-300/20 bg-sky-300/10 px-2 py-0.5 text-sky-300">{isBusiness(r.completedBy) ? '🏢' : '👷'} {r.completedBy}</span>
           ) : (
@@ -256,7 +256,7 @@ function RecordCard({ r, onSelect }: { r: MaintenanceRecord; onSelect: (r: Maint
 
         {/* Priority */}
         <div className="hidden text-right lg:block">
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>
+          <span className={`rounded-full border px-2 py-0.5 text-3xs font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>
             {r.priority}
           </span>
         </div>
@@ -293,8 +293,8 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>{r.priority}</span>
-              <span className={`rounded-full border px-2 py-0 text-[10px] font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>{r.status.replace('_',' ')}</span>
+              <span className={`rounded-full border px-2 py-0 text-3xs font-bold uppercase tracking-[0.12em] ${PRIORITY_COLORS[r.priority]}`}>{r.priority}</span>
+              <span className={`rounded-full border px-2 py-0 text-3xs font-bold uppercase tracking-[0.12em] ${STATUS_COLORS[r.status]}`}>{r.status.replace('_',' ')}</span>
             </div>
             <h2 className="text-xl font-semibold text-apptext">{r.title}</h2>
             <p className="mt-1 text-sm text-apptext-muted">{CAT_ICONS[r.category] || '🔨'} {r.category}{r.area ? ` · ${r.area}` : ''}</p>
@@ -308,15 +308,15 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
         {/* Dates */}
         <div className="mb-4 grid grid-cols-3 gap-3">
           <div className="rounded-xl border border-appborder bg-appinset p-3">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Scheduled</p>
+            <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Scheduled</p>
             <p className="mt-1 text-sm font-medium text-apptext-soft">{formatDate(r.scheduledDate)}</p>
           </div>
           <div className="rounded-xl border border-appborder bg-appinset p-3">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Started</p>
+            <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Started</p>
             <p className="mt-1 text-sm font-medium text-apptext-soft">{formatDate(r.startedDate)}</p>
           </div>
           <div className="rounded-xl border border-appborder bg-appinset p-3">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Completed</p>
+            <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Completed</p>
             <p className="mt-1 text-sm font-medium text-apptext-soft">{formatDate(r.completedDate)}</p>
           </div>
         </div>
@@ -326,13 +326,13 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
           <div className="mb-4 grid grid-cols-2 gap-3">
             {r.requestedBy && (
               <div className="rounded-xl border border-appborder bg-appinset p-3">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Requested By</p>
+                <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Requested By</p>
                 <p className="mt-1 text-sm font-medium text-apptext-soft">{r.requestedBy}</p>
               </div>
             )}
             {r.completedBy && (
               <div className="rounded-xl border border-appborder bg-appinset p-3">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Completed By</p>
+                <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Completed By</p>
                 <p className="mt-1 text-sm font-medium text-apptext-soft">{r.completedBy}</p>
               </div>
             )}
@@ -342,7 +342,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
         {/* Cost */}
         {r.cost != null && r.cost > 0 && (
           <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-muted">Cost</p>
+            <p className="text-3xs uppercase tracking-[0.12em] text-apptext-muted">Cost</p>
             <p className="mt-1 text-lg font-semibold text-amber-200">{formatCurrency(r.cost)}</p>
           </div>
         )}
@@ -352,19 +352,19 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
           <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {r.contractorName && (
               <div className="rounded-xl border border-appborder bg-appinset p-3">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Contractor</p>
+                <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Contractor</p>
                 <p className="mt-1 text-sm font-medium text-apptext-soft">{r.contractorName}</p>
               </div>
             )}
             {r.company && (
               <div className="rounded-xl border border-appborder bg-appinset p-3">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Company</p>
+                <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Company</p>
                 <p className="mt-1 text-sm font-medium text-apptext-soft">{r.company}</p>
               </div>
             )}
             {r.receiptNumber && (
               <div className="rounded-xl border border-appborder bg-appinset p-3">
-                <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Receipt</p>
+                <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Receipt</p>
                 <p className="mt-1 text-sm font-medium font-mono text-apptext-soft">{r.receiptNumber}</p>
               </div>
             )}
@@ -373,7 +373,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
 
         {r.warrantyExpiration && (
           <div className="mb-4 rounded-xl border border-amber-300/20 bg-amber-300/10 p-3">
-            <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-muted">Warranty Expires</p>
+            <p className="text-3xs uppercase tracking-[0.12em] text-apptext-muted">Warranty Expires</p>
             <p className="mt-1 text-sm font-medium text-amber-200">{formatDate(r.warrantyExpiration)}</p>
           </div>
         )}
@@ -381,7 +381,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
         {/* Photos */}
         {photos.length > 0 && (
           <div className="mb-4">
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-dim">Photos ({photos.length})</p>
+            <p className="mb-2 text-2xs font-medium uppercase tracking-[0.14em] text-apptext-dim">Photos ({photos.length})</p>
             <div className="flex gap-2 overflow-x-auto pb-2">
               {photos.map((url, i) => (
                 <img key={i} src={url} alt={`Photo ${i + 1}`} className="h-28 w-28 shrink-0 rounded-xl border border-appborder object-cover" />
@@ -393,7 +393,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
         {/* Documents */}
         {docs.length > 0 && (
           <div className="mb-4">
-            <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-dim">Documents ({docs.length})</p>
+            <p className="mb-2 text-2xs font-medium uppercase tracking-[0.14em] text-apptext-dim">Documents ({docs.length})</p>
             <div className="space-y-1">
               {docs.map((url, i) => (
                 <a key={i} href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl border border-appborder bg-appinset px-3 py-2 text-sm text-appaccent-text hover:bg-appinset-strong">
@@ -407,7 +407,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
         {/* Notes */}
         {r.notes && (
           <div className="mb-4 rounded-xl border border-appborder bg-appinset p-4">
-            <p className="mb-1 text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Notes</p>
+            <p className="mb-1 text-3xs uppercase tracking-[0.12em] text-apptext-dim">Notes</p>
             <p className="text-sm leading-6 text-apptext-soft whitespace-pre-wrap">{r.notes}</p>
           </div>
         )}
@@ -535,14 +535,14 @@ function FormModal({ editing, onClose, onSuccess }: {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Title */}
           <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Title *</label>
+            <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Title *</label>
             <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="e.g. Water Heater Replacement"
               className="w-full rounded-xl border border-appborder bg-appinset px-4 py-3 text-sm text-apptext placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
           </div>
 
           {/* Description */}
           <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Description</label>
+            <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Description</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="What was done..."
               className="w-full rounded-xl border border-appborder bg-appinset px-4 py-3 text-sm text-apptext placeholder:text-apptext-dim focus:border-appaccent focus:outline-none resize-none" />
           </div>
@@ -550,7 +550,7 @@ function FormModal({ editing, onClose, onSuccess }: {
           {/* Category + Area */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Category</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Category</label>
               <select value={category} onChange={(e) => setCategory(e.target.value)}
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none">
                 {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -559,7 +559,7 @@ function FormModal({ editing, onClose, onSuccess }: {
                 className="mt-1.5 w-full rounded-xl border border-appborder bg-appinset px-3 py-2 text-xs text-apptext placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Area</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Area</label>
               <select value={area} onChange={(e) => setArea(e.target.value)}
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none">
                 <option value="">Any</option>
@@ -573,16 +573,16 @@ function FormModal({ editing, onClose, onSuccess }: {
           {/* Priority + Status */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Priority</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Priority</label>
               <div className="flex gap-1.5">
                 {PRIORITIES.map((p) => (
                   <button key={p} type="button" onClick={() => setPriority(p)}
-                    className={`flex-1 rounded-lg border px-2 py-2 text-[11px] font-semibold transition-colors ${priority === p ? `${PRIORITY_COLORS[p]} border-current` : 'border-appborder text-apptext-dim'}`}>{p}</button>
+                    className={`flex-1 rounded-lg border px-2 py-2 text-2xs font-semibold transition-colors ${priority === p ? `${PRIORITY_COLORS[p]} border-current` : 'border-appborder text-apptext-dim'}`}>{p}</button>
                 ))}
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Status</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Status</label>
               <select value={status} onChange={(e) => setStatus(e.target.value)}
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none">
                 {STATUSES.map((s) => <option key={s} value={s}>{s.replace('_',' ')}</option>)}
@@ -593,17 +593,17 @@ function FormModal({ editing, onClose, onSuccess }: {
           {/* Dates */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Scheduled</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Scheduled</label>
               <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)}
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Started</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Started</label>
               <input type="date" value={startedDate} onChange={(e) => setStartedDate(e.target.value)}
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Completed</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Completed</label>
               <input type="date" value={completedDate} onChange={(e) => setCompletedDate(e.target.value)}
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none" />
             </div>
@@ -612,17 +612,17 @@ function FormModal({ editing, onClose, onSuccess }: {
           {/* People + Cost */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Requested By</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Requested By</label>
               <input value={requestedBy} onChange={(e) => setRequestedBy(e.target.value)} placeholder="Name"
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Completed By</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Completed By</label>
               <input value={completedBy} onChange={(e) => setCompletedBy(e.target.value)} placeholder="Name"
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Cost</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Cost</label>
               <input type="number" step="0.01" min="0" value={cost} onChange={(e) => setCost(e.target.value)} placeholder="$0.00"
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
@@ -631,17 +631,17 @@ function FormModal({ editing, onClose, onSuccess }: {
           {/* Contractor */}
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Contractor</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Contractor</label>
               <input value={contractorName} onChange={(e) => setContractorName(e.target.value)} placeholder="Name"
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Company</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Company</label>
               <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Company"
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
             <div>
-              <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Receipt #</label>
+              <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Receipt #</label>
               <input value={receiptNumber} onChange={(e) => setReceiptNumber(e.target.value)} placeholder="R-2026-..."
                 className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft placeholder:text-apptext-dim focus:border-appaccent focus:outline-none" />
             </div>
@@ -649,20 +649,20 @@ function FormModal({ editing, onClose, onSuccess }: {
 
           {/* Warranty */}
           <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Warranty Expiration</label>
+            <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Warranty Expiration</label>
             <input type="date" value={warrantyExpiration} onChange={(e) => setWarrantyExpiration(e.target.value)}
               className="w-full rounded-xl border border-appborder bg-appinset px-3 py-3 text-sm text-apptext-soft focus:border-appaccent focus:outline-none sm:w-1/2" />
           </div>
 
           {/* Photos */}
           <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Photos</label>
+            <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Photos</label>
             <div className="flex flex-wrap gap-2 mb-2">
               {photos.map((url, i) => (
                 <div key={i} className="relative h-20 w-20 shrink-0 rounded-xl border border-appborder overflow-hidden">
                   <img src={url} alt={`Upload ${i + 1}`} className="h-full w-full object-cover" />
                   <button type="button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
-                    className="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-[10px] text-white">✕</button>
+                    className="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-3xs text-white">✕</button>
                 </div>
               ))}
               <button type="button" onClick={() => fileRef.current?.click()}
@@ -675,7 +675,7 @@ function FormModal({ editing, onClose, onSuccess }: {
 
           {/* Notes */}
           <div>
-            <label className="mb-1.5 block text-[11px] font-medium uppercase tracking-[0.14em] text-apptext-muted">Notes</label>
+            <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Notes</label>
             <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3}
               placeholder="Details, observations, recommendations..."
               className="w-full rounded-xl border border-appborder bg-appinset px-4 py-3 text-sm text-apptext placeholder:text-apptext-dim focus:border-appaccent focus:outline-none resize-none" />
@@ -733,7 +733,7 @@ export default function MaintenanceDashboard() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Home Maintenance
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -818,7 +818,7 @@ export default function MaintenanceDashboard() {
         ) : (
           <div className="max-h-[40rem] overflow-y-auto pr-1">
             {/* Column headers */}
-            <div className="mb-2 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] items-center gap-3 px-5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">
+            <div className="mb-2 grid grid-cols-[minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_minmax(0,0.6fr)] items-center gap-3 px-5 py-2 text-3xs font-bold uppercase tracking-[0.14em] text-apptext-soft">
               <span>Job</span>
               <span>Dates</span>
               <span>Requested</span>

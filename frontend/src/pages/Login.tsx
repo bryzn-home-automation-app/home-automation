@@ -48,7 +48,7 @@ export default function Login() {
             <div>
               <label
                 htmlFor="username"
-                className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted"
+                className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted"
               >
                 Username
               </label>
@@ -67,7 +67,7 @@ export default function Login() {
             <div>
               <label
                 htmlFor="password"
-                className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted"
+                className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted"
               >
                 Password
               </label>

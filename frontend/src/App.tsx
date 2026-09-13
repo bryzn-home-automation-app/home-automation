@@ -38,7 +38,7 @@ function SidebarClock() {
 
   return (
     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-      <p className="truncate text-[10px] uppercase tracking-[0.14em] text-apptext-muted">
+      <p className="truncate text-3xs uppercase tracking-[0.14em] text-apptext-muted">
         {weekday} {monthDay}
       </p>
       <p className="mt-1 text-xs font-semibold text-apptext tabular-nums">{time}</p>
@@ -138,7 +138,7 @@ export default memo(function App() {
     <>
       <div className="flex items-center justify-between gap-3 border-b border-appborder pb-4">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+          <p className="text-3xs font-semibold uppercase tracking-[0.22em] text-appwarning/90">
             bryzncode
           </p>
           <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-apptext">
@@ -173,7 +173,7 @@ export default memo(function App() {
       <div className="mt-4 grid grid-cols-2 gap-2">
         <SidebarClock />
         <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-          <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Role</p>
+          <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Role</p>
           <p className="mt-1 text-xs font-semibold text-apptext">{user ? user.role : 'Guest'}</p>
         </div>
       </div>
@@ -198,7 +198,7 @@ export default memo(function App() {
               <span className="font-medium">{tab.label}</span>
             </span>
             {tab.path === '/notifications' && unreadCount > 0 && (
-              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-appdanger px-1.5 text-[10px] font-bold text-white shadow-[0_0_10px_var(--appdanger)]">
+              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-appdanger px-1.5 text-3xs font-bold text-white shadow-[0_0_10px_var(--appdanger)]">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -207,7 +207,7 @@ export default memo(function App() {
 
         {isAdmin && (
           <div className="pt-2">
-            <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">
+            <p className="px-3 pb-2 text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">
               Admin
             </p>
             <div className="flex flex-col gap-1">
@@ -237,7 +237,7 @@ export default memo(function App() {
       {/* Profile shortcut */}
       {user ? (
         <div className="mt-auto shrink-0 border-t border-appborder pt-4">
-          <p className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">Settings</p>
+          <p className="px-3 pb-2 text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">Settings</p>
           <Link
             to="/profile"
             onClick={closeMenu}
@@ -341,7 +341,7 @@ export default memo(function App() {
                   now on the bottom bar, incl. a "More" tab for the full menu). */}
               <div className="mb-3 flex items-center justify-between lg:hidden">
                 <span className="text-sm font-semibold tracking-[-0.02em] text-apptext">HomeOS</span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-appborder bg-appinset px-2.5 py-1 text-[10px] font-medium text-apptext-muted">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-appborder bg-appinset px-2.5 py-1 text-3xs font-medium text-apptext-muted">
                   <span className={`inline-block h-1.5 w-1.5 rounded-full ${backendUp ? 'bg-appsuccess' : 'bg-appdanger'}`} />
                   {backendUp ? 'Healthy' : 'Offline'}
                 </span>
@@ -353,15 +353,15 @@ export default memo(function App() {
                 actions={
                   <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
                     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Backend</p>
+                      <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Backend</p>
                       <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
                     </div>
                     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Unread</p>
+                      <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Unread</p>
                       <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
                     </div>
                     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                      <p className="text-[10px] uppercase tracking-[0.18em] text-apptext-muted">Access</p>
+                      <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Access</p>
                       <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
                     </div>
                   </div>
@@ -392,7 +392,7 @@ export default memo(function App() {
             aria-label="Open menu"
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-sidebar"
-            className="flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[11px] font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
+            className="flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-2xs font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
           >
             <span className="flex h-[1.5rem] items-center text-lg leading-none">☰</span>
             <span className="leading-none">Menu</span>
@@ -403,7 +403,7 @@ export default memo(function App() {
               to={tab.path}
               end={tab.end}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[11px] font-medium transition-colors ${
+                `flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-2xs font-medium transition-colors ${
                   isActive
                     ? 'text-appaccent-text'
                     : 'text-apptext-muted hover:text-apptext-soft'

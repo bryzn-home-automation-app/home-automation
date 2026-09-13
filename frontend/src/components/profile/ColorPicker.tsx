@@ -64,7 +64,7 @@ export default function ColorPicker({
           aria-label={name}
           title={name}
         >
-          <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-[10px] text-white opacity-0 transition-opacity group-hover:opacity-100">
+          <span className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2 py-1 text-3xs text-white opacity-0 transition-opacity group-hover:opacity-100">
             {name}
           </span>
         </button>

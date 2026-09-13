@@ -69,7 +69,7 @@ export default function ReleaseNotesModal() {
       >
         <div className="flex items-start justify-between gap-3 border-b border-appborder p-6 pb-4">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-appaccent-text">
+            <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-appaccent-text">
               What's New · v{latest.version}
             </p>
             <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-apptext">{latest.title}</h3>

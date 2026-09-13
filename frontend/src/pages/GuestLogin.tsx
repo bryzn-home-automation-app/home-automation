@@ -85,7 +85,7 @@ export default function GuestLogin() {
             </p>
 
             <div className="mt-6 rounded-2xl border border-appborder bg-appinset p-4 text-left">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Session Info</p>
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Session Info</p>
               <div className="mt-2 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-apptext-muted">Status</span>
@@ -121,10 +121,10 @@ export default function GuestLogin() {
 
             {/* bryzncode trademark */}
             <div className="mt-4 flex items-center justify-center gap-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-apptext-dim">
+              <span className="text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-dim">
                 powered by
               </span>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+              <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-appwarning/90">
                 bryzncode
               </span>
             </div>
@@ -190,7 +190,7 @@ export default function GuestLogin() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label htmlFor="guestName" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="guestName" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Your Name
               </label>
               <input
@@ -206,7 +206,7 @@ export default function GuestLogin() {
             </div>
 
             <div>
-              <label htmlFor="guestCode" className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label htmlFor="guestCode" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Invite Code
               </label>
               <input
@@ -221,7 +221,7 @@ export default function GuestLogin() {
             </div>
 
             <div>
-              <label className="mb-3 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <label className="mb-3 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Your Color
               </label>
               <ColorPicker selected={accentColor} onChange={setAccentColor} />
@@ -251,16 +251,16 @@ export default function GuestLogin() {
 
           <div className="mt-6 flex items-center justify-center gap-2">
             <span className="inline-flex h-2 w-2 rounded-full opacity-60" style={{ background: accentColor }} />
-            <span className="text-[10px] uppercase tracking-[0.2em] text-apptext-dim">Secure Connection</span>
+            <span className="text-3xs uppercase tracking-[0.2em] text-apptext-dim">Secure Connection</span>
             <span className="inline-flex h-2 w-2 rounded-full opacity-60" style={{ background: accentColor }} />
           </div>
 
           {/* bryzncode trademark */}
           <div className="mt-4 flex items-center justify-center gap-1.5">
-            <span className="text-[10px] uppercase tracking-[0.2em] text-apptext-dim">
+            <span className="text-3xs uppercase tracking-[0.2em] text-apptext-dim">
               powered by
             </span>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+            <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-appwarning/90">
               bryzncode
             </span>
           </div>

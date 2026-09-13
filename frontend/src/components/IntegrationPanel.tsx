@@ -18,7 +18,7 @@ export default function IntegrationPanel() {
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
             Integration
           </p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -46,7 +46,7 @@ export default function IntegrationPanel() {
       </div>
 
       <div className="mt-4">
-        <p className="mb-2 text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+        <p className="mb-2 text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Run From Project Root
         </p>
         <div className="rounded-2xl border border-appborder bg-appinset-strong p-3">

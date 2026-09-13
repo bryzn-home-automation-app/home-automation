@@ -135,7 +135,7 @@ export default function WiFiPage() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               WiFi &amp; Guest Access
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -148,11 +148,11 @@ export default function WiFiPage() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Active Guests</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Active Guests</p>
               <p className="mt-2 text-lg font-semibold text-apptext">{activeCount}</p>
             </div>
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Guest Portal</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Guest Portal</p>
               <p className="mt-2 text-sm font-semibold text-apptext">Name-based entry</p>
               <p className="mt-1 text-xs text-apptext-muted">Auto-expires 30 days</p>
             </div>
@@ -164,7 +164,7 @@ export default function WiFiPage() {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)] lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
         {/* QR Code */}
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-8">
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+          <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
             Scan to Connect
           </p>
           <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-apptext">
@@ -188,7 +188,7 @@ export default function WiFiPage() {
 
             <div className="flex-1 space-y-3 text-center sm:text-left">
               <div className="rounded-2xl border border-appborder bg-appinset p-4">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim">Guest Portal URL</p>
+                <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim">Guest Portal URL</p>
                 <code className="mt-1 block break-all text-sm font-medium text-appaccent-text select-all">
                   {guestInviteUrl}
                 </code>
@@ -202,7 +202,7 @@ export default function WiFiPage() {
 
         {/* Network Details */}
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)]">
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+          <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
             Network Details
           </p>
           <h3 className="mt-3 text-xl font-semibold text-apptext">WiFi credentials</h3>
@@ -210,7 +210,7 @@ export default function WiFiPage() {
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between rounded-2xl border border-appborder bg-appinset px-4 py-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Network Name</p>
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Network Name</p>
                 <p className={`mt-0.5 text-base font-semibold ${ssid ? 'text-apptext' : 'text-apptext-dim'}`}>{ssid || 'Not configured'}</p>
               </div>
               <span className="text-xl">📶</span>
@@ -218,7 +218,7 @@ export default function WiFiPage() {
 
             <div className="flex items-center justify-between rounded-2xl border border-appborder bg-appinset px-4 py-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Password</p>
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Password</p>
                 <p className={`mt-0.5 text-base font-mono font-semibold ${password ? 'text-apptext' : 'text-apptext-dim'}`}>{password || 'Not configured'}</p>
               </div>
               <span className="text-xl">🔒</span>
@@ -226,7 +226,7 @@ export default function WiFiPage() {
 
             <div className="flex items-center justify-between rounded-2xl border border-appborder bg-appinset px-4 py-3">
               <div>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Security</p>
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Security</p>
                 <p className="mt-0.5 text-sm text-apptext-soft">WPA2-Personal</p>
               </div>
               <span className="text-sm font-medium text-appsuccess">Secure</span>
@@ -248,7 +248,7 @@ export default function WiFiPage() {
         <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-5 flex items-center justify-between gap-4">
             <div>
-              <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
                 Connected Guests
               </p>
               <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -298,7 +298,7 @@ export default function WiFiPage() {
               ✕
             </button>
 
-            <p className="mb-4 text-center text-[11px] font-medium uppercase tracking-[0.22em] text-slate-400">
+            <p className="mb-4 text-center text-2xs font-medium uppercase tracking-[0.22em] text-slate-400">
               Scan to join
             </p>
 
@@ -341,7 +341,7 @@ function GuestRow({ session }: { session: GuestSession }) {
 
       {/* Visits count */}
       <div className="shrink-0 text-right">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Visits</p>
+        <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Visits</p>
         <p className="mt-0.5 text-sm font-semibold tabular-nums text-apptext-soft">
           {session.connectionCount}
         </p>
@@ -349,7 +349,7 @@ function GuestRow({ session }: { session: GuestSession }) {
 
       {/* Expiry countdown */}
       <div className="hidden text-right sm:block shrink-0">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Kicked off in</p>
+        <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Kicked off in</p>
         <p className={`mt-0.5 text-sm font-semibold tabular-nums ${countdown.urgent ? 'text-appwarning' : 'text-apptext-soft'}`}>
           {countdown.label}
         </p>
@@ -357,13 +357,13 @@ function GuestRow({ session }: { session: GuestSession }) {
 
       {/* Connected time */}
       <div className="hidden text-right md:block shrink-0">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Connected</p>
+        <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Connected</p>
         <p className="mt-0.5 text-sm tabular-nums text-apptext-soft">{timeAgo(session.connectedAt)}</p>
       </div>
 
       {/* Device */}
       <div className="hidden text-right lg:block shrink-0 max-w-[12rem]">
-        <p className="text-[10px] uppercase tracking-[0.12em] text-apptext-dim">Device</p>
+        <p className="text-3xs uppercase tracking-[0.12em] text-apptext-dim">Device</p>
         <p className="mt-0.5 text-sm text-apptext-muted truncate">{session.userAgent || 'Unknown'}</p>
       </div>
     </div>

@@ -109,7 +109,7 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
       >
         <div className="flex items-start justify-between gap-3">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Cleaning run
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">{fmtDate(run.startedAt)}</h3>

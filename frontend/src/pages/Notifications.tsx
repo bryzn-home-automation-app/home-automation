@@ -83,7 +83,7 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-semibold text-apptext">{n.title}</span>
-          <span className={`rounded-full border px-2 py-0 text-[10px] font-semibold uppercase tracking-[0.1em] ${severityColors[n.severity] ?? ''}`}>
+          <span className={`rounded-full border px-2 py-0 text-3xs font-semibold uppercase tracking-[0.1em] ${severityColors[n.severity] ?? ''}`}>
             {n.severity}
           </span>
           {!n.isRead && (
@@ -157,7 +157,7 @@ export default function NotificationsPage() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Notifications
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -170,7 +170,7 @@ export default function NotificationsPage() {
 
           <div className="flex items-center gap-3">
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Unread</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Unread</p>
               <p className="mt-2 text-lg font-semibold text-apptext">{unread}</p>
             </div>
             <button
@@ -213,7 +213,7 @@ export default function NotificationsPage() {
                 key={s.key}
                 type="button"
                 onClick={() => setSeverityFilter(s.key)}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                className={`rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors ${
                   severityFilter === s.key
                     ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
                     : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'
@@ -227,7 +227,7 @@ export default function NotificationsPage() {
             <button
               type="button"
               onClick={() => setUnreadOnly(!unreadOnly)}
-              className={`rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+              className={`rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors ${
                 unreadOnly
                   ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
                   : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'

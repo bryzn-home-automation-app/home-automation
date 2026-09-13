@@ -89,12 +89,12 @@ export default memo(function Updates() {
                 <span className="inline-flex items-center rounded-lg border border-appaccent-border bg-appaccent-soft px-2.5 py-1 text-sm font-semibold tracking-[-0.01em] text-appaccent-text">
                   v{release.version}
                 </span>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-apptext-dim">
+                <span className="text-3xs font-semibold uppercase tracking-[0.16em] text-apptext-dim">
                   {release.stage}
                 </span>
                 {idx === 0 && (
                   <span
-                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                    className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-[0.16em] ${
                       isDark ? LATEST_PILL.dark : LATEST_PILL.light
                     }`}
                   >

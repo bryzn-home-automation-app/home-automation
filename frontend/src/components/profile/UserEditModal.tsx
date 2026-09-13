@@ -115,7 +115,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div>
-            <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <label className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Display Name
             </label>
             <input
@@ -128,7 +128,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
           </div>
 
           <div>
-            <label className="mb-2 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <label className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Phone Number
             </label>
             <input
@@ -141,7 +141,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
           </div>
 
           <div>
-            <label className="mb-3 block text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <label className="mb-3 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Accent Color
             </label>
             <ColorPicker selected={accentColor} onChange={setAccentColor} />

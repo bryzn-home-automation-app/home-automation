@@ -11,7 +11,7 @@ export default function RoleBadge({ role, accentColor }: { role: string; accentC
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+      className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-2xs font-semibold uppercase tracking-[0.14em]"
       style={{
         color,
         borderColor: `${color}40`,

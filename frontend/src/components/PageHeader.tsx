@@ -32,7 +32,7 @@ export function PageHeader({
     <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
       <div>
         {eyebrow ? (
-          <p className="inline-flex items-center rounded-full border border-appaccent-border bg-appaccent-soft px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-appaccent-text">
+          <p className="inline-flex items-center rounded-full border border-appaccent-border bg-appaccent-soft px-3 py-1 text-2xs font-semibold uppercase tracking-[0.2em] text-appaccent-text">
             {eyebrow}
           </p>
         ) : null}

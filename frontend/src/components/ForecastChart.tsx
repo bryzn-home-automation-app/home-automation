@@ -68,7 +68,7 @@ function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, 
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+        <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Learned Pattern
         </p>
         <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -234,7 +234,7 @@ function ForecastChart() {
     return (
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
             AI Forecast
           </p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -298,7 +298,7 @@ function ForecastChart() {
       <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               AI Forecast
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -326,7 +326,7 @@ function ForecastChart() {
         </div>
 
         {/* Legend */}
-        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-apptext-muted">
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
           <span className="inline-flex items-center gap-1.5">
             <svg width="18" height="6" aria-hidden="true">
               <line x1="0" y1="3" x2="18" y2="3" stroke={actualColor} strokeWidth="2.5" />
@@ -424,7 +424,7 @@ function ForecastChart() {
       {accuracy && accuracy.points.length > 2 && (
         <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
           <div className="mb-4">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Self-Improvement
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">

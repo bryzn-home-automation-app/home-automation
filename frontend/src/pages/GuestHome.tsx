@@ -405,7 +405,7 @@ function LobbyAvatar({
           {displayName}
         </p>
 
-        <div className="pointer-events-none absolute -top-12 left-1/2 z-20 w-max -translate-x-1/2 rounded-full border border-white/70 bg-white/92 px-2.5 py-1 text-[10px] text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
+        <div className="pointer-events-none absolute -top-12 left-1/2 z-20 w-max -translate-x-1/2 rounded-full border border-white/70 bg-white/92 px-2.5 py-1 text-3xs text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
           {member.activity}
         </div>
 
@@ -452,11 +452,11 @@ function ProfileCard({ selected, onClose }: { selected: LobbyMember; onClose: ()
 
       <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-700">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Current Activity</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-slate-500">Current Activity</p>
           <p className="mt-1">{selected.activity}</p>
         </div>
         <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-700">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">Status</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-slate-500">Status</p>
           <p className="mt-1">{selected.user.isOnline ? 'Online now' : 'Away right now'}</p>
         </div>
       </div>
@@ -673,7 +673,7 @@ export default function GuestHome() {
         Join House
       </motion.button>
 
-      <div className="pointer-events-none fixed bottom-3 left-1/2 z-20 -translate-x-1/2 text-[10px] uppercase tracking-[0.22em] text-white/70">
+      <div className="pointer-events-none fixed bottom-3 left-1/2 z-20 -translate-x-1/2 text-3xs uppercase tracking-[0.22em] text-white/70">
         powered by bryzncode
       </div>
 

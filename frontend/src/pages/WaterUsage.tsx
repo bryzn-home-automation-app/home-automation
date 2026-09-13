@@ -213,39 +213,39 @@ export default memo(function WaterUsage() {
                   </div>
                   <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-apptext-soft">
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Usage (gal)</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Usage (gal)</dt>
                       <dd>{bill.usageThousands?.toFixed(0) ?? '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Due Date</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Due Date</dt>
                       <dd>{bill.dueDate ?? '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Water</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Water</dt>
                       <dd>{money(bill.waterCharge)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Sewer</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Sewer</dt>
                       <dd>{money(bill.sewerCharge)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Refuse</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Refuse</dt>
                       <dd>{money(bill.refuseCharge)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Tax</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Tax</dt>
                       <dd>{money(bill.taxCharge)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Stormwater</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Stormwater</dt>
                       <dd>{money(bill.stormwaterCharge)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Discount</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Discount</dt>
                       <dd>{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Bill</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Bill</dt>
                       <dd>
                         {bill.pdfPath ? (
                           <button

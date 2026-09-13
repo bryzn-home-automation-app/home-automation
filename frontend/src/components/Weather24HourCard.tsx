@@ -121,7 +121,7 @@ export default function Weather24HourCard({
     <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-1 flex items-center gap-2">
         <span className="text-lg">{emoji}</span>
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+        <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Last 24 Hours
         </p>
       </div>
@@ -129,7 +129,7 @@ export default function Weather24HourCard({
       {/* Stat tiles row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-3">
         <div className="rounded-2xl border border-appborder-light bg-appinset p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Now</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Now</p>
           <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-apptext">
             {current ? formatTemp(current.temperature) : formatTemp(nowHour?.temperature)}
           </p>
@@ -141,21 +141,21 @@ export default function Weather24HourCard({
         </div>
 
         <div className="rounded-2xl border border-sky-300/55 bg-sky-300/30 p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">High</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">High</p>
           <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-sky-200">
             {formatTemp(hi)}
           </p>
         </div>
 
         <div className="rounded-2xl border border-emerald-300/55 bg-emerald-300/30 p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-muted">Low</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Low</p>
           <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-emerald-200">
             {formatTemp(lo)}
           </p>
         </div>
 
         <div className="rounded-2xl border border-appborder-light bg-appinset p-3">
-          <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Average</p>
+          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Average</p>
           <p className="mt-1.5 text-xl font-semibold tracking-[-0.03em] text-apptext">
             {formatTemp(avg)}
           </p>

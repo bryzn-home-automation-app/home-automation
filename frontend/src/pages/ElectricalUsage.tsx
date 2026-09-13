@@ -223,7 +223,7 @@ export default memo(function ElectricalUsage() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Electric Module
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -236,24 +236,24 @@ export default memo(function ElectricalUsage() {
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">Rate</p>
+              <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim sm:text-2xs">Rate</p>
               <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
                 ${kwhRate.toFixed(4)}<span className="text-sm text-apptext-muted">/kWh</span>
               </p>
             </div>
             <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">60-Day Spend</p>
+              <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim sm:text-2xs">60-Day Spend</p>
               <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
                 ${(monthKwh * kwhRate).toFixed(2)}
               </p>
             </div>
             <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-dim sm:text-[11px]">Active Readings</p>
+              <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim sm:text-2xs">Active Readings</p>
               <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">{realData.length}</p>
             </div>
             {(config.data?.lastSyncCheck || config.data?.lastElectricReading) && (
               <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 p-3 sm:p-4">
-                <p className="text-[10px] uppercase tracking-[0.16em] text-apptext-muted sm:text-[11px]">Last Updated</p>
+                <p className="text-3xs uppercase tracking-[0.16em] text-apptext-muted sm:text-2xs">Last Updated</p>
                 {config.data?.lastElectricReading && (
                   <p className="mt-1 text-xs text-apptext-dim">
                     Data: {new Date(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
@@ -366,7 +366,7 @@ export default memo(function ElectricalUsage() {
           <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
             <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
               <div>
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Log</p>
+                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Log</p>
                 <h3 className="mt-2 text-xl font-semibold text-apptext">Recent electric readings</h3>
               </div>
               <div className="flex items-center gap-2">
@@ -387,7 +387,7 @@ export default memo(function ElectricalUsage() {
             </div>
             {/* Legend for the hourly threshold color bands (daily rows are single-color) */}
             {logFilter === 'hourly' && (
-              <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-apptext-muted">
+              <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
                 <span className="uppercase tracking-[0.14em] text-apptext-dim">Per hour:</span>
                 <span className="inline-flex items-center gap-1.5">
                   <span className="h-2 w-2 rounded-full bg-emerald-300" /> Low · under 2 kWh
@@ -443,7 +443,7 @@ export default memo(function ElectricalUsage() {
                             <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
                               ${(d.total * kwhRate).toFixed(2)}
                             </div>
-                            <div className="hidden py-3 text-right tabular-nums text-[11px] leading-tight text-apptext-muted md:block">
+                            <div className="hidden py-3 text-right tabular-nums text-2xs leading-tight text-apptext-muted md:block">
                               {wx ? (
                                 <span>
                                   <span className="text-sky-300/70">{Math.round(wx.low)}°</span>{' '}
@@ -486,7 +486,7 @@ export default memo(function ElectricalUsage() {
                             <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
                               ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
                             </div>
-                            <div className="hidden py-3 text-right text-[11px] text-apptext-muted md:block">
+                            <div className="hidden py-3 text-right text-2xs text-apptext-muted md:block">
                               {temp != null ? `${Math.round(temp)}°` : '—'}
                             </div>
                             <div className="py-3 text-right text-apptext-dim">

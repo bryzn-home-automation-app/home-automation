@@ -124,7 +124,7 @@ export default function CleanModal({ rooms, onClose }: Props) {
         className="flex max-h-[85vh] w-full max-w-md flex-col rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Clean</p>
+        <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Clean</p>
         <h3 className="mt-2 text-xl font-semibold text-apptext">Start a clean</h3>
         <p className="mt-2 text-sm leading-6 text-apptext-soft">
           Pick what to clean and how, then send the robot off. It’ll return to the dock when done.

@@ -46,7 +46,7 @@ export default function ReleaseChangeList({ changes }: { changes: ReleaseChange[
             className="flex flex-col gap-2 rounded-xl border border-appborder bg-appinset px-3.5 py-3 sm:flex-row sm:items-start sm:gap-3"
           >
             <span
-              className={`inline-flex shrink-0 items-center gap-1 self-start rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${style.className}`}
+              className={`inline-flex shrink-0 items-center gap-1 self-start rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] ${style.className}`}
             >
               <span aria-hidden="true">{style.icon}</span>
               {style.label}

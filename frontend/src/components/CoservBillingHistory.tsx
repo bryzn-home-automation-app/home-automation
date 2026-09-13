@@ -52,19 +52,19 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
                   </div>
                   <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-apptext-soft">
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">{usageLabel}</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">{usageLabel}</dt>
                       <dd>{usage != null ? usage.toFixed(0) : '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">{chargeLabel}</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">{chargeLabel}</dt>
                       <dd>{money(charge)}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Due Date</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Due Date</dt>
                       <dd>{bill.dueDate ?? '—'}</dd>
                     </div>
                     <div>
-                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Bill</dt>
+                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Bill</dt>
                       <dd>
                         {bill.pdfPath ? (
                           <button

@@ -26,7 +26,7 @@ function UsageSummaryGrid({
   return (
     <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
       <div className="mb-4">
-        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+        <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
           Usage Insights
         </p>
         <h3 className="mt-2 text-xl font-semibold text-apptext">{title}</h3>
@@ -52,7 +52,7 @@ function UsageSummaryGrid({
 
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-2xl border border-appborder-light bg-appinset-strong p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-dim">Total</p>
+                <p className="text-2xs uppercase tracking-[0.14em] text-apptext-dim">Total</p>
                 <p className="mt-2 text-lg font-semibold text-apptext">
                   {loading ? '...' : summary.totalKwh.toFixed(1)}
                   <span className="ml-1 text-sm text-apptext-muted">{unitLabel}</span>
@@ -60,7 +60,7 @@ function UsageSummaryGrid({
               </div>
 
               <div className="rounded-2xl border border-appborder-light bg-appinset-strong p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-dim">Average</p>
+                <p className="text-2xs uppercase tracking-[0.14em] text-apptext-dim">Average</p>
                 <p className="mt-2 text-lg font-semibold text-apptext">
                   {loading ? '...' : summary.averageKwh.toFixed(1)}
                   <span className="ml-1 text-sm text-apptext-muted">{unitLabel}</span>
@@ -68,7 +68,7 @@ function UsageSummaryGrid({
               </div>
 
               <div className="rounded-2xl border border-emerald-300/55 bg-emerald-300/30 p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-muted">Low</p>
+                <p className="text-2xs uppercase tracking-[0.14em] text-apptext-muted">Low</p>
                 <p className="mt-2 text-base font-semibold text-apptext">
                   {loading || !summary.lowest ? '...' : `${summary.lowest.usageKwh.toFixed(1)} ${unitLabel}`}
                 </p>
@@ -78,7 +78,7 @@ function UsageSummaryGrid({
               </div>
 
               <div className="rounded-2xl border border-rose-300/55 bg-rose-300/30 p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-muted">High</p>
+                <p className="text-2xs uppercase tracking-[0.14em] text-apptext-muted">High</p>
                 <p className="mt-2 text-base font-semibold text-apptext">
                   {loading || !summary.highest ? '...' : `${summary.highest.usageKwh.toFixed(1)} ${unitLabel}`}
                 </p>
@@ -90,7 +90,7 @@ function UsageSummaryGrid({
 
             {(wxAvg != null || wxHigh != null || wxLow != null) && (
               <div className="mt-3 rounded-2xl border border-amber-300/50 bg-amber-300/28 p-3">
-                <p className="text-[11px] uppercase tracking-[0.14em] text-apptext-muted">Temperature</p>
+                <p className="text-2xs uppercase tracking-[0.14em] text-apptext-muted">Temperature</p>
                 <p className="mt-1 text-sm text-apptext-soft">
                   {wxAvg != null && `${wxAvg}° avg`}
                   {wxHigh != null && ` · ${wxHigh}° high`}

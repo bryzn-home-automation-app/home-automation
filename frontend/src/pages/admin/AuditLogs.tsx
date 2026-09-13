@@ -85,7 +85,7 @@ export default function AuditLogs() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               Admin
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -97,7 +97,7 @@ export default function AuditLogs() {
           </div>
 
           <div className="rounded-2xl border border-appborder bg-appinset p-4">
-            <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Events</p>
+            <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Events</p>
             <p className="mt-2 text-lg font-semibold text-apptext">{logs.length}</p>
           </div>
         </div>
@@ -105,7 +105,7 @@ export default function AuditLogs() {
 
       <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
             Activity Feed
           </p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">
@@ -129,7 +129,7 @@ export default function AuditLogs() {
                 className="flex items-center justify-between gap-4 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
               >
                 <div className="flex items-center gap-3">
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
+                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                     {typeLabels[entry.type] ?? entry.type}
                   </span>
                   <span className="text-sm text-apptext-soft">{entry.description}</span>

@@ -110,7 +110,7 @@ export default function UserManagement() {
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl">
-            <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">
+            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
               {isAdmin ? 'Admin' : 'Household'}
             </p>
             <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
@@ -125,16 +125,16 @@ export default function UserManagement() {
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Members</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Members</p>
               <p className="mt-2 text-lg font-semibold text-apptext">{allUsers.data?.length ?? '...'}</p>
             </div>
             <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/10 p-4">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-muted">Online</p>
+              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-muted">Online</p>
               <p className="mt-2 text-lg font-semibold text-emerald-200">{onlineCount}</p>
             </div>
             {isAdmin && (
               <div className={`rounded-2xl border p-4 ${pendingCount > 0 ? 'border-amber-300/30 bg-amber-300/10' : 'border-appborder bg-appinset'}`}>
-                <p className="text-[11px] uppercase tracking-[0.16em] text-apptext-dim">Pending</p>
+                <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Pending</p>
                 <p className={`mt-2 text-lg font-semibold ${pendingCount > 0 ? 'text-appwarning' : 'text-apptext'}`}>
                   {pendingCount}
                 </p>
@@ -182,7 +182,7 @@ export default function UserManagement() {
             {activeTab === 'all' ? (
               <>
                 <div>
-                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">
+                  <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">
                     Household Members
                   </p>
                   <div className="space-y-3">
@@ -206,7 +206,7 @@ export default function UserManagement() {
 
                 {guestUsers.length > 0 && (
                   <div>
-                    <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">
+                    <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">
                       Guests
                     </p>
                     <div className="space-y-3">
@@ -231,7 +231,7 @@ export default function UserManagement() {
               </>
             ) : (
               <div>
-                <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-apptext-muted">
+                <p className="mb-3 text-2xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">
                   Pending Approvals
                 </p>
                 <div className="space-y-3">
@@ -323,17 +323,17 @@ function UserCard({
             </div>
 
             <div className="flex flex-wrap items-center gap-2 lg:justify-end">
-              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${roleBadgeColors[user.role] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-3xs font-semibold uppercase tracking-[0.12em] ${roleBadgeColors[user.role] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                 {user.role === 'USER' ? 'Household Member' : user.role}
               </span>
-              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] ${statusBadgeColors[user.status] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
+              <span className={`rounded-full border px-2.5 py-1 text-3xs font-semibold uppercase tracking-[0.12em] ${statusBadgeColors[user.status] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                 {user.status.replace('_', ' ')}
               </span>
             </div>
           </div>
 
           {isAdmin && (
-            <div className="flex flex-wrap items-center gap-2 text-[11px] text-apptext-dim">
+            <div className="flex flex-wrap items-center gap-2 text-2xs text-apptext-dim">
               <span className="rounded-full border border-appborder px-2 py-0.5">
                 Last login: {timeAgo(user.lastLoginAt)}
               </span>
@@ -351,15 +351,15 @@ function UserCard({
                   <select
                     value={selectedRole}
                     onChange={(e) => onRoleChange(e.target.value)}
-                    className="rounded-full border border-appborder bg-appsurface px-3 py-1.5 text-[11px] font-medium text-apptext-soft focus:border-appaccent focus:outline-none"
+                    className="rounded-full border border-appborder bg-appsurface px-3 py-1.5 text-2xs font-medium text-apptext-soft focus:border-appaccent focus:outline-none"
                   >
                     <option value="USER">User</option>
                     <option value="ADMIN">Admin</option>
                   </select>
-                  <button type="button" onClick={() => onApprove(user.id, selectedRole)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-[11px] font-semibold text-appsuccess transition-colors hover:bg-appsuccess/20">
+                  <button type="button" onClick={() => onApprove(user.id, selectedRole)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-2xs font-semibold text-appsuccess transition-colors hover:bg-appsuccess/20">
                     Approve
                   </button>
-                  <button type="button" onClick={() => onDeny(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-[11px] font-semibold text-appdanger transition-colors hover:bg-appdanger/20">
+                  <button type="button" onClick={() => onDeny(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-appdanger transition-colors hover:bg-appdanger/20">
                     Deny
                   </button>
                 </>
@@ -368,18 +368,18 @@ function UserCard({
                   <select
                     value={selectedRole}
                     onChange={(e) => { onRoleChange(e.target.value); onRoleUpdate(user.id, e.target.value); }}
-                    className="rounded-full border border-appborder bg-appsurface px-3 py-1.5 text-[11px] font-medium text-apptext-soft focus:border-appaccent focus:outline-none"
+                    className="rounded-full border border-appborder bg-appsurface px-3 py-1.5 text-2xs font-medium text-apptext-soft focus:border-appaccent focus:outline-none"
                   >
                     <option value="ADMIN">Admin</option>
                     <option value="USER">User</option>
                     <option value="GUEST">Guest</option>
                   </select>
                   {user.status === 'ACTIVE' ? (
-                    <button type="button" onClick={() => onDisable(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-[11px] font-semibold text-appdanger transition-colors hover:bg-appdanger/20">
+                    <button type="button" onClick={() => onDisable(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-appdanger transition-colors hover:bg-appdanger/20">
                       Disable
                     </button>
                   ) : (
-                    <button type="button" onClick={() => onReactivate(user.id)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-[11px] font-semibold text-appsuccess transition-colors hover:bg-appsuccess/20">
+                    <button type="button" onClick={() => onReactivate(user.id)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-2xs font-semibold text-appsuccess transition-colors hover:bg-appsuccess/20">
                       Reactivate
                     </button>
                   )}

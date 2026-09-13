@@ -46,11 +46,11 @@ export default function UserProfileCard({
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Email</p>
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Email</p>
               <p className="mt-0.5 text-sm font-medium text-apptext-soft truncate">{email}</p>
             </div>
             <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-              <p className="text-[10px] uppercase tracking-[0.14em] text-apptext-dim">Phone</p>
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Phone</p>
               <p className="mt-0.5 text-sm font-medium text-apptext-soft">
                 {phone || 'Not set'}
               </p>

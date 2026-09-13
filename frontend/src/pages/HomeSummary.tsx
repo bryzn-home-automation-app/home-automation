@@ -186,12 +186,12 @@ export default function HomeSummary() {
             </div>
             <div className="flex items-center gap-2">
               <div className="rounded-2xl border border-appborder bg-appinset px-4 py-3 text-center">
-                <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Humidity</p>
+                <p className="text-3xs font-bold uppercase tracking-[0.14em] text-apptext-soft">Humidity</p>
                 <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(latestHumidity!)}%</p>
               </div>
               {currentWx.windSpeed != null && (
                 <div className="hidden rounded-2xl border border-appborder bg-appinset px-4 py-3 text-center sm:block">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-apptext-soft">Wind</p>
+                  <p className="text-3xs font-bold uppercase tracking-[0.14em] text-apptext-soft">Wind</p>
                   <p className="mt-1 text-lg font-semibold text-apptext">{Math.round(currentWx.windSpeed)}<span className="text-xs font-normal text-apptext-muted"> mph</span></p>
                 </div>
               )}
@@ -214,7 +214,7 @@ export default function HomeSummary() {
           className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover"
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">⚡ Last Daily Electric</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">⚡ Last Daily Electric</p>
             <span className="text-xs font-medium text-appaccent-text">Utility →</span>
           </div>
           <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">
@@ -238,7 +238,7 @@ export default function HomeSummary() {
           }`}
         >
           <div className="flex items-center justify-between gap-2">
-            <p className={`text-[11px] font-medium uppercase tracking-[0.18em] ${roombaAttention ? 'text-appwarning' : 'text-apptext-muted'}`}>🤖 Roomba</p>
+            <p className={`text-2xs font-medium uppercase tracking-[0.18em] ${roombaAttention ? 'text-appwarning' : 'text-apptext-muted'}`}>🤖 Roomba</p>
             <span className="text-xs font-medium text-appaccent-text">Open →</span>
           </div>
           <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">
@@ -256,7 +256,7 @@ export default function HomeSummary() {
           className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover"
         >
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">💧 Last Water Bill</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">💧 Last Water Bill</p>
             <span className="text-xs font-medium text-appaccent-text">Utility →</span>
           </div>
           <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">
@@ -281,7 +281,7 @@ export default function HomeSummary() {
       {/* Module cards — quick access to every section (mobile nav aid) */}
       <section className="perf-section">
         <div className="mb-4">
-          <p className="text-[11px] font-medium uppercase tracking-[0.22em] text-apptext-muted">Modules</p>
+          <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">Modules</p>
           <h3 className="mt-2 text-xl font-semibold tracking-[-0.03em] text-apptext">Quick access to every system.</h3>
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -295,7 +295,7 @@ export default function HomeSummary() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center justify-between gap-2">
                   <h4 className="text-sm font-semibold text-apptext">{mod.label}</h4>
-                  <span className="shrink-0 rounded-full border border-appborder bg-appinset px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-apptext-soft">{mod.pill}</span>
+                  <span className="shrink-0 rounded-full border border-appborder bg-appinset px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.12em] text-apptext-soft">{mod.pill}</span>
                 </div>
                 <p className="mt-1 text-xs text-apptext-muted">{mod.detail}</p>
               </div>
@@ -308,7 +308,7 @@ export default function HomeSummary() {
       <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Alerts</p>
+            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Alerts</p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">Recent notifications</h3>
           </div>
           <Link to="/notifications" className="text-sm font-medium text-apptext-soft hover:text-apptext">View all →</Link>

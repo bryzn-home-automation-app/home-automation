@@ -7,7 +7,7 @@ export default function ThemePicker() {
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
       <div className="mb-4 flex items-center justify-between gap-4">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Appearance</p>
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Appearance</p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">Theme &amp; color palette</h3>
         </div>
       </div>
