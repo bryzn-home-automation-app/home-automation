@@ -200,56 +200,122 @@ export default memo(function WaterUsage() {
           </p>
         )}
         {hasData && (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <thead>
-                <tr className="border-b border-appborder text-left text-apptext-muted">
-                  <th className="py-2 pr-3 font-medium">Period</th>
-                  <th className="py-2 pr-3 font-medium">Usage (gal)</th>
-                  <th className="py-2 pr-3 font-medium">Water</th>
-                  <th className="py-2 pr-3 font-medium">Sewer</th>
-                  <th className="py-2 pr-3 font-medium">Refuse</th>
-                  <th className="py-2 pr-3 font-medium">Tax</th>
-                  <th className="py-2 pr-3 font-medium">Stormwater</th>
-                  <th className="py-2 pr-3 font-medium">Discount</th>
-                  <th className="py-2 pr-3 font-medium">Total Due</th>
-                  <th className="py-2 pr-3 font-medium">Due Date</th>
-                  <th className="py-2 font-medium">Bill</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bills.map((bill) => (
-                  <tr key={bill.id} className="border-b border-appborder/50 text-apptext">
-                    <td className="py-2 pr-3 whitespace-nowrap">
+          <>
+            {/* Mobile: stacked cards, no horizontal scroll. Desktop: full table. */}
+            <div className="divide-y divide-appborder/50 sm:hidden">
+              {bills.map((bill) => (
+                <div key={bill.id} className="py-3 text-sm text-apptext">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium">
                       {bill.billingPeriodStart} → {bill.billingPeriodEnd}
-                    </td>
-                    <td className="py-2 pr-3">{bill.usageThousands?.toFixed(0) ?? '—'}</td>
-                    <td className="py-2 pr-3">{money(bill.waterCharge)}</td>
-                    <td className="py-2 pr-3">{money(bill.sewerCharge)}</td>
-                    <td className="py-2 pr-3">{money(bill.refuseCharge)}</td>
-                    <td className="py-2 pr-3">{money(bill.taxCharge)}</td>
-                    <td className="py-2 pr-3">{money(bill.stormwaterCharge)}</td>
-                    <td className="py-2 pr-3">{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</td>
-                    <td className="py-2 pr-3 font-semibold">{money(bill.totalDue)}</td>
-                    <td className="py-2 pr-3 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
-                    <td className="py-2">
-                      {bill.pdfPath ? (
-                        <button
-                          type="button"
-                          onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
-                          className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
-                        >
-                          View Bill
-                        </button>
-                      ) : (
-                        '—'
-                      )}
-                    </td>
+                    </span>
+                    <span className="font-semibold">{money(bill.totalDue)}</span>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-apptext-soft">
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Usage (gal)</dt>
+                      <dd>{bill.usageThousands?.toFixed(0) ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Due Date</dt>
+                      <dd>{bill.dueDate ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Water</dt>
+                      <dd>{money(bill.waterCharge)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Sewer</dt>
+                      <dd>{money(bill.sewerCharge)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Refuse</dt>
+                      <dd>{money(bill.refuseCharge)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Tax</dt>
+                      <dd>{money(bill.taxCharge)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Stormwater</dt>
+                      <dd>{money(bill.stormwaterCharge)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Discount</dt>
+                      <dd>{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[11px] uppercase tracking-[0.1em] text-apptext-muted">Bill</dt>
+                      <dd>
+                        {bill.pdfPath ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
+                            className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
+                          >
+                            View Bill
+                          </button>
+                        ) : (
+                          '—'
+                        )}
+                      </dd>
+                    </div>
+                  </dl>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto sm:block">
+              <table className="w-full min-w-[640px] text-sm">
+                <thead>
+                  <tr className="border-b border-appborder text-left text-apptext-muted">
+                    <th className="py-2 pr-3 font-medium">Period</th>
+                    <th className="py-2 pr-3 font-medium">Usage (gal)</th>
+                    <th className="py-2 pr-3 font-medium">Water</th>
+                    <th className="py-2 pr-3 font-medium">Sewer</th>
+                    <th className="py-2 pr-3 font-medium">Refuse</th>
+                    <th className="py-2 pr-3 font-medium">Tax</th>
+                    <th className="py-2 pr-3 font-medium">Stormwater</th>
+                    <th className="py-2 pr-3 font-medium">Discount</th>
+                    <th className="py-2 pr-3 font-medium">Total Due</th>
+                    <th className="py-2 pr-3 font-medium">Due Date</th>
+                    <th className="py-2 font-medium">Bill</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {bills.map((bill) => (
+                    <tr key={bill.id} className="border-b border-appborder/50 text-apptext">
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {bill.billingPeriodStart} → {bill.billingPeriodEnd}
+                      </td>
+                      <td className="py-2 pr-3">{bill.usageThousands?.toFixed(0) ?? '—'}</td>
+                      <td className="py-2 pr-3">{money(bill.waterCharge)}</td>
+                      <td className="py-2 pr-3">{money(bill.sewerCharge)}</td>
+                      <td className="py-2 pr-3">{money(bill.refuseCharge)}</td>
+                      <td className="py-2 pr-3">{money(bill.taxCharge)}</td>
+                      <td className="py-2 pr-3">{money(bill.stormwaterCharge)}</td>
+                      <td className="py-2 pr-3">{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</td>
+                      <td className="py-2 pr-3 font-semibold">{money(bill.totalDue)}</td>
+                      <td className="py-2 pr-3 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
+                      <td className="py-2">
+                        {bill.pdfPath ? (
+                          <button
+                            type="button"
+                            onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
+                            className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
+                          >
+                            View Bill
+                          </button>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </section>
       <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
