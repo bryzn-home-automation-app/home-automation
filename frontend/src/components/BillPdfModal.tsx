@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -58,7 +59,14 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
 
   if (!url) return null;
 
-  return (
+  // Rendered via a portal into document.body rather than in place: any
+  // ancestor with `content-visibility: auto` (used by .perf-section, which
+  // wraps the billing tables this opens from) implicitly gets CSS
+  // containment, which makes it a containing block for `position: fixed`
+  // descendants — so a plain fixed-position modal rendered inside one
+  // shrinks to that ancestor's box instead of covering the viewport. A
+  // portal sidesteps this regardless of where the trigger lives in the tree.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 sm:p-4"
       role="dialog"
@@ -131,6 +139,7 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
