@@ -374,12 +374,18 @@ function ForecastChart() {
                 label={{ value: 'Today', fill: chartTheme.muted, fontSize: 10 }}
               />
 
-              {/* Confidence band — no stroke, just the faded fill. */}
+              {/* Confidence band — no visible outline on the chart (strokeWidth 0),
+                  but stroke is still set to the bright theme color (not "none")
+                  so Recharts' hover tooltip swatch — which colors itself from
+                  stroke, falling back to the translucent fill only when no
+                  stroke exists — matches the bright legend swatch below the
+                  chart title instead of reading as a faded, hard-to-see dot. */}
               <Area
                 dataKey="confidenceBand"
                 fill={bandColor}
                 fillOpacity={1}
-                stroke="none"
+                stroke={series.temp}
+                strokeWidth={0}
                 isAnimationActive={false}
                 connectNulls={false}
               />
