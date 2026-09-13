@@ -2,31 +2,12 @@ import { useState, useEffect, type FormEvent, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme, KPI_TONES, hexToRgba } from '../context/ThemeContext';
 import VirtualizedList from '../components/VirtualizedList';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)'; // matches this file's own lg: breakpoint usage
 const MOBILE_ROW_HEIGHT = 104;
 const DESKTOP_ROW_HEIGHT = 76;
 const LIST_HEIGHT = 640; // matches the old max-h-[40rem]
-
-/** Row height differs a lot between RecordCard's stacked-mobile and single-line-desktop
- * layouts (both exist in the DOM, one hidden via CSS) — VirtualizedList needs to know
- * which one is actually visible to size its windowing math correctly. */
-function useIsDesktopLayout() {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window === 'undefined' ? true : window.matchMedia(DESKTOP_MEDIA_QUERY).matches
-  );
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const media = window.matchMedia(DESKTOP_MEDIA_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches);
-    setIsDesktop(media.matches);
-    media.addEventListener('change', onChange);
-    return () => media.removeEventListener('change', onChange);
-  }, []);
-
-  return isDesktop;
-}
 
 /** Debounces a fast-changing value — used to keep the search box responsive
  * to type into while avoiding a network request (React Query refetch) per
@@ -749,7 +730,11 @@ export default function MaintenanceDashboard() {
   // Debounced so typing in the search box doesn't fire a network request
   // (and full-list re-render) on every keystroke.
   const debouncedSearch = useDebouncedValue(filters.search, 300);
-  const isDesktopLayout = useIsDesktopLayout();
+  // Row height differs a lot between RecordCard's stacked-mobile and
+  // single-line-desktop layouts (both exist in the DOM, one hidden via CSS)
+  // — VirtualizedList needs to know which one is actually visible to size
+  // its windowing math correctly.
+  const isDesktopLayout = useMediaQuery(DESKTOP_MEDIA_QUERY);
 
   const records = useQuery({
     queryKey: ['maintenance-records', filters.category, filters.status, filters.priority, debouncedSearch],

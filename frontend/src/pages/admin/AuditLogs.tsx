@@ -1,6 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllUsers, fetchGuestSessions } from '../../api/auth';
 import { useMemo } from 'react';
+import VirtualizedList from '../../components/VirtualizedList';
+
+const LOG_ROW_HEIGHT = 52;
+const LOG_LIST_HEIGHT = 576; // matches the old max-h-[36rem]
 
 interface LogEntry {
   id: string;
@@ -122,26 +126,32 @@ export default function AuditLogs() {
             No activity recorded yet. Events will appear here as users log in and interact with the platform.
           </div>
         ) : (
-          <div className="max-h-[36rem] overflow-y-auto space-y-2 pr-1">
-            {logs.map((entry) => (
+          <VirtualizedList
+            items={logs}
+            height={Math.min(LOG_LIST_HEIGHT, logs.length * LOG_ROW_HEIGHT)}
+            itemHeight={LOG_ROW_HEIGHT}
+            overscan={6}
+            className="pr-1"
+            renderItem={(entry) => (
               <div
                 key={entry.id}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
+                style={{ height: LOG_ROW_HEIGHT - 8, boxSizing: 'border-box' }}
+                className="mb-2 flex items-center justify-between gap-4 overflow-hidden rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
               >
-                <div className="flex items-center gap-3">
-                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
                     {typeLabels[entry.type] ?? entry.type}
                   </span>
-                  <span className="text-sm text-apptext-soft">{entry.description}</span>
+                  <span className="truncate text-sm text-apptext-soft">{entry.description}</span>
                 </div>
-                <span className="text-xs text-apptext-muted tabular-nums whitespace-nowrap">
+                <span className="shrink-0 text-xs text-apptext-muted tabular-nums whitespace-nowrap">
                   {new Date(entry.timestamp).toLocaleDateString('en-US', {
                     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                   })}
                 </span>
               </div>
-            ))}
-          </div>
+            )}
+          />
         )}
       </section>
     </div>

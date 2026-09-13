@@ -15,7 +15,9 @@ import DeferredRender from '../components/DeferredRender';
 import type { WaterBill } from '../types';
 import { fetchWaterBills } from '../api/waterBills';
 import BillPdfModal from '../components/BillPdfModal';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
+const SM_MEDIA_QUERY = '(min-width: 640px)'; // matches this component's own sm: breakpoint usage
 const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
 const TICK_PROPS = { fontSize: 11 } as const;
 const CHART_THEME = {
@@ -78,6 +80,9 @@ export default memo(function WaterUsage() {
   const loading = waterBills.isLoading;
   const hasData = bills.length > 0;
   const [viewingUrl, setViewingUrl] = useState<string | null>(null);
+  // Renders one layout, not both hidden-via-CSS (same anti-pattern fixed in
+  // MaintenanceDashboard and CoservBillingHistory).
+  const isWideLayout = useMediaQuery(SM_MEDIA_QUERY);
 
   const latestBill = bills[0];
   const avgMonthlyBill = hasData ? bills.reduce((s, b) => s + b.totalDue, 0) / bills.length : 0;
@@ -200,9 +205,8 @@ export default memo(function WaterUsage() {
           </p>
         )}
         {hasData && (
-          <>
-            {/* Mobile: stacked cards, no horizontal scroll. Desktop: full table. */}
-            <div className="divide-y divide-appborder/50 sm:hidden">
+          !isWideLayout ? (
+            <div className="divide-y divide-appborder/50">
               {bills.map((bill) => (
                 <div key={bill.id} className="py-3 text-sm text-apptext">
                   <div className="flex items-baseline justify-between gap-2">
@@ -264,8 +268,8 @@ export default memo(function WaterUsage() {
                 </div>
               ))}
             </div>
-
-            <div className="hidden overflow-x-auto sm:block">
+          ) : (
+            <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-sm">
                 <thead>
                   <tr className="border-b border-appborder text-left text-apptext-muted">
@@ -315,7 +319,7 @@ export default memo(function WaterUsage() {
                 </tbody>
               </table>
             </div>
-          </>
+          )
         )}
       </section>
       <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />

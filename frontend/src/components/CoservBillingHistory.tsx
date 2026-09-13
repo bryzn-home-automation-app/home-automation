@@ -2,7 +2,9 @@ import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCoservBills } from '../api/coservBills';
 import BillPdfModal from './BillPdfModal';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
+const SM_MEDIA_QUERY = '(min-width: 640px)'; // matches this component's own sm: breakpoint usage
 const money = (n?: number | null) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
 /** Shared by the Electric and Gas tabs — both read the same coserv_bills row, each showing its own usage/charge column. */
@@ -26,6 +28,10 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
 
   const usageLabel = service === 'electric' ? 'Usage (kWh)' : 'Usage (CCF)';
   const chargeLabel = service === 'electric' ? 'Electric Charge' : 'Gas Charge';
+  // Renders one layout, not both hidden-via-CSS — a card list here can grow
+  // over years of bills, so mounting both doubles real DOM cost for no
+  // visible benefit (same anti-pattern fixed in MaintenanceDashboard).
+  const isWideLayout = useMediaQuery(SM_MEDIA_QUERY);
 
   return (
     <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
@@ -36,9 +42,8 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
         </p>
       )}
       {hasData && (
-        <>
-          {/* Mobile: stacked cards, no horizontal scroll. Desktop: full table. */}
-          <div className="divide-y divide-appborder/50 sm:hidden">
+        !isWideLayout ? (
+          <div className="divide-y divide-appborder/50">
             {bills.map((bill) => {
               const usage = service === 'electric' ? bill.electricUsageKwh : bill.gasUsageCcf;
               const charge = service === 'electric' ? bill.electricCharge : bill.gasCharge;
@@ -84,8 +89,8 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
               );
             })}
           </div>
-
-          <div className="hidden overflow-x-auto sm:block">
+        ) : (
+          <div className="overflow-x-auto">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-appborder text-left text-apptext-muted">
@@ -129,7 +134,7 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
               </tbody>
             </table>
           </div>
-        </>
+        )
       )}
       <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
     </section>

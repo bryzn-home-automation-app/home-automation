@@ -3,6 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import VirtualizedList from '../../components/VirtualizedList';
+
+const EVENT_ROW_HEIGHT = 104;
 
 // Fetch config (includes version/commit hash) — shared key with useUsageData
 const fetchConfig = () => api.get('/config').then((r) => r.data);
@@ -681,8 +684,13 @@ export default function DebugDashboard() {
             No events yet. Run a sync or restart to populate.
           </div>
         ) : (
-          <div className="max-h-[520px] overflow-y-auto pr-1">
-            {events.map((e) => (
+          <VirtualizedList
+            items={events}
+            height={Math.min(520, events.length * EVENT_ROW_HEIGHT)}
+            itemHeight={EVENT_ROW_HEIGHT}
+            overscan={6}
+            className="pr-1"
+            renderItem={(e) => (
               <div
                 key={e.id}
                 role="button"
@@ -694,6 +702,7 @@ export default function DebugDashboard() {
                     setSelectedEvent(e);
                   }
                 }}
+                style={{ height: EVENT_ROW_HEIGHT, boxSizing: 'border-box', overflow: 'hidden' }}
                 className="group cursor-pointer border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-appaccent/40"
               >
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -714,15 +723,15 @@ export default function DebugDashboard() {
                     View details →
                   </span>
                 </div>
-                <p className="mt-1 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
+                <p className="mt-1 line-clamp-2 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
                 {e.details && (
                   <p className="mt-0.5 text-3xs leading-snug text-apptext-dim truncate" title={e.details}>
                     {e.details}
                   </p>
                 )}
               </div>
-            ))}
-          </div>
+            )}
+          />
         )}
       </section>
 
