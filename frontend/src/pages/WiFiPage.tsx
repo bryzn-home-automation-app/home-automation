@@ -43,11 +43,21 @@ function useCountdown(expiresAt: string): { label: string; urgent: boolean } {
   return result;
 }
 
+/** Escape SSID/password special chars per the WIFI: QR payload spec (\, ;, ,, "). */
+function escapeWifiField(value: string): string {
+  return value.replace(/([\\;,"])/g, '\\$1');
+}
+
+type QrMode = 'portal' | 'direct';
+
 export default function WiFiPage() {
   const { theme } = useTheme();
   const { isAdmin, isGuest, user } = useAuth();
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [qrLargeUrl, setQrLargeUrl] = useState<string>('');
+  const [wifiQrDataUrl, setWifiQrDataUrl] = useState<string>('');
+  const [wifiQrLargeUrl, setWifiQrLargeUrl] = useState<string>('');
+  const [qrMode, setQrMode] = useState<QrMode>('portal');
   const [copySuccess, setCopySuccess] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
 
@@ -74,6 +84,15 @@ export default function WiFiPage() {
   // lives in source control. Set VITE_WIFI_SSID / VITE_WIFI_PASSWORD (see .env.example).
   const ssid = import.meta.env.VITE_WIFI_SSID ?? '';
   const password = import.meta.env.VITE_WIFI_PASSWORD ?? '';
+
+  // Native WIFI: QR payload — scanned via the phone's system Camera app (not an
+  // in-app scanner), this triggers the OS "Join Network" prompt with the password
+  // pre-filled, no typing required. T:WPA covers WPA/WPA2/WPA3; adjust if the
+  // network ever moves to WEP or is left open.
+  const wifiQrPayload = useMemo(() => {
+    if (!ssid) return '';
+    return `WIFI:T:WPA;S:${escapeWifiField(ssid)};P:${escapeWifiField(password)};;`;
+  }, [ssid, password]);
 
   const guestSessionsInterval = useJitteredInterval(30_000);
   const guestCountInterval = useJitteredInterval(30_000);
@@ -115,8 +134,15 @@ export default function WiFiPage() {
     QRCode.toDataURL(guestInviteUrl, { width: 800, margin: 4, color })
       .then((url) => { if (!cancelled) setQrLargeUrl(url); });
 
+    if (wifiQrPayload) {
+      QRCode.toDataURL(wifiQrPayload, { width: 320, margin: 2, color })
+        .then((url) => { if (!cancelled) setWifiQrDataUrl(url); });
+      QRCode.toDataURL(wifiQrPayload, { width: 800, margin: 4, color })
+        .then((url) => { if (!cancelled) setWifiQrLargeUrl(url); });
+    }
+
     return () => { cancelled = true; };
-  }, [guestInviteUrl, theme]);
+  }, [guestInviteUrl, wifiQrPayload, theme]);
 
   const handleCopyNetwork = () => {
     const lines = [
@@ -164,19 +190,43 @@ export default function WiFiPage() {
       <section className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.8fr)] lg:grid-cols-[minmax(0,1fr)_minmax(340px,0.8fr)]">
         {/* QR Code */}
         <div className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-8">
-          <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
-            Scan to Connect
-          </p>
-          <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-apptext">
-            Guest login QR code
-          </h3>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
+                Scan to Connect
+              </p>
+              <h3 className="mt-3 text-xl font-semibold tracking-[-0.03em] text-apptext">
+                {qrMode === 'portal' ? 'Guest login QR code' : 'Direct WiFi connect QR code'}
+              </h3>
+            </div>
+
+            {/* Mode toggle */}
+            <div className="flex rounded-full border border-appborder bg-appinset p-1 text-xs font-semibold">
+              <button
+                type="button"
+                onClick={() => setQrMode('portal')}
+                className={`rounded-full px-3 py-1.5 transition-colors ${qrMode === 'portal' ? 'bg-appaccent-soft text-appaccent-text' : 'text-apptext-muted hover:text-apptext'}`}
+              >
+                Guest Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => setQrMode('direct')}
+                disabled={!wifiQrPayload}
+                className={`rounded-full px-3 py-1.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${qrMode === 'direct' ? 'bg-appaccent-soft text-appaccent-text' : 'text-apptext-muted hover:text-apptext'}`}
+                title={wifiQrPayload ? undefined : 'Configure VITE_WIFI_SSID to enable'}
+              >
+                Direct WiFi
+              </button>
+            </div>
+          </div>
 
           <div className="mt-6 flex flex-col items-center gap-4 sm:flex-row sm:items-start sm:gap-8">
             <div className="rounded-2xl border-2 border-appborder bg-appsurface p-3 cursor-pointer transition-transform hover:scale-105 active:scale-95" onClick={() => setQrModalOpen(true)} role="button" tabIndex={0} onKeyDown={(e) => { if (e.key === 'Enter') setQrModalOpen(true); }} title="Click to enlarge QR code">
-              {qrDataUrl ? (
+              {(qrMode === 'portal' ? qrDataUrl : wifiQrDataUrl) ? (
                 <img
-                  src={qrDataUrl}
-                  alt="QR code for guest WiFi login — click to enlarge"
+                  src={qrMode === 'portal' ? qrDataUrl : wifiQrDataUrl}
+                  alt={qrMode === 'portal' ? 'QR code for guest WiFi login — click to enlarge' : 'QR code that auto-connects to WiFi — click to enlarge'}
                   className="h-56 w-56 sm:h-64 sm:w-64 pointer-events-none"
                 />
               ) : (
@@ -186,17 +236,31 @@ export default function WiFiPage() {
               )}
             </div>
 
-            <div className="flex-1 space-y-3 text-center sm:text-left">
-              <div className="rounded-2xl border border-appborder bg-appinset p-4">
-                <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim">Guest Portal URL</p>
-                <code className="mt-1 block break-all text-sm font-medium text-appaccent-text select-all">
-                  {guestInviteUrl}
-                </code>
+            {qrMode === 'portal' ? (
+              <div className="flex-1 space-y-3 text-center sm:text-left">
+                <div className="rounded-2xl border border-appborder bg-appinset p-4">
+                  <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim">Guest Portal URL</p>
+                  <code className="mt-1 block break-all text-sm font-medium text-appaccent-text select-all">
+                    {guestInviteUrl}
+                  </code>
+                </div>
+                <p className="text-xs text-apptext-muted leading-5">
+                  Point any phone camera at the QR code. The guest login page opens directly in their browser.
+                </p>
               </div>
-              <p className="text-xs text-apptext-muted leading-5">
-                Point any phone camera at the QR code. The guest login page opens directly in their browser.
-              </p>
-            </div>
+            ) : (
+              <div className="flex-1 space-y-3 text-center sm:text-left">
+                <div className="rounded-2xl border border-appborder bg-appinset p-4">
+                  <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim">Auto-connects to</p>
+                  <p className="mt-1 text-sm font-medium text-appaccent-text">{ssid || 'Not configured'}</p>
+                </div>
+                <p className="text-xs text-apptext-muted leading-5">
+                  Open the <strong>Camera app</strong> (or Control Center&rsquo;s QR scanner) — not a browser or
+                  this page&rsquo;s own scanner — and point it at the code. iOS shows a &ldquo;Join Network&rdquo;
+                  prompt with the password already filled in; tap Join and you&rsquo;re connected, no typing.
+                </p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -299,13 +363,13 @@ export default function WiFiPage() {
             </button>
 
             <p className="mb-4 text-center text-2xs font-medium uppercase tracking-[0.22em] text-slate-400">
-              Scan to join
+              {qrMode === 'portal' ? 'Scan to join' : 'Scan with Camera app to auto-connect'}
             </p>
 
-            {qrLargeUrl ? (
+            {(qrMode === 'portal' ? qrLargeUrl : wifiQrLargeUrl) ? (
               <img
-                src={qrLargeUrl}
-                alt="QR code for guest WiFi login — large"
+                src={qrMode === 'portal' ? qrLargeUrl : wifiQrLargeUrl}
+                alt={qrMode === 'portal' ? 'QR code for guest WiFi login — large' : 'QR code that auto-connects to WiFi — large'}
                 className="h-[min(70vh,70vw)] w-[min(70vh,70vw)] max-h-[28rem] max-w-[28rem]"
               />
             ) : (
@@ -315,7 +379,7 @@ export default function WiFiPage() {
             )}
 
             <p className="mt-4 text-center text-sm text-slate-300">
-              {guestInviteUrl}
+              {qrMode === 'portal' ? guestInviteUrl : (ssid || 'Not configured')}
             </p>
             <p className="mt-2 text-center text-xs text-slate-500">
               Click outside or press ✕ to close
