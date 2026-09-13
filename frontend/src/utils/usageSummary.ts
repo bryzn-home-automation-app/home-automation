@@ -17,8 +17,17 @@ export interface UsagePeriodDefinition {
   displayEnd: string;
 }
 
+// Local wall-clock fields, formatted directly — NOT toISOString(), which
+// converts to UTC first. The backend parses this as a zone-less
+// LocalDateTime and compares it against naive local-wall-clock timestamp
+// columns, so a UTC-shifted string silently shifts every period boundary
+// (month/quarter/year/lifetime) by the local UTC offset (5-6h for US
+// Central), cutting off the first few hours of "today" and pulling in a
+// few hours it shouldn't.
 function formatIso(value: Date) {
-  return value.toISOString().slice(0, 19);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}` +
+    `T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
 }
 
 function formatDateOnly(value: Date) {

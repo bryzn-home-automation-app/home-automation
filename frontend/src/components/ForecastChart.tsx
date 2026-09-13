@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { fetchForecast, fetchForecastAccuracy } from '../api/forecast';
+import { localTodayIso } from '../utils/localDate';
 import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import StatTile, { Icons } from './StatTile';
@@ -367,7 +368,7 @@ function ForecastChart() {
               <Tooltip contentStyle={TOOLTIP_CONTENT_STYLE} />
 
               <ReferenceLine
-                x={formatDateLabel(new Date().toISOString().slice(0, 10))}
+                x={formatDateLabel(localTodayIso())}
                 stroke={chartTheme.muted}
                 strokeDasharray="4 4"
                 label={{ value: 'Today', fill: chartTheme.muted, fontSize: 10 }}

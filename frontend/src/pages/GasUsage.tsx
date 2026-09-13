@@ -1,17 +1,13 @@
 import { memo, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
 import MonthlyComparison from '../components/MonthlyComparison';
 import DeferredRender from '../components/DeferredRender';
-import UsageSummaryGrid from '../components/UsageSummaryGrid';
-import { fetchBatchSummaries } from '../api/energy';
-import { buildUsagePeriods, createEmptyUsageSummary } from '../utils/usageSummary';
 import CoservBillingHistory from '../components/CoservBillingHistory';
 
 export default memo(function GasUsage() {
-  const { gasUsage, gasTotal, gasMeter, config } = useUsageData();
+  const { gasUsage, gasTotal, config } = useUsageData();
 
   const data = gasUsage.data ?? [];
   const loading = gasUsage.isLoading;
@@ -52,35 +48,6 @@ export default memo(function GasUsage() {
     }
     return Array.from(byMonth.entries()).map(([month, kWh]) => ({ month, kWh: Math.round(kWh * 100) / 100 }));
   }, [chartData]);
-
-  const periodDefinitions = useMemo(
-    () => buildUsagePeriods(config.data?.dataStartDate),
-    [config.data?.dataStartDate]
-  );
-
-  // One batched HTTP call for all periods instead of N parallel ones —
-  // same data, same shape, fewer round-trips.
-  const periodsKey = periodDefinitions.map((p) => `${p.start}:${p.end}`).join('|');
-  const batchSummary = useQuery({
-    queryKey: ['usage-summaries', gasMeter?.id, periodsKey],
-    queryFn: () =>
-      gasMeter
-        ? fetchBatchSummaries(gasMeter.id, periodDefinitions.map((p) => ({ start: p.start, end: p.end })))
-        : Promise.resolve(periodDefinitions.map((p) => createEmptyUsageSummary(0, p.start, p.end))),
-    enabled: !!gasMeter && periodDefinitions.length > 0,
-    staleTime: 30_000,
-  });
-
-  const summaryCards = periodDefinitions.map((period, index) => ({
-    label: period.label,
-    rangeStart: period.displayStart,
-    rangeEnd: period.displayEnd,
-    summary:
-      batchSummary.data?.[index] ??
-      createEmptyUsageSummary(gasMeter?.id ?? 0, period.start, period.end),
-  }));
-
-  const summaryLoading = batchSummary.isLoading;
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -181,13 +148,6 @@ export default memo(function GasUsage() {
           </p>
         </section>
       )}
-
-      <UsageSummaryGrid
-        title="Gas highs, lows, and rolling period totals"
-        unitLabel="units"
-        summaries={summaryCards}
-        loading={summaryLoading}
-      />
 
       <CoservBillingHistory service="gas" />
     </div>

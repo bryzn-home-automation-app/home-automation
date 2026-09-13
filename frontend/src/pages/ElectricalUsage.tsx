@@ -16,6 +16,7 @@ import UsageWeatherChart from '../components/UsageWeatherChart';
 import ForecastChart from '../components/ForecastChart';
 import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import CoservBillingHistory from '../components/CoservBillingHistory';
+import { localTodayIso } from '../utils/localDate';
 
 type LogFilter = 'daily' | 'hourly';
 type ElectricTab = 'usage' | 'forecast';
@@ -41,7 +42,7 @@ export default memo(function ElectricalUsage() {
   const monthKwh = electricTotal.data?.totalKwh ?? 0;
   const kwhRate = config.data?.kwhRate ?? 0.1171;
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = localTodayIso();
   const realData = useMemo(
     () =>
       data.filter((d) => {
@@ -106,7 +107,7 @@ export default memo(function ElectricalUsage() {
   const avg30 = useMemo(() => averageCompleteDailyKwh(electricDaily.data ?? [], 30), [electricDaily.data]);
 
   // ── Date periods for summaries ─────────────────────────────────
-  const todayDate = new Date().toISOString().split('T')[0];
+  const todayDate = localTodayIso();
   const periodDefinitions = useMemo(
     () => buildUsagePeriods(config.data?.dataStartDate),
     // eslint-disable-next-line react-hooks/exhaustive-deps

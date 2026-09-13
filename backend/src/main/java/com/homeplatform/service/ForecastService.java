@@ -325,6 +325,14 @@ public class ForecastService {
         LocalDate start = data.get(0).date;
         LocalDate end = data.get(data.size() - 1).date;
 
+        // Training CDD/HDD range — see ForecastModel.cddMin/cddMax javadoc.
+        // predict() clamps to this instead of letting the line extrapolate
+        // past what the regression has actually seen.
+        double cddMin = data.stream().mapToDouble(dp -> dp.cdd).min().orElse(0);
+        double cddMax = data.stream().mapToDouble(dp -> dp.cdd).max().orElse(0);
+        double hddMin = data.stream().mapToDouble(dp -> dp.hdd).min().orElse(0);
+        double hddMax = data.stream().mapToDouble(dp -> dp.hdd).max().orElse(0);
+
         ForecastModel model = ForecastModel.builder()
                 .dataPointsUsed(data.size())
                 .rSquared(BigDecimal.valueOf(rSquared))
@@ -333,6 +341,10 @@ public class ForecastService {
                 .intercept(BigDecimal.valueOf(intercept))
                 .cddCoeff(BigDecimal.valueOf(cddCoeff))
                 .hddCoeff(BigDecimal.valueOf(hddCoeff))
+                .cddMin(BigDecimal.valueOf(cddMin))
+                .cddMax(BigDecimal.valueOf(cddMax))
+                .hddMin(BigDecimal.valueOf(hddMin))
+                .hddMax(BigDecimal.valueOf(hddMax))
                 .dowAdjustments(dowAdj)
                 .hourlyProfiles(hourlyProfiles)
                 .seasonalFactors(seasonalFactors)
@@ -359,6 +371,17 @@ public class ForecastService {
     public double predict(ForecastModel model, double avgTempF, DayOfWeek dow, int month) {
         double cdd = Math.max(0, avgTempF - COMFORT_BASE);
         double hdd = Math.max(0, COMFORT_BASE - avgTempF);
+
+        // Clamp to the CDD/HDD range the model was actually trained on — see
+        // ForecastModel.cddMin/cddMax javadoc. Null-safe: a model trained
+        // before this field existed just skips the clamp, same as before.
+        if (model.getCddMin() != null && model.getCddMax() != null) {
+            cdd = clamp(cdd, model.getCddMin().doubleValue(), model.getCddMax().doubleValue());
+        }
+        if (model.getHddMin() != null && model.getHddMax() != null) {
+            hdd = clamp(hdd, model.getHddMin().doubleValue(), model.getHddMax().doubleValue());
+        }
+
         double base = model.getIntercept().doubleValue()
                 + model.getCddCoeff().doubleValue() * cdd
                 + model.getHddCoeff().doubleValue() * hdd;
@@ -1364,6 +1387,10 @@ public class ForecastService {
 
     private static double round4(double v) {
         return BigDecimal.valueOf(v).setScale(4, RoundingMode.HALF_UP).doubleValue();
+    }
+
+    private static double clamp(double v, double min, double max) {
+        return Math.max(min, Math.min(max, v));
     }
 
     // ── Robust-stat helpers ─────────────────────────────────

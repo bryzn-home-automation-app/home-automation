@@ -47,6 +47,30 @@ public class ForecastModel {
     @Column(name = "hdd_coeff", nullable = false, precision = 12, scale = 6)
     private BigDecimal hddCoeff;
 
+    /**
+     * Min/max CDD and HDD actually seen in the training window. A linear
+     * regression fit only on (say) three months of hot-summer data has no
+     * evidence at all for cooler days — its intercept is just where the
+     * fitted line happens to cross zero, not a physically meaningful
+     * baseline. Evaluating it on a CDD/HDD outside this range extrapolates
+     * that line arbitrarily far, which for this model shape reliably goes
+     * negative and gets floored at a nonsensical flat 0 kWh. predict()
+     * clamps its inputs to this range instead of clamping the output, so a
+     * day outside the model's experience gets its nearest in-range estimate
+     * rather than a fabricated zero.
+     */
+    @Column(name = "cdd_min", precision = 10, scale = 3)
+    private BigDecimal cddMin;
+
+    @Column(name = "cdd_max", precision = 10, scale = 3)
+    private BigDecimal cddMax;
+
+    @Column(name = "hdd_min", precision = 10, scale = 3)
+    private BigDecimal hddMin;
+
+    @Column(name = "hdd_max", precision = 10, scale = 3)
+    private BigDecimal hddMax;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "dow_adjustments", columnDefinition = "jsonb")
     @Builder.Default
