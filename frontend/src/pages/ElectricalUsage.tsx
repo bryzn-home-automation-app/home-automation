@@ -18,10 +18,17 @@ import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import CoservBillingHistory from '../components/CoservBillingHistory';
 
 type LogFilter = 'daily' | 'hourly';
+type ElectricTab = 'usage' | 'forecast';
+
+const ELECTRIC_TABS: { key: ElectricTab; label: string; icon: string }[] = [
+  { key: 'usage', label: 'Usage & Bills', icon: '📊' },
+  { key: 'forecast', label: 'Forecast & Stats', icon: '🔮' },
+];
 
 export default memo(function ElectricalUsage() {
   const { electricUsage, electricTotal, electricMeter, config, electricDaily } = useUsageData();
   const [logFilter, setLogFilter] = useState<LogFilter>('daily');
+  const [tab, setTab] = useState<ElectricTab>('usage');
   const weatherInterval = useJitteredInterval(3_600_000, 60_000);
 
   // Usage visuals (trend line + monthly bars) follow the theme accent so they
@@ -296,193 +303,231 @@ export default memo(function ElectricalUsage() {
         />
       </section>
 
-      <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <DeferredRender minHeight={360}>
-          <UsageChart
-            data={realData}
-            dailyPoints={trendPoints}
-            loading={loading}
-            title="Electric usage trend"
-            emptyText="No electric usage data yet — readings sync automatically each evening once your utility posts the day's data."
-            unitLabel="kWh"
-            accentColor={usageColor}
-          />
-        </DeferredRender>
-        <DeferredRender minHeight={360}>
-          <MonthlyComparison
-            data={realData}
-            loading={loading}
-            title="Monthly electric comparison"
-            emptyText="Not enough electric history for a monthly comparison yet."
-            unitLabel="kWh"
-            barColor={usageColor}
-          />
-        </DeferredRender>
-      </section>
+      {/* Sub-tabs: keeps the two heaviest chart clusters off-screen until
+          picked, instead of stacking all 8 sections on one scroll — the
+          mobile complaint this addresses. */}
+      <div
+        role="tablist"
+        aria-label="Electric view"
+        className="inline-flex rounded-xl border border-appborder bg-appinset p-1"
+      >
+        {ELECTRIC_TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.key)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? 'bg-appaccent-soft text-appaccent-text shadow-[0_1px_3px_var(--appshadow)]'
+                  : 'text-apptext-soft hover:text-apptext'
+              }`}
+            >
+              <span aria-hidden="true">{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
 
-      {periodDefinitions.length > 0 && (
-        <DeferredRender minHeight={380}>
-          <UsageWeatherChart
-            usageData={realData}
-            loading={loading}
-            startDate={periodDefinitions[periodDefinitions.length - 1].start}
-            endDate={periodDefinitions[periodDefinitions.length - 1].end}
-          />
-        </DeferredRender>
+      {tab === 'usage' && (
+        <>
+          <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <DeferredRender minHeight={360}>
+              <UsageChart
+                data={realData}
+                dailyPoints={trendPoints}
+                loading={loading}
+                title="Electric usage trend"
+                emptyText="No electric usage data yet — readings sync automatically each evening once your utility posts the day's data."
+                unitLabel="kWh"
+                accentColor={usageColor}
+              />
+            </DeferredRender>
+            <DeferredRender minHeight={360}>
+              <MonthlyComparison
+                data={realData}
+                loading={loading}
+                title="Monthly electric comparison"
+                emptyText="Not enough electric history for a monthly comparison yet."
+                unitLabel="kWh"
+                barColor={usageColor}
+              />
+            </DeferredRender>
+          </section>
+
+          <CoservBillingHistory service="electric" />
+
+          {/* Usage Log with Daily/Hourly filter */}
+          <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+            <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Log</p>
+                <h3 className="mt-2 text-xl font-semibold text-apptext">Recent electric readings</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {(['daily', 'hourly'] as LogFilter[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setLogFilter(f)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
+                      logFilter === f
+                        ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
+                        : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Legend for the hourly threshold color bands (daily rows are single-color) */}
+            {logFilter === 'hourly' && (
+              <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-apptext-muted">
+                <span className="uppercase tracking-[0.14em] text-apptext-dim">Per hour:</span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-300" /> Low · under 2 kWh
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-amber-300" /> Moderate · 2–4 kWh
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-rose-300" /> High · 5 kWh and up
+                </span>
+              </div>
+            )}
+            {loading ? (
+              <div className="space-y-2 animate-pulse">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-10 rounded-2xl bg-appinset" />
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="text-sm">
+                  {/* Table header: 3 cols on mobile, 5 cols on md+ */}
+                  <div className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
+                    <div className="font-medium">Date</div>
+                    <div className="text-right font-medium">kWh</div>
+                    <div className="hidden text-right font-medium md:block">Est. Cost</div>
+                    <div className="hidden text-right font-medium md:block">Temp</div>
+                    <div className="text-right font-medium">Source</div>
+                  </div>
+                  {logFilter === 'daily' ? (
+                    <VirtualizedList
+                      items={dailyLogData}
+                      height={432}
+                      itemHeight={58}
+                      overscan={4}
+                      className="mt-1"
+                      renderItem={(d) => {
+                        const wx = weatherByDate.get(d.date);
+                        const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric',
+                        });
+                        return (
+                          <div
+                            key={d.date}
+                            className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                          >
+                            <div className="py-3 text-apptext-soft">{label}</div>
+                            <div className="py-3 text-right tabular-nums">
+                              <span className="inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold bg-emerald-300/10 border-emerald-300/20 text-emerald-300">
+                                {d.total.toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
+                              ${(d.total * kwhRate).toFixed(2)}
+                            </div>
+                            <div className="hidden py-3 text-right tabular-nums text-[11px] leading-tight text-apptext-muted md:block">
+                              {wx ? (
+                                <span>
+                                  <span className="text-sky-300/70">{Math.round(wx.low)}°</span>{' '}
+                                  <span className="text-amber-300/70">{Math.round(wx.mean)}°</span>{' '}
+                                  <span className="text-rose-300/70">{Math.round(wx.high)}°</span>
+                                </span>
+                              ) : '—'}
+                            </div>
+                            <div className="py-3 text-right text-apptext-dim">coserv</div>
+                          </div>
+                        );
+                      }}
+                    />
+                  ) : (
+                    <VirtualizedList
+                      items={hourlyLogData}
+                      height={432}
+                      itemHeight={58}
+                      overscan={6}
+                      className="mt-1"
+                      renderItem={(d) => {
+                        const level = getHourlyLevel(Number(d.usageKwh));
+                        const temp = weatherByHour.get(d.timestamp.replace(' ', 'T').substring(0, 13));
+                        const parsed = new Date(d.timestamp);
+                        const label = Number.isNaN(parsed.getTime())
+                          ? 'Unknown'
+                          : parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+                        return (
+                          <div
+                            key={d.id}
+                            className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
+                          >
+                            <div className="py-3 text-apptext-soft truncate">{label}</div>
+                            <div className="py-3 text-right tabular-nums">
+                              <span className={`inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold ${level.badgeClass}`}>
+                                {Number(d.usageKwh).toFixed(2)}
+                              </span>
+                            </div>
+                            <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
+                              ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
+                            </div>
+                            <div className="hidden py-3 text-right text-[11px] text-apptext-muted md:block">
+                              {temp != null ? `${Math.round(temp)}°` : '—'}
+                            </div>
+                            <div className="py-3 text-right text-apptext-dim">
+                              {d.sourceProvider}
+                            </div>
+                          </div>
+                        );
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
+        </>
       )}
 
-      <DeferredRender minHeight={400}>
-        <ForecastChart />
-      </DeferredRender>
+      {tab === 'forecast' && (
+        <>
+          {periodDefinitions.length > 0 && (
+            <DeferredRender minHeight={380}>
+              <UsageWeatherChart
+                usageData={realData}
+                loading={loading}
+                startDate={periodDefinitions[periodDefinitions.length - 1].start}
+                endDate={periodDefinitions[periodDefinitions.length - 1].end}
+              />
+            </DeferredRender>
+          )}
 
-      <CoservBillingHistory service="electric" />
+          <DeferredRender minHeight={400}>
+            <ForecastChart />
+          </DeferredRender>
 
-      <UsageSummaryGrid
-        title="Electric highs, lows, and rolling period totals"
-        unitLabel="kWh"
-        summaries={summaryCards}
-        loading={summaryLoading}
-      />
-
-      {/* Usage Log with Daily/Hourly filter */}
-      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Log</p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent electric readings</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            {(['daily', 'hourly'] as LogFilter[]).map((f) => (
-              <button
-                key={f}
-                onClick={() => setLogFilter(f)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                  logFilter === f
-                    ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                    : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-                }`}
-              >
-                {f}
-              </button>
-            ))}
-          </div>
-        </div>
-        {/* Legend for the hourly threshold color bands (daily rows are single-color) */}
-        {logFilter === 'hourly' && (
-          <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11px] text-apptext-muted">
-            <span className="uppercase tracking-[0.14em] text-apptext-dim">Per hour:</span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-emerald-300" /> Low · under 2 kWh
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-amber-300" /> Moderate · 2–4 kWh
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="h-2 w-2 rounded-full bg-rose-300" /> High · 5 kWh and up
-            </span>
-          </div>
-        )}
-        {loading ? (
-          <div className="space-y-2 animate-pulse">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-10 rounded-2xl bg-appinset" />
-            ))}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <div className="text-sm">
-              {/* Table header: 3 cols on mobile, 5 cols on md+ */}
-              <div className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
-                <div className="font-medium">Date</div>
-                <div className="text-right font-medium">kWh</div>
-                <div className="hidden text-right font-medium md:block">Est. Cost</div>
-                <div className="hidden text-right font-medium md:block">Temp</div>
-                <div className="text-right font-medium">Source</div>
-              </div>
-              {logFilter === 'daily' ? (
-                <VirtualizedList
-                  items={dailyLogData}
-                  height={432}
-                  itemHeight={58}
-                  overscan={4}
-                  className="mt-1"
-                  renderItem={(d) => {
-                    const wx = weatherByDate.get(d.date);
-                    const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric',
-                    });
-                    return (
-                      <div
-                        key={d.date}
-                        className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
-                      >
-                        <div className="py-3 text-apptext-soft">{label}</div>
-                        <div className="py-3 text-right tabular-nums">
-                          <span className="inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold bg-emerald-300/10 border-emerald-300/20 text-emerald-300">
-                            {d.total.toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
-                          ${(d.total * kwhRate).toFixed(2)}
-                        </div>
-                        <div className="hidden py-3 text-right tabular-nums text-[11px] leading-tight text-apptext-muted md:block">
-                          {wx ? (
-                            <span>
-                              <span className="text-sky-300/70">{Math.round(wx.low)}°</span>{' '}
-                              <span className="text-amber-300/70">{Math.round(wx.mean)}°</span>{' '}
-                              <span className="text-rose-300/70">{Math.round(wx.high)}°</span>
-                            </span>
-                          ) : '—'}
-                        </div>
-                        <div className="py-3 text-right text-apptext-dim">coserv</div>
-                      </div>
-                    );
-                  }}
-                />
-              ) : (
-                <VirtualizedList
-                  items={hourlyLogData}
-                  height={432}
-                  itemHeight={58}
-                  overscan={6}
-                  className="mt-1"
-                  renderItem={(d) => {
-                    const level = getHourlyLevel(Number(d.usageKwh));
-                    const temp = weatherByHour.get(d.timestamp.replace(' ', 'T').substring(0, 13));
-                    const parsed = new Date(d.timestamp);
-                    const label = Number.isNaN(parsed.getTime())
-                      ? 'Unknown'
-                      : parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-                    return (
-                      <div
-                        key={d.id}
-                        className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
-                      >
-                        <div className="py-3 text-apptext-soft truncate">{label}</div>
-                        <div className="py-3 text-right tabular-nums">
-                          <span className={`inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold ${level.badgeClass}`}>
-                            {Number(d.usageKwh).toFixed(2)}
-                          </span>
-                        </div>
-                        <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
-                          ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
-                        </div>
-                        <div className="hidden py-3 text-right text-[11px] text-apptext-muted md:block">
-                          {temp != null ? `${Math.round(temp)}°` : '—'}
-                        </div>
-                        <div className="py-3 text-right text-apptext-dim">
-                          {d.sourceProvider}
-                        </div>
-                      </div>
-                    );
-                  }}
-                />
-              )}
-            </div>
-          </div>
-        )}
-      </section>
+          <UsageSummaryGrid
+            title="Electric highs, lows, and rolling period totals"
+            unitLabel="kWh"
+            summaries={summaryCards}
+            loading={summaryLoading}
+          />
+        </>
+      )}
     </div>
   );
 });
