@@ -7,6 +7,10 @@ import {
   type Notification,
 } from '../api/notifications';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
+import VirtualizedList from '../components/VirtualizedList';
+
+const ROW_HEIGHT = 128;
+const LIST_HEIGHT = 640; // matches the old max-h-[40rem]
 
 const CATEGORIES = [
   { key: '', label: 'All', icon: '📋' },
@@ -74,6 +78,7 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
           ? 'border-appborder-light bg-appinset opacity-60 hover:opacity-90'
           : 'border-appborder bg-appinset-strong hover:border-appborder-hover'
       }`}
+      style={{ height: ROW_HEIGHT - 12, boxSizing: 'border-box' }}
       onClick={() => { if (!n.isRead) readMut.mutate(n.id); }}
     >
       {/* Severity dot */}
@@ -91,7 +96,10 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
           )}
         </div>
         {n.message && (
-          <p className="mt-1 text-sm text-apptext-soft leading-5">{n.message}</p>
+          // Clamped to a fixed line count (not unbounded wrap) so every row is
+          // the same height — required for VirtualizedList's fixed-itemHeight
+          // windowing math below.
+          <p className="mt-1 line-clamp-2 text-sm text-apptext-soft leading-5">{n.message}</p>
         )}
         <div className="mt-2 flex items-center gap-3 text-xs text-apptext-dim">
           <span className="inline-flex items-center gap-1">
@@ -264,11 +272,14 @@ export default function NotificationsPage() {
             </p>
           </div>
         ) : (
-          <div className="space-y-3 max-h-[40rem] overflow-y-auto pr-1">
-            {filtered.map((n) => (
-              <NotificationRow key={n.id} n={n} />
-            ))}
-          </div>
+          <VirtualizedList
+            items={filtered}
+            height={Math.min(LIST_HEIGHT, filtered.length * ROW_HEIGHT)}
+            itemHeight={ROW_HEIGHT}
+            overscan={4}
+            className="pr-1"
+            renderItem={(n) => <NotificationRow key={n.id} n={n} />}
+          />
         )}
       </section>
     </div>

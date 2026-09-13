@@ -119,7 +119,6 @@ export default memo(function App() {
     { path: '/utility', label: 'Utility', icon: '⚡', end: false },
     { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
     { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
-    { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },
     { path: '/users', label: 'Users', icon: '👥', end: false },
     { path: '/maintenance', label: 'Maintenance', icon: '🔧', end: false, guestHidden: true },
     { path: '/updates', label: "What's New", icon: '✨', end: false },
@@ -237,7 +236,28 @@ export default memo(function App() {
       {/* Profile shortcut */}
       {user ? (
         <div className="mt-auto shrink-0 border-t border-appborder pt-4">
-          <p className="px-3 pb-2 text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">Settings</p>
+          <div className="flex items-center justify-between px-3 pb-2">
+            <p className="text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">Settings</p>
+            <NavLink
+              to="/notifications"
+              onClick={closeMenu}
+              aria-label={`Alerts${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+              className={({ isActive }) =>
+                `relative rounded-lg p-1.5 transition-colors ${
+                  isActive
+                    ? 'bg-appaccent-soft text-appaccent-text'
+                    : 'text-apptext-muted hover:bg-appinset hover:text-apptext'
+                }`
+              }
+            >
+              <span className="text-base">🔔</span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </NavLink>
+          </div>
           <Link
             to="/profile"
             onClick={closeMenu}
