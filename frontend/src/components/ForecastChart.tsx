@@ -48,6 +48,17 @@ const ACC_RANGE_LABEL: Record<AccRange, string> = {
   '7d': '1 Week', '14d': '2 Weeks', '30d': '1 Month', all: 'Lifetime',
 };
 
+// Hourly is capped at 1 month (no lifetime): raw per-hour points don't window,
+// so beyond ~30 days (~720 points) the line turns into an unreadable, laggy
+// band. The daily tab covers the long-horizon trend.
+type HourlyRange = '7d' | '14d' | '30d';
+const HOURLY_RANGE_DAYS: Record<HourlyRange, number> = { '7d': 7, '14d': 14, '30d': 30 };
+// Trailing window for the hourly moving average: 24 hours = one full day, so the
+// trend line reads through the intra-day scatter.
+const HOURLY_TRAILING_WINDOW = 24;
+// Cap on labeled day-boundary ticks so a 30-day window doesn't crowd the axis.
+const HOURLY_MAX_TICKS = 8;
+
 type AccGranularity = 'daily' | 'hourly';
 
 // Trailing window (points) for the daily accuracy moving average — smooths the
@@ -141,6 +152,7 @@ function ForecastChart() {
   // the trailing time range.
   const [accGranularity, setAccGranularity] = useState<AccGranularity>('daily');
   const [accRange, setAccRange] = useState<AccRange>('30d');
+  const [hourlyRange, setHourlyRange] = useState<HourlyRange>('7d');
   const { theme, palette } = useTheme();
   const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
   const forecastInterval = useJitteredInterval(600_000);
@@ -175,9 +187,10 @@ function ForecastChart() {
   });
 
   // Hourly accuracy — only fetched once the user toggles the hourly view on.
+  const hourlyRangeDays = HOURLY_RANGE_DAYS[hourlyRange];
   const { data: hourlyAccuracy } = useQuery({
-    queryKey: ['forecast-accuracy-hourly', 7],
-    queryFn: () => fetchHourlyForecastAccuracy(7),
+    queryKey: ['forecast-accuracy-hourly', hourlyRangeDays],
+    queryFn: () => fetchHourlyForecastAccuracy(hourlyRangeDays),
     enabled: accGranularity === 'hourly',
     staleTime: 600_000,
     refetchInterval: forecastInterval,
@@ -195,21 +208,28 @@ function ForecastChart() {
     });
   }, [rangeAccuracy]);
 
-  // Hourly accuracy series: one point per graded hour over the past week, X keyed
-  // by array index with a labeled tick at each day boundary.
-  const hourlyAccData = useMemo(
-    () => (hourlyAccuracy?.points ?? []).map((p, i) => ({
-      idx: i, error: p.error, date: p.date, hour: p.hour,
-    })),
-    [hourlyAccuracy],
-  );
+  // Hourly accuracy series: one point per graded hour over the selected window,
+  // X keyed by array index, with a 24h (one-day) moving average so the trend
+  // reads through the intra-day scatter at the denser ranges.
+  const hourlyAccData = useMemo(() => {
+    const pts = hourlyAccuracy?.points ?? [];
+    return pts.map((p, i) => {
+      const from = Math.max(0, i - HOURLY_TRAILING_WINDOW + 1);
+      const slice = pts.slice(from, i + 1);
+      const avg = slice.reduce((s, x) => s + x.error, 0) / slice.length;
+      return { idx: i, error: p.error, trailing: Number(avg.toFixed(2)), date: p.date, hour: p.hour };
+    });
+  }, [hourlyAccuracy]);
+  // Labeled ticks at day boundaries, thinned so a 30-day window stays legible.
   const hourlyTicks = useMemo(() => {
     const seen = new Set<string>();
-    const ticks: number[] = [];
+    const dayStarts: number[] = [];
     for (const d of hourlyAccData) {
-      if (!seen.has(d.date)) { seen.add(d.date); ticks.push(d.idx); }
+      if (!seen.has(d.date)) { seen.add(d.date); dayStarts.push(d.idx); }
     }
-    return ticks;
+    if (dayStarts.length <= HOURLY_MAX_TICKS) return dayStarts;
+    const step = Math.ceil(dayStarts.length / HOURLY_MAX_TICKS);
+    return dayStarts.filter((_, i) => i % step === 0);
   }, [hourlyAccData]);
 
   const chartData = useMemo(() => {
@@ -504,7 +524,7 @@ function ForecastChart() {
             <p className="mt-1 max-w-prose text-xs text-apptext-muted">
               {accGranularity === 'daily'
                 ? 'Absolute error of each past daily prediction, with a 7-day moving average. The model retrains nightly and should trend downward as data accumulates.'
-                : "Absolute error of the model's learned hour-of-day shape vs. actual usage, hour by hour across the past week — shows which times of day it still gets wrong."}
+                : "Absolute error of the model's learned hour-of-day shape vs. actual usage, hour by hour over the selected range (capped at 1 month), with a 24-hour moving average — shows which times of day it still gets wrong."}
             </p>
           </div>
           {/* Daily / Hourly granularity toggle */}
@@ -545,10 +565,25 @@ function ForecastChart() {
             ))}
           </div>
         ) : (
-          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
-            <span>Past 7 days · hourly</span>
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              {(['7d', '14d', '30d'] as HourlyRange[]).map((r) => (
+                <button
+                  key={r}
+                  onClick={() => setHourlyRange(r)}
+                  aria-pressed={hourlyRange === r}
+                  className={`rounded-full px-3 py-1 text-2xs font-medium transition-colors ${
+                    hourlyRange === r
+                      ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
+                      : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
+                  }`}
+                >
+                  {ACC_RANGE_LABEL[r]}
+                </button>
+              ))}
+            </div>
             {hourlyAccuracy && hourlyAccuracy.dataPoints > 0 && (
-              <span>
+              <span className="text-2xs text-apptext-muted">
                 Avg hourly error {hourlyAccuracy.mae.toFixed(2)} kWh over {hourlyAccuracy.dataPoints} hours
               </span>
             )}
@@ -638,14 +673,26 @@ function ForecastChart() {
                   const d = hourlyAccData[idx];
                   return d ? `${formatDateLabel(d.date)} · ${String(d.hour).padStart(2, '0')}:00` : '';
                 }}
-                formatter={(value: number) => [`${value.toFixed(2)} kWh`, 'Hourly error']}
+                formatter={(value: number, name: string) => [
+                  `${value.toFixed(2)} kWh`,
+                  name === 'trailing' ? '24h avg' : 'Hourly error',
+                ]}
               />
               <Line
                 type="monotone"
                 dataKey="error"
-                name="Hourly error"
+                name="error"
                 stroke="#f59e0b"
                 strokeWidth={1.5}
+                dot={false}
+                isAnimationActive={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="trailing"
+                name="trailing"
+                stroke={series.usage}
+                strokeWidth={2.5}
                 dot={false}
                 isAnimationActive={false}
               />
