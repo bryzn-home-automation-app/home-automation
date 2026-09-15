@@ -151,12 +151,29 @@ public class ForecastService {
         List<ForecastSnapshot> actuals = snapshotRepo.findWithActualsSince(since);
         if (actuals.isEmpty()) return new AccuracyReport(0, 0, 0, 0, 0, List.of());
 
+        // Freshest prediction per target day (latest forecast_date). A single
+        // target date accumulates one graded snapshot for each horizon it was
+        // forecast at (7-days-ahead … day-ahead), all sharing the same actual —
+        // so without this collapse the chart stacks several points on one date
+        // and the MAE/RMSE/MAPE get biased by stale long-horizon guesses. Same
+        // freshest-per-target-day invariant as computeIntervalSigma /
+        // assessDrift / getDiagnostics.
+        Map<LocalDate, ForecastSnapshot> freshest = new HashMap<>();
+        for (ForecastSnapshot s : actuals) {
+            if (s.getActualKwh() == null || s.getPredictedKwh() == null) continue;
+            freshest.merge(s.getTargetDate(), s,
+                    (a, b) -> a.getForecastDate().isAfter(b.getForecastDate()) ? a : b);
+        }
+
+        List<LocalDate> dates = new ArrayList<>(freshest.keySet());
+        Collections.sort(dates);
+
         double sumAbsErr = 0, sumAbsPctErr = 0, sumSqErr = 0;
         int count = 0;
         List<AccuracyPoint> points = new ArrayList<>();
 
-        for (ForecastSnapshot s : actuals) {
-            if (s.getActualKwh() == null || s.getPredictedKwh() == null) continue;
+        for (LocalDate d : dates) {
+            ForecastSnapshot s = freshest.get(d);
             double pred = s.getPredictedKwh().doubleValue();
             double actual = s.getActualKwh().doubleValue();
             double err = Math.abs(pred - actual);
@@ -164,7 +181,7 @@ public class ForecastService {
             sumSqErr += err * err;
             if (actual > 0) sumAbsPctErr += err / actual;
             count++;
-            points.add(new AccuracyPoint(s.getTargetDate().toString(), pred, actual, err));
+            points.add(new AccuracyPoint(d.toString(), pred, actual, err));
         }
 
         if (count == 0) return new AccuracyReport(0, 0, 0, 0, 0, List.of());
