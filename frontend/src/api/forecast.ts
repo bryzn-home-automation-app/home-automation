@@ -1,5 +1,10 @@
 import api from './client';
-import type { ForecastResponse, ForecastAccuracy, ForecastHourlyResponse } from '../types';
+import type {
+  ForecastResponse,
+  ForecastAccuracy,
+  ForecastHourlyResponse,
+  ForecastHourlyAccuracy,
+} from '../types';
 
 export async function fetchForecast(days = 7): Promise<ForecastResponse> {
   const { data } = await api.get('/forecast/electric', { params: { days } });
@@ -13,5 +18,10 @@ export async function fetchForecastAccuracy(days = 30): Promise<ForecastAccuracy
 
 export async function fetchHourlyForecast(date?: string): Promise<ForecastHourlyResponse> {
   const { data } = await api.get('/forecast/electric/hourly', { params: date ? { date } : {} });
+  return data;
+}
+
+export async function fetchHourlyForecastAccuracy(days = 7): Promise<ForecastHourlyAccuracy> {
+  const { data } = await api.get('/forecast/accuracy/hourly', { params: { days } });
   return data;
 }

@@ -440,6 +440,25 @@ export interface ForecastAccuracy {
   points: ForecastAccuracyPoint[];
 }
 
+/** One reconstructed hourly-accuracy point (self-improvement hourly view). */
+export interface ForecastHourlyAccuracyPoint {
+  /** Local `yyyy-MM-ddTHH:00` the point belongs to. */
+  timestamp: string;
+  date: string;
+  hour: number;
+  predicted: number;
+  actual: number;
+  /** |predicted - actual| kWh for that hour. */
+  error: number;
+}
+
+export interface ForecastHourlyAccuracy {
+  dataPoints: number;
+  mae: number;
+  trailingDays: number;
+  points: ForecastHourlyAccuracyPoint[];
+}
+
 export interface ForecastHourlyPoint {
   hour: number;
   predictedKwh: number;

@@ -130,6 +130,12 @@ public class ForecastController {
         return ResponseEntity.ok(report);
     }
 
+    @GetMapping("/accuracy/hourly")
+    public ResponseEntity<?> getHourlyAccuracy(@RequestParam(defaultValue = "7") int days) {
+        HourlyAccuracyReport report = forecastService.getHourlyAccuracy(days);
+        return ResponseEntity.ok(report);
+    }
+
     @GetMapping("/model")
     public ResponseEntity<?> getModel() {
         var modelOpt = forecastService.getActiveModel();

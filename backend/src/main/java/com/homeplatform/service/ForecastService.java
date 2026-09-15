@@ -176,6 +176,124 @@ public class ForecastService {
     }
 
     /**
+     * Hourly forecast-accuracy series for the self-improvement view (default one
+     * trailing week). For each completed day in the window that has both actual
+     * hourly readings and a weather observation, we regenerate what the model's
+     * learned hourly shape would have predicted for that day (from the day's own
+     * average temperature) and compare it hour-by-hour against the actual
+     * {@code hourly_electric_usage}. The result is a dense per-hour error series
+     * (up to ~24 points/day) plus the overall hourly MAE.
+     *
+     * <p>Unlike {@link #getAccuracy}, these predictions are <em>reconstructed</em>
+     * from the current model rather than read from stored out-of-sample snapshots
+     * (hourly predictions are never persisted). So this measures how well the
+     * model's learned hour-of-day shape matches reality, not day-ahead operational
+     * skill — the UI copy is explicit about that. Today is excluded (its data is
+     * still incomplete). Read-only: no persistence, training, or model mutation.
+     */
+    public HourlyAccuracyReport getHourlyAccuracy(int trailingDays) {
+        Optional<ForecastModel> modelOpt = getActiveModel();
+        if (modelOpt.isEmpty()) {
+            return new HourlyAccuracyReport(0, 0, trailingDays, List.of());
+        }
+        ForecastModel model = modelOpt.get();
+
+        LocalDate today = LocalDate.now();
+        LocalDate since = today.minusDays(trailingDays);
+
+        // Actual kWh per (day, hour) + the day's average temperature, for whole
+        // completed days in [since, today). NaN marks an hour with no reading.
+        SortedMap<LocalDate, double[]> actualByDay = new TreeMap<>();
+        Map<LocalDate, Double> avgTempByDay = new HashMap<>();
+        try {
+            var rows = jdbc.queryForList("""
+                SELECT h.timestamp::date AS day,
+                       EXTRACT(HOUR FROM h.timestamp) AS hr,
+                       SUM(h.usage_kwh) AS kwh,
+                       MAX(w.avg_temp_f) AS avg_temp
+                FROM hourly_electric_usage h
+                JOIN weather_observations w ON h.timestamp::date = w.observation_date
+                WHERE h.timestamp::date >= ?::date
+                  AND h.timestamp::date < ?::date
+                  AND h.usage_kwh > 0
+                  AND w.avg_temp_f IS NOT NULL
+                GROUP BY h.timestamp::date, EXTRACT(HOUR FROM h.timestamp)
+                ORDER BY day, hr
+                """, since.toString(), today.toString());
+
+            for (var row : rows) {
+                LocalDate day = toLocalDate(row.get("day"));
+                int hr = ((Number) row.get("hr")).intValue();
+                if (hr < 0 || hr > 23) continue;
+                double kwh = ((Number) row.get("kwh")).doubleValue();
+                double avgTemp = ((Number) row.get("avg_temp")).doubleValue();
+                actualByDay.computeIfAbsent(day, k -> nanArray24())[hr] = kwh;
+                avgTempByDay.putIfAbsent(day, avgTemp);
+            }
+        } catch (Exception e) {
+            log.warn("ForecastService: hourly-accuracy query failed: {}", e.getMessage());
+            return new HourlyAccuracyReport(0, 0, trailingDays, List.of());
+        }
+
+        // Reconstruct the model's day-ahead hourly shape for each day.
+        Map<LocalDate, double[]> predictedByDay = new HashMap<>();
+        for (var e : avgTempByDay.entrySet()) {
+            double[] pred = new double[24];
+            for (HourlyForecast f : generateHourlyForecast(model, e.getKey(), e.getValue())) {
+                if (f.hour() >= 0 && f.hour() < 24) pred[f.hour()] = f.predictedKwh();
+            }
+            predictedByDay.put(e.getKey(), pred);
+        }
+
+        return buildHourlyAccuracy(trailingDays, actualByDay, predictedByDay);
+    }
+
+    /**
+     * Pure assembly of the hourly accuracy series: for every (day, hour) with a
+     * non-NaN actual and a matching predicted-day shape, emit one point with the
+     * predicted/actual kWh and their absolute error, in day-then-hour order, and
+     * report the overall hourly MAE. Stateless/testable — no DB access.
+     */
+    static HourlyAccuracyReport buildHourlyAccuracy(int trailingDays,
+                                                    SortedMap<LocalDate, double[]> actualByDay,
+                                                    Map<LocalDate, double[]> predictedByDay) {
+        List<HourlyAccuracyPoint> points = new ArrayList<>();
+        double sumAbsErr = 0;
+        int count = 0;
+        for (var e : actualByDay.entrySet()) {
+            LocalDate day = e.getKey();
+            double[] actual = e.getValue();
+            double[] predicted = predictedByDay.get(day);
+            if (predicted == null) continue;
+            for (int h = 0; h < 24; h++) {
+                if (Double.isNaN(actual[h])) continue;
+                double pred = h < predicted.length ? predicted[h] : 0.0;
+                double err = Math.abs(pred - actual[h]);
+                sumAbsErr += err;
+                count++;
+                points.add(new HourlyAccuracyPoint(
+                        String.format("%sT%02d:00", day, h), day.toString(), h,
+                        round2(pred), round2(actual[h]), round2(err)));
+            }
+        }
+        double mae = count > 0 ? round2(sumAbsErr / count) : 0;
+        return new HourlyAccuracyReport(count, mae, trailingDays, points);
+    }
+
+    private static double[] nanArray24() {
+        double[] a = new double[24];
+        Arrays.fill(a, Double.NaN);
+        return a;
+    }
+
+    private static LocalDate toLocalDate(Object o) {
+        if (o instanceof java.sql.Date d) return d.toLocalDate();
+        if (o instanceof LocalDate ld) return ld;
+        if (o instanceof java.time.LocalDateTime dt) return dt.toLocalDate();
+        return LocalDate.parse(o.toString());
+    }
+
+    /**
      * Assemble per-day forecast diagnostics for the Admin Debug Dashboard (doc §12):
      * for each graded day in the trailing window, the actual vs. predicted totals,
      * residual / absolute error, and a robust anomaly score + classification (via
@@ -1519,6 +1637,23 @@ public class ForecastService {
             int trailingDays, LocalDate asOf, DriftAssessment drift, List<DailyDiagnostic> daily) {}
 
     public record AccuracyPoint(String date, double predicted, double actual, double error) {}
+
+    /**
+     * One reconstructed hourly accuracy point (self-improvement hourly view).
+     * {@code timestamp} is the local {@code yyyy-MM-ddTHH:00} the point belongs
+     * to; {@code error} is {@code |predicted - actual|} kWh for that hour.
+     */
+    public record HourlyAccuracyPoint(
+            String timestamp, String date, int hour,
+            double predicted, double actual, double error) {}
+
+    /**
+     * Result of {@link #getHourlyAccuracy}: the per-hour error series (day-then-
+     * hour order) over the trailing window plus the overall hourly MAE and the
+     * number of graded hours.
+     */
+    public record HourlyAccuracyReport(
+            int dataPoints, double mae, int trailingDays, List<HourlyAccuracyPoint> points) {}
 
     /** Robust anomaly classification bands for a graded observation. */
     public enum AnomalyClass { NORMAL, ANOMALOUS, SEVERE }

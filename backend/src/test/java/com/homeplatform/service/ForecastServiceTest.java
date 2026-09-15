@@ -558,4 +558,70 @@ class ForecastServiceTest {
         assertTrue(Double.isFinite(f.updatedEodKwh()), "must not produce NaN/Infinity");
         assertTrue(Double.isFinite(f.updatedSigma()), "must not produce NaN/Infinity");
     }
+
+    // ── Hourly accuracy series assembly (self-improvement hourly view) ────
+
+    @Test
+    @DisplayName("buildHourlyAccuracy emits day-then-hour points, skips NaN hours, and averages error")
+    void hourlyAccuracyAssembly() {
+        java.util.SortedMap<LocalDate, double[]> actual = new java.util.TreeMap<>();
+        double[] day1 = new double[24];
+        java.util.Arrays.fill(day1, Double.NaN);
+        day1[0] = 1.0;  // predicted 1.5 -> err 0.5
+        day1[1] = 3.0;  // predicted 2.0 -> err 1.0
+        // hour 2 stays NaN (no reading) -> skipped
+        double[] day2 = new double[24];
+        java.util.Arrays.fill(day2, Double.NaN);
+        day2[5] = 4.0;  // predicted 4.0 -> err 0.0
+        // insert out of order to prove the SortedMap drives ordering
+        LocalDate d2 = LocalDate.of(2026, 1, 2);
+        LocalDate d1 = LocalDate.of(2026, 1, 1);
+        actual.put(d2, day2);
+        actual.put(d1, day1);
+
+        Map<LocalDate, double[]> predicted = new java.util.HashMap<>();
+        double[] p1 = new double[24]; p1[0] = 1.5; p1[1] = 2.0;
+        double[] p2 = new double[24]; p2[5] = 4.0;
+        predicted.put(d1, p1);
+        predicted.put(d2, p2);
+
+        var report = ForecastService.buildHourlyAccuracy(7, actual, predicted);
+
+        assertEquals(3, report.dataPoints(), "three non-NaN hours graded");
+        assertEquals(7, report.trailingDays());
+        // MAE = (0.5 + 1.0 + 0.0) / 3 = 0.5
+        assertEquals(0.5, report.mae(), 1e-9);
+
+        var pts = report.points();
+        assertEquals(3, pts.size());
+        // day1 comes first (sorted), hours ascending
+        assertEquals("2026-01-01", pts.get(0).date());
+        assertEquals(0, pts.get(0).hour());
+        assertEquals("2026-01-01T00:00", pts.get(0).timestamp());
+        assertEquals(0.5, pts.get(0).error(), 1e-9);
+        assertEquals(1, pts.get(1).hour());
+        assertEquals(1.0, pts.get(1).error(), 1e-9);
+        // day2 last
+        assertEquals("2026-01-02", pts.get(2).date());
+        assertEquals(5, pts.get(2).hour());
+        assertEquals(0.0, pts.get(2).error(), 1e-9);
+    }
+
+    @Test
+    @DisplayName("buildHourlyAccuracy skips days with no reconstructed prediction and handles empty input")
+    void hourlyAccuracyMissingPredictionAndEmpty() {
+        assertEquals(0, ForecastService.buildHourlyAccuracy(
+                7, new java.util.TreeMap<>(), new java.util.HashMap<>()).dataPoints());
+
+        java.util.SortedMap<LocalDate, double[]> actual = new java.util.TreeMap<>();
+        double[] day = new double[24];
+        java.util.Arrays.fill(day, Double.NaN);
+        day[0] = 2.0;
+        actual.put(LocalDate.of(2026, 1, 1), day);
+        // predicted map has no entry for that day
+        var report = ForecastService.buildHourlyAccuracy(7, actual, new java.util.HashMap<>());
+        assertEquals(0, report.dataPoints());
+        assertEquals(0, report.mae());
+        assertTrue(report.points().isEmpty());
+    }
 }

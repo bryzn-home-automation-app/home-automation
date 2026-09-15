@@ -11,7 +11,7 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { fetchForecast, fetchForecastAccuracy } from '../api/forecast';
+import { fetchForecast, fetchForecastAccuracy, fetchHourlyForecastAccuracy } from '../api/forecast';
 import { localTodayIso } from '../utils/localDate';
 import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
@@ -39,6 +39,21 @@ function formatDateLabel(iso: string): string {
   const d = new Date(iso + 'T12:00:00');
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+
+// Accuracy "day-by-day" ranges. Lifetime is a large trailing window the backend
+// clamps against available graded snapshots — no special-casing needed server-side.
+type AccRange = '7d' | '14d' | '30d' | 'all';
+const ACC_RANGE_DAYS: Record<AccRange, number> = { '7d': 7, '14d': 14, '30d': 30, all: 3650 };
+const ACC_RANGE_LABEL: Record<AccRange, string> = {
+  '7d': '1 Week', '14d': '2 Weeks', '30d': '1 Month', all: 'Lifetime',
+};
+
+type AccGranularity = 'daily' | 'hourly';
+
+// Trailing window (points) for the daily accuracy moving average — smooths the
+// day-to-day error scatter so the "is it actually improving" trend reads over
+// the longer ranges where raw dots are noisy.
+const DAILY_TRAILING_WINDOW = 7;
 
 // Monday-first display order, independent of the java.time.DayOfWeek enum's
 // own Monday-first .name() ordering (kept explicit here since this is a
@@ -122,6 +137,10 @@ type ForecastRange = '7d' | '14d';
 function ForecastChart() {
   const [range, setRange] = useState<ForecastRange>('7d');
   const days = range === '14d' ? 14 : 7;
+  // Self-improvement accuracy view: daily vs hourly granularity, and (for daily)
+  // the trailing time range.
+  const [accGranularity, setAccGranularity] = useState<AccGranularity>('daily');
+  const [accRange, setAccRange] = useState<AccRange>('30d');
   const { theme, palette } = useTheme();
   const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
   const forecastInterval = useJitteredInterval(600_000);
@@ -134,13 +153,64 @@ function ForecastChart() {
     refetchIntervalInBackground: false,
   });
 
+  // 30-day accuracy powers the KPI tiles (a stable headline number, independent
+  // of whatever range the trend chart is showing below).
   const { data: accuracy } = useQuery({
-    queryKey: ['forecast-accuracy'],
+    queryKey: ['forecast-accuracy', 30],
     queryFn: () => fetchForecastAccuracy(30),
     staleTime: 600_000,
     refetchInterval: forecastInterval,
     refetchIntervalInBackground: false,
   });
+
+  // Daily accuracy for the selected trend range (dedupes with the KPI query when
+  // the range is also 30 days).
+  const rangeDays = ACC_RANGE_DAYS[accRange];
+  const { data: rangeAccuracy } = useQuery({
+    queryKey: ['forecast-accuracy', rangeDays],
+    queryFn: () => fetchForecastAccuracy(rangeDays),
+    staleTime: 600_000,
+    refetchInterval: forecastInterval,
+    refetchIntervalInBackground: false,
+  });
+
+  // Hourly accuracy — only fetched once the user toggles the hourly view on.
+  const { data: hourlyAccuracy } = useQuery({
+    queryKey: ['forecast-accuracy-hourly', 7],
+    queryFn: () => fetchHourlyForecastAccuracy(7),
+    enabled: accGranularity === 'hourly',
+    staleTime: 600_000,
+    refetchInterval: forecastInterval,
+    refetchIntervalInBackground: false,
+  });
+
+  // Daily accuracy series + trailing moving average (improvement trend).
+  const dailyAccData = useMemo(() => {
+    const pts = rangeAccuracy?.points ?? [];
+    return pts.map((p, i) => {
+      const from = Math.max(0, i - DAILY_TRAILING_WINDOW + 1);
+      const slice = pts.slice(from, i + 1);
+      const avg = slice.reduce((s, x) => s + x.error, 0) / slice.length;
+      return { label: formatDateLabel(p.date), error: p.error, trailing: Number(avg.toFixed(2)) };
+    });
+  }, [rangeAccuracy]);
+
+  // Hourly accuracy series: one point per graded hour over the past week, X keyed
+  // by array index with a labeled tick at each day boundary.
+  const hourlyAccData = useMemo(
+    () => (hourlyAccuracy?.points ?? []).map((p, i) => ({
+      idx: i, error: p.error, date: p.date, hour: p.hour,
+    })),
+    [hourlyAccuracy],
+  );
+  const hourlyTicks = useMemo(() => {
+    const seen = new Set<string>();
+    const ticks: number[] = [];
+    for (const d of hourlyAccData) {
+      if (!seen.has(d.date)) { seen.add(d.date); ticks.push(d.idx); }
+    }
+    return ticks;
+  }, [hourlyAccData]);
 
   const chartData = useMemo(() => {
     if (!forecast || forecast.status !== 'ok') return [];
@@ -420,34 +490,141 @@ function ForecastChart() {
       {/* Day-of-week learned pattern */}
       {forecast.dowAdjustments && <DowAdjustmentCard dowAdjustments={forecast.dowAdjustments} />}
 
-      {/* Accuracy trend (if we have graded predictions) */}
-      {accuracy && accuracy.points.length > 2 && (
-        <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-4">
+      {/* Self-improvement accuracy trend — day-by-day with range toggle, plus an
+          optional hourly (past week) view. */}
+      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
             <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
               Self-Improvement
             </p>
             <h3 className="mt-2 text-xl font-semibold text-apptext">
               Forecast Accuracy Over Time
             </h3>
-            <p className="mt-1 text-xs text-apptext-muted">
-              Each point shows the absolute error for a past prediction. The model retrains nightly and should trend downward as data accumulates.
+            <p className="mt-1 max-w-prose text-xs text-apptext-muted">
+              {accGranularity === 'daily'
+                ? 'Absolute error of each past daily prediction, with a 7-day moving average. The model retrains nightly and should trend downward as data accumulates.'
+                : "Absolute error of the model's learned hour-of-day shape vs. actual usage, hour by hour across the past week — shows which times of day it still gets wrong."}
             </p>
           </div>
-          <ResponsiveContainer width="100%" height={200} debounce={80}>
-            <ComposedChart
-              data={accuracy.points.map((p) => ({
-                ...p,
-                label: formatDateLabel(p.date),
-              }))}
-              margin={{ top: 5, right: 20, left: 0, bottom: 5 }}
-            >
+          {/* Daily / Hourly granularity toggle */}
+          <div className="flex items-center gap-2">
+            {(['daily', 'hourly'] as AccGranularity[]).map((g) => (
+              <button
+                key={g}
+                onClick={() => setAccGranularity(g)}
+                aria-pressed={accGranularity === g}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  accGranularity === g
+                    ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
+                    : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
+                }`}
+              >
+                {g === 'daily' ? 'Daily' : 'Hourly'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Daily range selector (hidden in hourly mode — hourly is fixed to a week) */}
+        {accGranularity === 'daily' ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            {(['7d', '14d', '30d', 'all'] as AccRange[]).map((r) => (
+              <button
+                key={r}
+                onClick={() => setAccRange(r)}
+                aria-pressed={accRange === r}
+                className={`rounded-full px-3 py-1 text-2xs font-medium transition-colors ${
+                  accRange === r
+                    ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
+                    : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
+                }`}
+              >
+                {ACC_RANGE_LABEL[r]}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
+            <span>Past 7 days · hourly</span>
+            {hourlyAccuracy && hourlyAccuracy.dataPoints > 0 && (
+              <span>
+                Avg hourly error {hourlyAccuracy.mae.toFixed(2)} kWh over {hourlyAccuracy.dataPoints} hours
+              </span>
+            )}
+          </div>
+        )}
+
+        {accGranularity === 'daily' ? (
+          dailyAccData.length < 2 ? (
+            <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
+              Not enough graded predictions in this range yet.
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={220} debounce={80}>
+              <ComposedChart data={dailyAccData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
+                  axisLine={{ stroke: chartTheme.grid }}
+                  tickLine={false}
+                  minTickGap={28}
+                />
+                <YAxis
+                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
+                  axisLine={{ stroke: chartTheme.grid }}
+                  tickLine={false}
+                  unit=" kWh"
+                />
+                <Tooltip
+                  contentStyle={TOOLTIP_CONTENT_STYLE}
+                  formatter={(value: number, name: string) => [
+                    `${value.toFixed(1)} kWh`,
+                    name === 'trailing' ? '7-day avg' : 'Daily error',
+                  ]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="error"
+                  name="error"
+                  stroke="#f59e0b"
+                  strokeWidth={1.5}
+                  dot={{ fill: '#f59e0b', r: 2.5 }}
+                  isAnimationActive={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="trailing"
+                  name="trailing"
+                  stroke={series.usage}
+                  strokeWidth={2.5}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )
+        ) : hourlyAccData.length < 2 ? (
+          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
+            No hourly readings to grade in the past week yet.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={220} debounce={80}>
+            <ComposedChart data={hourlyAccData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
               <XAxis
-                dataKey="label"
+                dataKey="idx"
+                type="number"
+                domain={[0, hourlyAccData.length - 1]}
+                ticks={hourlyTicks}
                 tick={{ fill: chartTheme.tick, fontSize: 10 }}
                 axisLine={{ stroke: chartTheme.grid }}
                 tickLine={false}
+                tickFormatter={(idx: number) => {
+                  const d = hourlyAccData[idx];
+                  return d ? formatDateLabel(d.date) : '';
+                }}
               />
               <YAxis
                 tick={{ fill: chartTheme.tick, fontSize: 10 }}
@@ -457,21 +634,25 @@ function ForecastChart() {
               />
               <Tooltip
                 contentStyle={TOOLTIP_CONTENT_STYLE}
-                formatter={(value: number) => [`${Math.round(value)} kWh`, 'Prediction Error']}
+                labelFormatter={(idx: number) => {
+                  const d = hourlyAccData[idx];
+                  return d ? `${formatDateLabel(d.date)} · ${String(d.hour).padStart(2, '0')}:00` : '';
+                }}
+                formatter={(value: number) => [`${value.toFixed(2)} kWh`, 'Hourly error']}
               />
               <Line
                 type="monotone"
                 dataKey="error"
-                name="Prediction Error"
+                name="Hourly error"
                 stroke="#f59e0b"
-                strokeWidth={2}
-                dot={{ fill: '#f59e0b', r: 3 }}
+                strokeWidth={1.5}
+                dot={false}
                 isAnimationActive={false}
               />
             </ComposedChart>
           </ResponsiveContainer>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
