@@ -428,6 +428,8 @@ interface SceneItem {
   scale?: number;
   cls?: string;
   delay?: string;
+  /** Marks the scene's must-keep items for the compact (mobile) variant. */
+  hero?: boolean;
 }
 
 type SceneSpec = SceneItem[];
@@ -465,8 +467,8 @@ const SCENES: Array<[prefix: string, spec: SceneSpec]> = [
   ]],
   ['/notifications', [
     sky(CLOUD, 70, 4, 'px-bob-slow'),
-    sky(BELL, 38, 6, 'px-swing'),
-    ground(DARK, 52, 4, 'px-bob'),
+    { ...sky(BELL, 38, 6, 'px-swing'), hero: true },
+    { ...ground(DARK, 52, 4, 'px-bob'), hero: true },
     ground(TREE, 12, 4),
     ground(FENCE, 80, 4),
   ]],
@@ -487,10 +489,10 @@ const SCENES: Array<[prefix: string, spec: SceneSpec]> = [
   ]],
   ['/updates', [
     sky(SPARKLE, 16, 8, 'px-twinkle'),
-    sky(SPARKLE, 62, 4, 'px-twinkle', '0.7s'),
+    { ...sky(SPARKLE, 62, 4, 'px-twinkle', '0.7s'), hero: true },
     sky(SPARKLE, 90, 14, 'px-twinkle', '0.4s'),
-    ground(GIFT, 34, 4, 'px-bob'),
-    ground(RED, 50, 4, 'px-bob', '0.3s'),
+    { ...ground(GIFT, 34, 4, 'px-bob'), hero: true },
+    { ...ground(RED, 50, 4, 'px-bob', '0.3s'), hero: true },
     ground(TREE, 78, 4),
   ]],
   ['/profile', [
@@ -536,19 +538,45 @@ function specFor(path: string): SceneSpec {
   return SCENES[SCENES.length - 1][1];
 }
 
+/**
+ * Derive the phone-sized scene from the full spec: keep the first three
+ * grounded items (the themed hero props/characters — scenery like far
+ * fences/trees comes later in each spec), re-spread them across the narrow
+ * strip, drop clouds, and step every sprite down one pixel-scale. The wide
+ * roomba patrol also drops to the narrow drive amplitude.
+ */
+function compactSpec(spec: SceneSpec): SceneSpec {
+  const heroes = spec.filter((item) => item.hero);
+  const pool = heroes.length > 0 ? heroes : spec.filter((item) => item.top === undefined);
+  const kept = pool.slice(0, 3);
+  const positions = kept.length === 1 ? [40] : kept.length === 2 ? [18, 60] : [8, 40, 70];
+  return kept.map((item, i) => ({
+    ...item,
+    left: positions[i],
+    scale: Math.max(2, (item.scale ?? 4) - 1),
+    cls: item.cls === 'px-drive-wide' ? 'px-drive' : item.cls,
+  }));
+}
+
 interface HeaderPixelSceneProps {
   path: string;
+  /** Compact: shorter strip, fewer/smaller sprites — for the mobile header. */
+  compact?: boolean;
 }
 
 /**
- * Route-aware pixel panorama for the shell header. Rendered only on lg+
- * (the header middle is empty there); memoized so it re-renders only on
- * route change, not on health/unread poll updates.
+ * Route-aware pixel panorama for the shell header. The full variant fills
+ * the empty header middle on lg+; the compact variant is a short strip for
+ * the mobile header. Memoized so it re-renders only on route change, not on
+ * health/unread poll updates.
  */
-export const HeaderPixelScene = memo(function HeaderPixelScene({ path }: HeaderPixelSceneProps) {
-  const spec = specFor(path);
+export const HeaderPixelScene = memo(function HeaderPixelScene({ path, compact = false }: HeaderPixelSceneProps) {
+  const spec = compact ? compactSpec(specFor(path)) : specFor(path);
   return (
-    <div className="pointer-events-none relative h-[4.5rem] w-full select-none" aria-hidden="true">
+    <div
+      className={`pointer-events-none relative w-full select-none ${compact ? 'h-12' : 'h-[4.5rem]'}`}
+      aria-hidden="true"
+    >
       {spec.map((item, i) => (
         <div
           key={i}

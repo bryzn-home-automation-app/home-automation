@@ -11,6 +11,8 @@ interface PageHeaderProps {
   actions?: ReactNode;
   /** Optional decorative art centered in the empty middle space (lg+ only). */
   art?: ReactNode;
+  /** Optional compact art strip rendered full-width below the title (mobile only). */
+  artMobile?: ReactNode;
   /** Heading level. Defaults to h2 to match the app shell. */
   as?: 'h1' | 'h2' | 'h3';
 }
@@ -28,6 +30,7 @@ export function PageHeader({
   eyebrow,
   actions,
   art,
+  artMobile,
   as = 'h2',
 }: PageHeaderProps) {
   const HeadingTag = as;
@@ -52,6 +55,9 @@ export function PageHeader({
         <div className="pointer-events-none hidden min-w-0 flex-1 items-end justify-center self-stretch overflow-hidden lg:flex">
           {art}
         </div>
+      ) : null}
+      {artMobile ? (
+        <div className="pointer-events-none w-full overflow-hidden lg:hidden">{artMobile}</div>
       ) : null}
       {actions ? <div className="flex flex-wrap items-center gap-2 sm:gap-3">{actions}</div> : null}
     </div>

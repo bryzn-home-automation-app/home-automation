@@ -378,6 +378,7 @@ export default memo(function App() {
                 subtitle={pageHeader.subtitle}
                 eyebrow={pageHeader.eyebrow}
                 art={<HeaderPixelScene path={pathname} />}
+                artMobile={<HeaderPixelScene path={pathname} compact />}
                 actions={
                   <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
                     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
