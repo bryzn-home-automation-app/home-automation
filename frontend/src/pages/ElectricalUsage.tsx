@@ -8,6 +8,7 @@ import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
 import { fetchBatchSummaries } from '../api/energy';
+import { fetchForecast } from '../api/forecast';
 import { fetchWeatherForRange } from '../api/weather';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { buildUsagePeriods, createEmptyUsageSummary, dailyTrendSeries, averageCompleteDailyKwh } from '../utils/usageSummary';
@@ -98,6 +99,24 @@ export default memo(function ElectricalUsage() {
     }
     return dailyFromHourly.length > 0 ? dailyFromHourly[0] : null;
   }, [dailyFromHourly, hourlyCountByDate]);
+
+  // Predicted-vs-actual for the Last Reading tile. The backend always
+  // returns the trailing 14 days of graded snapshots regardless of `days`
+  // (see ForecastController), so days=1 keeps this fetch cheap while still
+  // covering latestDaily's date. Shares the query cache with any other
+  // consumer requesting the same days value.
+  const { data: latestForecast } = useQuery({
+    queryKey: ['forecast', 1],
+    queryFn: () => fetchForecast(1),
+    staleTime: 600_000,
+    refetchInterval: weatherInterval,
+    refetchIntervalInBackground: false,
+  });
+  const latestPredicted = useMemo(() => {
+    if (!latestDaily || latestForecast?.status !== 'ok') return null;
+    const snap = latestForecast.snapshots?.find((s) => s.targetDate === latestDaily.date);
+    return snap?.predictedKwh ?? null;
+  }, [latestDaily, latestForecast]);
 
   // ── 7-day and 30-day averages ──────────────────────────────────
   // Count only COMPLETE days (>= COMPLETE_DAY_MIN_HOURS hourly rows) from the
@@ -278,8 +297,19 @@ export default memo(function ElectricalUsage() {
           loading={loading}
           icon={Icons.Bolt}
           subtitle={latestDaily
-            ? new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            ? `${new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${
+                latestPredicted != null ? ` · Predicted ${latestPredicted.toFixed(1)} kWh` : ''
+              }`
             : undefined}
+          trendLabel="vs predicted"
+          trend={
+            latestDaily && latestPredicted != null && latestPredicted > 0
+              ? {
+                  direction: latestDaily.total > latestPredicted ? 'up' : 'down',
+                  pct: Math.round(Math.abs((latestDaily.total - latestPredicted) / latestPredicted) * 100),
+                }
+              : undefined
+          }
         />
         <StatTile
           label="60-Day Total"

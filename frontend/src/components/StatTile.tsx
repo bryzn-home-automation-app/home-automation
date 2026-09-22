@@ -5,6 +5,10 @@ interface StatTileProps {
   value: string;
   unit: string;
   trend?: { direction: 'up' | 'down'; pct: number };
+  /** Overrides the trend line's trailing text (default "vs last month") —
+   *  e.g. "vs predicted" when comparing against a forecast instead of a
+   *  prior period. */
+  trendLabel?: string;
   loading?: boolean;
   icon: React.ReactNode;
   subtitle?: string;
@@ -15,6 +19,7 @@ function StatTile({
   value,
   unit,
   trend,
+  trendLabel = 'vs last month',
   loading,
   icon,
   subtitle,
@@ -59,7 +64,7 @@ function StatTile({
               : 'text-apptext-dim'
           }`}
         >
-          {trend.direction === 'down' ? '↓' : '↑'} {trend.pct}% vs last month
+          {trend.direction === 'down' ? '↓' : '↑'} {trend.pct}% {trendLabel}
         </span>
       )}
     </div>
