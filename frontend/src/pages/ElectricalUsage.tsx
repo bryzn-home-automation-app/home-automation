@@ -2,7 +2,7 @@ import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import StatTile, { Icons } from '../components/StatTile';
-import UsageChart from '../components/UsageChart';
+import TrendOutlookChart from '../components/TrendOutlookChart';
 import MonthlyComparison from '../components/MonthlyComparison';
 import DeferredRender from '../components/DeferredRender';
 import VirtualizedList from '../components/VirtualizedList';
@@ -338,14 +338,11 @@ export default memo(function ElectricalUsage() {
         <>
           <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
             <DeferredRender minHeight={360}>
-              <UsageChart
-                data={realData}
+              <TrendOutlookChart
                 dailyPoints={trendPoints}
                 loading={loading}
                 title="Electric usage trend"
                 emptyText="No electric usage data yet — readings sync automatically each evening once your utility posts the day's data."
-                unitLabel="kWh"
-                accentColor={usageColor}
               />
             </DeferredRender>
             <DeferredRender minHeight={360}>

@@ -71,6 +71,19 @@ public class ForecastController {
                     "message", "Weather forecast unavailable. Cannot generate predictions without forecast temperatures."));
         }
 
+        // Pad beyond the point-forecast horizon (Open-Meteo caps out ~16 days)
+        // with recent climatology so a 30-day outlook stays defined end to end.
+        // The lead-aware band widening keeps those far days honestly uncertain.
+        LocalDate lastCovered = forecastDays.get(forecastDays.size() - 1).date();
+        if (lastCovered.isBefore(end)) {
+            double[] typical = forecastService.typicalRecentWeather(14);
+            if (typical != null) {
+                for (LocalDate d = lastCovered.plusDays(1); !d.isAfter(end); d = d.plusDays(1)) {
+                    forecastDays.add(new WeatherForecastDay(d, typical[0], typical[1], typical[2]));
+                }
+            }
+        }
+
         List<DailyForecast> forecasts = forecastService.generateForecasts(model, forecastDays);
 
         // Also fetch recent actuals for the chart overlay

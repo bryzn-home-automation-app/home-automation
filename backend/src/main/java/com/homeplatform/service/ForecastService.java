@@ -1488,6 +1488,31 @@ public class ForecastService {
         return new DailyDataPoint(date, kwh, avgTemp, cdd, hdd, date.getDayOfWeek());
     }
 
+    /**
+     * Trailing-mean high/low/avg °F over the last {@code lookbackDays} of
+     * weather observations — the climatology stand-in for outlook days beyond
+     * the point weather forecast horizon (~16 days on Open-Meteo). Returns
+     * {@code [high, low, avg]}, or null when there are no usable observations.
+     */
+    public double[] typicalRecentWeather(int lookbackDays) {
+        try {
+            var row = jdbc.queryForMap("""
+                SELECT AVG(high_temp_f) AS hi, AVG(low_temp_f) AS lo, AVG(avg_temp_f) AS avg
+                FROM weather_observations
+                WHERE observation_date >= ?::date AND avg_temp_f IS NOT NULL
+                """, LocalDate.now().minusDays(lookbackDays).toString());
+            Object hi = row.get("hi"), lo = row.get("lo"), avg = row.get("avg");
+            if (hi == null || lo == null || avg == null) return null;
+            return new double[]{
+                    ((Number) hi).doubleValue(),
+                    ((Number) lo).doubleValue(),
+                    ((Number) avg).doubleValue()};
+        } catch (Exception e) {
+            log.warn("ForecastService: typical-weather query failed: {}", e.getMessage());
+            return null;
+        }
+    }
+
     private Double queryDailyKwh(String date) {
         try {
             // Try hourly table first

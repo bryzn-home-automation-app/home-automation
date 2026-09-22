@@ -36,6 +36,10 @@ const CHART_MARGIN = { top: 5, right: 20, left: 0, bottom: 5 } as const;
 const TICK_PROPS = { fontSize: 11 } as const;
 const TICK_LINE_FALSE = false;
 const CARTESIAN_GRID_DASH = '3 3';
+// Daily-view temperature extremes: conventional hot/cold hues, deliberately
+// theme-independent so red always reads "high" and blue always reads "low".
+const HIGH_TEMP_COLOR = '#ef4444';
+const LOW_TEMP_COLOR = '#3b82f6';
 const TOOLTIP_CONTENT_STYLE = {
   backgroundColor: chartTheme.tooltipBg,
   border: `1px solid ${chartTheme.tooltipBorder}`,
@@ -462,11 +466,23 @@ function UsageWeatherChart({
           <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={series.usage} strokeWidth="2.5" /></svg>
           Usage (kWh, left)
         </span>
-        {hasWeather && (
+        {hasWeather && useHourly && (
           <span className="inline-flex items-center gap-1.5">
             <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={series.temp} strokeWidth="2" strokeDasharray="5 3" /></svg>
             Temp (°F, right)
           </span>
+        )}
+        {hasWeather && !useHourly && (
+          <>
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={HIGH_TEMP_COLOR} strokeWidth="2" strokeDasharray="5 3" /></svg>
+              High (°F, right)
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={LOW_TEMP_COLOR} strokeWidth="2" strokeDasharray="5 3" /></svg>
+              Low (°F, right)
+            </span>
+          </>
         )}
       </div>
 
@@ -478,7 +494,11 @@ function UsageWeatherChart({
             tick={{ fill: chartTheme.tick, ...TICK_PROPS }}
             axisLine={{ stroke: chartTheme.grid }}
             tickLine={TICK_LINE_FALSE}
-            interval={useHourly ? (range === '24h' ? 3 : range === '3d' ? 11 : range === 'week' ? 23 : 0) : 0}
+            // Daily views auto-thin their date labels to the available width
+            // (interval 0 forced EVERY label to render, which turned the
+            // Monthly/All-Time x-axis into an overlapping smear on mobile).
+            interval={useHourly ? (range === '24h' ? 3 : range === '3d' ? 11 : range === 'week' ? 23 : 0) : 'preserveStartEnd'}
+            minTickGap={useHourly ? undefined : 28}
             angle={useHourly ? 0 : -35}
             textAnchor={useHourly ? 'middle' : 'end'}
             height={useHourly ? 30 : 50}
@@ -501,8 +521,20 @@ function UsageWeatherChart({
             <Line yAxisId="left" type="monotone" dataKey="kWh" stroke={series.usage} strokeWidth={2.5} dot={showDots ? { fill: series.usage, r: 4 } : false} isAnimationActive={false} connectNulls />
           )}
 
-          {/* Temperature — contrasting dashed line (see CHART_SERIES) */}
-          {hasWeather && <Line yAxisId="right" type="monotone" dataKey={useHourly ? 'temp' : 'avgTemp'} stroke={series.temp} strokeWidth={2} dot={useHourly ? false : (showDots ? { fill: series.temp, r: 4 } : false)} isAnimationActive={false} connectNulls strokeDasharray="8 3" />}
+          {/* Temperature. Hourly views: single contrasting dashed line (the
+              hourly series IS the temperature curve). Daily views (Monthly /
+              All Time): the day's average is nearly flat at that zoom and
+              shows little, so plot the daily HIGH (red) and LOW (blue) dashed
+              lines instead — the spread carries the real signal. */}
+          {hasWeather && useHourly && (
+            <Line yAxisId="right" type="monotone" dataKey="temp" stroke={series.temp} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls strokeDasharray="8 3" />
+          )}
+          {hasWeather && !useHourly && (
+            <>
+              <Line yAxisId="right" type="monotone" dataKey="highTemp" name="highTemp" stroke={HIGH_TEMP_COLOR} strokeWidth={1.75} dot={showDots ? { fill: HIGH_TEMP_COLOR, r: 3.5 } : false} isAnimationActive={false} connectNulls strokeDasharray="8 3" />
+              <Line yAxisId="right" type="monotone" dataKey="lowTemp" name="lowTemp" stroke={LOW_TEMP_COLOR} strokeWidth={1.75} dot={showDots ? { fill: LOW_TEMP_COLOR, r: 3.5 } : false} isAnimationActive={false} connectNulls strokeDasharray="8 3" />
+            </>
+          )}
         </LineChart>
       </ResponsiveContainer>
     </div>
