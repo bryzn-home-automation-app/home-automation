@@ -1,9 +1,17 @@
-import { memo, useState } from 'react';
+import { lazy, memo, Suspense, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import ElectricalUsage from './ElectricalUsage';
-import GasUsage from './GasUsage';
-import WaterUsage from './WaterUsage';
+import PageSkeleton from '../components/PageSkeleton';
+
+// Each tab pulls in its own recharts-backed sub-tree (and, for Water, the
+// react-pdf viewer — see BillPdfModal). Only one tab is ever visible at a
+// time, so loading all three eagerly (as this used to) meant every /utility
+// visit downloaded and parsed Electric + Gas + Water regardless of which tab
+// opened. Split per-tab so the initial /utility chunk only carries the
+// active view.
+const ElectricalUsage = lazy(() => import('./ElectricalUsage'));
+const GasUsage = lazy(() => import('./GasUsage'));
+const WaterUsage = lazy(() => import('./WaterUsage'));
 
 type UtilityView = 'electric' | 'gas' | 'water';
 
@@ -66,9 +74,11 @@ export default memo(function Utility() {
         </div>
       )}
 
-      {view === 'electric' && <ElectricalUsage />}
-      {view === 'gas' && <GasUsage />}
-      {view === 'water' && <WaterUsage />}
+      <Suspense fallback={<PageSkeleton variant="stats-charts" />}>
+        {view === 'electric' && <ElectricalUsage />}
+        {view === 'gas' && <GasUsage />}
+        {view === 'water' && <WaterUsage />}
+      </Suspense>
     </div>
   );
 });

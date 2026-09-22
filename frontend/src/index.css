@@ -518,3 +518,110 @@ body {
     radial-gradient(circle at 80% 80%, var(--appglow-accent), transparent 40%),
     radial-gradient(circle at 50% 50%, var(--appglow-header), transparent 60%);
 }
+
+/* ── Pixel scenes (header art — see components/PixelScene.tsx) ──
+   Gentle idle animations in the retro-game style: bobbing characters, a
+   flickering bolt, a patrolling roomba. All transform/opacity only (no
+   layout or paint cost while scrolling). */
+.px-bob {
+  animation: px-bob 2.2s ease-in-out infinite;
+}
+.px-bob-slow {
+  animation: px-bob 3.4s ease-in-out infinite;
+}
+@keyframes px-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.px-flicker {
+  animation: px-flicker 2.8s steps(1) infinite;
+}
+@keyframes px-flicker {
+  0%, 100% { opacity: 1; }
+  86% { opacity: 1; }
+  88% { opacity: 0.25; }
+  90% { opacity: 1; }
+  93% { opacity: 0.4; }
+  95% { opacity: 1; }
+}
+
+.px-twinkle {
+  animation: px-twinkle 1.6s ease-in-out infinite;
+}
+@keyframes px-twinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.px-pulse {
+  animation: px-pulse 2.4s ease-in-out infinite;
+}
+@keyframes px-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.px-drive {
+  animation: px-drive 7s ease-in-out infinite;
+}
+@keyframes px-drive {
+  0%,
+  100% {
+    transform: translateX(-16px);
+  }
+  50% {
+    transform: translateX(16px);
+  }
+}
+
+.px-swing {
+  transform-origin: top center;
+  animation: px-swing 2.6s ease-in-out infinite;
+}
+@keyframes px-swing {
+  0%,
+  100% {
+    transform: rotate(-8deg);
+  }
+  50% {
+    transform: rotate(8deg);
+  }
+}
+
+.px-spin-slow {
+  animation: px-spin 14s linear infinite;
+}
+@keyframes px-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .px-bob,
+  .px-bob-slow,
+  .px-flicker,
+  .px-twinkle,
+  .px-pulse,
+  .px-drive,
+  .px-swing,
+  .px-spin-slow {
+    animation: none;
+  }
+}

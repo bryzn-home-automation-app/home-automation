@@ -11,6 +11,7 @@ import { useDocumentTitle } from './hooks/useDocumentTitle';
 import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
 import { PageHeader } from './components/PageHeader';
+import { HeaderPixelScene } from './components/PixelScene';
 import ReleaseNotesModal from './components/ReleaseNotesModal';
 
 /**
@@ -309,14 +310,17 @@ export default memo(function App() {
   ];
 
   return (
-    <div
-      className="min-h-[100dvh]"
-      style={{
-        background: isDark
-          ? 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #07111f 0%, #08101c 42%, #050913 100%)'
-          : 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
-      }}
-    >
+    <div className="min-h-[100dvh]">
+      {/* Backdrop gradients live on a fixed, non-scrolling layer so they paint
+          once instead of repainting on every scroll frame (desktop jank fix). */}
+      <div
+        className="pointer-events-none fixed inset-0 -z-10"
+        style={{
+          background: isDark
+            ? 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #07111f 0%, #08101c 42%, #050913 100%)'
+            : 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
+        }}
+      />
       <div className="w-full px-2 py-2 sm:px-5 sm:py-5 lg:px-6 lg:py-6 2xl:px-8 pb-20 lg:pb-0">
         <div
           className="absolute inset-x-0 top-0 -z-10 h-[32rem]"
@@ -329,7 +333,10 @@ export default memo(function App() {
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]">
           {/* ── Desktop sidebar (sticky left rail) ── */}
-          <aside className="hidden lg:flex lg:flex-col overflow-hidden rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_12px_36px_var(--appshadow)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5">
+          {/* translateZ(0) + will-change promote the sticky rail (and its large
+              blurred shadow) to its own compositor layer, so scrolling doesn't
+              repaint the shadow every frame at desktop sizes. */}
+          <aside className="hidden lg:flex lg:flex-col overflow-hidden rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_12px_36px_var(--appshadow)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5 lg:[transform:translateZ(0)] lg:will-change-transform">
             {sidebarContent}
           </aside>
 
@@ -370,6 +377,7 @@ export default memo(function App() {
                 title={pageHeader.title}
                 subtitle={pageHeader.subtitle}
                 eyebrow={pageHeader.eyebrow}
+                art={<HeaderPixelScene path={pathname} />}
                 actions={
                   <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
                     <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">

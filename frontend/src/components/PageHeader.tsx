@@ -9,6 +9,8 @@ interface PageHeaderProps {
   eyebrow?: string;
   /** Optional slot for right-aligned content (status pills, action buttons, etc.). */
   actions?: ReactNode;
+  /** Optional decorative art centered in the empty middle space (lg+ only). */
+  art?: ReactNode;
   /** Heading level. Defaults to h2 to match the app shell. */
   as?: 'h1' | 'h2' | 'h3';
 }
@@ -25,6 +27,7 @@ export function PageHeader({
   subtitle,
   eyebrow,
   actions,
+  art,
   as = 'h2',
 }: PageHeaderProps) {
   const HeadingTag = as;
@@ -45,6 +48,11 @@ export function PageHeader({
           </p>
         ) : null}
       </div>
+      {art ? (
+        <div className="pointer-events-none hidden min-w-0 flex-1 items-end justify-center self-stretch overflow-hidden lg:flex">
+          {art}
+        </div>
+      ) : null}
       {actions ? <div className="flex flex-wrap items-center gap-2 sm:gap-3">{actions}</div> : null}
     </div>
   );

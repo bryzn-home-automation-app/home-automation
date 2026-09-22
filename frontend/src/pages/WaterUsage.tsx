@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { lazy, memo, Suspense, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart,
@@ -14,8 +14,13 @@ import StatTile, { Icons } from '../components/StatTile';
 import DeferredRender from '../components/DeferredRender';
 import type { WaterBill } from '../types';
 import { fetchWaterBills } from '../api/waterBills';
-import BillPdfModal from '../components/BillPdfModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+
+// BillPdfModal pulls in react-pdf + its ~1.3MB pdf.js worker. It's only
+// mounted when a user actually clicks "view bill", so keep that weight out
+// of the WaterUsage chunk entirely rather than paying for it on every visit
+// to the Water tab.
+const BillPdfModal = lazy(() => import('../components/BillPdfModal'));
 
 const SM_MEDIA_QUERY = '(min-width: 640px)'; // matches this component's own sm: breakpoint usage
 const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
@@ -322,7 +327,11 @@ export default memo(function WaterUsage() {
           )
         )}
       </section>
-      <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
+      {viewingUrl && (
+        <Suspense fallback={null}>
+          <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
+        </Suspense>
+      )}
     </div>
   );
 });
