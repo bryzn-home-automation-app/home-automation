@@ -10,6 +10,10 @@ import com.homeplatform.service.ForecastService.IntradayForecast;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import com.homeplatform.model.ForecastModel;
+
+import java.math.BigDecimal;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -193,6 +197,72 @@ class ForecastServiceTest {
         double[] robust = ForecastService.robustRegression(y, x);
         assertEquals(ols[0], robust[0], 1e-6);
         assertEquals(ols[1], robust[1], 1e-6);
+    }
+
+    @Test
+    @DisplayName("three-feature fit recovers an AR(1) lag coefficient")
+    void regressionRecoversLagCoefficient() {
+        // True relationship: kwh = 5 + 2*cdd + 0.5*lag (hdd held at 0).
+        double[] cdd = {0, 1, 2, 3, 4, 5, 6, 7, 2, 4};
+        double[] lag = {40, 50, 45, 60, 55, 70, 65, 80, 50, 60};
+        double[] y = new double[cdd.length];
+        double[][] x = new double[cdd.length][3];
+        for (int i = 0; i < cdd.length; i++) {
+            y[i] = 5 + 2 * cdd[i] + 0.5 * lag[i];
+            x[i][0] = cdd[i];
+            x[i][1] = 0;
+            x[i][2] = lag[i];
+        }
+
+        double[] robust = ForecastService.robustRegression(y, x);
+        assertEquals(5.0, robust[0], 1e-6, "intercept");
+        assertEquals(2.0, robust[1], 1e-6, "cdd coefficient");
+        assertEquals(0.5, robust[3], 1e-6, "lag coefficient");
+    }
+
+    @Test
+    @DisplayName("predict applies the lag term, falling back to the training lag mean")
+    void predictUsesLagWithMeanFallback() {
+        ForecastService svc = new ForecastService(null, null, null, null);
+        ForecastModel m = ForecastModel.builder()
+                .intercept(BigDecimal.valueOf(10))
+                .cddCoeff(BigDecimal.valueOf(2))
+                .hddCoeff(BigDecimal.ZERO)
+                .lagCoeff(BigDecimal.valueOf(0.5))
+                .lagMean(BigDecimal.valueOf(40))
+                .build();
+        // avgTemp 70 -> cdd 5 (no clamp range set). Base = 10 + 2*5 = 20.
+        assertEquals(20 + 0.5 * 60, svc.predict(m, 70, DayOfWeek.MONDAY, 6, 60.0), EPS);
+        // Null previous-day kWh -> training lag mean (40).
+        assertEquals(20 + 0.5 * 40, svc.predict(m, 70, DayOfWeek.MONDAY, 6, null), EPS);
+        // A pre-lag model ignores the argument entirely.
+        ForecastModel legacy = ForecastModel.builder()
+                .intercept(BigDecimal.valueOf(10))
+                .cddCoeff(BigDecimal.valueOf(2))
+                .hddCoeff(BigDecimal.ZERO)
+                .build();
+        assertEquals(20, svc.predict(legacy, 70, DayOfWeek.MONDAY, 6, 60.0), EPS);
+    }
+
+    // ── Lead-time band widening ───────────────────────────────────────────
+
+    @Test
+    @DisplayName("band widening is 1.0 same-day and grows with lead time")
+    void leadWideningGrowsWithLead() {
+        assertEquals(1.0, ForecastService.leadWideningFactor(0), EPS);
+        // Monotonic in lead.
+        double prev = 1.0;
+        for (int lead = 1; lead <= 7; lead++) {
+            double w = ForecastService.leadWideningFactor(lead);
+            assertTrue(w > prev, "widening must grow with lead " + lead);
+            prev = w;
+        }
+        // Calibration: ~2x at a 7-day lead (matches the measured MAE ratio).
+        assertEquals(Math.sqrt(1 + ForecastService.BAND_LEAD_GROWTH * 7),
+                ForecastService.leadWideningFactor(7), EPS);
+        assertEquals(1.95, ForecastService.leadWideningFactor(7), 0.05);
+        // Negative leads (shouldn't happen, but) clamp to no widening.
+        assertEquals(1.0, ForecastService.leadWideningFactor(-3), EPS);
     }
 
     // ── Anomaly scoring ───────────────────────────────────────────────────

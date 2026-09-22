@@ -536,6 +536,8 @@ CREATE TABLE IF NOT EXISTS forecast_model (
     intercept           NUMERIC(12,6)  NOT NULL,
     cdd_coeff           NUMERIC(12,6)  NOT NULL,
     hdd_coeff           NUMERIC(12,6)  NOT NULL,
+    lag_coeff           NUMERIC(12,6),
+    lag_mean            NUMERIC(10,3),
     cdd_min             NUMERIC(10,3),
     cdd_max             NUMERIC(10,3),
     hdd_min             NUMERIC(10,3),

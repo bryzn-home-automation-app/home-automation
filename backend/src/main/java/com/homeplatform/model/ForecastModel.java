@@ -59,6 +59,26 @@ public class ForecastModel {
      * day outside the model's experience gets its nearest in-range estimate
      * rather than a fabricated zero.
      */
+    /**
+     * AR(1) coefficient: weight on yesterday's total kWh. Home usage is
+     * strongly autocorrelated (high-usage days cluster), so the lag term
+     * captures behavioral variance the degree-day regression can't see.
+     * Null on models trained before this feature existed, or when there
+     * weren't enough consecutive-day pairs to fit it — predict() then
+     * behaves exactly like the pre-lag model.
+     */
+    @Column(name = "lag_coeff", precision = 12, scale = 6)
+    private BigDecimal lagCoeff;
+
+    /**
+     * Mean of the lag feature over the training rows. When a prediction has
+     * no usable previous-day kWh (cold start, data gap), predict() substitutes
+     * this mean so the lag term contributes its average effect instead of
+     * silently dropping to zero (which would bias every such prediction low).
+     */
+    @Column(name = "lag_mean", precision = 10, scale = 3)
+    private BigDecimal lagMean;
+
     @Column(name = "cdd_min", precision = 10, scale = 3)
     private BigDecimal cddMin;
 
