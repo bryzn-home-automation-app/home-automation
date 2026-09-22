@@ -82,6 +82,34 @@ class ForecastServiceDiagnosticsTest {
     }
 
     @Test
+    @DisplayName("getForecastRange keeps only the freshest snapshot per target day, oldest-first")
+    void forecastRangeDedupesToFreshestPerDay() {
+        LocalDate target = LocalDate.now().minusDays(1);
+        // Same target date forecast at three different lead times — the
+        // repository's ORDER BY target_date has no secondary sort, so these
+        // can come back in any order; the freshest forecast_date must win
+        // regardless of input order (this reproduces the raw DB row order
+        // for 2026-09-21 that surfaced the bug: 8 rows, id-ascending,
+        // freshest last).
+        ForecastSnapshot weekOut = snap(target.minusDays(7), target, 42.37, 56.06);
+        ForecastSnapshot midLead = snap(target.minusDays(3), target, 66.44, 56.06);
+        ForecastSnapshot sameDay = snap(target, target, 55.00, 56.06);
+        LocalDate other = target.minusDays(5);
+        ForecastSnapshot otherDay = snap(other, other, 30.0, 31.0);
+
+        when(snapshotRepo.findByTargetDateBetweenOrderByTargetDateAsc(any(), any()))
+                .thenReturn(List.of(weekOut, midLead, sameDay, otherDay));
+
+        List<ForecastSnapshot> range = service.getForecastRange(target.minusDays(10), target);
+
+        assertEquals(2, range.size(), "one row per distinct target date");
+        assertEquals(other, range.get(0).getTargetDate(), "ascending by target date");
+        assertEquals(target, range.get(1).getTargetDate());
+        assertEquals(0, BigDecimal.valueOf(55.00).compareTo(range.get(1).getPredictedKwh()),
+                "freshest (same-day) prediction wins, not the first/last row by chance DB order");
+    }
+
+    @Test
     @DisplayName("keeps the freshest prediction per target day and orders newest-first")
     void dedupesAndOrdersNewestFirst() {
         LocalDate d1 = LocalDate.now().minusDays(3);

@@ -268,7 +268,14 @@ function ForecastChart() {
         date: f.date,
         label: formatDateLabel(f.date),
         actual,
-        predicted: f.predictedKwh,
+        // Once a day is graded, `existing.predicted` is the TRUE historical
+        // prediction (the stored snapshot from whichever model was active
+        // when that day was actually forecast). f.predictedKwh here is a
+        // live re-hindcast from TODAY's model — using it would silently
+        // rewrite history every time the model retrains (e.g. yesterday's
+        // "predicted" value drifting as the model improves), which reads as
+        // a bug ("the chart predicted X" when it actually predicted Y).
+        predicted: actual != null && existing ? existing.predicted : f.predictedKwh,
         lower: f.lowerBound,
         upper: f.upperBound,
         // Once the real actual is known, let it stand on its own — don't keep

@@ -155,8 +155,27 @@ public class ForecastService {
         return modelRepo.findFirstByOrderByCreatedAtDesc();
     }
 
+    /**
+     * Freshest-per-target-day snapshots in [start, end]. A single target date
+     * accumulates one stored row for every horizon it was forecast at
+     * (7-days-ahead … day-ahead) — the repository query has no secondary sort
+     * on forecast_date, so without this collapse callers get whichever row
+     * Postgres happens to return, an essentially random pick among predictions
+     * that can differ by 20+ kWh for the same day. Same freshest-per-target-day
+     * invariant as {@link #getAccuracy}/{@link #computeIntervalSigma}/
+     * {@link #assessDrift}/{@link #getDiagnostics} — this was the one caller
+     * that had never been brought in line with it.
+     */
     public List<ForecastSnapshot> getForecastRange(LocalDate start, LocalDate end) {
-        return snapshotRepo.findByTargetDateBetweenOrderByTargetDateAsc(start, end);
+        List<ForecastSnapshot> raw = snapshotRepo.findByTargetDateBetweenOrderByTargetDateAsc(start, end);
+        Map<LocalDate, ForecastSnapshot> freshest = new LinkedHashMap<>();
+        for (ForecastSnapshot s : raw) {
+            freshest.merge(s.getTargetDate(), s,
+                    (a, b) -> a.getForecastDate().isAfter(b.getForecastDate()) ? a : b);
+        }
+        List<ForecastSnapshot> result = new ArrayList<>(freshest.values());
+        result.sort(Comparator.comparing(ForecastSnapshot::getTargetDate));
+        return result;
     }
 
     public AccuracyReport getAccuracy(int trailingDays) {
