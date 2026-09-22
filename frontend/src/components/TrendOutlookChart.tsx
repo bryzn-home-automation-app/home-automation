@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   ComposedChart,
   Line,
-  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -13,20 +12,21 @@ import {
 } from 'recharts';
 import { fetchForecast } from '../api/forecast';
 import { localTodayIso } from '../utils/localDate';
-import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
+import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 /**
- * TrendOutlookChart — 30 days back, 30 days forward on one line: solid green
+ * TrendOutlookChart — 30 days back, 14 days forward on one line: solid green
  * actuals (the last month of daily totals) flowing into a dashed purple AI
- * projection (the next month), with the forecast confidence band behind it.
+ * projection (the next two weeks — matching the AI Forecast tab's horizon,
+ * band-free to keep this chart about the trend line).
  * Replaces the everything-since-day-one trend chart that had become an
  * unreadable wall of points on mobile. Colors intentionally match the AI
  * Forecast chart (green = actual, theme accent = predicted).
  */
 
 const HIST_DAYS = 30;
-const OUTLOOK_DAYS = 30;
+const OUTLOOK_DAYS = 14;
 
 const chartTheme = {
   grid: 'var(--appchart-grid)',
@@ -59,7 +59,7 @@ interface TrendOutlookChartProps {
 function TrendOutlookChart({
   dailyPoints,
   loading,
-  title = 'Usage trend & 30-day outlook',
+  title = 'Usage trend & outlook',
   emptyText = 'No electric usage data yet — readings sync automatically each evening.',
 }: TrendOutlookChartProps) {
   const { theme, palette } = useTheme();
@@ -84,7 +84,6 @@ function TrendOutlookChart({
       label: string;
       actual: number | null;
       predicted: number | null;
-      confidenceBand: [number, number] | null;
     }>();
 
     for (const p of actuals) {
@@ -93,7 +92,6 @@ function TrendOutlookChart({
         label: formatDateLabel(p.date),
         actual: p.kWh,
         predicted: null,
-        confidenceBand: null,
       });
     }
 
@@ -108,23 +106,17 @@ function TrendOutlookChart({
           label: formatDateLabel(f.date),
           actual: rows.get(f.date)?.actual ?? null,
           predicted: f.predictedKwh,
-          confidenceBand: [f.lowerBound, f.upperBound],
         });
       }
     }
 
     const sorted = Array.from(rows.values()).sort((a, b) => a.date.localeCompare(b.date));
 
-    // Anchor the projection to the last actual so the dashed line and its band
-    // emerge from the green line instead of starting after a visible gap.
+    // Anchor the projection to the last actual so the dashed line emerges
+    // from the green line instead of starting after a visible gap.
     const lastIdx = sorted.findIndex((r) => r.date === lastActualDate);
     if (lastIdx >= 0) {
-      const anchor = sorted[lastIdx].actual as number;
-      sorted[lastIdx] = {
-        ...sorted[lastIdx],
-        predicted: anchor,
-        confidenceBand: [anchor, anchor],
-      };
+      sorted[lastIdx] = { ...sorted[lastIdx], predicted: sorted[lastIdx].actual };
     }
 
     return sorted;
@@ -132,7 +124,6 @@ function TrendOutlookChart({
 
   const predictedColor = series.usage;
   const actualColor = '#22c55e';
-  const bandColor = hexToRgba(series.temp, theme === 'dark' ? 0.22 : 0.16);
 
   if (loading) {
     return (
@@ -182,10 +173,6 @@ function TrendOutlookChart({
           </svg>
           Predicted
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-3 w-5 rounded border" style={{ backgroundColor: series.temp, borderColor: series.temp }} />
-          Confidence band
-        </span>
       </div>
 
       {chartData.length < 2 ? (
@@ -215,12 +202,10 @@ function TrendOutlookChart({
             />
             <Tooltip
               contentStyle={TOOLTIP_CONTENT_STYLE}
-              formatter={(value: number | [number, number], name: string) => {
-                if (name === 'confidenceBand' && Array.isArray(value)) {
-                  return [`${value[0].toFixed(1)} – ${value[1].toFixed(1)} kWh`, 'Range'];
-                }
-                return [`${(value as number).toFixed(1)} kWh`, name === 'actual' ? 'Actual' : 'Predicted'];
-              }}
+              formatter={(value: number, name: string) => [
+                `${value.toFixed(1)} kWh`,
+                name === 'actual' ? 'Actual' : 'Predicted',
+              ]}
             />
 
             <ReferenceLine
@@ -228,18 +213,6 @@ function TrendOutlookChart({
               stroke={chartTheme.muted}
               strokeDasharray="4 4"
               label={{ value: 'Today', fill: chartTheme.muted, fontSize: 10 }}
-            />
-
-            {/* stroke set (width 0) so the tooltip swatch matches the legend —
-                same rationale as ForecastChart's band. */}
-            <Area
-              dataKey="confidenceBand"
-              fill={bandColor}
-              fillOpacity={1}
-              stroke={series.temp}
-              strokeWidth={0}
-              isAnimationActive={false}
-              connectNulls={false}
             />
 
             <Line
