@@ -29,6 +29,7 @@ import static org.mockito.Mockito.*;
  */
 class ForecastServiceDiagnosticsTest {
 
+    private JdbcTemplate jdbc;
     private ForecastModelRepository modelRepo;
     private ForecastSnapshotRepository snapshotRepo;
     private AppEventService appEventService;
@@ -36,7 +37,7 @@ class ForecastServiceDiagnosticsTest {
 
     @BeforeEach
     void setUp() {
-        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        jdbc = mock(JdbcTemplate.class);
         modelRepo = mock(ForecastModelRepository.class);
         snapshotRepo = mock(ForecastSnapshotRepository.class);
         appEventService = mock(AppEventService.class);
@@ -79,6 +80,44 @@ class ForecastServiceDiagnosticsTest {
         ForecastDiagnostics d = service.getDiagnostics(30);
 
         assertTrue(d.daily().isEmpty());
+    }
+
+    @Test
+    @DisplayName("backfill only grades a day once it has the final-day hourly row count")
+    void backfillRequiresFinalDay() {
+        LocalDate target = LocalDate.now().minusDays(1);
+        ForecastSnapshot pending = ForecastSnapshot.builder()
+                .forecastDate(target).targetDate(target)
+                .predictedKwh(BigDecimal.valueOf(50)).build();
+        when(snapshotRepo.findByActualKwhIsNullAndTargetDateBefore(any())).thenReturn(List.of(pending));
+
+        service.backfillActuals();
+
+        // Hourly query must demand >= 20 rows (not the looser 18 used for lag input).
+        verify(jdbc).queryForObject(anyString(), eq(Double.class), eq(target.toString()), eq(20));
+    }
+
+    @Test
+    @DisplayName("live forecast seeds the AR(1) lag from the latest actual, not a chained prediction")
+    void liveForecastUsesLatestActualAsLag() {
+        LocalDate today = LocalDate.now();
+        LocalDate yesterday = today.minusDays(1);
+        ForecastModel m = ForecastModel.builder()
+                .intercept(BigDecimal.valueOf(10)).cddCoeff(BigDecimal.ZERO).hddCoeff(BigDecimal.ZERO)
+                .lagCoeff(BigDecimal.valueOf(0.5)).lagMean(BigDecimal.valueOf(40)).build();
+        when(snapshotRepo.findRecentWithActuals(any())).thenReturn(List.of());
+        when(jdbc.queryForObject(anyString(), eq(Double.class), eq(yesterday.minusDays(1).toString()), eq(18)))
+                .thenReturn(45.0);
+        when(jdbc.queryForObject(anyString(), eq(Double.class), eq(yesterday.toString()), eq(18)))
+                .thenReturn(62.0);
+
+        var out = service.generateForecasts(m, List.of(
+                new ForecastService.WeatherForecastDay(yesterday, 70, 60, 65),
+                new ForecastService.WeatherForecastDay(today, 70, 60, 65)));
+
+        assertEquals(10 + 0.5 * 45, out.get(0).predictedKwh(), 0.01);
+        // Today uses yesterday's ACTUAL (62), not yesterday's prediction (32.5).
+        assertEquals(10 + 0.5 * 62, out.get(1).predictedKwh(), 0.01);
     }
 
     @Test

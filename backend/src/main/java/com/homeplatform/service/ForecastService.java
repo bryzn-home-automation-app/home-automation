@@ -24,6 +24,11 @@ public class ForecastService {
     private static final Logger log = LoggerFactory.getLogger(ForecastService.class);
     private static final double COMFORT_BASE = 65.0;
     private static final int MIN_DATA_POINTS = 7;
+    // Hourly rows needed before a day's total is trusted as the AR(1) lag input,
+    // and before it is final enough to grade a stored prediction against (the
+    // same 20-hour "complete day" threshold the usage UI applies).
+    private static final int LAG_MIN_HOURLY_ROWS = 18;
+    private static final int FINAL_DAY_MIN_HOURLY_ROWS = 20;
 
     // ── Recency-weighted confidence-band tuning ─────────────────
     // The band is derived from RECENT out-of-sample forecast errors (graded
@@ -657,24 +662,26 @@ public class ForecastService {
         LocalDate today = LocalDate.now();
         double sigma = computeIntervalSigma(model, today);
 
-        // Chain the AR(1) lag forward through the horizon: process days in
-        // date order; the first day seeds from the last actual daily total in
-        // the DB, and each later day feeds on the previous day's own
-        // prediction. A date gap breaks the chain (predict() then falls back
-        // to the training lag mean for that day and the chain restarts).
+        // Chain the AR(1) lag forward through the horizon in date order. The
+        // lag for a day is the previous day's ACTUAL total whenever one exists
+        // (any day before today) and otherwise the previous day's own
+        // prediction — so the live projection always uses the latest reading,
+        // exactly as ForecastScheduler's saved snapshots do. A date gap breaks
+        // the chain (predict() then falls back to the training lag mean).
         List<WeatherForecastDay> days = new ArrayList<>(forecastWeather);
         days.sort(Comparator.comparing(WeatherForecastDay::date));
 
         Double lag = null;
-        if (!days.isEmpty() && model.getLagCoeff() != null) {
-            Double seed = queryDailyKwh(days.get(0).date().minusDays(1).toString());
-            if (seed != null && seed > 0) lag = seed;
-        }
         LocalDate prevDate = null;
 
         List<DailyForecast> results = new ArrayList<>();
         for (WeatherForecastDay wx : days) {
             if (prevDate != null && !wx.date().equals(prevDate.plusDays(1))) lag = null;
+            LocalDate prevDay = wx.date().minusDays(1);
+            if (model.getLagCoeff() != null && prevDay.isBefore(today)) {
+                Double actualPrev = queryDailyKwh(prevDay.toString(), LAG_MIN_HOURLY_ROWS);
+                if (actualPrev != null && actualPrev > 0) lag = actualPrev;
+            }
             double kwh = predict(model, wx.avgTemp, wx.date.getDayOfWeek(), wx.date.getMonthValue(), lag);
             lag = kwh;
             prevDate = wx.date();
@@ -1288,7 +1295,10 @@ public class ForecastService {
         List<ForecastSnapshot> pending = snapshotRepo.findByActualKwhIsNullAndTargetDateBefore(LocalDate.now());
         int filled = 0;
         for (ForecastSnapshot snap : pending) {
-            Double actual = queryDailyKwh(snap.getTargetDate().toString());
+            // Grade only once the day is final: actual_kwh is written once and
+            // never revisited, so freezing a still-syncing day at e.g. 18/24
+            // hours would permanently record a phantom miss in accuracy/MAE/band.
+            Double actual = queryDailyKwh(snap.getTargetDate().toString(), FINAL_DAY_MIN_HOURLY_ROWS);
             if (actual != null) {
                 snap.setActualKwh(BigDecimal.valueOf(actual));
                 snap.setActualCost(BigDecimal.valueOf(actual * kwhRate));
@@ -1532,15 +1542,15 @@ public class ForecastService {
         }
     }
 
-    private Double queryDailyKwh(String date) {
+    private Double queryDailyKwh(String date, int minHourlyRows) {
         try {
             // Try hourly table first
             Double result = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(usage_kwh), 0)
                 FROM hourly_electric_usage
                 WHERE timestamp::date = ?::date AND usage_kwh > 0
-                HAVING COUNT(*) >= 18
-                """, Double.class, date);
+                HAVING COUNT(*) >= ?
+                """, Double.class, date, minHourlyRows);
             if (result != null) return result;
         } catch (Exception e) {
             // No hourly data for this date — fall through

@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.WeatherResponse;
 import com.homeplatform.model.ForecastModel;
+import com.homeplatform.model.ForecastSnapshot;
 import com.homeplatform.service.ForecastService;
 import com.homeplatform.service.ForecastService.*;
 import com.homeplatform.service.WeatherService;
@@ -33,10 +34,15 @@ public class ForecastController {
         this.weatherService = weatherService;
     }
 
+    // Request-size caps: an unbounded `days` allocates one forecast object per
+    // requested day (heap exhaustion), and an unbounded history window can push
+    // the query start outside Postgres's date range (HTTP 500).
+    private static final int MAX_FORECAST_DAYS = 90;
+    private static final int MAX_HISTORY_DAYS = 90;
+
     @GetMapping("/electric")
-    public ResponseEntity<?> getElectricForecast(
-            @RequestParam(defaultValue = "7") int days,
-            @RequestParam(defaultValue = "14") int historyDays) {
+    public ResponseEntity<?> getElectricForecast(@RequestParam(defaultValue = "7") int days) {
+        days = Math.max(1, Math.min(days, MAX_FORECAST_DAYS));
         var modelOpt = forecastService.getActiveModel();
         if (modelOpt.isEmpty()) {
             return ResponseEntity.ok(Map.of(
@@ -88,10 +94,8 @@ public class ForecastController {
 
         List<DailyForecast> forecasts = forecastService.generateForecasts(model, forecastDays);
 
-        // Also fetch recent actuals for the chart overlay — historyDays lets a
-        // caller like the trend chart request a longer graded-prediction
-        // window than the default 14 (e.g. 30, to cover its whole trend view).
-        LocalDate histStart = today.minusDays(historyDays);
+        // Also fetch recent actuals for the chart overlay
+        LocalDate histStart = today.minusDays(14);
         var snapshots = forecastService.getForecastRange(histStart, end);
 
         Map<String, Object> result = new LinkedHashMap<>();
@@ -101,7 +105,31 @@ public class ForecastController {
         result.put("rSquared", model.getRSquared());
         result.put("dowAdjustments", model.getDowAdjustments());
         result.put("forecasts", forecasts);
-        result.put("snapshots", snapshots.stream().map(s -> {
+        result.put("snapshots", toSnapshotDtos(snapshots));
+
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * Stored predictions (freshest per target day) for the trailing
+     * {@code days} up through today. Deliberately independent of the live
+     * forecast: it needs no model and no weather call, so a weather outage
+     * or failed forecast request never erases the prediction history.
+     */
+    @GetMapping("/electric/snapshots")
+    public ResponseEntity<?> getElectricSnapshots(@RequestParam(defaultValue = "30") int days) {
+        int window = Math.max(1, Math.min(days, MAX_HISTORY_DAYS));
+        LocalDate today = LocalDate.now();
+        var snapshots = forecastService.getForecastRange(today.minusDays(window), today);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("status", "ok");
+        result.put("snapshots", toSnapshotDtos(snapshots));
+        return ResponseEntity.ok(result);
+    }
+
+    private static List<Map<String, Object>> toSnapshotDtos(List<ForecastSnapshot> snapshots) {
+        return snapshots.stream().map(s -> {
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("targetDate", s.getTargetDate().toString());
             m.put("predictedKwh", s.getPredictedKwh());
@@ -109,9 +137,7 @@ public class ForecastController {
             m.put("predictedCost", s.getPredictedCost());
             m.put("actualCost", s.getActualCost());
             return m;
-        }).toList());
-
-        return ResponseEntity.ok(result);
+        }).toList();
     }
 
     @GetMapping("/electric/hourly")
