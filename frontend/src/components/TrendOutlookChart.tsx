@@ -10,24 +10,17 @@ import {
   ResponsiveContainer,
   ReferenceLine,
 } from 'recharts';
-import { fetchForecast } from '../api/forecast';
+import { fetchForecast, fetchForecastSnapshots } from '../api/forecast';
+import { pickPredicted } from '../utils/forecastSeries';
 import { localTodayIso } from '../utils/localDate';
 import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 /**
- * TrendOutlookChart — 30 days back, 14 days forward: solid green actuals (the
- * last month of daily totals) alongside a dashed purple predicted line. Over
- * the historical range the purple line is each day's real graded prediction
- * (the snapshot stored at the time — not a live re-hindcast from today's
- * model, which would silently drift every retrain), so hovering any past
- * point shows both what happened and what the model actually said it would
- * be, as far back as forecasting has been running. Past "Today" the purple
- * line continues as the live forward-looking forecast. Band-free to keep
- * this chart about the trend line (see ForecastChart for the confidence
- * band). Replaces the everything-since-day-one trend chart that had become
- * an unreadable wall of points on mobile. Colors intentionally match the AI
- * Forecast chart (green = actual, theme accent = predicted).
+ * TrendOutlookChart — last 30 days of actual usage (solid green) against the
+ * predicted line (dashed purple: the stored prediction for past days, the live
+ * forecast from today on), so hovering any day shows both. Band-free; the
+ * Forecast tab has the confidence band. Colors match that chart.
  */
 
 const HIST_DAYS = 30;
@@ -48,42 +41,33 @@ const TOOLTIP_CONTENT_STYLE = {
   boxShadow: '0 20px 50px var(--appshadow-lg)',
 } as const;
 
+const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
+
 function formatDateLabel(iso: string): string {
   const d = new Date(iso + 'T12:00:00');
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-interface TooltipPayloadEntry {
-  dataKey: string;
-  value: number | null | undefined;
-  color?: string;
+/** ISO date + 1 calendar day, in local calendar terms (no UTC shifting). */
+function nextDay(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(y, m - 1, d + 1);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
 }
 
-/**
- * Recharts' default Tooltip renders one row per <Line>, including a "—" row
- * for a series that's null at this point (e.g. Predicted on a day before
- * forecasting existed, or Actual on a future day). Filtering to only the
- * series that actually have a value here keeps the tooltip honest — a day
- * with no prediction on record simply doesn't claim to have one.
- */
-function TrendTooltip({ active, payload, label }: {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
-  label?: string;
-}) {
-  if (!active || !payload?.length) return null;
-  const rows = payload.filter((p) => p.value != null);
-  if (!rows.length) return null;
-  return (
-    <div style={TOOLTIP_CONTENT_STYLE} className="px-3 py-2">
-      <p className="mb-1 text-apptext-muted">{label}</p>
-      {rows.map((r) => (
-        <p key={r.dataKey} style={{ color: r.color }}>
-          {r.dataKey === 'actual' ? 'Actual' : 'Predicted'}: {r.value!.toFixed(1)} kWh
-        </p>
-      ))}
-    </div>
-  );
+function daysBetween(fromIso: string, toIso: string): number {
+  const [y1, m1, d1] = fromIso.split('-').map(Number);
+  const [y2, m2, d2] = toIso.split('-').map(Number);
+  return Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / 86_400_000);
+}
+
+interface Row {
+  date: string;
+  label: string;
+  actual: number | null;
+  predicted: number | null;
+  /** Invisible-to-tooltip connector joining the green line to the first predicted point. */
+  bridge: number | null;
 }
 
 interface TrendOutlookChartProps {
@@ -103,69 +87,83 @@ function TrendOutlookChart({
   const { theme, palette } = useTheme();
   const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
   const forecastInterval = useJitteredInterval(600_000);
+  const today = localTodayIso();
 
+  const actuals = useMemo(
+    () => dailyPoints.filter((p) => p.date <= today).slice(-HIST_DAYS),
+    [dailyPoints, today]
+  );
+  const startDate = actuals.length ? actuals[0].date : '';
+  // Snapshot window follows the first plotted day (not a fixed day count), so
+  // the oldest visible day keeps its stored prediction even across data gaps.
+  const historyDays = startDate ? Math.min(90, daysBetween(startDate, today) + 1) : HIST_DAYS;
+
+  // Same key as ForecastChart's 14-day view, so the two share one cached fetch.
   const { data: forecast } = useQuery({
-    // historyDays=HIST_DAYS: pulls graded prediction snapshots across the
-    // whole displayed history, not just the API's 14-day default — so the
-    // predicted line covers the full trend window, back to whenever
-    // forecasting first started if that's more recent than HIST_DAYS.
-    queryKey: ['forecast', OUTLOOK_DAYS, HIST_DAYS],
-    queryFn: () => fetchForecast(OUTLOOK_DAYS, HIST_DAYS),
+    queryKey: ['forecast', OUTLOOK_DAYS],
+    queryFn: () => fetchForecast(OUTLOOK_DAYS),
     staleTime: 600_000,
     refetchInterval: forecastInterval,
     refetchIntervalInBackground: false,
   });
 
-  const today = localTodayIso();
+  // Stored predictions live in their own query so a weather outage or failed
+  // live-forecast request never erases the prediction history.
+  const { data: snapshots } = useQuery({
+    queryKey: ['forecast-snapshots', historyDays],
+    queryFn: () => fetchForecastSnapshots(historyDays),
+    staleTime: 600_000,
+    refetchInterval: forecastInterval,
+    refetchIntervalInBackground: false,
+  });
 
   const chartData = useMemo(() => {
-    const actuals = dailyPoints.filter((p) => p.date <= today).slice(-HIST_DAYS);
+    if (!actuals.length) return [];
 
-    const rows = new Map<string, {
-      date: string;
-      label: string;
-      actual: number | null;
-      predicted: number | null;
-    }>();
+    const actualByDate = new Map(actuals.map((p) => [p.date, p.kWh]));
+    const snapByDate = new Map((snapshots ?? []).map((s) => [s.targetDate, s]));
+    const liveByDate = new Map(
+      (forecast?.status === 'ok' ? forecast.forecasts ?? [] : []).map((f) => [f.date, f.predictedKwh])
+    );
 
-    for (const p of actuals) {
-      rows.set(p.date, {
-        date: p.date,
-        label: formatDateLabel(p.date),
-        actual: p.kWh,
-        predicted: null,
+    const lastActualDate = actuals[actuals.length - 1].date;
+    const liveDates = [...liveByDate.keys()].sort();
+    const endDate = liveDates.length && liveDates[liveDates.length - 1] > lastActualDate
+      ? liveDates[liveDates.length - 1]
+      : lastActualDate;
+
+    // One row per calendar day so gaps in the actuals stay visible on the axis.
+    const rows: Row[] = [];
+    for (let d = startDate; d <= endDate; d = nextDay(d)) {
+      rows.push({
+        date: d,
+        label: formatDateLabel(d),
+        actual: actualByDate.get(d) ?? null,
+        predicted: pickPredicted({
+          date: d,
+          today,
+          snapshot: snapByDate.get(d),
+          hasActual: actualByDate.has(d),
+          live: liveByDate.get(d),
+        }),
+        bridge: null,
       });
     }
 
-    const lastActualDate = actuals.length ? actuals[actuals.length - 1].date : '';
-
-    if (forecast?.status === 'ok') {
-      // Historical predicted: each day's REAL graded prediction (the
-      // snapshot stored at forecast time — see ForecastService.getForecastRange's
-      // freshest-per-target-day dedup), not a live re-hindcast. Only applied
-      // within the displayed window; a day with no snapshot (before
-      // forecasting existed) simply keeps predicted=null.
-      for (const s of forecast.snapshots ?? []) {
-        const existing = rows.get(s.targetDate);
-        if (!existing) continue;
-        rows.set(s.targetDate, { ...existing, predicted: s.predictedKwh });
-      }
-
-      // Future predicted: no graded snapshot exists yet for days beyond
-      // today, so these come from the live forecast instead.
-      for (const f of forecast.forecasts ?? []) {
-        if (f.date <= lastActualDate) continue;
-        rows.set(f.date, {
-          date: f.date,
-          label: formatDateLabel(f.date),
-          actual: rows.get(f.date)?.actual ?? null,
-          predicted: f.predictedKwh,
-        });
+    // If the last actual day has no prediction of its own, join the green line
+    // to the first predicted point with a tooltip-less connector.
+    let lastActualIdx = -1;
+    rows.forEach((r, i) => { if (r.actual != null) lastActualIdx = i; });
+    if (lastActualIdx >= 0 && rows[lastActualIdx].predicted == null) {
+      const nextIdx = rows.findIndex((r, i) => i > lastActualIdx && r.predicted != null);
+      if (nextIdx >= 0) {
+        rows[lastActualIdx].bridge = rows[lastActualIdx].actual;
+        rows[nextIdx].bridge = rows[nextIdx].predicted;
       }
     }
 
-    return Array.from(rows.values()).sort((a, b) => a.date.localeCompare(b.date));
-  }, [dailyPoints, forecast, today]);
+    return rows;
+  }, [actuals, startDate, snapshots, forecast, today]);
 
   const predictedColor = series.usage;
   const actualColor = '#22c55e';
@@ -245,7 +243,14 @@ function TrendOutlookChart({
               tickLine={false}
               unit=" kWh"
             />
-            <Tooltip content={<TrendTooltip />} />
+            <Tooltip
+              contentStyle={TOOLTIP_CONTENT_STYLE}
+              labelStyle={TOOLTIP_LABEL_STYLE}
+              formatter={(value: number, name: string) => [
+                `${value.toFixed(1)} kWh`,
+                name === 'actual' ? 'Actual' : 'Predicted',
+              ]}
+            />
 
             <ReferenceLine
               x={formatDateLabel(today)}
@@ -256,13 +261,24 @@ function TrendOutlookChart({
 
             <Line
               type="monotone"
-              dataKey="predicted"
+              dataKey="bridge"
               stroke={predictedColor}
               strokeWidth={2}
               strokeDasharray="6 3"
               dot={false}
               isAnimationActive={false}
               connectNulls
+              tooltipType="none"
+            />
+
+            <Line
+              type="monotone"
+              dataKey="predicted"
+              stroke={predictedColor}
+              strokeWidth={2}
+              strokeDasharray="6 3"
+              dot={false}
+              isAnimationActive={false}
             />
 
             <Line
