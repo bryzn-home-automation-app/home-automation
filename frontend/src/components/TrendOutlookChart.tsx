@@ -16,12 +16,17 @@ import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 /**
- * TrendOutlookChart — 30 days back, 14 days forward on one line: solid green
- * actuals (the last month of daily totals) flowing into a dashed purple AI
- * projection (the next two weeks — matching the AI Forecast tab's horizon,
- * band-free to keep this chart about the trend line).
- * Replaces the everything-since-day-one trend chart that had become an
- * unreadable wall of points on mobile. Colors intentionally match the AI
+ * TrendOutlookChart — 30 days back, 14 days forward: solid green actuals (the
+ * last month of daily totals) alongside a dashed purple predicted line. Over
+ * the historical range the purple line is each day's real graded prediction
+ * (the snapshot stored at the time — not a live re-hindcast from today's
+ * model, which would silently drift every retrain), so hovering any past
+ * point shows both what happened and what the model actually said it would
+ * be, as far back as forecasting has been running. Past "Today" the purple
+ * line continues as the live forward-looking forecast. Band-free to keep
+ * this chart about the trend line (see ForecastChart for the confidence
+ * band). Replaces the everything-since-day-one trend chart that had become
+ * an unreadable wall of points on mobile. Colors intentionally match the AI
  * Forecast chart (green = actual, theme accent = predicted).
  */
 
@@ -48,6 +53,39 @@ function formatDateLabel(iso: string): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+interface TooltipPayloadEntry {
+  dataKey: string;
+  value: number | null | undefined;
+  color?: string;
+}
+
+/**
+ * Recharts' default Tooltip renders one row per <Line>, including a "—" row
+ * for a series that's null at this point (e.g. Predicted on a day before
+ * forecasting existed, or Actual on a future day). Filtering to only the
+ * series that actually have a value here keeps the tooltip honest — a day
+ * with no prediction on record simply doesn't claim to have one.
+ */
+function TrendTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: TooltipPayloadEntry[];
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const rows = payload.filter((p) => p.value != null);
+  if (!rows.length) return null;
+  return (
+    <div style={TOOLTIP_CONTENT_STYLE} className="px-3 py-2">
+      <p className="mb-1 text-apptext-muted">{label}</p>
+      {rows.map((r) => (
+        <p key={r.dataKey} style={{ color: r.color }}>
+          {r.dataKey === 'actual' ? 'Actual' : 'Predicted'}: {r.value!.toFixed(1)} kWh
+        </p>
+      ))}
+    </div>
+  );
+}
+
 interface TrendOutlookChartProps {
   /** Server-aggregated daily totals, ascending by date. */
   dailyPoints: Array<{ date: string; kWh: number }>;
@@ -67,8 +105,12 @@ function TrendOutlookChart({
   const forecastInterval = useJitteredInterval(600_000);
 
   const { data: forecast } = useQuery({
-    queryKey: ['forecast', OUTLOOK_DAYS],
-    queryFn: () => fetchForecast(OUTLOOK_DAYS),
+    // historyDays=HIST_DAYS: pulls graded prediction snapshots across the
+    // whole displayed history, not just the API's 14-day default — so the
+    // predicted line covers the full trend window, back to whenever
+    // forecasting first started if that's more recent than HIST_DAYS.
+    queryKey: ['forecast', OUTLOOK_DAYS, HIST_DAYS],
+    queryFn: () => fetchForecast(OUTLOOK_DAYS, HIST_DAYS),
     staleTime: 600_000,
     refetchInterval: forecastInterval,
     refetchIntervalInBackground: false,
@@ -98,8 +140,20 @@ function TrendOutlookChart({
     const lastActualDate = actuals.length ? actuals[actuals.length - 1].date : '';
 
     if (forecast?.status === 'ok') {
+      // Historical predicted: each day's REAL graded prediction (the
+      // snapshot stored at forecast time — see ForecastService.getForecastRange's
+      // freshest-per-target-day dedup), not a live re-hindcast. Only applied
+      // within the displayed window; a day with no snapshot (before
+      // forecasting existed) simply keeps predicted=null.
+      for (const s of forecast.snapshots ?? []) {
+        const existing = rows.get(s.targetDate);
+        if (!existing) continue;
+        rows.set(s.targetDate, { ...existing, predicted: s.predictedKwh });
+      }
+
+      // Future predicted: no graded snapshot exists yet for days beyond
+      // today, so these come from the live forecast instead.
       for (const f of forecast.forecasts ?? []) {
-        // Future only — history is the real usage line, not stale predictions.
         if (f.date <= lastActualDate) continue;
         rows.set(f.date, {
           date: f.date,
@@ -110,16 +164,7 @@ function TrendOutlookChart({
       }
     }
 
-    const sorted = Array.from(rows.values()).sort((a, b) => a.date.localeCompare(b.date));
-
-    // Anchor the projection to the last actual so the dashed line emerges
-    // from the green line instead of starting after a visible gap.
-    const lastIdx = sorted.findIndex((r) => r.date === lastActualDate);
-    if (lastIdx >= 0) {
-      sorted[lastIdx] = { ...sorted[lastIdx], predicted: sorted[lastIdx].actual };
-    }
-
-    return sorted;
+    return Array.from(rows.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [dailyPoints, forecast, today]);
 
   const predictedColor = series.usage;
@@ -155,7 +200,7 @@ function TrendOutlookChart({
           <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Trend &amp; outlook</p>
           <h3 className="mt-2 text-xl font-semibold text-apptext">{title}</h3>
           <p className="mt-1 text-xs text-apptext-muted">
-            Last {HIST_DAYS} days of real usage, next {OUTLOOK_DAYS} days of AI-projected usage.
+            Last {HIST_DAYS} days of actual usage vs. what was predicted at the time, plus the next {OUTLOOK_DAYS} days of AI-projected usage.
           </p>
         </div>
       </div>
@@ -200,13 +245,7 @@ function TrendOutlookChart({
               tickLine={false}
               unit=" kWh"
             />
-            <Tooltip
-              contentStyle={TOOLTIP_CONTENT_STYLE}
-              formatter={(value: number, name: string) => [
-                `${value.toFixed(1)} kWh`,
-                name === 'actual' ? 'Actual' : 'Predicted',
-              ]}
-            />
+            <Tooltip content={<TrendTooltip />} />
 
             <ReferenceLine
               x={formatDateLabel(today)}

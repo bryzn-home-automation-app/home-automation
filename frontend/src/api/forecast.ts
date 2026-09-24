@@ -6,8 +6,8 @@ import type {
   ForecastHourlyAccuracy,
 } from '../types';
 
-export async function fetchForecast(days = 7): Promise<ForecastResponse> {
-  const { data } = await api.get('/forecast/electric', { params: { days } });
+export async function fetchForecast(days = 7, historyDays = 14): Promise<ForecastResponse> {
+  const { data } = await api.get('/forecast/electric', { params: { days, historyDays } });
   return data;
 }
 

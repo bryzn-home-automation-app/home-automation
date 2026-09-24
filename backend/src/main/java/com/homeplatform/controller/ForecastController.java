@@ -34,7 +34,9 @@ public class ForecastController {
     }
 
     @GetMapping("/electric")
-    public ResponseEntity<?> getElectricForecast(@RequestParam(defaultValue = "7") int days) {
+    public ResponseEntity<?> getElectricForecast(
+            @RequestParam(defaultValue = "7") int days,
+            @RequestParam(defaultValue = "14") int historyDays) {
         var modelOpt = forecastService.getActiveModel();
         if (modelOpt.isEmpty()) {
             return ResponseEntity.ok(Map.of(
@@ -86,8 +88,10 @@ public class ForecastController {
 
         List<DailyForecast> forecasts = forecastService.generateForecasts(model, forecastDays);
 
-        // Also fetch recent actuals for the chart overlay
-        LocalDate histStart = today.minusDays(14);
+        // Also fetch recent actuals for the chart overlay — historyDays lets a
+        // caller like the trend chart request a longer graded-prediction
+        // window than the default 14 (e.g. 30, to cover its whole trend view).
+        LocalDate histStart = today.minusDays(historyDays);
         var snapshots = forecastService.getForecastRange(histStart, end);
 
         Map<String, Object> result = new LinkedHashMap<>();
