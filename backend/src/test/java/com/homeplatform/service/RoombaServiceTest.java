@@ -14,6 +14,9 @@ import com.homeplatform.repository.RoombaCommandRepository;
 import com.homeplatform.repository.RoombaDeviceRepository;
 import com.homeplatform.repository.RoombaMapRepository;
 import com.homeplatform.repository.RoombaNativeScheduleRepository;
+import com.homeplatform.repository.RoombaPartRepository;
+import com.homeplatform.model.RoombaPart;
+import com.homeplatform.dto.RoombaPartResponse;
 import com.homeplatform.repository.RoombaPositionRepository;
 import com.homeplatform.repository.RoombaCoverageRepository;
 import com.homeplatform.model.RoombaCoverage;
@@ -43,6 +46,7 @@ class RoombaServiceTest {
     private RoombaPositionRepository positionRepo;
     private RoombaCoverageRepository coverageRepo;
     private RoombaNativeScheduleRepository nativeScheduleRepo;
+    private RoombaPartRepository partRepo;
     private RoombaService service;
 
     @BeforeEach
@@ -55,9 +59,74 @@ class RoombaServiceTest {
         positionRepo = mock(RoombaPositionRepository.class);
         coverageRepo = mock(RoombaCoverageRepository.class);
         nativeScheduleRepo = mock(RoombaNativeScheduleRepository.class);
+        partRepo = mock(RoombaPartRepository.class);
         service = new RoombaService(
                 statusRepo, runRepo, mapRepo, commandRepo, deviceRepo, positionRepo, coverageRepo,
-                nativeScheduleRepo);
+                nativeScheduleRepo, partRepo);
+    }
+
+    private static RoombaPart part(String id, String type, String category, Integer remaining, Integer used) {
+        return RoombaPart.builder()
+                .robotId("BLID").partId(id).countType(type).counterCategory(category)
+                .countRemaining(remaining).countUsed(used).resetBy("user")
+                .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC))
+                .build();
+    }
+
+    @Nested
+    @DisplayName("getParts (maintenance counters)")
+    class GetParts {
+
+        @Test
+        @DisplayName("derives life %, unit, action and a catalogued label from the raw counters")
+        void derivesFields() {
+            // Real numbers from the robot: filter 2,400 min left, 734 min used.
+            when(partRepo.findAllByOrderByPartIdAsc()).thenReturn(List.of(
+                    part("72", "minutes", "replacement", 2400, 734)));
+            List<RoombaPartResponse> out = service.getParts();
+            assertEquals(1, out.size());
+            RoombaPartResponse f = out.get(0);
+            assertEquals("Filter", f.label());
+            assertEquals("hours", f.unit());
+            assertEquals("replace", f.action());
+            assertEquals(77, f.pctRemaining());
+            assertEquals("ok", f.status());
+        }
+
+        @Test
+        @DisplayName("flags overdue and due-soon parts and sorts worst first")
+        void statusAndOrdering() {
+            when(partRepo.findAllByOrderByPartIdAsc()).thenReturn(List.of(
+                    part("148", "combo_missions", "replacement", 27, 3),   // ok, 90 %
+                    part("147", "evacs", "replacement", 0, 60),            // overdue
+                    part("999", "minutes", "replacement", 300, 2700)));    // due soon, 10 %
+            List<RoombaPartResponse> out = service.getParts();
+            assertEquals(List.of("147", "999", "148"),
+                    out.stream().map(RoombaPartResponse::partId).toList());
+            assertEquals("overdue", out.get(0).status());
+            assertEquals("Dock bag", out.get(0).label());
+            assertEquals("empties", out.get(0).unit());
+            assertEquals("due_soon", out.get(1).status());
+            assertEquals("Part 999", out.get(1).label()); // unknown id → generic label
+            assertEquals("ok", out.get(2).status());
+            assertEquals("Mop pad", out.get(2).label());
+            assertEquals("missions", out.get(2).unit());
+        }
+
+        @Test
+        @DisplayName("an overdue part shows up in the status card's attention reasons")
+        void overdueFeedsNeedsAttention() {
+            when(partRepo.findAllByOrderByPartIdAsc()).thenReturn(List.of(
+                    part("72", "minutes", "replacement", 0, 3134)));
+            RoombaStatus s = RoombaStatus.builder()
+                    .robotId("BLID").name("iRummy").phase("charge").error(0)
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC))
+                    .build();
+            when(statusRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(s));
+            RoombaStatusResponse out = service.getStatus().orElseThrow();
+            assertTrue(out.needsAttention());
+            assertTrue(out.attentionReasons().contains("Maintenance overdue: Filter"));
+        }
     }
 
     @Nested

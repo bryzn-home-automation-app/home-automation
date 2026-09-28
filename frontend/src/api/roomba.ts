@@ -5,6 +5,7 @@ import type {
   RoombaDevice,
   RoombaMap,
   RoombaNativeSchedule,
+  RoombaPart,
   RoombaPosition,
   RoombaRun,
   RoombaStatus,
@@ -62,6 +63,16 @@ export async function fetchRoombaCoverage(): Promise<RoombaCoverage | null> {
   const res = await api.get<RoombaCoverage | ''>('/roomba/coverage');
   if (isNoContent(res.status, res.data)) return null;
   return res.data as RoombaCoverage;
+}
+
+/**
+ * Consumable / maintenance counters (filter, brushes, mop pad, dock bag, routine
+ * clean-ups) with life left + status, worst first — the data behind the iRobot
+ * app's Maintenance screen. Empty until the poller's first parts sync.
+ */
+export async function fetchRoombaParts(): Promise<RoombaPart[]> {
+  const res = await api.get<RoombaPart[]>('/roomba/parts');
+  return Array.isArray(res.data) ? res.data : [];
 }
 
 /** Static device identity + firmware, or null until the poller syncs it. */

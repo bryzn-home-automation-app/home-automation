@@ -4,6 +4,7 @@ import com.homeplatform.dto.RoombaCoverageResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
 import com.homeplatform.dto.RoombaMapResponse;
 import com.homeplatform.dto.RoombaNativeScheduleResponse;
+import com.homeplatform.dto.RoombaPartResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
@@ -64,6 +65,16 @@ public class RoombaController {
         return service.getDevice()
                 .map(ResponseEntity::ok)
                 .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
+     * Consumable / maintenance counters (filter, brushes, mop pad, dock bag, routine
+     * clean-ups) with life left, status and friendly labels — the data behind the iRobot
+     * app's Maintenance screen. Worst first; empty until the poller's first parts sync.
+     */
+    @GetMapping("/parts")
+    public ResponseEntity<List<RoombaPartResponse>> getParts() {
+        return ResponseEntity.ok(service.getParts());
     }
 
     /** Live robot position for the map dot, or 204 when none/stale (older than ~15s). */
