@@ -58,10 +58,12 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("new", "Forecast accuracy, day by day: see how close each day's "
                                     + "prediction landed, with 1-week / 2-week / 1-month views for the "
                                     + "hourly accuracy too."),
-                            change("new", "Roomba maintenance: the same counters the iRobot app tracks — "
-                                    + "filter, edge brush, rubber brushes, mop pad, dock bag and the routine "
-                                    + "clean-up — with how much life is left on each. Anything overdue is "
-                                    + "flagged under “Needs attention”."),
+                            change("new", "Roomba maintenance: a new Maintenance view on the Roomba tab "
+                                    + "shows the same counters the iRobot app tracks — filter, edge brush, "
+                                    + "rubber brushes, mop pad, dock bag and the routine clean-up — with how "
+                                    + "much life is left on each. Anything overdue is flagged under “Needs "
+                                    + "attention”, and the Overview stays focused on live status, the map "
+                                    + "and history."),
                             change("new", "A pixel-art scene for every tab — a full panorama on desktop "
                                     + "and a compact strip on your phone."),
                             change("improved", "The forecast now learns from yesterday's miss and widens "

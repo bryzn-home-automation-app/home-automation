@@ -126,6 +126,16 @@ function presenceChip(label: string, present: boolean | null | undefined): { tex
     : { text: `${label} missing`, className: 'border-amber-300/20 bg-amber-300/10 text-amber-300' };
 }
 
+// Sub-tabs (same pattern as the Electric tab): the everyday view stays short —
+// live status, map, history — and the "check it occasionally" upkeep data gets
+// its own view instead of stacking one more long section on the page.
+type RoombaTab = 'overview' | 'maintenance';
+
+const ROOMBA_TABS: { key: RoombaTab; label: string; icon: string }[] = [
+  { key: 'overview', label: 'Overview', icon: '🤖' },
+  { key: 'maintenance', label: 'Maintenance', icon: '🧰' },
+];
+
 // ── Page ──────────────────────────────────────────────────
 
 export default memo(function Roomba() {
@@ -230,6 +240,8 @@ export default memo(function Roomba() {
   const [showClean, setShowClean] = useState(false);
   // Run history: the run whose detail popup is open.
   const [selectedRun, setSelectedRun] = useState<RoombaRun | null>(null);
+  // Which sub-view is showing (see ROOMBA_TABS).
+  const [tab, setTab] = useState<RoombaTab>('overview');
 
   const exitSplitMode = () => {
     setSplitMode(false);
@@ -362,6 +374,22 @@ export default memo(function Roomba() {
     return parts.length ? parts.join(' · ') : null;
   }, [status?.wear]);
 
+  // One-glance upkeep chip for the hero (tap → Maintenance tab). Hidden until the
+  // poller has synced the part counters at least once.
+  const partsData = partsQuery.data;
+  const upkeepChip = useMemo(() => {
+    if (!partsData || partsData.length === 0) return null;
+    const overdue = partsData.filter((p) => p.status === 'overdue').length;
+    const dueSoon = partsData.filter((p) => p.status === 'due_soon').length;
+    if (overdue) {
+      return { text: `Upkeep · ${overdue} overdue`, className: 'border-rose-300/25 bg-rose-300/10 text-rose-300' };
+    }
+    if (dueSoon) {
+      return { text: `Upkeep · ${dueSoon} due soon`, className: 'border-amber-300/25 bg-amber-300/10 text-amber-300' };
+    }
+    return { text: 'Upkeep · all OK', className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
+  }, [partsData]);
+
   // Aggregate lifetime stats for a friendly summary line.
   const totalRuns = runs.length;
   const completedRuns = runs.filter((r) => r.status === 'COMPLETED').length;
@@ -425,6 +453,16 @@ export default memo(function Roomba() {
                 <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${tankChip.className}`}>
                   {tankChip.text}
                 </span>
+                {upkeepChip && (
+                  <button
+                    type="button"
+                    onClick={() => setTab('maintenance')}
+                    title="Open the Maintenance view"
+                    className={`rounded-full border px-2.5 py-1 text-2xs font-medium transition-[filter] hover:brightness-110 ${upkeepChip.className}`}
+                  >
+                    {upkeepChip.text}
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -436,6 +474,15 @@ export default memo(function Roomba() {
             <div className="text-sm text-amber-200">
               <p className="font-semibold">Needs attention</p>
               <p className="mt-0.5 text-amber-200/90">{status.attentionReasons.join(' · ')}</p>
+              {status.attentionReasons.some((r) => r.startsWith('Maintenance overdue')) && (
+                <button
+                  type="button"
+                  onClick={() => setTab('maintenance')}
+                  className="mt-1.5 text-xs font-semibold text-amber-100 underline underline-offset-2 hover:text-white"
+                >
+                  View maintenance →
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -453,6 +500,37 @@ export default memo(function Roomba() {
         )}
       </section>
 
+      {/* Sub-tabs: Overview (live status, map, history) vs Maintenance (parts &
+          upkeep, robot health). Same tablist styling as the Electric tab. */}
+      <div
+        role="tablist"
+        aria-label="Roomba view"
+        className="inline-flex rounded-xl border border-appborder bg-appinset p-1"
+      >
+        {ROOMBA_TABS.map((t) => {
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(t.key)}
+              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? 'bg-appaccent-soft text-appaccent-text shadow-[0_1px_3px_var(--appshadow)]'
+                  : 'text-apptext-soft hover:text-apptext'
+              }`}
+            >
+              <span aria-hidden="true">{t.icon}</span>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'overview' && (
+        <>
       {/* ── Live status stat tiles ────────────────────────── */}
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
         <StatTile
@@ -505,31 +583,17 @@ export default memo(function Roomba() {
       {/* ── Real (robot/cloud-side) schedule, read-only ───── */}
       <RoombaNativeSchedules isAdmin={isAdmin} />
 
-      {/* ── Maintenance / detail strip ────────────────────── */}
-      {status &&
-        (status.errorText || status.dockText || status.initiator || status.detectedPad ||
-          status.chargeCycles != null || wearSummary) && (
+      {/* ── Live detail strip (what's happening right now; the dock state is
+             already a hero chip, and wear/charge details live on the
+             Maintenance view) ───────────────────────────── */}
+      {status && (status.errorText || (running && status.initiator)) && (
         <section className="rounded-[24px] border border-appborder bg-appsurface-raised p-4 sm:p-5">
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
             {status.errorText && <Detail label="Error" value={status.errorText} tone="warn" />}
-            {!running && status.dockText && <Detail label="Dock" value={status.dockText} />}
             {running && status.initiator && <Detail label="Started by" value={initiatorLabel(status.initiator)} />}
-            {status.detectedPad && <Detail label="Mop pad" value={status.detectedPad} />}
-            {status.chargeCycles != null && <Detail label="Charge cycles" value={String(status.chargeCycles)} />}
-            {status.chargeErrors != null && status.chargeErrors > 0 && (
-              <Detail label="Charging faults" value={String(status.chargeErrors)} tone="warn" />
-            )}
-            {wearSummary && <Detail label="Recent incidents" value={wearSummary} />}
           </div>
         </section>
       )}
-
-      {/* ── Maintenance counters (filter, brushes, pad, dock bag …) ── */}
-      <RoombaMaintenance
-        parts={partsQuery.data ?? []}
-        loading={partsQuery.isLoading}
-        error={partsQuery.isError}
-      />
 
       {/* ── Floor-plan map ────────────────────────────────── */}
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
@@ -780,6 +844,46 @@ export default memo(function Roomba() {
           </div>
         )}
       </section>
+
+        </>
+      )}
+
+      {tab === 'maintenance' && (
+        <>
+          {/* ── Maintenance counters (filter, brushes, pad, dock bag …) ── */}
+          <RoombaMaintenance
+            parts={partsQuery.data ?? []}
+            loading={partsQuery.isLoading}
+            error={partsQuery.isError}
+          />
+
+          {/* ── Robot health: battery wear, incidents, what's fitted ── */}
+          {status && (
+            <section className="rounded-[24px] border border-appborder bg-appsurface-raised p-4 sm:p-5">
+              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
+                Robot health
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
+                {status.chargeCycles != null && (
+                  <Detail label="Charge cycles" value={String(status.chargeCycles)} />
+                )}
+                {status.chargeErrors != null && status.chargeErrors > 0 && (
+                  <Detail label="Charging faults" value={String(status.chargeErrors)} tone="warn" />
+                )}
+                {wearSummary && <Detail label="Recent incidents" value={wearSummary} />}
+                {status.detectedPad && <Detail label="Mop pad fitted" value={status.detectedPad} />}
+                {status.lifetimeMissions != null && (
+                  <Detail label="Lifetime runs" value={`${status.lifetimeMissions} missions`} />
+                )}
+                {status.lifetimeRunMinutes != null && (
+                  <Detail label="Powered-on time" value={`${Math.round(status.lifetimeRunMinutes / 60)} hr`} />
+                )}
+                {device?.firmware && <Detail label="Firmware" value={device.firmware} />}
+              </div>
+            </section>
+          )}
+        </>
+      )}
 
       {/* Admin room-rename dialog */}
       {isAdmin && selectedRoom && (
