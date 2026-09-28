@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Deeper project memory — architecture decisions and why they were made, debugging history for
 recurring issues, current-vs-planned implementation state, and session history — lives
-outside this repo at `C:\Cluade Memory\projects\home-automation\` (see `MEMORY_GUIDE.md` in
+outside this repo at `C:\Claude Memory\projects\home-automation\` (see `MEMORY_GUIDE.md` in
 that folder's parent for how the system works). Check it at the start of substantial tasks,
 especially before re-investigating something that feels like it's been hit before (see
 `ISSUES.md` there) or before assuming this `CLAUDE.md`/README are current (see
@@ -46,8 +46,10 @@ CoServ SmartHub (NISC Angular Material portal)
   (`electric_usage`, `gas_usage`, `water_usage`, `roomba_runs`); `energy_usage` is a
   read-only compatibility view unioning electric + gas. Weather (`weather_observations`)
   is the one shared enrichment table.
-  Full DDL: `backend/src/main/resources/schema.sql` (JPA is `ddl-auto: validate` —
-  entities must match the schema exactly, no auto-migration).
+  Full DDL: `backend/src/main/resources/schema.sql` — the documented schema; JPA runs
+  `ddl-auto: update`, so a new entity/column is created on boot, but `update` never
+  drops or retypes anything, so keep `schema.sql` in sync and treat it as the source
+  of truth for column types.
 - **Two in-process Spring schedulers** retry until CoServ finishes posting the day's
   data: `DailySyncScheduler` (every 30 min, 6:30 AM–11:30 PM CT, skips once yesterday
   has a non-zero `electric_usage` reading) and `HourlySyncScheduler` (every 30 min,
