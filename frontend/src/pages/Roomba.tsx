@@ -12,7 +12,8 @@ import CleanModal, { type CleanRoomOption } from '../components/CleanModal';
 import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
 import RoombaNativeSchedules from '../components/RoombaNativeSchedules';
-import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice } from '../api/roomba';
+import RoombaMaintenance from '../components/RoombaMaintenance';
+import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useAuth } from '../context/AuthContext';
 import type { RoombaStatus, RoombaRun } from '../types';
@@ -134,6 +135,7 @@ export default memo(function Roomba() {
   const runsInterval = useJitteredInterval(60_000);
   const mapInterval = useJitteredInterval(300_000, 30_000);
   const deviceInterval = useJitteredInterval(600_000, 30_000);
+  const partsInterval = useJitteredInterval(300_000, 30_000);
 
   const statusQuery = useQuery({
     queryKey: ['roomba-status'],
@@ -167,6 +169,16 @@ export default memo(function Roomba() {
     refetchIntervalInBackground: false,
   });
 
+  // Maintenance counters change only when a mission ends (the poller re-reads them
+  // ~40s after a run), so a slow poll plus the end-of-run refetch below is plenty.
+  const partsQuery = useQuery({
+    queryKey: ['roomba-parts'],
+    queryFn: fetchRoombaParts,
+    staleTime: 300_000,
+    refetchInterval: partsInterval,
+    refetchIntervalInBackground: false,
+  });
+
   const status = statusQuery.data ?? null;
   const device = deviceQuery.data ?? null;
   const runs = useMemo<RoombaRun[]>(() => runsQuery.data ?? [], [runsQuery.data]);
@@ -185,9 +197,15 @@ export default memo(function Roomba() {
     prevRunningRef.current = running;
     if (prev !== true || running !== false) return; // only the cleaning → idle edge
     const refetchMap = () => queryClient.invalidateQueries({ queryKey: ['roomba-map'] });
+    const refetchParts = () => queryClient.invalidateQueries({ queryKey: ['roomba-parts'] });
     queryClient.invalidateQueries({ queryKey: ['roomba-runs'] });
     refetchMap();
-    const timers = [setTimeout(refetchMap, 20_000), setTimeout(refetchMap, 45_000)];
+    // Part counters land ~40s after the run (PARTS_REFRESH_AFTER_RUN in the poller).
+    const timers = [
+      setTimeout(refetchMap, 20_000),
+      setTimeout(refetchMap, 45_000),
+      setTimeout(refetchParts, 60_000),
+    ];
     return () => timers.forEach(clearTimeout);
   }, [running, queryClient]);
   const [selectedRoom, setSelectedRoom] = useState<RoomSelection | null>(null);
@@ -505,6 +523,13 @@ export default memo(function Roomba() {
           </div>
         </section>
       )}
+
+      {/* ── Maintenance counters (filter, brushes, pad, dock bag …) ── */}
+      <RoombaMaintenance
+        parts={partsQuery.data ?? []}
+        loading={partsQuery.isLoading}
+        error={partsQuery.isError}
+      />
 
       {/* ── Floor-plan map ────────────────────────────────── */}
       <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">

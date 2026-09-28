@@ -224,6 +224,29 @@ CREATE TABLE IF NOT EXISTS roomba_device (
     updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
 );
 
+-- Consumable / maintenance counters per robot, straight from the iRobot cloud
+-- (GET /v1/robots/{blid}/parts — the record behind the app's Maintenance screen).
+-- The poller fully replaces a robot's rows on each refresh (on connect, ~40s after
+-- a completed run, every 6h). count_remaining/count_used are in count_type units
+-- (minutes | mission | combo_missions | evacs | pad_washes_used); counter is the
+-- cloud's ceil(% used); counter_category = replacement | maintenance; reset_by =
+-- user (reset in the app) | cloud (automatic, e.g. a new dock bag).
+CREATE TABLE IF NOT EXISTS roomba_parts (
+    id                SERIAL PRIMARY KEY,
+    robot_id          VARCHAR(64) NOT NULL,
+    part_id           VARCHAR(40) NOT NULL,
+    count_type        VARCHAR(40),
+    counter           INTEGER,
+    count_remaining   INTEGER,
+    count_used        INTEGER,
+    minutes_remaining INTEGER,
+    counter_category  VARCHAR(40),
+    reset_by          VARCHAR(20),
+    last_updated_at   TIMESTAMP,
+    updated_at        TIMESTAMP   NOT NULL DEFAULT NOW(),
+    CONSTRAINT uq_roomba_parts_robot_part UNIQUE (robot_id, part_id)
+);
+
 -- Live robot position (poller UPSERTs from watch_live_map() while a mission runs,
 -- UNIQUE robot_id). x/y are meters in the same space as the map bundle GeoJSON;
 -- theta is the raw wire heading in radians. Read-only + staleness-gated by the API.

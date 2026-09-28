@@ -184,6 +184,8 @@ class PollerState:
         self.map_refresh_due = None   # monotonic ts: re-fetch the map bundle soon (set after a map edit)
         self.robot_name = None        # user-assigned name from the account (e.g. "iRummy")
         self.fast_poll_until = 0.0    # monotonic ts: poll at the fast cadence until this time (set after a mission-starting command)
+        self.last_parts_at = None     # monotonic ts of the last successful parts refresh (None = never → due now)
+        self.parts_refresh_due = None # monotonic ts: re-read the part counters soon (set after a run completes)
 
 
 def _snapshot(cms):
@@ -380,6 +382,51 @@ async def sync_device(robot, conninfo, robot_id):
         getattr(info, "sku", None), getattr(info, "series", None),
         getattr(info, "family", None), getattr(info, "serial_number", None), firmware,
     )
+
+
+def replace_parts(conninfo, robot_id, parts):
+    """Full replace of a robot's roomba_parts rows (a part the cloud stops reporting
+    must disappear too, not linger from an earlier read). One transaction."""
+    with psycopg.connect(conninfo, autocommit=False) as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM roomba_parts WHERE robot_id = %s", (robot_id,))
+            for p in parts:
+                part_id = getattr(p, "part_id", None)
+                if not part_id:
+                    continue
+                cur.execute(
+                    "INSERT INTO roomba_parts (robot_id, part_id, count_type, counter, "
+                    "count_remaining, count_used, minutes_remaining, counter_category, "
+                    "reset_by, last_updated_at, updated_at) "
+                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())",
+                    (
+                        robot_id, str(part_id), getattr(p, "count_type", None),
+                        getattr(p, "counter", None), getattr(p, "count_remaining", None),
+                        getattr(p, "count_used", None), getattr(p, "minutes_remaining", None),
+                        getattr(p, "counter_category", None), getattr(p, "reset_by", None),
+                        _epoch_to_utc(getattr(p, "last_updated_ts", None)),
+                    ),
+                )
+        conn.commit()
+
+
+async def refresh_parts(robot, conninfo, robot_id, state, force=False):
+    """Read the consumable / maintenance counters (the record behind the iRobot
+    app's Maintenance screen) and replace roomba_parts. Cloud REST only — never
+    touches the robot. Fail-open: a failed read is retried sooner than the normal
+    cadence, so a table that doesn't exist yet on first boot self-heals."""
+    now = time.monotonic()
+    if not force and state.last_parts_at is not None and now - state.last_parts_at < PARTS_REFRESH_SECONDS:
+        return
+    try:
+        info = await robot.get_robot_parts()
+        parts = list(getattr(info, "parts", None) or [])
+        replace_parts(conninfo, robot_id, parts)
+        state.last_parts_at = now
+        log.info("Maintenance parts refreshed: %d part(s)", len(parts))
+    except Exception as e:  # noqa: BLE001 — fail-open
+        state.last_parts_at = now - PARTS_REFRESH_SECONDS + PARTS_RETRY_SECONDS
+        log.warning("parts refresh failed: %s: %s", type(e).__name__, e)
 
 
 def load_map_version(conninfo, robot_id):
@@ -602,6 +649,9 @@ def detect_completion(state, rep, conninfo):
         # the next status poll (up to 300s later on the NUC). refresh_map's version check
         # makes this a cheap no-op if the robot hasn't bumped the map version yet.
         state.map_refresh_due = time.monotonic() + MAP_REFRESH_AFTER_RUN
+        # The part counters (filter/brush hours, pad missions, dock-bag empties) advance
+        # at mission end too — re-read them shortly after instead of waiting hours.
+        state.parts_refresh_due = time.monotonic() + PARTS_REFRESH_AFTER_RUN
 
     # Refresh / set the active snapshot for the currently-running mission.
     if cur_running:
@@ -723,6 +773,7 @@ async def poll_once(robot, conninfo, state):
         log.warning("detect_completion failed: %s: %s", type(e).__name__, e)
 
     await refresh_map(robot, conninfo, robot_id, state, shadow_version)
+    await refresh_parts(robot, conninfo, robot_id, state)
 
 
 # ---------------------------------------------------------------------------
@@ -738,6 +789,12 @@ MAP_REFRESH_AFTER_EDIT = 12
 # up to a full poll cycle for the version bump to be noticed. Slightly longer than the
 # edit delay to give the robot time to publish the finalized map.
 MAP_REFRESH_AFTER_RUN = 25
+# Consumable / maintenance counters (GET /v1/robots/{blid}/parts — a plain cloud
+# REST read; nothing is sent to the robot). They only move when a mission ends,
+# so refresh on connect, shortly after each completed run, and on a slow timer.
+PARTS_REFRESH_SECONDS = 6 * 3600
+PARTS_RETRY_SECONDS = 120        # after a failed read (e.g. the table isn't created yet)
+PARTS_REFRESH_AFTER_RUN = 40     # a little after the post-run map re-fetch
 SIMPLE_COMMANDS = {"start", "stop", "pause", "resume", "dock", "find", "evac"}
 RENAME_ROOM = "rename_room"
 SPLIT_ROOM = "split_room"
@@ -1217,6 +1274,10 @@ async def main():
                 if state.map_refresh_due is not None and now >= state.map_refresh_due:
                     state.map_refresh_due = None
                     await refresh_map(robot, conninfo, robot.blid, state, None)
+                # Same one-shot after a completed run for the maintenance counters.
+                if state.parts_refresh_due is not None and now >= state.parts_refresh_due:
+                    state.parts_refresh_due = None
+                    await refresh_parts(robot, conninfo, robot.blid, state, force=True)
                 # Keep the concurrent live-position task in sync with mission state.
                 live_task = await _manage_live_task(live_task, robot, conninfo, state)
             except asyncio.CancelledError:

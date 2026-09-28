@@ -294,6 +294,34 @@ export interface RoombaDevice {
   updatedAt: string;
 }
 
+/**
+ * One consumable / maintenance counter (GET /api/roomba/parts) — the robot's cloud
+ * record behind the iRobot app's Maintenance screen. `countRemaining`/`countUsed`
+ * are read in `unit` (hours = values are minutes; missions; empties = dock
+ * evacuations; washes). Sorted worst first by the API.
+ */
+export interface RoombaPart {
+  partId: string;
+  label: string;
+  hint: string | null;
+  countType: string | null;
+  counterCategory: string | null;
+  /** replace | clean | null */
+  action: string | null;
+  /** user (reset in the iRobot app) | cloud (auto, e.g. a new dock bag) */
+  resetBy: string | null;
+  /** hours | missions | empties | washes | count */
+  unit: string;
+  countRemaining: number | null;
+  countUsed: number | null;
+  minutesRemaining: number | null;
+  /** remaining / (remaining + used), 0–100. */
+  pctRemaining: number | null;
+  status: 'ok' | 'due_soon' | 'overdue' | 'unknown' | string;
+  lastUpdatedAt: string | null;
+  updatedAt: string;
+}
+
 /** A queued/processed control command (ADMIN only). */
 export interface RoombaCommand {
   id: number;

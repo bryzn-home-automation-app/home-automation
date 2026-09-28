@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.homeplatform.dto.RoombaCommandResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
+import com.homeplatform.dto.RoombaPartResponse;
 import com.homeplatform.dto.RoombaMapResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
@@ -15,6 +16,7 @@ import com.homeplatform.model.RoombaCommand;
 import com.homeplatform.model.RoombaDevice;
 import com.homeplatform.model.RoombaMap;
 import com.homeplatform.model.RoombaNativeSchedule;
+import com.homeplatform.model.RoombaPart;
 import com.homeplatform.model.RoombaRun;
 import com.homeplatform.model.RoombaStatus;
 import com.homeplatform.repository.RoombaCommandRepository;
@@ -24,6 +26,7 @@ import com.homeplatform.repository.RoombaCoverageRepository;
 import com.homeplatform.dto.RoombaCoverageResponse;
 import com.homeplatform.dto.RoombaNativeScheduleResponse;
 import com.homeplatform.repository.RoombaNativeScheduleRepository;
+import com.homeplatform.repository.RoombaPartRepository;
 import com.homeplatform.repository.RoombaPositionRepository;
 import com.homeplatform.repository.RoombaRunRepository;
 import com.homeplatform.repository.RoombaStatusRepository;
@@ -35,7 +38,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
@@ -86,6 +91,7 @@ public class RoombaService {
     private final RoombaPositionRepository positionRepo;
     private final RoombaCoverageRepository coverageRepo;
     private final RoombaNativeScheduleRepository nativeScheduleRepo;
+    private final RoombaPartRepository partRepo;
 
     public RoombaService(RoombaStatusRepository statusRepo,
                          RoombaRunRepository runRepo,
@@ -94,7 +100,8 @@ public class RoombaService {
                          RoombaDeviceRepository deviceRepo,
                          RoombaPositionRepository positionRepo,
                          RoombaCoverageRepository coverageRepo,
-                         RoombaNativeScheduleRepository nativeScheduleRepo) {
+                         RoombaNativeScheduleRepository nativeScheduleRepo,
+                         RoombaPartRepository partRepo) {
         this.statusRepo = statusRepo;
         this.runRepo = runRepo;
         this.mapRepo = mapRepo;
@@ -103,6 +110,109 @@ public class RoombaService {
         this.positionRepo = positionRepo;
         this.coverageRepo = coverageRepo;
         this.nativeScheduleRepo = nativeScheduleRepo;
+        this.partRepo = partRepo;
+    }
+
+    // ── Maintenance / consumable parts ─────────────────────────────────────
+
+    /** Friendly name + care note for a part id. */
+    private record PartInfo(String label, String hint) {}
+
+    /**
+     * Part ids as reported by a Roomba Combo G2 (G284020). The cloud sends ids only, no
+     * names; 147/148/213 follow from their count types (dock evacuations, combo
+     * missions, a "maintenance" mission count) and the three minutes-based replacement
+     * parts are named by their service life — filter ≈52 h, edge brush ≈104 h, rubber
+     * brushes ≈312 h — which matches iRobot's replacement guidance. Anything else falls
+     * back to a generic label built from its count type, with the raw id shown.
+     */
+    private static final Map<String, PartInfo> PART_CATALOG = Map.of(
+            "72", new PartInfo("Filter", "Tap it clean weekly; replace when the counter runs out (about every 2 months of run time)."),
+            "67", new PartInfo("Edge-sweeping brush", "The small spinning corner brush — pull off hair and check for bent bristles."),
+            "71", new PartInfo("Rubber brushes", "The pair of multi-surface rollers under the robot — clear wrapped hair and debris."),
+            "148", new PartInfo("Mop pad", "Replacement mop pad; counted in combo (vacuum + mop) missions."),
+            "147", new PartInfo("Dock bag", "The dock's disposable dirt bag; the dock resets this itself when you fit a new one."),
+            "213", new PartInfo("Routine clean-up", "Wipe the cliff sensors, charging contacts, wheels and bin."));
+
+    /** At or below this share of life left, a part is flagged "due soon". */
+    private static final int DUE_SOON_PCT = 15;
+
+    /** Every tracked part, worst first (overdue → due soon → ok, then least life left). */
+    public List<RoombaPartResponse> getParts() {
+        return partRepo.findAllByOrderByPartIdAsc().stream()
+                .map(this::toPartResponse)
+                .sorted(Comparator.comparingInt((RoombaPartResponse p) -> statusRank(p.status()))
+                        .thenComparingInt(p -> p.pctRemaining() == null ? Integer.MAX_VALUE : p.pctRemaining())
+                        .thenComparing(RoombaPartResponse::label))
+                .toList();
+    }
+
+    private static int statusRank(String status) {
+        return switch (status) {
+            case "overdue" -> 0;
+            case "due_soon" -> 1;
+            case "ok" -> 2;
+            default -> 3;
+        };
+    }
+
+    private static PartInfo fallbackInfo(String partId, String countType) {
+        return switch (countType) {
+            case "evacs" -> new PartInfo("Dock bag", "Disposable dirt bag in the dock.");
+            case "combo_missions" -> new PartInfo("Mop pad", "Counted in combo (vacuum + mop) missions.");
+            case "pad_washes_used" -> new PartInfo("Pad washes", "Times the dock has washed the mop pad since the last reset.");
+            case "minutes" -> new PartInfo("Part " + partId, "A time-based replacement part; check the iRobot app for its name.");
+            case "mission" -> new PartInfo("Maintenance task " + partId, "A mission-count check-up; see the iRobot app for the exact task.");
+            default -> new PartInfo("Part " + partId, null);
+        };
+    }
+
+    RoombaPartResponse toPartResponse(RoombaPart p) {
+        String type = p.getCountType() == null ? "" : p.getCountType();
+        PartInfo info = PART_CATALOG.get(p.getPartId());
+        if (info == null) {
+            info = fallbackInfo(p.getPartId(), type);
+        }
+        String unit = switch (type) {
+            case "minutes" -> "hours";
+            case "evacs" -> "empties";
+            case "pad_washes_used" -> "washes";
+            case "mission", "combo_missions" -> "missions";
+            default -> "count";
+        };
+        String category = p.getCounterCategory() == null ? "" : p.getCounterCategory().toLowerCase();
+        String action = switch (category) {
+            case "replacement" -> "replace";
+            case "maintenance" -> "clean";
+            default -> null;
+        };
+
+        Integer remaining = p.getCountRemaining();
+        Integer used = p.getCountUsed();
+        Integer pct = null;
+        if (remaining != null && used != null) {
+            int left = Math.max(0, remaining);
+            int total = left + Math.max(0, used);
+            if (total > 0) {
+                pct = (int) Math.round(100.0 * left / total);
+            }
+        }
+        String status;
+        if (remaining == null) {
+            status = "unknown";
+        } else if (remaining <= 0) {
+            status = "overdue";
+        } else if (pct != null && pct <= DUE_SOON_PCT) {
+            status = "due_soon";
+        } else {
+            status = "ok";
+        }
+
+        return new RoombaPartResponse(
+                p.getPartId(), info.label(), info.hint(),
+                type.isEmpty() ? null : type, p.getCounterCategory(), action, p.getResetBy(), unit,
+                remaining, used, p.getMinutesRemaining(), pct, status,
+                iso(p.getLastUpdatedAt()), iso(p.getUpdatedAt()));
     }
 
     /**
@@ -588,6 +698,14 @@ public class RoombaService {
         }
         if (s.getFaultText() != null && !s.getFaultText().isBlank()) {
             reasons.add(s.getFaultText());
+        }
+        // Maintenance counters that have run out (filter/brush hours, mop-pad missions,
+        // dock-bag empties) are the "needs a hand" case the iRobot app nags about too.
+        for (RoombaPart part : partRepo.findAllByOrderByPartIdAsc()) {
+            RoombaPartResponse r = toPartResponse(part);
+            if ("overdue".equals(r.status())) {
+                reasons.add("Maintenance overdue: " + r.label());
+            }
         }
         boolean needsAttention = !reasons.isEmpty();
 

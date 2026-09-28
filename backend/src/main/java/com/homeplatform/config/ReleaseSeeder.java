@@ -37,6 +37,52 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.4.0", "stable", LocalDate.of(2026, 9, 28),
+                    "Bills in the app, a clearer forecast, and robot upkeep",
+                    "Your electric, gas and water bills now open right inside the app, the "
+                            + "electric forecast is easier to read and more honest about how it's "
+                            + "doing, every tab got a little pixel-art scene up top, and the Roomba "
+                            + "tab now tells you when its filter, brushes, mop pad or dock bag need "
+                            + "attention.",
+                    List.of(
+                            change("new", "Bills, in the app: the CoServ electric + gas bill and the "
+                                    + "water bill are pulled in automatically and open full-screen right "
+                                    + "here — no more digging through email or the utility's site."),
+                            change("new", "The Electric tab is split into “Usage & Bills” and "
+                                    + "“Forecast & Stats”, so the everyday view stays simple and the "
+                                    + "forecasting detail has room to breathe."),
+                            change("new", "Trend & outlook: the last 30 days of actual usage next to the "
+                                    + "next 14 days predicted, with each day's high and low temperature; "
+                                    + "the Last Reading tile now shows what was predicted beside what "
+                                    + "actually happened."),
+                            change("new", "Forecast accuracy, day by day: see how close each day's "
+                                    + "prediction landed, with 1-week / 2-week / 1-month views for the "
+                                    + "hourly accuracy too."),
+                            change("new", "Roomba maintenance: the same counters the iRobot app tracks — "
+                                    + "filter, edge brush, rubber brushes, mop pad, dock bag and the routine "
+                                    + "clean-up — with how much life is left on each. Anything overdue is "
+                                    + "flagged under “Needs attention”."),
+                            change("new", "A pixel-art scene for every tab — a full panorama on desktop "
+                                    + "and a compact strip on your phone."),
+                            change("improved", "The forecast now learns from yesterday's miss and widens "
+                                    + "its range the further out it looks, so the next few days are "
+                                    + "tighter and far-out days are honest about being guesses. It also "
+                                    + "stays within the weather it was trained on instead of sliding to "
+                                    + "zero on extreme days."),
+                            change("improved", "Alerts moved to a bell icon next to Settings, and long "
+                                    + "lists (alerts, maintenance records, history) scroll smoothly however "
+                                    + "long they get."),
+                            change("improved", "The WiFi page is now a single direct-connect QR code — "
+                                    + "scan and you're on."),
+                            change("improved", "Pages load lighter and scroll more smoothly on the web, "
+                                    + "especially the Electric tab."),
+                            change("fixed", "The Gas tab's charts no longer come up blank, and its highs "
+                                    + "and lows no longer read 0."),
+                            change("fixed", "Signing in no longer cares about capital letters in your "
+                                    + "username."),
+                            change("fixed", "The forecast's predicted line no longer fakes the join between "
+                                    + "history and future, and an older prediction can no longer overwrite "
+                                    + "a fresher one."))),
             define("1.3.0", "stable", LocalDate.of(2026, 9, 12),
                     "A forecast that reacts faster and looks better",
                     "The electric usage forecast now updates within minutes of a new "
