@@ -321,7 +321,10 @@ export default memo(function App() {
             : 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
         }}
       />
-      <div className="w-full px-2 py-2 sm:px-5 sm:py-5 lg:px-6 lg:py-6 2xl:px-8 pb-20 lg:pb-0">
+      {/* Bottom padding clears the fixed phone/tablet nav (hidden at lg), which
+          grows by the iOS safe-area inset via its pb-safe. Only top padding is
+          responsive: a py-* here would override the bottom value from sm up. */}
+      <div className="w-full px-2 pt-2 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 lg:px-6 lg:pt-6 lg:pb-0 2xl:px-8">
         <div
           className="absolute inset-x-0 top-0 -z-10 h-[32rem]"
           style={{

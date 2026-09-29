@@ -257,7 +257,7 @@
    Palette variants — override the page background, surfaces, insets,
    borders, and accent tokens for a real hue shift across the whole
    UI, not just buttons/badges. Deliberately UNCHANGED per palette:
-   --apptext*/--appborder ratios stay legible (same lightness/opacity
+   the --apptext and --appborder ratios stay legible (same lightness/opacity
    approach as the default, just hue-shifted — contrast is a function
    of lightness, not hue, so this keeps the contrast work from
    earlier sessions intact) and --appsurface stays pure white (light)
