@@ -17,10 +17,21 @@ import UsageWeatherChart from '../components/UsageWeatherChart';
 import ForecastChart from '../components/ForecastChart';
 import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import CoservBillingHistory from '../components/CoservBillingHistory';
+import { fetchCoservBills } from '../api/coservBills';
 import { localTodayIso } from '../utils/localDate';
+import {
+  currentBillingCycle,
+  daysBetween,
+  describeBillProjection,
+  formatCycleRange,
+  projectElectricBill,
+} from '../utils/billProjection';
 
 type LogFilter = 'daily' | 'hourly';
 type ElectricTab = 'usage' | 'forecast';
+
+/** Keep a phrase on one line, so a narrow tile wraps its subtitle at the " · " separators only. */
+const nb = (s: string) => s.replace(/ /g, ' ');
 
 const ELECTRIC_TABS: { key: ElectricTab; label: string; icon: string }[] = [
   { key: 'usage', label: 'Usage & Bills', icon: '📊' },
@@ -100,14 +111,27 @@ export default memo(function ElectricalUsage() {
     return dailyFromHourly.length > 0 ? dailyFromHourly[0] : null;
   }, [dailyFromHourly, hourlyCountByDate]);
 
-  // Predicted-vs-actual for the Last Reading tile. The backend always
-  // returns the trailing 14 days of graded snapshots regardless of `days`
-  // (see ForecastController), so days=1 keeps this fetch cheap while still
-  // covering latestDaily's date. Shares the query cache with any other
-  // consumer requesting the same days value.
-  const { data: latestForecast } = useQuery({
-    queryKey: ['forecast', 1],
-    queryFn: () => fetchForecast(1),
+  // CoServ bills — same query key as the Billing History section below, so the
+  // page fetches them once. They anchor the bill projection's cycle + pricing.
+  const coservBills = useQuery({
+    queryKey: ['coserv-bills'],
+    queryFn: fetchCoservBills,
+    staleTime: 30_000,
+  });
+  const billCycle = useMemo(
+    () => currentBillingCycle(coservBills.data ?? [], today),
+    [coservBills.data, today]
+  );
+
+  // One forecast fetch serves both the Last Reading tile and the bill
+  // projection: it must reach the end of the billing cycle (the endpoint pads
+  // past the weather horizon), and it always carries the trailing 14 days of
+  // snapshots (see ForecastController), which cover latestDaily's date. At the
+  // usual 14-day horizon this shares one cached request with the trend chart.
+  const forecastDays = Math.min(90, Math.max(14, daysBetween(today, billCycle.end)));
+  const { data: latestForecast, isLoading: forecastLoading } = useQuery({
+    queryKey: ['forecast', forecastDays],
+    queryFn: () => fetchForecast(forecastDays),
     staleTime: 600_000,
     refetchInterval: weatherInterval,
     refetchIntervalInBackground: false,
@@ -117,6 +141,23 @@ export default memo(function ElectricalUsage() {
     const snap = latestForecast.snapshots?.find((s) => s.targetDate === latestDaily.date);
     return snap?.predictedKwh ?? null;
   }, [latestDaily, latestForecast]);
+
+  // Predicted electric charge for the current billing cycle (see billProjection).
+  const billProjection = useMemo(
+    () =>
+      projectElectricBill({
+        today,
+        bills: coservBills.data ?? [],
+        daily: electricDaily.data ?? [],
+        forecasts: latestForecast?.status === 'ok' ? latestForecast.forecasts ?? [] : [],
+        snapshots: latestForecast?.status === 'ok' ? latestForecast.snapshots ?? [] : [],
+        kwhRate,
+      }),
+    [today, coservBills.data, electricDaily.data, latestForecast, kwhRate]
+  );
+  const billTrendPct = billProjection?.lastBill
+    ? Math.round((Math.abs(billProjection.projectedCost - billProjection.lastBill.charge) / billProjection.lastBill.charge) * 100)
+    : 0;
 
   // ── 7-day and 30-day averages ──────────────────────────────────
   // Count only COMPLETE days (>= COMPLETE_DAY_MIN_HOURS hourly rows) from the
@@ -289,16 +330,24 @@ export default memo(function ElectricalUsage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+      {/* Five tiles in one row from 1440px (90rem — in rem so Tailwind sorts
+          it after the sm/lg breakpoints; a px value is emitted first and loses
+          the cascade). Measured with a real scrollbar, that's where the
+          longest label ("Predicted Bill", 98px) still fits beside its icon;
+          narrower, the two headline tiles share the first row and the three
+          averages the second (6-col grid); phones: pairs, with the last tile
+          spanning the row. */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-6 lg:gap-4 min-[90rem]:grid-cols-5">
         <StatTile
+          className="sm:col-span-3 min-[90rem]:col-span-1"
           label="Last Reading"
           value={latestDaily ? latestDaily.total.toFixed(1) : '—'}
           unit="kWh"
           loading={loading}
           icon={Icons.Bolt}
           subtitle={latestDaily
-            ? `${new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}${
-                latestPredicted != null ? ` · Predicted ${latestPredicted.toFixed(1)} kWh` : ''
+            ? `${nb(new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}${
+                latestPredicted != null ? ` · ${nb(`Predicted ${latestPredicted.toFixed(1)} kWh`)}` : ''
               }`
             : undefined}
           trendLabel="vs predicted"
@@ -312,6 +361,32 @@ export default memo(function ElectricalUsage() {
           }
         />
         <StatTile
+          className="sm:col-span-3 min-[90rem]:col-span-1"
+          label="Predicted Bill"
+          value={billProjection ? `$${Math.round(billProjection.projectedCost)}` : '—'}
+          unit=""
+          loading={loading || coservBills.isLoading || forecastLoading}
+          icon={Icons.Dollar}
+          subtitle={billProjection
+            ? `${nb(formatCycleRange(billProjection.cycle))} · ${nb(
+                billProjection.daysLeft > 0
+                  ? `${billProjection.daysLeft} day${billProjection.daysLeft === 1 ? '' : 's'} left`
+                  : 'bill pending'
+              )}`
+            : undefined}
+          title={billProjection ? describeBillProjection(billProjection) : undefined}
+          trendLabel="vs last bill"
+          trend={
+            billProjection?.lastBill && billTrendPct > 0
+              ? {
+                  direction: billProjection.projectedCost > billProjection.lastBill.charge ? 'up' : 'down',
+                  pct: billTrendPct,
+                }
+              : undefined
+          }
+        />
+        <StatTile
+          className="sm:col-span-2 min-[90rem]:col-span-1"
           label="60-Day Total"
           value={monthKwh.toFixed(0)}
           unit="kWh"
@@ -319,6 +394,7 @@ export default memo(function ElectricalUsage() {
           icon={Icons.Calendar}
         />
         <StatTile
+          className="sm:col-span-2 min-[90rem]:col-span-1"
           label="7-Day Avg"
           value={avg7.toFixed(1)}
           unit="kWh/day"
@@ -326,6 +402,7 @@ export default memo(function ElectricalUsage() {
           icon={Icons.Bolt}
         />
         <StatTile
+          className="col-span-2 sm:col-span-2 min-[90rem]:col-span-1"
           label="30-Day Avg"
           value={avg30.toFixed(1)}
           unit="kWh/day"
@@ -380,6 +457,7 @@ export default memo(function ElectricalUsage() {
                 data={realData}
                 loading={loading}
                 title="Monthly electric comparison"
+                description="Hourly readings from the last 60 days, totaled by calendar month; the oldest and current months are partial."
                 emptyText="Not enough electric history for a monthly comparison yet."
                 unitLabel="kWh"
                 barColor={usageColor}

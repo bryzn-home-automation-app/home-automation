@@ -12,6 +12,10 @@ interface StatTileProps {
   loading?: boolean;
   icon: React.ReactNode;
   subtitle?: string;
+  /** Extra classes on the tile root — e.g. grid column spans. */
+  className?: string;
+  /** Native hover tooltip, e.g. how a derived value was calculated. */
+  title?: string;
 }
 
 function StatTile({
@@ -23,10 +27,12 @@ function StatTile({
   loading,
   icon,
   subtitle,
+  className = '',
+  title,
 }: StatTileProps) {
   if (loading) {
     return (
-      <div className="animate-pulse rounded-[20px] border border-appborder bg-appsurface-raised p-4 sm:rounded-[24px] sm:p-5">
+      <div className={`animate-pulse rounded-[20px] border border-appborder bg-appsurface-raised p-4 sm:rounded-[24px] sm:p-5 ${className}`}>
         <div className="mb-4 flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-appinset sm:h-11 sm:w-11 sm:rounded-2xl" />
           <div className="h-4 w-24 rounded bg-appinset" />
@@ -38,7 +44,10 @@ function StatTile({
   }
 
   return (
-    <div className="rounded-[20px] border border-appborder bg-appsurface-raised p-4 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover hover:bg-appinset-strong sm:rounded-[24px] sm:p-5">
+    <div
+      title={title}
+      className={`rounded-[20px] border border-appborder bg-appsurface-raised p-4 shadow-[0_8px_24px_var(--appshadow)] transition-colors hover:border-appborder-hover hover:bg-appinset-strong sm:rounded-[24px] sm:p-5 ${className}`}
+    >
       <div className="mb-4 flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-appaccent-border bg-appaccent-soft sm:h-11 sm:w-11 sm:rounded-2xl">
           {icon}
