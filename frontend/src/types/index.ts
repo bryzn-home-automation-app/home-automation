@@ -509,3 +509,48 @@ export interface RoombaMap {
   geojson: RoombaMapGeoJson;
   updatedAt: string;
 }
+
+// ── Climate (Home Assistant → ecobee) ──────────────────────
+
+/**
+ * GET /api/home/thermostats[/{id}]. `id` is the app's stable device ID (never
+ * the HA entity ID). Any reading may be null when HA reports it unavailable.
+ * Timestamps are UTC ISO-8601 strings.
+ */
+export interface Thermostat {
+  id: string;
+  name: string;
+  available: boolean;
+  temperature: number | null;
+  humidity: number | null;
+  /** Single setpoint in heat or cool mode; null in heat_cool (use the range). */
+  targetTemperature: number | null;
+  heatSetpoint: number | null;
+  coolSetpoint: number | null;
+  /** off | heat | cool | heat_cool */
+  hvacMode: string | null;
+  /** idle | heating | cooling | fan | drying | off */
+  hvacAction: string | null;
+  /** Comfort setting or hold: home | away | sleep | away_indefinitely | temp (manual hold) | vacation */
+  presetMode: string | null;
+  temperatureUnit: string | null;
+  minTemp: number | null;
+  maxTemp: number | null;
+  hvacModes: string[];
+  presetModes: string[];
+  updatedAt: string | null;
+}
+
+/** GET /api/home/thermostats/{id}/history — one stored reading. */
+export interface ThermostatReading {
+  recordedAt: string;
+  temperature: number | null;
+  humidity: number | null;
+  targetTemperature: number | null;
+  heatSetpoint: number | null;
+  coolSetpoint: number | null;
+  hvacMode: string | null;
+  hvacAction: string | null;
+  presetMode: string | null;
+  source: string | null;
+}
