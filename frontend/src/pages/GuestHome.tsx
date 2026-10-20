@@ -666,7 +666,7 @@ export default function GuestHome() {
 
       <motion.button
         type="button"
-        className="fixed bottom-5 right-4 z-40 rounded-full border border-amber-300/80 bg-amber-200 px-5 py-3 text-sm font-semibold text-amber-900 shadow-[0_12px_24px_rgba(0,0,0,0.18)]"
+        className="fixed bottom-5 right-4 z-40 rounded-full border border-[#fcd34d]/80 bg-[#fde68a] px-5 py-3 text-sm font-semibold text-[#78350f] shadow-[0_12px_24px_rgba(0,0,0,0.18)]"
         whileHover={{ scale: 1.05 }}
         whileTap={{ scale: 0.96 }}
       >

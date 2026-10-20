@@ -478,7 +478,7 @@ export default memo(function Roomba() {
                 <button
                   type="button"
                   onClick={() => setTab('maintenance')}
-                  className="mt-1.5 text-xs font-semibold text-amber-100 underline underline-offset-2 hover:text-white"
+                  className="mt-1.5 text-xs font-semibold text-amber-200 underline underline-offset-2 hover:text-apptext"
                 >
                   View maintenance →
                 </button>
@@ -674,7 +674,7 @@ export default memo(function Roomba() {
                 type="button"
                 disabled={!splitDraft || splitDraft.pts.length < 2}
                 onClick={finishSplit}
-                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-100 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-200 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Finish line
               </button>
@@ -705,7 +705,7 @@ export default memo(function Roomba() {
                 type="button"
                 disabled={mergeSelection.length < 2}
                 onClick={finishMerge}
-                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-100 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-200 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Merge selected
               </button>

@@ -1,5 +1,6 @@
 import { memo, useMemo } from 'react';
 import { useUsageData } from '../hooks/useUsageData';
+import { useTheme, DATA_SERIES } from '../context/ThemeContext';
 import StatTile, { Icons } from '../components/StatTile';
 import UsageChart from '../components/UsageChart';
 import MonthlyComparison from '../components/MonthlyComparison';
@@ -8,6 +9,8 @@ import CoservBillingHistory from '../components/CoservBillingHistory';
 
 export default memo(function GasUsage() {
   const { gasUsage, gasTotal, config } = useUsageData();
+  const { theme } = useTheme();
+  const gasColors = DATA_SERIES[theme];
 
   const data = gasUsage.data ?? [];
   const loading = gasUsage.isLoading;
@@ -120,7 +123,7 @@ export default memo(function GasUsage() {
               title="Gas usage trend"
               emptyText="No gas usage data is available yet."
               unitLabel="units"
-              accentColor="#38bdf8"
+              accentColor={gasColors.gasLine}
             />
           </DeferredRender>
           <DeferredRender minHeight={360}>
@@ -131,7 +134,7 @@ export default memo(function GasUsage() {
               title="Monthly gas comparison"
               emptyText="More gas history is needed for month-over-month comparison."
               unitLabel="units"
-              barColor="#0ea5e9"
+              barColor={gasColors.gasBar}
             />
           </DeferredRender>
         </section>

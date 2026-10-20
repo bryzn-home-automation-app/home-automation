@@ -19,10 +19,13 @@ const TOOLTIP_CONTENT_STYLE = {
 const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
 
 // Orange = heat, sky = cool everywhere on the tab; indoor temp stays neutral.
+// Dedicated chart tokens (not the orange-300/sky-300 text remaps, which light
+// mode darkens to near-black 800 shades for text contrast and would make heat
+// and cool hard to tell apart as thin dashed lines).
 const COLORS = {
   temp: 'var(--apptext-soft)',
-  heat: 'var(--color-orange-300)',
-  cool: 'var(--color-sky-300)',
+  heat: 'var(--appchart-heat)',
+  cool: 'var(--appchart-cool)',
 } as const;
 
 export type HistoryRange = 24 | 168;

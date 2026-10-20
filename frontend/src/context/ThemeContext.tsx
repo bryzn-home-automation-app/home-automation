@@ -69,14 +69,17 @@ export const KPI_TONES: Record<string, { light: string[]; dark: string[] }> = {
  * `stroke` as an SVG *attribute*, where `var()` resolution is unreliable
  * across browsers (see DECISIONS.md) — same reason KPI_TONES above is
  * hardcoded rather than CSS-var-driven. Light-mode `usage`/`temp` values are
- * a notch deeper so both lines stay legible on the white chart background.
+ * a notch deeper so both lines stay legible on the white chart background —
+ * and since the °F legend chip uses `temp` as its TEXT color, every light
+ * `temp` clears 4.5:1 on white (amber-600 #d97706 was 3.2:1 → amber-700;
+ * yellow-600 #ca8a04 was 2.9:1 → yellow-700).
  */
 export const CHART_SERIES: Record<string, {
   light: { usage: string; temp: string };
   dark: { usage: string; temp: string };
 }> = {
   default: {
-    light: { usage: '#047857', temp: '#d97706' }, // green ↔ amber
+    light: { usage: '#047857', temp: '#b45309' }, // green ↔ amber
     dark:  { usage: '#34d399', temp: '#f59e0b' },
   },
   ocean: {
@@ -88,8 +91,39 @@ export const CHART_SERIES: Record<string, {
     dark:  { usage: '#ea580c', temp: '#38bdf8' },
   },
   violet: {
-    light: { usage: '#6d28d9', temp: '#ca8a04' }, // violet ↔ yellow
+    light: { usage: '#6d28d9', temp: '#a16207' }, // violet ↔ yellow
     dark:  { usage: '#7c3aed', temp: '#facc15' },
+  },
+};
+
+/**
+ * Palette-independent data-identity series (forecast actual/error lines, the
+ * day-of-week over/under bars, gas and water charts), per mode. Dark values are
+ * the hexes these charts always used; the dark-mode-tuned 400/500 shades were
+ * 1.8-2.8:1 on the white light-mode chart, under the 3:1 minimum for chart
+ * marks, so light gets the 600/700 step of the same hue (all >= 3.5:1;
+ * `positive`/`caution` are also used as text and clear 4.5:1).
+ */
+export const DATA_SERIES: Record<'light' | 'dark', {
+  positive: string;
+  caution: string;
+  gasLine: string;
+  gasBar: string;
+  water: string;
+  sewer: string;
+  refuse: string;
+  tax: string;
+  stormwater: string;
+}> = {
+  dark: {
+    positive: '#22c55e', caution: '#f59e0b',
+    gasLine: '#38bdf8', gasBar: '#0ea5e9',
+    water: '#22d3ee', sewer: '#0ea5e9', refuse: '#6366f1', tax: '#a855f7', stormwater: '#14b8a6',
+  },
+  light: {
+    positive: '#15803d', caution: '#b45309', // green-700, amber-700
+    gasLine: '#0284c7', gasBar: '#0369a1', // sky-600, sky-700
+    water: '#0891b2', sewer: '#0369a1', refuse: '#4f46e5', tax: '#9333ea', stormwater: '#0f766e',
   },
 };
 

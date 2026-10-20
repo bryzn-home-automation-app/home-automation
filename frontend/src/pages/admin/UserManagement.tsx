@@ -135,7 +135,7 @@ export default function UserManagement() {
             {isAdmin && (
               <div className={`rounded-2xl border p-4 ${pendingCount > 0 ? 'border-amber-300/30 bg-amber-300/10' : 'border-appborder bg-appinset'}`}>
                 <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Pending</p>
-                <p className={`mt-2 text-lg font-semibold ${pendingCount > 0 ? 'text-appwarning' : 'text-apptext'}`}>
+                <p className={`mt-2 text-lg font-semibold ${pendingCount > 0 ? 'text-apptext-warning' : 'text-apptext'}`}>
                   {pendingCount}
                 </p>
               </div>
@@ -356,10 +356,10 @@ function UserCard({
                     <option value="USER">User</option>
                     <option value="ADMIN">Admin</option>
                   </select>
-                  <button type="button" onClick={() => onApprove(user.id, selectedRole)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-2xs font-semibold text-appsuccess transition-colors hover:bg-appsuccess/20">
+                  <button type="button" onClick={() => onApprove(user.id, selectedRole)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-2xs font-semibold text-apptext-success transition-colors hover:bg-appsuccess/20">
                     Approve
                   </button>
-                  <button type="button" onClick={() => onDeny(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-appdanger transition-colors hover:bg-appdanger/20">
+                  <button type="button" onClick={() => onDeny(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-apptext-danger transition-colors hover:bg-appdanger/20">
                     Deny
                   </button>
                 </>
@@ -375,11 +375,11 @@ function UserCard({
                     <option value="GUEST">Guest</option>
                   </select>
                   {user.status === 'ACTIVE' ? (
-                    <button type="button" onClick={() => onDisable(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-appdanger transition-colors hover:bg-appdanger/20">
+                    <button type="button" onClick={() => onDisable(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-apptext-danger transition-colors hover:bg-appdanger/20">
                       Disable
                     </button>
                   ) : (
-                    <button type="button" onClick={() => onReactivate(user.id)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-2xs font-semibold text-appsuccess transition-colors hover:bg-appsuccess/20">
+                    <button type="button" onClick={() => onReactivate(user.id)} className="rounded-full border border-appsuccess/30 bg-appsuccess/10 px-3 py-1.5 text-2xs font-semibold text-apptext-success transition-colors hover:bg-appsuccess/20">
                       Reactivate
                     </button>
                   )}
