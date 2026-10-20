@@ -72,9 +72,24 @@ function usePrefetchTabs() {
 }
 
 export default memo(function App() {
-  const { toggleTheme, isDark } = useTheme();
+  const { toggleTheme, isDark, mode: themeMode, setSunLocation } = useTheme();
   const { user, isAdmin, logout } = useAuth();
   usePrefetchTabs();
+
+  // The Auto (sunset) theme needs the home's coordinates; the theme provider keeps
+  // them in localStorage, so it keeps working on the login screen and offline.
+  const appConfig = useQuery({
+    queryKey: ['config'],
+    queryFn: () => api.get('/config').then((r) => r.data),
+    staleTime: 300_000,
+  });
+  useEffect(() => {
+    const c = appConfig.data as { propertyLatitude?: number; propertyLongitude?: number } | undefined;
+    if (c?.propertyLatitude != null && c?.propertyLongitude != null) {
+      setSunLocation(Number(c.propertyLatitude), Number(c.propertyLongitude));
+    }
+  }, [appConfig.data, setSunLocation]);
+  const themeToggleLabel = `${themeMode === 'auto' ? 'Auto (sunset) is on — ' : ''}Switch to ${isDark ? 'light' : 'dark'} mode`;
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSidebarRef = useRef<HTMLElement | null>(null);
@@ -180,8 +195,8 @@ export default memo(function App() {
             type="button"
             onClick={toggleTheme}
             className="theme-toggle shrink-0"
-            aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-            title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+            aria-label={themeToggleLabel}
+            title={themeToggleLabel}
           >
             <span className={`theme-toggle-thumb ${isDark ? '' : 'light'}`}>
               {isDark ? '🌙' : '☀️'}

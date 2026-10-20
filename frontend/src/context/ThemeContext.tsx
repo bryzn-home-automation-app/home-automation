@@ -1,6 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
+import { isDaytime, nextSunChange } from '../utils/sun';
 
 type Theme = 'dark' | 'light';
+/**
+ * What the user picked. 'auto' follows sunrise/sunset at the home; 'system' (no
+ * choice stored) follows the device's own light/dark setting.
+ */
+export type ThemeMode = 'light' | 'dark' | 'auto' | 'system';
 
 export interface PaletteOption {
   id: string;
@@ -102,6 +108,14 @@ export function hexToRgba(hex: string, alpha: number): string {
 
 interface ThemeContextValue {
   theme: Theme;
+  /** The user's choice; `theme` is what it resolves to right now. */
+  mode: ThemeMode;
+  setMode: (mode: ThemeMode) => void;
+  /** Auto mode: when it flips next (null when unknown / not auto). */
+  nextThemeChange: Date | null;
+  /** Remember the home's coordinates (from /api/config) for Auto mode. */
+  setSunLocation: (lat: number, lon: number) => void;
+  /** Flip light/dark now — an explicit choice, so it leaves Auto. */
   toggleTheme: () => void;
   isLight: boolean;
   isDark: boolean;
@@ -113,6 +127,10 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue>({
   theme: 'dark',
+  mode: 'system',
+  setMode: () => {},
+  nextThemeChange: null,
+  setSunLocation: () => {},
   toggleTheme: () => {},
   isLight: false,
   isDark: true,
@@ -120,13 +138,39 @@ const ThemeContext = createContext<ThemeContextValue>({
   setPalette: () => {},
 });
 
-function readStoredTheme(): Theme {
-  if (typeof window === 'undefined') return 'dark';
+const SUN_LOCATION_KEY = 'sun-location';
+
+function readStoredMode(): ThemeMode {
+  if (typeof window === 'undefined') return 'system';
   try {
     const stored = localStorage.getItem('theme');
-    if (stored === 'light' || stored === 'dark') return stored;
+    if (stored === 'light' || stored === 'dark' || stored === 'auto') return stored;
   } catch { /* localStorage blocked */ }
+  return 'system';
+}
+
+function readSunLocation(): { lat: number; lon: number } | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SUN_LOCATION_KEY) ?? 'null');
+    return v && Number.isFinite(v.lat) && Number.isFinite(v.lon) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function systemTheme(): Theme {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'dark';
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+}
+
+/** The theme a mode means right now. Auto without a known location falls back to the device setting. */
+export function resolveTheme(mode: ThemeMode, loc: { lat: number; lon: number } | null, now = new Date()): Theme {
+  if (mode === 'light' || mode === 'dark') return mode;
+  if (mode === 'auto') {
+    const day = isDaytime(now, loc?.lat ?? null, loc?.lon ?? null);
+    if (day != null) return day ? 'light' : 'dark';
+  }
+  return systemTheme();
 }
 
 function readStoredPalette(mode: Theme): string {
@@ -139,7 +183,10 @@ function readStoredPalette(mode: Theme): string {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const [mode, setModeState] = useState<ThemeMode>(readStoredMode);
+  const [sunLocation, setSunLocationState] = useState(readSunLocation);
+  const [theme, setTheme] = useState<Theme>(() => resolveTheme(readStoredMode(), readSunLocation()));
+  const [nextThemeChange, setNextThemeChange] = useState<Date | null>(null);
   const [lightPalette, setLightPalette] = useState(() => readStoredPalette('light'));
   const [darkPalette, setDarkPalette] = useState(() => readStoredPalette('dark'));
 
@@ -166,32 +213,75 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
-    try {
-      localStorage.setItem('theme', theme);
-    } catch { /* quota exceeded */ }
   }, [theme]);
+
+  // Persist the choice (not the resolved theme): 'system' stores nothing, so the
+  // device setting keeps applying.
+  useEffect(() => {
+    try {
+      if (mode === 'system') localStorage.removeItem('theme');
+      else localStorage.setItem('theme', mode);
+    } catch { /* quota exceeded */ }
+  }, [mode]);
+
+  // Auto: resolve now, then wake exactly at the next sunrise/sunset. Also re-check
+  // when the app comes back to the foreground — a phone asleep through sunset
+  // (timers don't fire while suspended) is right the moment it wakes.
+  useEffect(() => {
+    if (mode !== 'auto') {
+      setNextThemeChange(null);
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const apply = () => {
+      const now = new Date();
+      setTheme(resolveTheme('auto', sunLocation, now));
+      const next = nextSunChange(now, sunLocation?.lat ?? null, sunLocation?.lon ?? null);
+      setNextThemeChange(next);
+      clearTimeout(timer);
+      // Cap the wait so a clock change or a long-lived tab still re-checks.
+      if (next) timer = setTimeout(apply, Math.min(next.getTime() - now.getTime() + 1_000, 3_600_000));
+    };
+    apply();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') apply();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [mode, sunLocation]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-palette', palette);
   }, [palette]);
 
-  // Follow OS preference changes when no explicit choice has been made
+  // Follow the device's light/dark setting while no explicit choice is made (and
+  // for Auto until the home's location is known).
   useEffect(() => {
+    if (mode !== 'system' && !(mode === 'auto' && !sunLocation)) return;
     const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const handler = (e: MediaQueryListEvent) => {
-      setTheme((prev) => {
-        // Only auto-switch if the user hasn't explicitly chosen a theme
-        const stored = localStorage.getItem('theme');
-        if (stored === 'light' || stored === 'dark') return prev;
-        return e.matches ? 'light' : 'dark';
-      });
-    };
+    const handler = (e: MediaQueryListEvent) => setTheme(e.matches ? 'light' : 'dark');
+    setTheme(systemTheme());
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
+  }, [mode, sunLocation]);
+
+  const setMode = useCallback((next: ThemeMode) => {
+    setModeState(next);
+    if (next === 'light' || next === 'dark') setTheme(next);
   }, []);
 
-  const toggleTheme = useCallback(() => {
-    setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
+  const toggleTheme = useCallback(() => setMode(theme === 'dark' ? 'light' : 'dark'), [theme, setMode]);
+
+  const setSunLocation = useCallback((lat: number, lon: number) => {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
+    setSunLocationState((prev) => {
+      if (prev && Math.abs(prev.lat - lat) < 1e-6 && Math.abs(prev.lon - lon) < 1e-6) return prev;
+      try { localStorage.setItem(SUN_LOCATION_KEY, JSON.stringify({ lat, lon })); } catch { /* quota exceeded */ }
+      return { lat, lon };
+    });
   }, []);
 
   const setPalette = useCallback((id: string) => {
@@ -213,13 +303,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,
+      mode,
+      setMode,
+      nextThemeChange,
+      setSunLocation,
       toggleTheme,
       isLight: theme === 'light',
       isDark: theme === 'dark',
       palette,
       setPalette,
     }),
-    [theme, palette, toggleTheme, setPalette],
+    [theme, mode, setMode, nextThemeChange, setSunLocation, palette, toggleTheme, setPalette],
   );
 
   return (
