@@ -20,6 +20,7 @@ const HomeSummary = lazy(() => import('./pages/HomeSummary'));
 const Utility = lazy(() => import('./pages/Utility'));
 const Roomba = lazy(() => import('./pages/Roomba'));
 const Climate = lazy(() => import('./pages/Climate'));
+const Cameras = lazy(() => import('./pages/Cameras'));
 const WiFiPage = lazy(() => import('./pages/WiFiPage'));
 
 // ── Other protected pages ──
@@ -72,6 +73,7 @@ const HomeSummaryRoute = lazyRoute(HomeSummary, 'stats-charts');
 const UtilityRoute = lazyRoute(Utility, 'stats-charts');
 const RoombaRoute = lazyRoute(Roomba, 'stats-charts');
 const ClimateRoute = lazyRoute(Climate, 'stats-charts');
+const CamerasRoute = lazyRoute(Cameras, 'stats-charts');
 const WiFiPageRoute = lazyRoute(WiFiPage, 'list');
 const NotificationsRoute = lazyRoute(NotificationsPage, 'list');
 const ProfilePageRoute = lazyRoute(ProfilePage, 'form');
@@ -113,6 +115,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                   <Route path="users" element={<UserManagementRoute />} />
                   <Route element={<MemberRoute />}>
                     <Route path="maintenance" element={<MaintenanceDashboardRoute />} />
+                    <Route path="cameras" element={<CamerasRoute />} />
                   </Route>
 
                   {/* ── Admin-only routes ── */}

@@ -76,7 +76,6 @@ class HomeDeviceServiceTest {
         when(ha.isActive()).thenReturn(false);
         assertThrows(HomeAssistantException.Unavailable.class, () -> service.listThermostats());
         assertThrows(HomeAssistantException.Unavailable.class, () -> service.setMode(ID, "heat"));
-        assertThrows(HomeAssistantException.Unavailable.class, () -> service.listCameras());
     }
 
     @Nested
@@ -88,7 +87,6 @@ class HomeDeviceServiceTest {
         void notFound() {
             assertThrows(HomeDeviceService.NotFound.class, () -> service.getThermostat("not-a-uuid"));
             assertThrows(HomeDeviceService.NotFound.class, () -> service.getThermostat(UUID.randomUUID().toString()));
-            assertThrows(HomeDeviceService.NotFound.class, () -> service.cameraSnapshot(ID), "thermostat id used as camera");
             thermostat.setEnabled(false);
             assertThrows(HomeDeviceService.NotFound.class, () -> service.getThermostat(ID));
             verifyNoInteractions(readingRepo);

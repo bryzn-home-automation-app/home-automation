@@ -217,19 +217,7 @@ public class HomeDeviceService {
         }
     }
 
-    // ── cameras ──
-
-    public List<CameraResponse> listCameras() {
-        requireConfigured();
-        return deviceRepo.findByKindAndEnabledTrueOrderByNameAsc(SmartDevice.Kind.CAMERA).stream()
-                .map(d -> new CameraResponse(d.getPublicId().toString(), d.getName(), iso(d.getLastSeenAt())))
-                .toList();
-    }
-
-    public HomeAssistantClient.CameraImage cameraSnapshot(String id) {
-        requireConfigured();
-        return ha.cameraSnapshot(device(id, SmartDevice.Kind.CAMERA));
-    }
+    // Cameras live in CameraService.
 
     // ── admin ──
 

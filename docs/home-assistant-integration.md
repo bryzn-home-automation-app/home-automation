@@ -48,6 +48,11 @@ it makes no assumption about where HA runs.
   Discovery upserts `climate.*` (THERMOSTAT) and `camera.*` (CAMERA). New devices start
   **enabled**; an admin can disable one. Entity renames in HA create a new row.
 - `thermostat_status` — latest snapshot per device (upserted, like `roomba_status`).
+- `camera_status` — per camera: its sibling HA entities (battery, charging, motion, person),
+  the go2rtc stream name (the eufy serial), and latest battery/motion state. Discovery fills
+  the links via HA's `/api/template` (the only REST route into the device registry).
+- `camera_battery_readings` — append-only battery history for battery cameras: a row when
+  the level or charging state changes, plus the 15-minute snapshot.
 - `thermostat_readings` — append-only history. A row is written when a meaningful field
   changes (temperature, humidity, setpoints, mode, action) and by a 15-minute snapshot
   fallback. Every row carries `source`, `source_provider`, `ingestion_batch_id`.
@@ -64,7 +69,7 @@ IDs or the token. 503 when HA is disabled/unreachable, 404 for unknown/disabled 
 | `POST /api/home/thermostats/{id}/temperature` `{ "temperature" }` or `{ "low", "high" }` | ✗ | ✓ | ✓ |
 | `POST /api/home/thermostats/{id}/hold` `{ "preset": "away" }` (optional) | ✗ | ✓ | ✓ |
 | `POST /api/home/thermostats/{id}/resume` | ✗ | ✓ | ✓ |
-| `GET /api/home/cameras`, `/{id}/snapshot` | ✗ | ✓ | ✓ |
+| `GET /api/home/cameras`, `/{id}/snapshot`, `/{id}/battery?from&to`; `POST /{id}/live` | ✗ | ✓ | ✓ |
 | `GET /api/admin/home/devices`, `POST /api/admin/home/discover`, `PUT /api/admin/home/devices/{id}` `{ "enabled" }` | ✗ | ✗ | ✓ |
 
 ## Phases
@@ -149,3 +154,32 @@ been reported (eufy-sdk #182) — fix is re-login via the integration. Host netw
 needed for the bridge's own WebRTC; HA streams via RTSP. Whether streaming needs LAN P2P to
 the HomeBase (which Docker Desktop's NAT + the NUC's Wi-Fi may block) is unverified — if live
 view fails but snapshots/events work, try HomeBase RTSP or move HA to wired dedicated hardware.
+
+## Cameras tab
+
+Members only (route guard + `requireMember`). Built and tested against mocked cameras;
+not verified against the real bridge yet.
+
+**Live view only while someone is watching.** Each tile shows the latest snapshot. Live
+video runs only while the tab is visible, the tile is on screen and the page isn't idle
+(3 min without input) — `shouldStream()` in `frontend/src/utils/cameras.ts` is the single
+rule. Wired cameras (E30) start by themselves; battery cameras (S340) need a tap and stop
+after 45 s with "Still watching?". Leaving, hiding the tab or going idle closes the socket,
+and go2rtc stops the camera when its last viewer leaves.
+
+**Path.** `POST /api/home/cameras/{id}/live` returns `/camera-stream/<ticket>/ws` (HMAC,
+60 s, random key per process). nginx `auth_request`s
+`/internal/camera-stream/auth`, which answers 204 + `X-Stream-Src: <serial>`, then proxies
+to `eufy-bridge:1984/api/ws?src=<serial>` — go2rtc's MSE WebSocket (fMP4 over TCP, so no
+WebRTC/UDP through Docker's NAT). nginx sends the browser's `Host` because go2rtc only
+accepts a WebSocket whose Origin matches Host. The client's query string is never forwarded.
+iPhone needs iOS 17.1+ (ManagedMediaSource).
+
+**Battery.** Badge on each battery tile, plus a chart per camera (24 h / 7 d / 30 d): level
+line green while charging, grey on battery, night shaded from sunrise/sunset computed for
+`PROPERTY_LATITUDE/LONGITUDE`, and a daily "+X% sun · −Y% used" summary. When the camera
+doesn't report charging, the UI infers it from the trend and says "Likely charging".
+
+**To verify on the real bridge.** That go2rtc listens on `0.0.0.0:1984` inside the bridge;
+the S340/E30 entity names (battery `sensor`, charging sensor, motion/person); and that a
+battery camera's stream starts over the NUC's network.

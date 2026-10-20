@@ -1,14 +1,10 @@
 package com.homeplatform.controller;
 
 import com.homeplatform.dto.*;
-import com.homeplatform.homeassistant.HomeAssistantClient;
 import com.homeplatform.homeassistant.HomeDeviceService;
 import com.homeplatform.homeassistant.ThermostatChangeRecorder;
 import com.homeplatform.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.http.CacheControl;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
@@ -20,7 +16,7 @@ import java.util.List;
  * {@code JwtAuthFilter}; role rules:
  * <ul>
  *   <li>GUEST — read thermostats only</li>
- *   <li>USER / ADMIN — read + control thermostats, view cameras</li>
+ *   <li>USER / ADMIN — read + control thermostats (cameras: {@link CameraController})</li>
  * </ul>
  * Errors are mapped in {@link HomeExceptionHandler}.
  */
@@ -121,32 +117,9 @@ public class HomeController {
         return service.resume(id, actor(request));
     }
 
-    // ── cameras ──
+    // Cameras: see CameraController.
 
-    @GetMapping("/cameras")
-    public List<CameraResponse> cameras(HttpServletRequest request) {
-        requireMember(request);
-        return service.listCameras();
-    }
-
-    /** Proxied still image — the browser never talks to HA or sees its token. */
-    @GetMapping("/cameras/{id}/snapshot")
-    public ResponseEntity<byte[]> snapshot(@PathVariable String id, HttpServletRequest request) {
-        requireMember(request);
-        HomeAssistantClient.CameraImage img = service.cameraSnapshot(id);
-        MediaType type;
-        try {
-            type = MediaType.parseMediaType(img.contentType());
-        } catch (Exception e) {
-            type = MediaType.IMAGE_JPEG;
-        }
-        return ResponseEntity.ok()
-                .contentType(type)
-                .cacheControl(CacheControl.noStore())
-                .body(img.bytes());
-    }
-
-    private static Instant instant(String value, String name) {
+    static Instant instant(String value, String name) {
         if (value == null || value.isBlank()) return null;
         try {
             return Instant.parse(value);

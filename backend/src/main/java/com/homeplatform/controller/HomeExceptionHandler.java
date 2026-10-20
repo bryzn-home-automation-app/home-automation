@@ -15,7 +15,7 @@ import java.util.Map;
  * Error mapping for the smart-home controllers only. Messages are our own (never
  * HA response bodies), so nothing from HA — including the token — leaks to clients.
  */
-@RestControllerAdvice(assignableTypes = {HomeController.class, HomeAdminController.class})
+@RestControllerAdvice(assignableTypes = {HomeController.class, HomeAdminController.class, CameraController.class})
 public class HomeExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(HomeExceptionHandler.class);

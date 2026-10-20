@@ -698,3 +698,47 @@ CREATE TABLE IF NOT EXISTS thermostat_changes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_thermostat_changes_device_time ON thermostat_changes (device_id, changed_at);
+
+-- Per-camera links + latest state. Discovery resolves each camera's sibling HA
+-- entities (battery, charging, motion, person) through HA's device registry and
+-- the go2rtc stream name (the eufy serial). Ingestion UPSERTs one row per camera.
+CREATE TABLE IF NOT EXISTS camera_status (
+    id                  SERIAL PRIMARY KEY,
+    device_id           INTEGER        NOT NULL UNIQUE REFERENCES smart_devices(id),
+    -- go2rtc stream name for live view. Never exposed by the API.
+    stream_name         VARCHAR(64),
+    -- 'battery' or 'wired' (no battery level reported).
+    power_source        VARCHAR(10),
+    battery_entity_id   VARCHAR(255),
+    charging_entity_id  VARCHAR(255),
+    motion_entity_id    VARCHAR(255),
+    person_entity_id    VARCHAR(255),
+    available           BOOLEAN        NOT NULL DEFAULT FALSE,
+    battery_percent     DOUBLE PRECISION,
+    -- NULL = the camera doesn't report charging; the UI then infers it from the trend.
+    charging            BOOLEAN,
+    -- The integration's own label, e.g. 'Solar charging' (enum sensors only).
+    charging_status     VARCHAR(60),
+    battery_updated_at  TIMESTAMP,
+    last_motion_at      TIMESTAMP,
+    last_person_at      TIMESTAMP,
+    updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+-- Append-only battery history for battery cameras: a row when the level or the
+-- charging state changes (WebSocket) plus a periodic snapshot. Never updated/deleted.
+CREATE TABLE IF NOT EXISTS camera_battery_readings (
+    id                  SERIAL PRIMARY KEY,
+    device_id           INTEGER        NOT NULL REFERENCES smart_devices(id),
+    recorded_at         TIMESTAMP      NOT NULL,
+    battery_percent     DOUBLE PRECISION NOT NULL,
+    charging            BOOLEAN,
+    charging_status     VARCHAR(60),
+    source              VARCHAR(100)   NOT NULL,
+    source_provider     VARCHAR(50)    NOT NULL,
+    ingestion_batch_id  UUID,
+    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_camera_battery_readings_device_time ON camera_battery_readings (device_id, recorded_at);
