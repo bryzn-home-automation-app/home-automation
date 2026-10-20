@@ -5,7 +5,8 @@ import ThermostatHistoryChart, { type HistoryRange } from '../components/Thermos
 import { discoverHomeDevices, errorMessage, errorStatus, fetchThermostatHistory, fetchThermostats } from '../api/climate';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useAuth } from '../context/AuthContext';
-import { unitSymbol } from '../utils/thermostat';
+import { FOCUS_RING } from '../components/ThermostatControls';
+import { formatTemp, statusChip, unitSymbol } from '../utils/thermostat';
 import type { ThermostatReading } from '../types';
 
 function Notice({ title, children }: { title: string; children: React.ReactNode }) {
@@ -85,15 +86,34 @@ export default memo(function Climate() {
     );
   }
 
-  if (thermostatsQuery.isError) {
+  const retryButton = (
+    <button
+      type="button"
+      onClick={() => thermostatsQuery.refetch()}
+      disabled={thermostatsQuery.isFetching}
+      className={`mt-4 h-11 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 text-sm font-semibold text-apptext transition-colors hover:bg-appaccent/20 disabled:opacity-50 ${FOCUS_RING}`}
+    >
+      {thermostatsQuery.isFetching ? 'Retrying…' : 'Retry'}
+    </button>
+  );
+
+  // Only a failure with nothing to show replaces the page; a failed background
+  // refresh keeps the last data and shows a slim banner instead.
+  if (thermostatsQuery.isError && !thermostatsQuery.data) {
     const status = errorStatus(thermostatsQuery.error);
     return status === 503 ? (
       <Notice title="Home Assistant isn't connected">
-        The thermostats come through Home Assistant, which isn't reachable right now.
-        {isAdmin && ' Check the homeassistant container and the HA_* settings in .env.'}
+        <p>
+          The thermostats come through Home Assistant, which isn't reachable right now.
+          {isAdmin && ' Check the homeassistant container and the HA_* settings in .env.'}
+        </p>
+        {retryButton}
       </Notice>
     ) : (
-      <Notice title="Couldn't load thermostats">{errorMessage(thermostatsQuery.error)}</Notice>
+      <Notice title="Couldn't load thermostats">
+        <p>{errorMessage(thermostatsQuery.error)}</p>
+        {retryButton}
+      </Notice>
     );
   }
 
@@ -116,11 +136,43 @@ export default memo(function Climate() {
     );
   }
 
+  const lastGood = thermostatsQuery.dataUpdatedAt
+    ? new Date(thermostatsQuery.dataUpdatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+    : null;
+
   return (
     <div className="flex flex-col gap-4 lg:gap-5">
+      {thermostatsQuery.isError && (
+        <div role="alert" className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs text-amber-400">
+          Can't reach Home Assistant{lastGood ? ` — showing data from ${lastGood}` : ''}.
+        </div>
+      )}
+
+      {/* Phone: each card is tall, so later floors sit below the fold — a
+          compact strip shows all of them at a glance and jumps to each. */}
+      {thermostats.length > 1 && (
+        <nav aria-label="Thermostats" className="grid grid-cols-2 gap-2 lg:hidden">
+          {thermostats.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() =>
+                document.getElementById(`thermostat-${t.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+              }
+              className={`min-h-11 rounded-2xl border border-appborder bg-appsurface-raised px-3 py-2 text-left transition-colors hover:border-appborder-hover ${FOCUS_RING}`}
+            >
+              <span className="block truncate text-xs font-semibold text-apptext">
+                {t.name} {formatTemp(t.temperature)}°
+              </span>
+              <span className="block truncate text-3xs text-apptext-muted">{statusChip(t).text}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
         {thermostats.map((t) => (
-          <ThermostatCard key={t.id} thermostat={t} canControl={canControl} />
+          <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
         ))}
       </div>
       <ThermostatHistoryChart
@@ -131,9 +183,6 @@ export default memo(function Climate() {
         loading={historyLoading}
         unit={unitSymbol(thermostats[0]?.temperatureUnit)}
       />
-      {!canControl && (
-        <p className="text-center text-xs text-apptext-dim">Guests can view the thermostats but not change them.</p>
-      )}
     </div>
   );
 });
