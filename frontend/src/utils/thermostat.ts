@@ -225,6 +225,29 @@ export function attributionText(change: ThermostatChange, currentUserId: number 
   return when ? `${who} · ${when}` : who;
 }
 
+/** How long after another person's change we ask before overriding it. */
+export const RECENT_CHANGE_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Another app user changed this thermostat within the last 10 minutes → who and
+ * how long ago, so the card can ask before overriding them. Only people count:
+ * the current user's own changes, ecobee (schedule/wall unit) and Home
+ * Assistant don't prompt.
+ */
+export function recentChangeByOther(
+  change: ThermostatChange | null | undefined,
+  currentUserId: number | null | undefined,
+  now = Date.now(),
+): { name: string; ago: string } | null {
+  if (!change || change.actor !== 'app') return null;
+  if (currentUserId != null && change.byUserId === currentUserId) return null;
+  const elapsed = now - new Date(change.at).getTime();
+  if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed > RECENT_CHANGE_WINDOW_MS) return null;
+  const min = Math.floor(elapsed / 60_000);
+  const ago = min < 1 ? 'just now' : `${min} minute${min === 1 ? '' : 's'} ago`;
+  return { name: change.by, ago };
+}
+
 /** "Updated just now" / "Updated 4 min ago" / … from an ISO timestamp. */
 export function updatedText(iso: string | null, now = Date.now()): string {
   if (!iso) return 'No reading yet';

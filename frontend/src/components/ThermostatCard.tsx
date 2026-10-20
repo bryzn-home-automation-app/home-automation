@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { Thermostat } from '../types';
 import { useThermostatCommands, type Draft } from '../hooks/useThermostatCommands';
 import { FOCUS_RING, SetpointTile, Spinner, type Side } from './ThermostatControls';
+import ConfirmThermostatChangeModal from './ConfirmThermostatChangeModal';
 import {
   HEAT_COOL_MIN_GAP,
   attributionText,
@@ -15,6 +16,7 @@ import {
   modeLabel,
   normalizeRange,
   presetLabel,
+  recentChangeByOther,
   selectablePresets,
   sortedModes,
   statusChip,
@@ -70,6 +72,8 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
   const [flash, setFlash] = useState<Side | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
   const [showHoldHint, setShowHoldHint] = useState(() => !holdHintSeen());
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [acknowledgedAt, setAcknowledgedAt] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const offTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -137,9 +141,29 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
     queue({ kind: 'range', low: r.low, high: r.high });
   };
 
-  const onMode = (m: string) => {
+  // Ask before overriding another household member's change from the last
+  // 10 minutes — once per change: after "Change anyway", further taps go through.
+  const recentOther = recentChangeByOther(t.lastChange, currentUserId);
+  const needsConfirm = recentOther != null && acknowledgedAt !== t.lastChange?.at;
+  const guard = (action: (confirmed: boolean) => void) => {
+    if (disabled) return;
+    if (needsConfirm) {
+      setPendingAction(() => () => action(true));
+      return;
+    }
+    action(false);
+  };
+  const confirmPending = () => {
+    setAcknowledgedAt(t.lastChange?.at ?? null);
+    const run = pendingAction;
+    setPendingAction(null);
+    run?.();
+  };
+
+  /** `confirmed`: the user already said yes in the popup, so Off needs no second tap. */
+  const onMode = (m: string, confirmed = false) => {
     if (m === t.hvacMode || disabled) return;
-    if (m === 'off' && !confirmOff) {
+    if (m === 'off' && !confirmOff && !confirmed) {
       setConfirmOff(true);
       if (offTimer.current) clearTimeout(offTimer.current);
       offTimer.current = setTimeout(() => setConfirmOff(false), 3000);
@@ -220,12 +244,12 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
                 <SetpointTile
                   side="heat" label="Heat to" deviceName={t.name} value={shownLow} unit={unit}
                   pending={draft?.kind === 'range'} flash={flash === 'heat'} readOnly={!canControl}
-                  disabled={disabled} onStep={(d) => stepRange('low', d)}
+                  disabled={disabled} onStep={(d) => guard(() => stepRange('low', d))}
                 />
                 <SetpointTile
                   side="cool" label="Cool to" deviceName={t.name} value={shownHigh} unit={unit}
                   pending={draft?.kind === 'range'} flash={flash === 'cool'} readOnly={!canControl}
-                  disabled={disabled} onStep={(d) => stepRange('high', d)}
+                  disabled={disabled} onStep={(d) => guard(() => stepRange('high', d))}
                 />
               </>
             ) : (
@@ -237,7 +261,7 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
                 disabled={disabled}
                 lowerDisabled={shownSingle != null && shownSingle <= lim.min}
                 raiseDisabled={shownSingle != null && shownSingle >= lim.max}
-                onStep={stepSingle}
+                onStep={(d) => guard(() => stepSingle(d))}
               />
             )}
           </div>
@@ -287,7 +311,9 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
                   role="radio"
                   aria-checked={active}
                   aria-disabled={active || disabled}
-                  onClick={() => onMode(m)}
+                  onClick={() => {
+                    if (!active) guard((confirmed) => onMode(m, confirmed));
+                  }}
                   className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border px-1 text-xs font-semibold transition-colors aria-disabled:cursor-default ${FOCUS_RING} ${
                     active
                       ? MODE_ACTIVE[m] ?? MODE_ACTIVE.heat_cool
@@ -319,7 +345,9 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
                   type="button"
                   aria-pressed={active}
                   aria-disabled={active || disabled}
-                  onClick={() => !active && !disabled && cmd.hold(p)}
+                  onClick={() => {
+                    if (!active) guard(() => cmd.hold(p));
+                  }}
                   className={`h-11 rounded-full border px-4 text-xs font-medium transition-colors aria-disabled:cursor-default ${FOCUS_RING} ${
                     active
                       ? 'border-appaccent-border bg-appaccent-soft text-apptext'
@@ -344,7 +372,7 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
             <button
               type="button"
               aria-disabled={disabled}
-              onClick={() => !disabled && cmd.resume()}
+              onClick={() => guard(() => cmd.resume())}
               className={`h-11 shrink-0 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 text-xs font-semibold text-apptext transition-colors hover:bg-appaccent/20 aria-disabled:opacity-40 ${FOCUS_RING}`}
             >
               Resume schedule
@@ -357,6 +385,16 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
         <span className={stale ? 'text-amber-400' : 'text-apptext-dim'}>{updatedText(t.updatedAt)}</span>
         {!canControl && <span className="text-apptext-dim">View only</span>}
       </div>
+
+      {pendingAction && recentOther && (
+        <ConfirmThermostatChangeModal
+          deviceName={t.name}
+          changedBy={recentOther.name}
+          ago={recentOther.ago}
+          onConfirm={confirmPending}
+          onCancel={() => setPendingAction(null)}
+        />
+      )}
     </section>
   );
 }

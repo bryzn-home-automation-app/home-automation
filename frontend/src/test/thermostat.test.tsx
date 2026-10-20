@@ -11,6 +11,7 @@ import {
   modeLabel,
   normalizeRange,
   presetLabel,
+  recentChangeByOther,
   selectablePresets,
   sortedModes,
   statusChip,
@@ -266,5 +267,72 @@ describe('ThermostatCard', () => {
     expect(screen.getByRole('button', { name: 'Raise Upstairs cool-to temperature' }).getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
     expect(climate.setThermostatMode).not.toHaveBeenCalled();
+  });
+});
+
+describe('recent change by someone else', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+  });
+
+  const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+  const byKim = (m: number) => change({ at: minsAgo(m), by: 'Kim', byUserId: 7 });
+
+  it('detects only other people within 10 minutes', () => {
+    const now = Date.now();
+    expect(recentChangeByOther(byKim(4), 42, now)).toEqual({ name: 'Kim', ago: '4 minutes ago' });
+    expect(recentChangeByOther(byKim(0), 42, now)?.ago).toBe('just now');
+    expect(recentChangeByOther(byKim(1), 42, now)?.ago).toBe('1 minute ago');
+    expect(recentChangeByOther(byKim(11), 42, now)).toBeNull();
+    expect(recentChangeByOther(change({ at: minsAgo(2) }), 42, now)).toBeNull(); // you
+    expect(recentChangeByOther(change({ at: minsAgo(2), actor: 'ecobee', byUserId: null }), 42, now)).toBeNull();
+    expect(recentChangeByOther(null, 42, now)).toBeNull();
+  });
+
+  it('asks before overriding, then runs the tapped action once confirmed', async () => {
+    renderCard({ ...upstairs, lastChange: byKim(4) });
+    fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
+    const dialog = screen.getByRole('dialog', { name: 'Change Upstairs?' });
+    expect(dialog.textContent).toContain('Kim changed the Upstairs thermostat 4 minutes ago');
+    expect(climate.setThermostatMode).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Change anyway' }));
+    await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('a1b2', 'heat'));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('does not ask twice for the same change', () => {
+    vi.useFakeTimers();
+    renderCard({ ...upstairs, lastChange: byKim(4) });
+    const raise = screen.getByRole('button', { name: 'Raise Upstairs cool-to temperature' });
+    fireEvent.click(raise);
+    fireEvent.click(screen.getByRole('button', { name: 'Change anyway' }));
+    expect(screen.getByText('73')).toBeTruthy();
+    fireEvent.click(raise);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByText('74')).toBeTruthy();
+    vi.useRealTimers();
+  });
+
+  it('Cancel leaves the thermostat alone', () => {
+    renderCard({ ...upstairs, presetMode: 'temp', lastChange: byKim(2) });
+    fireEvent.click(screen.getByRole('button', { name: 'Resume schedule' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(climate.resumeThermostat).not.toHaveBeenCalled();
+  });
+
+  it('confirming Off in the popup skips the second-tap confirmation', async () => {
+    renderCard({ ...upstairs, lastChange: byKim(3) });
+    fireEvent.click(screen.getByRole('radio', { name: 'Off' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Change anyway' }));
+    await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('a1b2', 'off'));
+  });
+
+  it('no popup for your own change or an older one', async () => {
+    renderCard({ ...upstairs, lastChange: byKim(12) });
+    fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('a1b2', 'heat'));
   });
 });
