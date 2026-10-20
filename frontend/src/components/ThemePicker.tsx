@@ -3,7 +3,8 @@ import { useTheme, PALETTES, type ThemeMode } from '../context/ThemeContext';
 const MODES: Array<{ mode: ThemeMode; label: string }> = [
   { mode: 'light', label: '☀️ Light' },
   { mode: 'dark', label: '🌙 Dark' },
-  { mode: 'auto', label: '🌗 Auto (sunset)' },
+  // Short so all three fit on a phone row; the line below explains sunset.
+  { mode: 'auto', label: '🌗 Auto' },
 ];
 
 /** "Switches to dark at 6:52 PM" / "… tomorrow at 7:21 AM". */
