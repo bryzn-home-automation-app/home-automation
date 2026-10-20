@@ -27,6 +27,7 @@ class ThermostatIngestionServiceTest {
     private ThermostatStatusRepository statusRepo;
     private ThermostatReadingRepository readingRepo;
     private ThermostatIngestionService service;
+    private ThermostatChangeRecorder recorder;
     private final SmartDevice device = SmartDevice.builder().id(7L).providerEntityId("climate.main")
             .kind(SmartDevice.Kind.THERMOSTAT).enabled(true).build();
 
@@ -36,7 +37,8 @@ class ThermostatIngestionServiceTest {
         readingRepo = mock(ThermostatReadingRepository.class);
         when(statusRepo.findByDeviceId(7L)).thenReturn(Optional.empty());
         when(readingRepo.findTopByDeviceIdOrderByRecordedAtDesc(7L)).thenReturn(Optional.empty());
-        service = new ThermostatIngestionService(statusRepo, readingRepo, JSON);
+        recorder = mock(ThermostatChangeRecorder.class);
+        service = new ThermostatIngestionService(statusRepo, readingRepo, recorder, JSON);
     }
 
     private static HaEntityState heat(double temp, double target, String action) throws Exception {
@@ -124,5 +126,29 @@ class ThermostatIngestionServiceTest {
         service.ingest(device, heat(66, 69, "heating"), "°F", EVENT, UUID.randomUUID());
         verify(statusRepo).save(same(existing));
         assertEquals(66.0, existing.getTemperature());
+    }
+
+    @Test
+    @DisplayName("hands the previous and new control state to the change recorder")
+    void passesControlStateToRecorder() throws Exception {
+        ThermostatStatus existing = ThermostatStatus.builder().id(3L).deviceId(7L).available(true)
+                .targetTemperature(69.0).heatSetpoint(69.0).hvacMode("heat").presetMode("home").build();
+        when(statusRepo.findByDeviceId(7L)).thenReturn(Optional.of(existing));
+        HaEntityState s = heat(66, 71, "heating");
+        UUID batch = UUID.randomUUID();
+        service.ingest(device, s, "°F", EVENT, batch);
+        ArgumentCaptor<ThermostatChangeRecorder.ControlState> before = ArgumentCaptor.forClass(ThermostatChangeRecorder.ControlState.class);
+        ArgumentCaptor<ThermostatChangeRecorder.ControlState> after = ArgumentCaptor.forClass(ThermostatChangeRecorder.ControlState.class);
+        verify(recorder).onIngested(same(device), before.capture(), after.capture(), same(s), eq("ha_websocket"), eq(batch));
+        assertEquals(69.0, before.getValue().targetTemperature());   // captured before the upsert overwrote it
+        assertEquals("home", before.getValue().presetMode());
+        assertEquals(71.0, after.getValue().targetTemperature());
+    }
+
+    @Test
+    @DisplayName("first sighting passes a null previous state")
+    void firstSightingNullBefore() throws Exception {
+        service.ingest(device, heat(66, 71, "heating"), "°F", SNAPSHOT, UUID.randomUUID());
+        verify(recorder).onIngested(same(device), isNull(), any(), any(), eq("ha_snapshot"), any());
     }
 }

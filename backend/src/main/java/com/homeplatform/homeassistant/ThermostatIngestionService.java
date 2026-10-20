@@ -28,7 +28,8 @@ import java.util.UUID;
  *   <li>{@link Source#SNAPSHOT} — the periodic fallback, timestamped at sample time so
  *       history has a steady resolution even when nothing changes.</li>
  * </ul>
- * Unavailable states update status only — no all-null history rows.
+ * Unavailable states update status only — no all-null history rows. Setpoint/mode/hold
+ * changes also go to {@link ThermostatChangeRecorder} for "set by" attribution.
  */
 @Service
 public class ThermostatIngestionService {
@@ -46,13 +47,16 @@ public class ThermostatIngestionService {
 
     private final ThermostatStatusRepository statusRepo;
     private final ThermostatReadingRepository readingRepo;
+    private final ThermostatChangeRecorder changes;
     private final ObjectMapper mapper;
 
     public ThermostatIngestionService(ThermostatStatusRepository statusRepo,
                                       ThermostatReadingRepository readingRepo,
+                                      ThermostatChangeRecorder changes,
                                       ObjectMapper mapper) {
         this.statusRepo = statusRepo;
         this.readingRepo = readingRepo;
+        this.changes = changes;
         this.mapper = mapper;
     }
 
@@ -60,7 +64,11 @@ public class ThermostatIngestionService {
     @Transactional
     public boolean ingest(SmartDevice device, HaEntityState state, String unit, Source source, UUID batchId) {
         ThermostatSnapshot snap = EntityMapper.toThermostat(state, unit);
+        // Captured before upsertStatus, which mutates the same row in place.
+        ThermostatChangeRecorder.ControlState before = statusRepo.findByDeviceId(device.getId())
+                .map(ThermostatIngestionService::controlState).orElse(null);
         upsertStatus(device.getId(), snap, state);
+        changes.onIngested(device, before, ThermostatChangeRecorder.ControlState.of(snap), state, source.value, batchId);
 
         if (!snap.available()) return false;
 
@@ -100,6 +108,11 @@ public class ThermostatIngestionService {
                 || !Objects.equals(s.hvacMode(), r.getHvacMode())
                 || !Objects.equals(s.hvacAction(), r.getHvacAction())
                 || !Objects.equals(s.presetMode(), r.getPresetMode());
+    }
+
+    private static ThermostatChangeRecorder.ControlState controlState(ThermostatStatus st) {
+        return new ThermostatChangeRecorder.ControlState(st.isAvailable(), st.getTargetTemperature(),
+                st.getHeatSetpoint(), st.getCoolSetpoint(), st.getHvacMode(), st.getPresetMode());
     }
 
     private void upsertStatus(Long deviceId, ThermostatSnapshot s, HaEntityState state) {

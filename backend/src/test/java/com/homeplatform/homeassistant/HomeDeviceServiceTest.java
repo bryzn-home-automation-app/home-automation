@@ -5,6 +5,7 @@ import com.homeplatform.dto.ThermostatTemperatureRequest;
 import com.homeplatform.model.SmartDevice;
 import com.homeplatform.model.ThermostatStatus;
 import com.homeplatform.repository.SmartDeviceRepository;
+import com.homeplatform.repository.ThermostatChangeRepository;
 import com.homeplatform.repository.ThermostatReadingRepository;
 import com.homeplatform.repository.ThermostatStatusRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -32,6 +33,8 @@ class HomeDeviceServiceTest {
     private SmartDeviceRepository deviceRepo;
     private ThermostatStatusRepository statusRepo;
     private ThermostatReadingRepository readingRepo;
+    private ThermostatChangeRepository changeRepo;
+    private ThermostatChangeRecorder recorder;
     private HomeDeviceService service;
     private SmartDevice thermostat;
     private ThermostatStatus status;
@@ -42,7 +45,9 @@ class HomeDeviceServiceTest {
         deviceRepo = mock(SmartDeviceRepository.class);
         statusRepo = mock(ThermostatStatusRepository.class);
         readingRepo = mock(ThermostatReadingRepository.class);
-        service = new HomeDeviceService(ha, deviceRepo, statusRepo, readingRepo, JSON);
+        recorder = mock(ThermostatChangeRecorder.class);
+        changeRepo = mock(ThermostatChangeRepository.class);
+        service = new HomeDeviceService(ha, deviceRepo, statusRepo, readingRepo, changeRepo, recorder, JSON);
 
         when(ha.isActive()).thenReturn(true);
         thermostat = SmartDevice.builder().id(5L).publicId(PUBLIC_ID).providerEntityId("climate.main_floor")
@@ -185,6 +190,63 @@ class HomeDeviceServiceTest {
             Instant now = Instant.now();
             assertThrows(IllegalArgumentException.class, () -> service.history(ID, now, now.minus(1, ChronoUnit.HOURS)));
             assertThrows(IllegalArgumentException.class, () -> service.history(ID, now.minus(200, ChronoUnit.DAYS), now));
+        }
+    }
+
+    @Nested
+    @DisplayName("set-by attribution")
+    class Attribution {
+
+        private final ThermostatChangeRecorder.Actor bryan = new ThermostatChangeRecorder.Actor(42L, "Bryan");
+
+        @Test
+        @DisplayName("registers the actor before calling HA (the event can beat the REST reply)")
+        void expectsBeforeCall() {
+            service.setTemperature(ID, new ThermostatTemperatureRequest(70.0, null, null), bryan);
+            var order = inOrder(recorder, ha);
+            order.verify(recorder).expect(thermostat, bryan);
+            order.verify(ha).setTemperature(thermostat, 70.0);
+            verify(recorder, never()).cancel(any(), any());
+        }
+
+        @Test
+        @DisplayName("withdraws the actor when HA rejects the command")
+        void cancelsOnFailure() {
+            doThrow(new HomeAssistantException.Http(500, "boom")).when(ha).setHvacMode(thermostat, "cool");
+            assertThrows(HomeAssistantException.Http.class, () -> service.setMode(ID, "cool", bryan));
+            verify(recorder).expect(thermostat, bryan);
+            verify(recorder).cancel(thermostat, bryan);
+        }
+
+        @Test
+        @DisplayName("validation failures never register an actor")
+        void noExpectOnBadInput() {
+            assertThrows(IllegalArgumentException.class, () -> service.setMode(ID, "dry", bryan));
+            verify(recorder, never()).expect(any(), any());
+        }
+
+        @Test
+        @DisplayName("unsupported resume withdraws the actor")
+        void resumeUnsupported() {
+            when(ha.resumeProgram(thermostat)).thenReturn(false);
+            assertThrows(HomeDeviceService.Unsupported.class, () -> service.resume(ID, bryan));
+            verify(recorder).cancel(thermostat, bryan);
+        }
+
+        @Test
+        @DisplayName("the latest change rides along on the thermostat response")
+        void lastChangeInResponse() {
+            when(changeRepo.findTopByDeviceIdOrderByChangedAtDesc(5L)).thenReturn(Optional.of(
+                    com.homeplatform.model.ThermostatChange.builder().deviceId(5L)
+                            .changedAt(java.time.LocalDateTime.of(2026, 10, 20, 5, 0))
+                            .changedFields("setpoint,preset").actorType(com.homeplatform.model.ThermostatChange.ActorType.ECOBEE)
+                            .actorName("ecobee").hvacMode("heat").presetMode("temp").targetTemperature(70.0).build()));
+            var change = service.getThermostat(ID).lastChange();
+            assertEquals("ecobee", change.actor());
+            assertEquals("ecobee", change.by());
+            assertNull(change.byUserId());
+            assertEquals(List.of("setpoint", "preset"), change.fields());
+            assertEquals("2026-10-20T05:00:00Z", change.at());
         }
     }
 }

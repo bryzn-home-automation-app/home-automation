@@ -4,17 +4,21 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homeplatform.dto.*;
 import com.homeplatform.model.SmartDevice;
+import com.homeplatform.model.ThermostatChange;
 import com.homeplatform.model.ThermostatReading;
 import com.homeplatform.model.ThermostatStatus;
 import com.homeplatform.repository.SmartDeviceRepository;
+import com.homeplatform.repository.ThermostatChangeRepository;
 import com.homeplatform.repository.ThermostatReadingRepository;
 import com.homeplatform.repository.ThermostatStatusRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -51,17 +55,23 @@ public class HomeDeviceService {
     private final SmartDeviceRepository deviceRepo;
     private final ThermostatStatusRepository statusRepo;
     private final ThermostatReadingRepository readingRepo;
+    private final ThermostatChangeRepository changeRepo;
+    private final ThermostatChangeRecorder recorder;
     private final ObjectMapper mapper;
 
     public HomeDeviceService(HomeAssistantService ha,
                              SmartDeviceRepository deviceRepo,
                              ThermostatStatusRepository statusRepo,
                              ThermostatReadingRepository readingRepo,
+                             ThermostatChangeRepository changeRepo,
+                             ThermostatChangeRecorder recorder,
                              ObjectMapper mapper) {
         this.ha = ha;
         this.deviceRepo = deviceRepo;
         this.statusRepo = statusRepo;
         this.readingRepo = readingRepo;
+        this.changeRepo = changeRepo;
+        this.recorder = recorder;
         this.mapper = mapper;
     }
 
@@ -92,9 +102,24 @@ public class HomeDeviceService {
                 .stream().map(HomeDeviceService::toReading).toList();
     }
 
+    /** Recent setpoint/mode/hold changes, newest first ({@code limit} capped at 100). */
+    public List<ThermostatChangeResponse> changes(String id, int limit) {
+        requireConfigured();
+        SmartDevice d = device(id, SmartDevice.Kind.THERMOSTAT);
+        int n = Math.max(1, Math.min(limit, 100));
+        return changeRepo.findByDeviceIdOrderByChangedAtDesc(d.getId(), PageRequest.of(0, n))
+                .stream().map(HomeDeviceService::toChange).toList();
+    }
+
     // ── thermostat commands ──
+    // Each takes the acting app user (null = unattributed) so the change it causes is
+    // credited to them — see ThermostatChangeRecorder.
 
     public ThermostatResponse setMode(String id, String mode) {
+        return setMode(id, mode, null);
+    }
+
+    public ThermostatResponse setMode(String id, String mode, ThermostatChangeRecorder.Actor actor) {
         requireConfigured();
         SmartDevice d = device(id, SmartDevice.Kind.THERMOSTAT);
         ThermostatStatus st = status(d);
@@ -102,11 +127,16 @@ public class HomeDeviceService {
         List<String> supported = st == null ? List.of() : list(st.getHvacModes());
         boolean ok = supported.isEmpty() ? EntityMapper.KNOWN_HVAC_MODES.contains(mode) : supported.contains(mode);
         if (!ok) throw new IllegalArgumentException("Unsupported mode: " + mode);
-        ha.setHvacMode(d, mode);
+        attributed(d, actor, () -> ha.setHvacMode(d, mode));
         return toThermostat(d);
     }
 
     public ThermostatResponse setTemperature(String id, ThermostatTemperatureRequest req) {
+        return setTemperature(id, req, null);
+    }
+
+    public ThermostatResponse setTemperature(String id, ThermostatTemperatureRequest req,
+                                             ThermostatChangeRecorder.Actor actor) {
         requireConfigured();
         SmartDevice d = device(id, SmartDevice.Kind.THERMOSTAT);
         ThermostatStatus st = status(d);
@@ -124,7 +154,8 @@ public class HomeDeviceService {
             if (mode != null && RANGE_MODES.contains(mode)) {
                 throw new IllegalArgumentException("Mode " + mode + " needs 'low' and 'high'");
             }
-            ha.setTemperature(d, checkTemp(req.temperature(), bounds));
+            double t = checkTemp(req.temperature(), bounds);
+            attributed(d, actor, () -> ha.setTemperature(d, t));
         } else {
             if (req.low() == null || req.high() == null) {
                 throw new IllegalArgumentException("Both 'low' and 'high' are required");
@@ -135,12 +166,16 @@ public class HomeDeviceService {
             double low = checkTemp(req.low(), bounds);
             double high = checkTemp(req.high(), bounds);
             if (low >= high) throw new IllegalArgumentException("'low' must be below 'high'");
-            ha.setTemperatureRange(d, low, high);
+            attributed(d, actor, () -> ha.setTemperatureRange(d, low, high));
         }
         return toThermostat(d);
     }
 
     public ThermostatResponse hold(String id, String preset) {
+        return hold(id, preset, null);
+    }
+
+    public ThermostatResponse hold(String id, String preset, ThermostatChangeRecorder.Actor actor) {
         requireConfigured();
         SmartDevice d = device(id, SmartDevice.Kind.THERMOSTAT);
         ThermostatStatus st = status(d);
@@ -148,17 +183,38 @@ public class HomeDeviceService {
         if (presets.isEmpty()) throw new Unsupported("This thermostat exposes no presets to hold", false);
         if (preset == null || preset.isBlank()) throw new IllegalArgumentException("'preset' is required");
         if (!presets.contains(preset)) throw new IllegalArgumentException("Unsupported preset: " + preset);
-        ha.setPreset(d, preset);
+        attributed(d, actor, () -> ha.setPreset(d, preset));
         return toThermostat(d);
     }
 
     public ThermostatResponse resume(String id) {
+        return resume(id, null);
+    }
+
+    public ThermostatResponse resume(String id, ThermostatChangeRecorder.Actor actor) {
         requireConfigured();
         SmartDevice d = device(id, SmartDevice.Kind.THERMOSTAT);
-        if (!ha.resumeProgram(d)) {
+        boolean[] supported = {false};
+        attributed(d, actor, () -> supported[0] = ha.resumeProgram(d));
+        if (!supported[0]) {
+            recorder.cancel(d, actor);
             throw new Unsupported("Home Assistant has no ecobee.resume_program service", true);
         }
         return toThermostat(d);
+    }
+
+    /**
+     * Registers the actor before calling HA — the resulting state_changed event can
+     * arrive before the call returns — and withdraws it if the call fails.
+     */
+    private void attributed(SmartDevice d, ThermostatChangeRecorder.Actor actor, Runnable call) {
+        recorder.expect(d, actor);
+        try {
+            call.run();
+        } catch (RuntimeException e) {
+            recorder.cancel(d, actor);
+            throw e;
+        }
     }
 
     // ── cameras ──
@@ -236,9 +292,12 @@ public class HomeDeviceService {
 
     private ThermostatResponse toThermostat(SmartDevice d) {
         ThermostatStatus st = status(d);
+        ThermostatChangeResponse lastChange = changeRepo.findTopByDeviceIdOrderByChangedAtDesc(d.getId())
+                .map(HomeDeviceService::toChange).orElse(null);
         if (st == null) {
             return new ThermostatResponse(d.getPublicId().toString(), d.getName(), false,
-                    null, null, null, null, null, null, null, null, null, null, null, List.of(), List.of(), null);
+                    null, null, null, null, null, null, null, null, null, null, null, List.of(), List.of(), null,
+                    lastChange);
         }
         return new ThermostatResponse(
                 d.getPublicId().toString(), d.getName(), st.isAvailable(),
@@ -247,7 +306,15 @@ public class HomeDeviceService {
                 st.getHvacMode(), st.getHvacAction(), st.getPresetMode(), st.getTemperatureUnit(),
                 st.getMinTemp(), st.getMaxTemp(),
                 list(st.getHvacModes()), list(st.getPresetModes()),
-                iso(st.getUpdatedAt()));
+                iso(st.getUpdatedAt()), lastChange);
+    }
+
+    private static ThermostatChangeResponse toChange(ThermostatChange c) {
+        return new ThermostatChangeResponse(iso(c.getChangedAt()),
+                c.getActorType().name().toLowerCase(), c.getActorName(), c.getActorUserId(),
+                Arrays.asList(c.getChangedFields().split(",")),
+                c.getHvacMode(), c.getPresetMode(),
+                c.getTargetTemperature(), c.getHeatSetpoint(), c.getCoolSetpoint());
     }
 
     private static ThermostatReadingResponse toReading(ThermostatReading r) {

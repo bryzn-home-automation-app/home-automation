@@ -6,6 +6,8 @@ import java.util.List;
  * Current thermostat state. {@code id} is the stable app device ID — never the HA
  * entity ID. Temperatures are in {@code temperatureUnit}; any reading may be null
  * (unavailable/unknown in HA). {@code updatedAt} is a UTC ISO-8601 string.
+ * {@code lastChange} is the most recent setpoint/mode/hold change and who made it
+ * (null until one has been seen).
  */
 public record ThermostatResponse(
         String id,
@@ -24,5 +26,6 @@ public record ThermostatResponse(
         Double maxTemp,
         List<String> hvacModes,
         List<String> presetModes,
-        String updatedAt
+        String updatedAt,
+        ThermostatChangeResponse lastChange
 ) {}

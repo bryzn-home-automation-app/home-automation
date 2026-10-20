@@ -3,6 +3,8 @@ package com.homeplatform.controller;
 import com.homeplatform.dto.*;
 import com.homeplatform.homeassistant.HomeAssistantClient;
 import com.homeplatform.homeassistant.HomeDeviceService;
+import com.homeplatform.homeassistant.ThermostatChangeRecorder;
+import com.homeplatform.repository.UserRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
@@ -27,9 +29,21 @@ import java.util.List;
 public class HomeController {
 
     private final HomeDeviceService service;
+    private final UserRepository users;
 
-    public HomeController(HomeDeviceService service) {
+    public HomeController(HomeDeviceService service, UserRepository users) {
         this.service = service;
+        this.users = users;
+    }
+
+    /** The caller, for "set by" attribution: display name, else username. */
+    ThermostatChangeRecorder.Actor actor(HttpServletRequest request) {
+        Long userId = request.getAttribute("userId") instanceof Long id ? id : null;
+        String name = userId == null ? null : users.findById(userId)
+                .map(u -> u.getDisplayName() != null && !u.getDisplayName().isBlank() ? u.getDisplayName() : u.getUsername())
+                .orElse(null);
+        if (name == null && request.getAttribute("username") instanceof String u && !u.isBlank()) name = u;
+        return new ThermostatChangeRecorder.Actor(userId, name == null ? "Someone" : name);
     }
 
     static void requireAnyRole(HttpServletRequest request) {
@@ -71,31 +85,40 @@ public class HomeController {
         return service.history(id, instant(from, "from"), instant(to, "to"));
     }
 
+    /** Who changed the setpoint/mode/hold recently, newest first. */
+    @GetMapping("/thermostats/{id}/changes")
+    public List<ThermostatChangeResponse> changes(@PathVariable String id,
+                                                  @RequestParam(defaultValue = "20") int limit,
+                                                  HttpServletRequest request) {
+        requireAnyRole(request);
+        return service.changes(id, limit);
+    }
+
     @PostMapping("/thermostats/{id}/mode")
     public ThermostatResponse mode(@PathVariable String id, @RequestBody ThermostatModeRequest body,
                                    HttpServletRequest request) {
         requireMember(request);
-        return service.setMode(id, body == null ? null : body.mode());
+        return service.setMode(id, body == null ? null : body.mode(), actor(request));
     }
 
     @PostMapping("/thermostats/{id}/temperature")
     public ThermostatResponse temperature(@PathVariable String id, @RequestBody ThermostatTemperatureRequest body,
                                           HttpServletRequest request) {
         requireMember(request);
-        return service.setTemperature(id, body);
+        return service.setTemperature(id, body, actor(request));
     }
 
     @PostMapping("/thermostats/{id}/hold")
     public ThermostatResponse hold(@PathVariable String id, @RequestBody(required = false) ThermostatHoldRequest body,
                                    HttpServletRequest request) {
         requireMember(request);
-        return service.hold(id, body == null ? null : body.preset());
+        return service.hold(id, body == null ? null : body.preset(), actor(request));
     }
 
     @PostMapping("/thermostats/{id}/resume")
     public ThermostatResponse resume(@PathVariable String id, HttpServletRequest request) {
         requireMember(request);
-        return service.resume(id);
+        return service.resume(id, actor(request));
     }
 
     // ── cameras ──

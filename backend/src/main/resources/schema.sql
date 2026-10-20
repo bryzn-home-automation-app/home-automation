@@ -672,3 +672,29 @@ CREATE TABLE IF NOT EXISTS thermostat_readings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_thermostat_readings_device_time ON thermostat_readings (device_id, recorded_at);
+
+-- Who last changed a thermostat's setpoint / mode / hold. Append-only: one row per
+-- detected control change. actor_type APP = a user of this app (actor_user_id set),
+-- HOME_ASSISTANT = someone using HA directly, ECOBEE = the thermostat itself, the
+-- ecobee app, or its schedule. Values are the state *after* the change.
+CREATE TABLE IF NOT EXISTS thermostat_changes (
+    id                  SERIAL PRIMARY KEY,
+    device_id           INTEGER        NOT NULL REFERENCES smart_devices(id),
+    changed_at          TIMESTAMP      NOT NULL,
+    changed_fields      VARCHAR(60)    NOT NULL,
+    actor_type          VARCHAR(20)    NOT NULL,
+    actor_user_id       BIGINT,
+    actor_name          VARCHAR(120)   NOT NULL,
+    hvac_mode           VARCHAR(30),
+    preset_mode         VARCHAR(60),
+    target_temperature  DOUBLE PRECISION,
+    heat_setpoint       DOUBLE PRECISION,
+    cool_setpoint       DOUBLE PRECISION,
+    source              VARCHAR(100)   NOT NULL,
+    source_provider     VARCHAR(50)    NOT NULL,
+    ingestion_batch_id  UUID,
+    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_thermostat_changes_device_time ON thermostat_changes (device_id, changed_at);

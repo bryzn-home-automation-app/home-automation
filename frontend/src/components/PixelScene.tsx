@@ -402,8 +402,91 @@ const GEAR: PixelArt = {
   palette: { N: '#9aa5b8', K: '#131a2a' },
 };
 
+// ── Climate props ──
+
+/** ecobee-style wall unit reading "72", sky dot = cooling. */
+const THERMOSTAT: PixelArt = {
+  grid: [
+    '.KKKKKKKKK.',
+    'KKKKKKKKKKK',
+    'KKKKKKKKKKK',
+    'KKWWWKWWWKK',
+    'KKKKWKKKWKK',
+    'KKKKWKWWWKK',
+    'KKKKWKWKKKK',
+    'KKKKWKWWWKK',
+    'KKKKKKKKKKK',
+    'KKKKKSKKKKK',
+    '.KKKKKKKKK.',
+  ],
+  palette: { K: '#1c2230', W: '#e8f1fb', S: '#38bdf8' },
+};
+
+const SNOWFLAKE: PixelArt = {
+  grid: [
+    '...S...',
+    '.S.S.S.',
+    '..SSS..',
+    'SSSSSSS',
+    '..SSS..',
+    '.S.S.S.',
+    '...S...',
+  ],
+  palette: { S: '#9fe3ff' },
+};
+
+/** Outdoor AC condenser — the cool side of the scene. */
+const AC_UNIT: PixelArt = {
+  grid: [
+    'MMMMMMMMMMMM',
+    'MGGGGGGGGGLM',
+    'MGKKKKKKKKGM',
+    'MGGGGGGGGGGM',
+    'MGKKKKKKKKGM',
+    'MGGGGGGGGGGM',
+    'MGKKKKKKKKGM',
+    'MGGGGGGGGGGM',
+    'MMMMMMMMMMMM',
+    '.D........D.',
+  ],
+  palette: { M: '#9aa5b8', G: '#4a5670', K: '#8fd3f4', L: '#5ad48a', D: OUT },
+};
+
+const THERMOMETER: PixelArt = {
+  grid: [
+    '.G.',
+    'GWG',
+    'GWG',
+    'GWG',
+    'GRG',
+    'GRG',
+    'GRG',
+    'GRG',
+    'RRR',
+    'RRR',
+    '.R.',
+  ],
+  palette: { G: '#cbd5e1', W: '#f8fafc', R: '#e8574a' },
+};
+
+/** Little fire on a log — the warm side. */
+const FLAME: PixelArt = {
+  grid: [
+    '...R...',
+    '..RR...',
+    '..RRR..',
+    '.RRORR.',
+    '.ROOOR.',
+    'RROYORR',
+    '.OOYYO.',
+    'LLLLLLL',
+    '.L...L.',
+  ],
+  palette: { R: '#e8574a', O: '#f59e0b', Y: '#ffe08a', L: '#7a5236' },
+};
+
 // ── Cast ──
-const BRYAN = chibi({ hair: '#3a2c22', shirt: '#4f7cd1', wave: true });
+const BRYAN =chibi({ hair: '#3a2c22', shirt: '#4f7cd1', wave: true });
 const GREEN = chibi({ hair: '#4ea45c', shirt: '#e0e4ee' });
 const RED = chibi({ hair: '#d1603f', shirt: '#e8b93c' });
 const DARK = chibi({ hair: '#241f2e', shirt: '#8a5cd1' });
@@ -451,13 +534,19 @@ const SCENES: Array<[prefix: string, spec: SceneSpec]> = [
     ground(BATTERY, 58, 4, 'px-bob-slow', '0.6s'),
     ground(POLE, 78, 4),
   ]],
+  // Cool side → warm side: snow over the AC, the thermostat glowing in the
+  // middle, a cat curled up by the fire.
   ['/climate', [
-    sky(SUN, 6, 0, 'px-spin-slow'),
-    sky(CLOUD, 64, 4, 'px-bob-slow'),
-    ground(TREE, 14, 4),
-    ground(HOUSE, 36, 4, 'px-bob-slow'),
-    ground(PLANT, 60, 4),
-    ground(FENCE, 80, 4),
+    { ...sky(THERMOSTAT, 46, 2, 'px-pulse'), hero: true },
+    sky(SNOWFLAKE, 8, 2, 'px-twinkle'),
+    sky(SNOWFLAKE, 22, 12, 'px-twinkle', '0.9s'),
+    sky(SNOWFLAKE, 32, 0, 'px-twinkle', '1.6s'),
+    ground(AC_UNIT, 6, 4),
+    { ...ground(BRYAN, 30, 4, 'px-bob'), hero: true },
+    ground(THERMOMETER, 60, 4),
+    { ...ground(FLAME, 72, 4, 'px-flicker'), hero: true },
+    ground(CAT, 82, 4, 'px-bob-slow'),
+    ground(PLANT, 94, 4),
   ]],
   ['/roomba', [
     ground(PLANT, 4, 4),

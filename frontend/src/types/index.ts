@@ -539,6 +539,26 @@ export interface Thermostat {
   hvacModes: string[];
   presetModes: string[];
   updatedAt: string | null;
+  /** Latest setpoint/mode/hold change and who made it (null until one is seen). */
+  lastChange: ThermostatChange | null;
+}
+
+/**
+ * Who changed a thermostat and to what (values are the state after the change).
+ * actor: `app` = a user of this app (`by` = display name, `byUserId` = their id),
+ * `home_assistant`, or `ecobee` (the thermostat, the ecobee app, or its schedule).
+ */
+export interface ThermostatChange {
+  at: string;
+  actor: 'app' | 'home_assistant' | 'ecobee';
+  by: string;
+  byUserId: number | null;
+  fields: Array<'setpoint' | 'mode' | 'preset'>;
+  hvacMode: string | null;
+  presetMode: string | null;
+  targetTemperature: number | null;
+  heatSetpoint: number | null;
+  coolSetpoint: number | null;
 }
 
 /** GET /api/home/thermostats/{id}/history — one stored reading. */
