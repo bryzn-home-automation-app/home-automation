@@ -84,6 +84,16 @@ class HomeAssistantClientTest {
     }
 
     @Test
+    @DisplayName("getTemperatureUnit reads unit_system.temperature from /api/config")
+    void temperatureUnit() {
+        responseBody = "{\"unit_system\":{\"temperature\":\"°F\",\"length\":\"mi\"}}";
+        assertEquals("°F", client().getTemperatureUnit());
+        assertEquals("GET /api/config", lastPath.get());
+        responseBody = "{}";
+        assertNull(client().getTemperatureUnit());
+    }
+
+    @Test
     @DisplayName("getState returns empty on 404")
     void getStateMissing() {
         status = 404;

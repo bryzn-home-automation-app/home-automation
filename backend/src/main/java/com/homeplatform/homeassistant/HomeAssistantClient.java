@@ -72,6 +72,12 @@ public class HomeAssistantClient {
         return out;
     }
 
+    /** HA's configured temperature unit ({@code unit_system.temperature}, e.g. "°F"), or null. */
+    public String getTemperatureUnit() {
+        JsonNode t = parseJson(send(get("/api/config"))).path("unit_system").path("temperature");
+        return t.isTextual() && !t.asText().isBlank() ? t.asText() : null;
+    }
+
     /** One entity's state, or empty if HA doesn't know the entity (404). */
     public Optional<HaEntityState> getState(String entityId) {
         requireEntityId(entityId);
