@@ -62,6 +62,7 @@ export default memo(function App() {
   const PAGE_HEADERS: Record<string, { eyebrow: string; title: string; subtitle?: string }> = {
     '/': { eyebrow: 'Operations Console', title: 'Home Dashboard', subtitle: `Welcome ${welcomeName}!` },
     '/utility': { eyebrow: 'Utilities', title: 'Utility' },
+    '/climate': { eyebrow: 'Thermostats', title: 'Climate' },
     '/roomba': { eyebrow: 'Robot Vacuum', title: 'Roomba' },
     '/wifi': { eyebrow: 'Guest Access', title: 'Guest Wi‑Fi' },
     '/notifications': { eyebrow: 'Alerts', title: 'Notifications' },
@@ -118,6 +119,7 @@ export default memo(function App() {
   const mainTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
     { path: '/utility', label: 'Utility', icon: '⚡', end: false },
+    { path: '/climate', label: 'Climate', icon: '🌡️', end: false },
     { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
     { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
     { path: '/users', label: 'Users', icon: '👥', end: false },

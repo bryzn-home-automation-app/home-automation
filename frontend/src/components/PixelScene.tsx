@@ -451,6 +451,14 @@ const SCENES: Array<[prefix: string, spec: SceneSpec]> = [
     ground(BATTERY, 58, 4, 'px-bob-slow', '0.6s'),
     ground(POLE, 78, 4),
   ]],
+  ['/climate', [
+    sky(SUN, 6, 0, 'px-spin-slow'),
+    sky(CLOUD, 64, 4, 'px-bob-slow'),
+    ground(TREE, 14, 4),
+    ground(HOUSE, 36, 4, 'px-bob-slow'),
+    ground(PLANT, 60, 4),
+    ground(FENCE, 80, 4),
+  ]],
   ['/roomba', [
     ground(PLANT, 4, 4),
     ground(CAT, 16, 4, 'px-bob-slow'),

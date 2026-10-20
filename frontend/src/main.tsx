@@ -19,6 +19,7 @@ const Register = lazy(() => import('./pages/Register'));
 const HomeSummary = lazy(() => import('./pages/HomeSummary'));
 const Utility = lazy(() => import('./pages/Utility'));
 const Roomba = lazy(() => import('./pages/Roomba'));
+const Climate = lazy(() => import('./pages/Climate'));
 const WiFiPage = lazy(() => import('./pages/WiFiPage'));
 
 // ── Other protected pages ──
@@ -70,6 +71,7 @@ const RegisterRoute = lazyRoute(Register, 'form');
 const HomeSummaryRoute = lazyRoute(HomeSummary, 'stats-charts');
 const UtilityRoute = lazyRoute(Utility, 'stats-charts');
 const RoombaRoute = lazyRoute(Roomba, 'stats-charts');
+const ClimateRoute = lazyRoute(Climate, 'stats-charts');
 const WiFiPageRoute = lazyRoute(WiFiPage, 'list');
 const NotificationsRoute = lazyRoute(NotificationsPage, 'list');
 const ProfilePageRoute = lazyRoute(ProfilePage, 'form');
@@ -102,6 +104,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                   <Route path="electric" element={<Navigate to="/utility" replace />} />
                   <Route path="gas" element={<Navigate to="/utility?view=gas" replace />} />
                   <Route path="water" element={<Navigate to="/utility?view=water" replace />} />
+                  <Route path="climate" element={<ClimateRoute />} />
                   <Route path="roomba" element={<RoombaRoute />} />
                   <Route path="wifi" element={<WiFiPageRoute />} />
                   <Route path="notifications" element={<NotificationsRoute />} />
