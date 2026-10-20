@@ -8,12 +8,20 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          recharts: ['recharts'],
-          // Heavy, route-specific vendors split out for long-term caching:
-          // framer-motion is only used by GuestHome, qrcode only by WiFiPage.
-          'framer-motion': ['framer-motion'],
-          qrcode: ['qrcode'],
+        // Heavy, route-specific vendors split out for long-term caching:
+        // recharts only on chart pages, framer-motion only by GuestHome, qrcode only
+        // by WiFiPage. Function form on purpose: the object form also moved each
+        // package's *shared* dependencies into its chunk — React itself landed in
+        // framer-motion's — so the entry had to import both heavy chunks and every
+        // page (even login) downloaded ~200 KB gz of chart/animation code. React gets
+        // its own small chunk; anything else shared is left to Rollup.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react';
+          if (/[\\/]node_modules[\\/](recharts|victory-vendor|d3-[^\\/]+)[\\/]/.test(id)) return 'recharts';
+          if (/[\\/]node_modules[\\/](framer-motion|motion-dom|motion-utils)[\\/]/.test(id)) return 'framer-motion';
+          if (/[\\/]node_modules[\\/]qrcode[\\/]/.test(id)) return 'qrcode';
+          return undefined;
         },
       },
     },

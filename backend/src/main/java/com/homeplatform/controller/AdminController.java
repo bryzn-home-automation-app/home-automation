@@ -27,6 +27,12 @@ public class AdminController {
         }
     }
 
+    /** A non-admin caller is a 403, not a server error. */
+    @ExceptionHandler(SecurityException.class)
+    public ResponseEntity<Map<String, String>> forbidden(SecurityException e) {
+        return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
+    }
+
     // ── All users ──
 
     @GetMapping("/users")

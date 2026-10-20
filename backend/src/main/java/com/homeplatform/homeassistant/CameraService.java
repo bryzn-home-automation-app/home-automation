@@ -9,6 +9,8 @@ import com.homeplatform.model.SmartDevice;
 import com.homeplatform.repository.CameraBatteryReadingRepository;
 import com.homeplatform.repository.CameraStatusRepository;
 import com.homeplatform.repository.SmartDeviceRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -21,8 +23,11 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * The app-facing camera API behind {@code /api/home/cameras}: listing with battery and
@@ -39,6 +44,14 @@ public class CameraService {
      * bridge wake a battery camera.
      */
     static final Duration SNAPSHOT_CACHE = Duration.ofSeconds(20);
+    /**
+     * An older still is served instantly and refreshed in the background, unless a
+     * motion/person event happened since it was taken (then the viewer waits for the
+     * new frame). A cold E30 still took ~4 s while the bridge grabbed a live frame.
+     */
+    static final Duration SNAPSHOT_STALE_OK = Duration.ofMinutes(20);
+
+    private static final Logger log = LoggerFactory.getLogger(CameraService.class);
     static final String LIVE_PATH = "/camera-stream/";
 
     private final HomeAssistantService ha;
@@ -50,6 +63,12 @@ public class CameraService {
     private final double longitude;
     private final Clock clock;
     private final Map<Long, CachedImage> snapshots = new ConcurrentHashMap<>();
+    private final Set<Long> refreshing = ConcurrentHashMap.newKeySet();
+    private final ExecutorService refresher = Executors.newSingleThreadExecutor(r -> {
+        Thread t = new Thread(r, "camera-snapshot-refresh");
+        t.setDaemon(true);
+        return t;
+    });
 
     private record CachedImage(Instant at, HomeAssistantClient.CameraImage image) {}
 
@@ -110,10 +129,59 @@ public class CameraService {
         SmartDevice d = camera(id);
         Instant now = clock.instant();
         CachedImage hit = snapshots.get(d.getId());
-        if (hit != null && hit.at().plus(SNAPSHOT_CACHE).isAfter(now)) return hit.image();
-        HomeAssistantClient.CameraImage img = ha.cameraSnapshot(d);
-        snapshots.put(d.getId(), new CachedImage(now, img));
+        if (hit != null) {
+            if (hit.at().plus(SNAPSHOT_CACHE).isAfter(now)) return hit.image();
+            if (hit.at().plus(SNAPSHOT_STALE_OK).isAfter(now) && !eventSince(d, hit.at())) {
+                refreshInBackground(d);
+                return hit.image();
+            }
+        }
+        return fetchSnapshot(d);
+    }
+
+    /**
+     * Keep wired cameras' stills warm (called from the 15-minute HA snapshot) so the
+     * first view of the tab is instant. Battery cameras are left alone: their stills
+     * come from the last event, and asking for more could wake them.
+     */
+    public void prewarmSnapshots() {
+        if (!ha.isActive()) return;
+        for (SmartDevice d : deviceRepo.findByKindAndEnabledTrueOrderByNameAsc(SmartDevice.Kind.CAMERA)) {
+            statusRepo.findByDeviceId(d.getId())
+                    .filter(st -> st.isAvailable() && CameraStatus.POWER_WIRED.equals(st.getPowerSource()))
+                    .ifPresent(st -> refreshInBackground(d));
+        }
+    }
+
+    private HomeAssistantClient.CameraImage fetchSnapshot(SmartDevice d) {
+        HomeAssistantClient.CameraImage img = ImageScaler.fit(ha.cameraSnapshot(d), ImageScaler.MAX_WIDTH);
+        snapshots.put(d.getId(), new CachedImage(clock.instant(), img));
         return img;
+    }
+
+    private void refreshInBackground(SmartDevice d) {
+        if (!refreshing.add(d.getId())) return; // one refresh per camera at a time
+        refresher.execute(() -> {
+            try {
+                fetchSnapshot(d);
+            } catch (Exception e) {
+                log.debug("Background snapshot refresh failed for camera {}: {}", d.getId(), e.getMessage());
+            } finally {
+                refreshing.remove(d.getId());
+            }
+        });
+    }
+
+    /** A motion/person event newer than the cached still: the viewer should see the new frame. */
+    private boolean eventSince(SmartDevice d, Instant at) {
+        LocalDateTime since = utc(at);
+        return statusRepo.findByDeviceId(d.getId())
+                .map(st -> isAfter(st.getLastMotionAt(), since) || isAfter(st.getLastPersonAt(), since))
+                .orElse(false);
+    }
+
+    private static boolean isAfter(LocalDateTime t, LocalDateTime since) {
+        return t != null && t.isAfter(since);
     }
 
     /** A ticketed live-view URL. 422 when the camera has no stream (not via eufy-sdk). */
