@@ -67,9 +67,9 @@ function StatTile({
         <span
           className={`text-xs font-medium ${
             trend.direction === 'down'
-              ? 'text-appsuccess'
+              ? 'text-apptext-success'
               : trend.direction === 'up'
-              ? 'text-appdanger'
+              ? 'text-apptext-danger'
               : 'text-apptext-dim'
           }`}
         >

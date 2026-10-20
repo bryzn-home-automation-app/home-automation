@@ -58,7 +58,7 @@ export default function GuestManagement() {
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-2xl border border-appborder bg-appinset p-4">
               <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Active Guests</p>
-              <p className="mt-2 text-lg font-semibold text-appsuccess">{activeCount}</p>
+              <p className="mt-2 text-lg font-semibold text-apptext-success">{activeCount}</p>
             </div>
             <button
               type="button"

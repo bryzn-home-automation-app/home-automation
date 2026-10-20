@@ -66,7 +66,7 @@ export default function Register() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-apptext-muted">Status</span>
-                  <span className="font-medium text-appwarning">Pending Approval</span>
+                  <span className="font-medium text-apptext-warning">Pending Approval</span>
                 </div>
               </div>
             </div>
@@ -182,7 +182,7 @@ export default function Register() {
             </div>
 
             {error && (
-              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-appdanger">
+              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
                 {error}
               </div>
             )}
@@ -190,7 +190,7 @@ export default function Register() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-2xl bg-appaccent px-4 py-3.5 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-appaccent focus-visible:ring-offset-2 disabled:opacity-60"
+              className="w-full rounded-2xl bg-appaccent px-4 py-3.5 text-sm font-semibold text-appaccent-fg shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-appaccent focus-visible:ring-offset-2 disabled:opacity-60"
             >
               {loading ? 'Creating account...' : 'Create Account'}
             </button>

@@ -182,7 +182,7 @@ export default memo(function App() {
     <>
       <div className="flex items-center justify-between gap-3 border-b border-appborder pb-4">
         <div>
-          <p className="text-3xs font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+          <p className="text-3xs font-semibold uppercase tracking-[0.22em] text-apptext-warning/90">
             bryzncode
           </p>
           <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-apptext">
@@ -242,7 +242,7 @@ export default memo(function App() {
               <span className="font-medium">{tab.label}</span>
             </span>
             {tab.path === '/notifications' && unreadCount > 0 && (
-              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-appdanger px-1.5 text-3xs font-bold text-white shadow-[0_0_10px_var(--appdanger)]">
+              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-appdanger px-1.5 text-3xs font-bold text-appdanger-fg shadow-[0_0_10px_var(--appdanger)]">
                 {unreadCount > 99 ? '99+' : unreadCount}
               </span>
             )}
@@ -297,7 +297,7 @@ export default memo(function App() {
             >
               <span className="text-base">🔔</span>
               {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-white">
+                <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-appdanger-fg">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
@@ -328,7 +328,7 @@ export default memo(function App() {
           <button
             type="button"
             onClick={logout}
-            className="mt-2 w-full rounded-xl border border-appdanger/30 bg-appdanger/10 px-4 py-2 text-sm font-semibold text-appdanger transition-colors hover:bg-appdanger/20"
+            className="mt-2 w-full rounded-xl border border-appdanger/30 bg-appdanger/10 px-4 py-2 text-sm font-semibold text-apptext-danger transition-colors hover:bg-appdanger/20"
           >
             Sign Out
           </button>
@@ -489,7 +489,7 @@ export default memo(function App() {
               <span className="relative text-lg">
                 {tab.icon}
                 {tab.path === '/notifications' && unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-white">
+                  <span className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-appdanger-fg">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}

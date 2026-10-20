@@ -13,7 +13,7 @@ import {
 import { fetchForecast, fetchForecastSnapshots } from '../api/forecast';
 import { pickPredicted } from '../utils/forecastSeries';
 import { localTodayIso } from '../utils/localDate';
-import { useTheme, CHART_SERIES } from '../context/ThemeContext';
+import { useTheme, CHART_SERIES, DATA_SERIES } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 /**
@@ -166,7 +166,7 @@ function TrendOutlookChart({
   }, [actuals, startDate, snapshots, forecast, today]);
 
   const predictedColor = series.usage;
-  const actualColor = '#22c55e';
+  const actualColor = DATA_SERIES[theme].positive;
 
   if (loading) {
     return (

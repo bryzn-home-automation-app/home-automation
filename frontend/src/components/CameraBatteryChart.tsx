@@ -21,7 +21,9 @@ const TOOLTIP_CONTENT_STYLE = {
 const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
 
 const COLORS = {
-  charge: 'var(--color-emerald-400)',
+  // Chart token, not --color-emerald-400: light mode remaps that to a dark
+  // 800 text shade that sits too close to the slate "on battery" line.
+  charge: 'var(--appchart-charge)',
   drain: 'var(--apptext-soft)',
   night: 'var(--appchart-grid)',
 } as const;

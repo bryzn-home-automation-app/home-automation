@@ -15,6 +15,7 @@ import DeferredRender from '../components/DeferredRender';
 import type { WaterBill } from '../types';
 import { fetchWaterBills } from '../api/waterBills';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useTheme, DATA_SERIES } from '../context/ThemeContext';
 
 // BillPdfModal pulls in react-pdf + its ~1.3MB pdf.js worker. It's only
 // mounted when a user actually clicks "view bill", so keep that weight out
@@ -40,13 +41,20 @@ const TOOLTIP_CONTENT_STYLE = {
 const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
 const LEGEND_STYLE = { fontSize: 12 } as const;
 
+// Colors come from DATA_SERIES per mode (the dark-tuned 400/500 shades were
+// 1.8-2.8:1 on the white light-mode chart).
 const CHARGE_SERIES = [
-  { key: 'water', label: 'Water', color: '#22d3ee' },
-  { key: 'sewer', label: 'Sewer', color: '#0ea5e9' },
-  { key: 'refuse', label: 'Refuse', color: '#6366f1' },
-  { key: 'tax', label: 'Tax', color: '#a855f7' },
-  { key: 'stormwater', label: 'Stormwater', color: '#14b8a6' },
+  { key: 'water', label: 'Water' },
+  { key: 'sewer', label: 'Sewer' },
+  { key: 'refuse', label: 'Refuse' },
+  { key: 'tax', label: 'Tax' },
+  { key: 'stormwater', label: 'Stormwater' },
 ] as const;
+
+// Recharts colors legend labels with the series color by default; in light
+// mode even the deepened series colors are < 4.5:1 as 12px text, so the label
+// goes neutral there (the swatch keeps the series color).
+const lightLegendLabel = (value: string) => <span style={{ color: 'var(--apptext-soft)' }}>{value}</span>;
 
 const money = (n?: number) => (n == null ? '—' : `$${n.toFixed(2)}`);
 
@@ -69,6 +77,8 @@ function EmptyChart({ title, emptyText }: { title: string; emptyText: string }) 
 }
 
 export default memo(function WaterUsage() {
+  const { theme, isLight } = useTheme();
+  const ds = DATA_SERIES[theme];
   const waterBills = useQuery({
     queryKey: ['water-bills'],
     queryFn: fetchWaterBills,
@@ -163,7 +173,7 @@ export default memo(function WaterUsage() {
                     labelStyle={TOOLTIP_LABEL_STYLE}
                     formatter={(value: number) => [`${value.toFixed(0)} gal`, 'Usage']}
                   />
-                  <Bar dataKey="gallons" fill="#22d3ee" radius={[10, 10, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+                  <Bar dataKey="gallons" fill={ds.water} radius={[10, 10, 0, 0]} maxBarSize={48} isAnimationActive={false} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -188,9 +198,9 @@ export default memo(function WaterUsage() {
                     labelStyle={TOOLTIP_LABEL_STYLE}
                     formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
                   />
-                  <Legend wrapperStyle={LEGEND_STYLE} />
+                  <Legend wrapperStyle={LEGEND_STYLE} formatter={isLight ? lightLegendLabel : undefined} />
                   {CHARGE_SERIES.map((s) => (
-                    <Bar key={s.key} dataKey={s.key} name={s.label} stackId="charges" fill={s.color} isAnimationActive={false} maxBarSize={48} />
+                    <Bar key={s.key} dataKey={s.key} name={s.label} stackId="charges" fill={ds[s.key]} isAnimationActive={false} maxBarSize={48} />
                   ))}
                 </BarChart>
               </ResponsiveContainer>

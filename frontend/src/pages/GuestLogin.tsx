@@ -89,7 +89,7 @@ export default function GuestLogin() {
               <div className="mt-2 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-apptext-muted">Status</span>
-                  <span className="font-medium text-appsuccess">Active</span>
+                  <span className="font-medium text-apptext-success">Active</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-apptext-muted">Connected at</span>
@@ -124,7 +124,7 @@ export default function GuestLogin() {
               <span className="text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-dim">
                 powered by
               </span>
-              <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+              <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-apptext-warning/90">
                 bryzncode
               </span>
             </div>
@@ -184,7 +184,7 @@ export default function GuestLogin() {
           <p className="mb-6 -mt-2 text-center text-xs text-apptext-dim">
             {avatarUrl ? 'Tap to change photo' : 'Tap avatar to add a photo'}
             {avatarUrl && (
-              <button type="button" onClick={() => setAvatarUrl(null)} className="ml-1 text-appdanger hover:underline">(remove)</button>
+              <button type="button" onClick={() => setAvatarUrl(null)} className="ml-1 text-apptext-danger hover:underline">(remove)</button>
             )}
           </p>
 
@@ -228,7 +228,7 @@ export default function GuestLogin() {
             </div>
 
             {error && (
-              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-appdanger">
+              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
                 {error}
               </div>
             )}
@@ -260,7 +260,7 @@ export default function GuestLogin() {
             <span className="text-3xs uppercase tracking-[0.2em] text-apptext-dim">
               powered by
             </span>
-            <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-appwarning/90">
+            <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-apptext-warning/90">
               bryzncode
             </span>
           </div>

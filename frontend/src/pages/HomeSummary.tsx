@@ -247,7 +247,7 @@ export default function HomeSummary() {
           }`}
         >
           <div className="flex items-center justify-between gap-2">
-            <p className={`text-2xs font-medium uppercase tracking-[0.18em] ${roombaAttention ? 'text-appwarning' : 'text-apptext-muted'}`}>🤖 Roomba</p>
+            <p className={`text-2xs font-medium uppercase tracking-[0.18em] ${roombaAttention ? 'text-apptext-warning' : 'text-apptext-muted'}`}>🤖 Roomba</p>
             <span className="text-xs font-medium text-appaccent-text">Open →</span>
           </div>
           <p className="mt-3 text-3xl font-semibold tracking-[-0.03em] text-apptext">

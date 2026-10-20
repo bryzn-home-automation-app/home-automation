@@ -109,7 +109,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
             {avatarUrl ? 'Tap to change photo' : 'Tap to add a photo'}
           </span>
           {uploadError && (
-            <p className="text-xs text-appdanger">{uploadError}</p>
+            <p className="text-xs text-apptext-danger">{uploadError}</p>
           )}
         </div>
 
@@ -158,7 +158,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
             <button
               type="submit"
               disabled={saving || !displayName.trim() || uploading}
-              className="flex-1 rounded-2xl bg-appaccent px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 disabled:opacity-50"
+              className="flex-1 rounded-2xl bg-appaccent px-4 py-3 text-sm font-semibold text-appaccent-fg shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 disabled:opacity-50"
             >
               {saving ? 'Saving...' : 'Save Changes'}
             </button>

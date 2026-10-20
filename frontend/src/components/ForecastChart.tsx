@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { fetchForecast, fetchForecastAccuracy, fetchHourlyForecastAccuracy } from '../api/forecast';
 import { localTodayIso } from '../utils/localDate';
-import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
+import { useTheme, CHART_SERIES, DATA_SERIES, hexToRgba } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import StatTile, { Icons } from './StatTile';
 
@@ -90,6 +90,8 @@ function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, 
   if (entries.length === 0) return null;
 
   const maxDeviation = Math.max(0.1, ...entries.map((e) => Math.abs(e.factor - 1)));
+  const { theme } = useTheme();
+  const ds = DATA_SERIES[theme];
 
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
@@ -124,14 +126,14 @@ function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, 
                   style={{
                     width: `${widthPct}%`,
                     left: above ? '50%' : `${50 - widthPct}%`,
-                    backgroundColor: above ? '#22c55e' : '#f59e0b',
+                    backgroundColor: above ? ds.positive : ds.caution,
                     opacity: 0.75,
                   }}
                 />
               </div>
               <span
                 className="w-12 shrink-0 text-right text-xs font-semibold"
-                style={{ color: above ? '#22c55e' : '#f59e0b' }}
+                style={{ color: above ? ds.positive : ds.caution }}
               >
                 {above ? '+' : ''}{pct.toFixed(0)}%
               </span>
@@ -304,7 +306,8 @@ function ForecastChart() {
   }, [forecast]);
 
   const predictedColor = series.usage;
-  const actualColor = '#22c55e';
+  const actualColor = DATA_SERIES[theme].positive;
+  const errorColor = DATA_SERIES[theme].caution;
   // Confidence band: a tint of the theme's CONTRASTING color (series.temp —
   // e.g. yellow/amber against a purple usage line), not a tint of the
   // predicted-usage color itself. A low-alpha tint of the same hue as the solid
@@ -630,9 +633,9 @@ function ForecastChart() {
                   type="monotone"
                   dataKey="error"
                   name="error"
-                  stroke="#f59e0b"
+                  stroke={errorColor}
                   strokeWidth={1.5}
-                  dot={{ fill: '#f59e0b', r: 2.5 }}
+                  dot={{ fill: errorColor, r: 2.5 }}
                   isAnimationActive={false}
                 />
                 <Line
@@ -689,7 +692,7 @@ function ForecastChart() {
                 type="monotone"
                 dataKey="error"
                 name="error"
-                stroke="#f59e0b"
+                stroke={errorColor}
                 strokeWidth={1.5}
                 dot={false}
                 isAnimationActive={false}

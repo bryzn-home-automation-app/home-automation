@@ -28,6 +28,17 @@
   --color-apptext-muted:      var(--apptext-muted);
   --color-apptext-dim:        var(--apptext-dim);
 
+  /* ── Semantic status TEXT tokens ──
+     Text-safe status colors (>= 4.5:1 on every app surface, incl. a 10% tinted
+     badge of the same hue, in both themes). Use these for status words and
+     figures: text-apptext-success, text-apptext-warning, ...
+     --appsuccess/--appwarning/--appdanger below remain the FILL tokens (dots,
+     bars, solid badges, 10% tints). */
+  --color-apptext-success:    var(--apptext-success);
+  --color-apptext-warning:    var(--apptext-warning);
+  --color-apptext-danger:     var(--apptext-danger);
+  --color-apptext-info:       var(--apptext-info);
+
   /* ── Semantic border tokens ── */
   --color-appborder:          var(--appborder);
   --color-appborder-light:    var(--appborder-light);
@@ -38,9 +49,12 @@
   --color-appaccent-soft:     var(--appaccent-soft);
   --color-appaccent-border:   var(--appaccent-border);
   --color-appaccent-text:     var(--appaccent-text);
+  /* Text/icon color ON a solid bg-appaccent / bg-appdanger fill. */
+  --color-appaccent-fg:       var(--appaccent-fg);
   --color-appsuccess:         var(--appsuccess);
   --color-appwarning:         var(--appwarning);
   --color-appdanger:          var(--appdanger);
+  --color-appdanger-fg:       var(--appdanger-fg);
 
   /* ── Glow / gradient ── */
   --color-appglow:            var(--appglow);
@@ -52,6 +66,10 @@
   --color-appchart-grid:      var(--appchart-grid);
   --color-appchart-tick:      var(--appchart-tick);
   --color-appchart-border:    var(--appchart-border);
+  /* Fixed data-identity series (>= 3:1 on --appchart-bg in both themes). */
+  --color-appchart-heat:      var(--appchart-heat);
+  --color-appchart-cool:      var(--appchart-cool);
+  --color-appchart-charge:    var(--appchart-charge);
 
   /* ── Shadows ── */
   --color-appshadow:          var(--appshadow);
@@ -107,7 +125,19 @@
   --apptext:            #f8fafc;
   --apptext-soft:       #cbd5e1;
   --apptext-muted:      #94a3b8;
-  --apptext-dim:        #64748b;
+  /* Was #64748b (slate-500): only 3.2-3.8:1 on the dark surfaces, under the
+     4.5:1 body-text minimum for the timestamps/captions that use it. Lifted
+     just enough to pass on --appinset-strong (4.7:1) while staying visibly
+     dimmer than --apptext-muted. */
+  --apptext-dim:        #8190a5;
+
+  /* Status text — the exact hexes --appsuccess/--appwarning/--appdanger
+     already had, so text-appsuccess → text-apptext-success is a no-op in dark.
+     Info matches the sky-300 the app uses for informational text. */
+  --apptext-success:    #4ade80;
+  --apptext-warning:    #fbbf24;
+  --apptext-danger:     #fb7185;
+  --apptext-info:       #7dd3fc;
 
   --appborder:          rgba(255, 255, 255, 0.1);
   --appborder-light:    rgba(255, 255, 255, 0.06);
@@ -117,10 +147,14 @@
   --appaccent-soft:     rgba(16, 185, 129, 0.15);
   --appaccent-border:   rgba(52, 211, 153, 0.4);
   --appaccent-text:     #a7f3d0;
+  /* White on the bright dark-mode emerald was 1.9:1 (Sign in / Save buttons). */
+  --appaccent-fg:       #022c22;
 
   --appsuccess:         #4ade80;
   --appwarning:         #fbbf24;
   --appdanger:          #fb7185;
+  /* White on #fb7185 is 2.7:1 (unread-count badges); rose-950 is 5.8:1. */
+  --appdanger-fg:       #4c0519;
 
   --appglow:            rgba(56, 189, 248, 0.16);
   --appglow-accent:     rgba(16, 185, 129, 0.18);
@@ -130,6 +164,11 @@
   --appchart-grid:      rgba(148, 163, 184, 0.12);
   --appchart-tick:      #94a3b8;
   --appchart-border:    rgba(148, 163, 184, 0.14);
+  /* Same colors the charts used before (Tailwind v4 orange-300 / sky-300 /
+     emerald-400, as rendered in sRGB). */
+  --appchart-heat:      #ffb86a;
+  --appchart-cool:      #74d4ff;
+  --appchart-charge:    #00d492;
 
   --appshadow:          rgba(2, 8, 23, 0.24);
   --appshadow-lg:       rgba(2, 8, 23, 0.42);
@@ -160,8 +199,19 @@
      Dashboard, Maintenance, Home, WiFi, and others), the same role
      --apptext-muted already handles correctly elsewhere — so this keeps a
      hair of distinction from --apptext-muted rather than making them
-     identical, but is meaningfully more legible than the old value. */
-  --apptext-dim:        #56637a;
+     identical, but is meaningfully more legible than the old value.
+     Nudged again #56637a → #4d596e: the tinted palettes' --appinset-strong
+     (Violet #dbcaef, Ocean #c3ddf0) took #56637a down to 3.96-4.3:1. */
+  --apptext-dim:        #4d596e;
+
+  /* Status text — Tailwind 800 steps. 600/700 looked fine on white but fell
+     to 2.2-3.7:1 on the palette-tinted inset tiles and inside the 10% tinted
+     badges they usually sit in; 800 holds >= 4.5:1 on every surface except a
+     tinted badge on the darkest palette --appinset-strong (>= 4.0:1). */
+  --apptext-success:    #065f46;   /* emerald-800 */
+  --apptext-warning:    #92400e;   /* amber-800 */
+  --apptext-danger:     #9f1239;   /* rose-800 */
+  --apptext-info:       #075985;   /* sky-800 */
 
   --appborder:          rgba(15, 23, 42, 0.14);
   --appborder-light:    rgba(15, 23, 42, 0.08);
@@ -171,10 +221,15 @@
   --appaccent-soft:     rgba(5, 150, 105, 0.14);
   --appaccent-border:   rgba(4, 120, 87, 0.4);
   --appaccent-text:     #065f46;
+  --appaccent-fg:       #ffffff;
 
-  --appsuccess:         #16a34a;
-  --appwarning:         #d97706;
-  --appdanger:          #e11d48;
+  /* Fill tokens one step deeper (were green-600 / amber-600 / rose-600):
+     the old success/warning dots and bars were 2.2-2.7:1 against the inset
+     tiles, under the 3:1 non-text minimum. */
+  --appsuccess:         #15803d;   /* green-700 */
+  --appwarning:         #b45309;   /* amber-700 */
+  --appdanger:          #be123c;   /* rose-700 */
+  --appdanger-fg:       #ffffff;
 
   --appglow:            rgba(56, 189, 248, 0.1);
   --appglow-accent:     rgba(5, 150, 105, 0.1);
@@ -184,71 +239,81 @@
   --appchart-grid:      rgba(15, 23, 42, 0.1);
   --appchart-tick:      #475569;
   --appchart-border:    rgba(15, 23, 42, 0.14);
+  /* 600 steps: >= 3.5:1 on the white chart, and deliberately NOT the 800
+     text shades — at 800 heat (brown) and cool (navy) both go near-black and
+     stop reading as orange-vs-blue, and charging green merges with the slate
+     on-battery line. */
+  --appchart-heat:      #ea580c;   /* orange-600 */
+  --appchart-cool:      #0284c7;   /* sky-600 */
+  --appchart-charge:    #059669;   /* emerald-600 */
 
   --appshadow:          rgba(15, 23, 42, 0.08);
   --appshadow-lg:       rgba(15, 23, 42, 0.16);
 
-  /* ── Vivid accent shades (200/300/400) used in component markup ──
-     Badges use text-{color}-300 + bg-{color}-300/10 + border-{color}-300/20.
-     Mapping 300→500 (instead of the darker 600/700) keeps the text legible
-     AND lets the 10%/20% tinted backgrounds + borders actually show their
-     green/yellow color instead of washing out to near-invisible. */
-  /* One notch darker than a plain 400/500/600 mapping — same reasoning
-     as sky/emerald below: badges/labels use this as plain text on top
-     of tinted card fills now, not just a subtle dark-mode pastel. */
-  --color-amber-200:    #f59e0b;   /* 500 */
-  --color-amber-300:    #d97706;   /* 600 */
-  --color-amber-400:    #b45309;   /* 700 */
+  /* ── Pastel palette steps (100-400) used in component markup ──
+     Components are written for dark mode: badges are text-{c}-300 +
+     bg-{c}-300/10 + border-{c}-300/20, plain status text is text-{c}-200/300/400.
+     The app has no `dark:` variant, so light mode redefines those steps here.
+     They used to map to the 400-700 steps, which measured 1.2-3.8:1 as text
+     on the light surfaces (yellow/cyan/amber worst). Every step now resolves
+     to ONE text-safe shade per hue (the 800 step; 700 for the blue-violet
+     hues, whose 700 already clears 4.5:1), so text, the 10% tint behind it and
+     the border all stay one recognisable hue. The four status hues route
+     through the semantic --apptext-* tokens so there is one place to tune.
+     100 is left alone on purpose: it is only used as text on top of solid
+     -400/-600 gradient fills (UserManagement role rail), where a dark 100
+     would vanish. */
+  --color-emerald-200:  var(--apptext-success);
+  --color-emerald-300:  var(--apptext-success);
+  --color-emerald-400:  var(--apptext-success);
+  --color-green-200:    #166534;   /* 800 */
+  --color-green-300:    #166534;
+  --color-green-400:    #166534;
+  --color-teal-200:     #115e59;   /* 800 */
+  --color-teal-300:     #115e59;
+  --color-teal-400:     #115e59;
 
-  /* One notch darker than the other remapped families (500/600/700
-     instead of 400/500/600) — plain text, e.g. job-row dates and cost
-     figures, uses these at full strength directly on white, not just
-     inside a tinted badge, and the 500-weight read as too light there. */
-  --color-emerald-200:  #10b981;   /* 500 */
-  --color-emerald-300:  #059669;   /* 600 */
-  --color-emerald-400:  #047857;   /* 700 */
+  --color-amber-200:    var(--apptext-warning);
+  --color-amber-300:    var(--apptext-warning);
+  --color-amber-400:    var(--apptext-warning);
+  --color-yellow-200:   #854d0e;   /* 800 */
+  --color-yellow-300:   #854d0e;
+  --color-yellow-400:   #854d0e;
+  --color-orange-200:   #9a3412;   /* 800 */
+  --color-orange-300:   #9a3412;
+  --color-orange-400:   #9a3412;
 
-  --color-sky-200:      #0ea5e9;   /* 500 */
-  --color-sky-300:      #0284c7;   /* 600 */
-  --color-sky-400:      #0369a1;   /* 700 */
+  --color-rose-200:     var(--apptext-danger);
+  --color-rose-300:     var(--apptext-danger);
+  --color-rose-400:     var(--apptext-danger);
+  --color-red-200:      #991b1b;   /* 800 */
+  --color-red-300:      #991b1b;
+  --color-red-400:      #991b1b;
+  --color-pink-200:     #9d174d;   /* 800 */
+  --color-pink-300:     #9d174d;
+  --color-pink-400:     #9d174d;
+  --color-fuchsia-200:  #86198f;   /* 800 */
+  --color-fuchsia-300:  #86198f;
+  --color-fuchsia-400:  #86198f;
 
-  --color-rose-200:     #fb7185;   /* 400 */
-  --color-rose-300:     #f43f5e;   /* 500 */
-  --color-rose-400:     #e11d48;   /* 600 */
-
-  --color-cyan-200:     #22d3ee;   /* 400 */
-  --color-cyan-300:     #06b6d4;   /* 500 */
-  --color-cyan-400:     #0891b2;   /* 600 */
-
-  --color-violet-200:   #a78bfa;   /* 400 */
-  --color-violet-300:   #8b5cf6;   /* 500 */
-  --color-violet-400:   #7c3aed;   /* 600 */
-
-  --color-pink-200:     #f9a8d4;   /* 400 */
-  --color-pink-300:     #ec4899;   /* 500 */
-  --color-pink-400:     #db2777;   /* 600 */
-
-  /* Same idiom, same 200/300/400 → 400/500/600 shift as above. These three
-     families weren't covered before, so every badge using them (role/status
-     pills in UserManagement, AuditLogs, Notifications, MaintenanceDashboard —
-     e.g. GUEST role, PENDING_APPROVAL status, CRITICAL severity) fell back to
-     Tailwind's dark-mode-tuned defaults and washed out to near-invisible
-     tinted backgrounds + low-contrast text in light mode. */
-  --color-red-200:      #f87171;   /* 400 */
-  --color-red-300:      #ef4444;   /* 500 */
-  --color-red-400:      #dc2626;   /* 600 */
-
-  --color-purple-200:   #c084fc;   /* 400 */
-  --color-purple-300:   #a855f7;   /* 500 */
-  --color-purple-400:   #9333ea;   /* 600 */
-
-  --color-yellow-200:   #facc15;   /* 400 */
-  --color-yellow-300:   #eab308;   /* 500 */
-  --color-yellow-400:   #ca8a04;   /* 600 */
-
-  --color-orange-200:   #f97316;   /* 500 */
-  --color-orange-300:   #ea580c;   /* 600 */
-  --color-orange-400:   #c2410c;   /* 700 */
+  --color-sky-200:      var(--apptext-info);
+  --color-sky-300:      var(--apptext-info);
+  --color-sky-400:      var(--apptext-info);
+  --color-cyan-200:     #155e75;   /* 800 */
+  --color-cyan-300:     #155e75;
+  --color-cyan-400:     #155e75;
+  --color-blue-200:     #1d4ed8;   /* 700 */
+  --color-blue-300:     #1d4ed8;
+  --color-blue-400:     #1d4ed8;
+  --color-indigo-200:   #4338ca;   /* 700 */
+  --color-indigo-300:   #4338ca;
+  --color-indigo-400:   #4338ca;
+  --color-violet-200:   #6d28d9;   /* 700 */
+  --color-violet-300:   #6d28d9;
+  --color-violet-400:   #6d28d9;
+  --color-purple-200:   #7e22ce;   /* 700 */
+  --color-purple-300:   #7e22ce;
+  --color-purple-400:   #7e22ce;
 
   color-scheme: light;
 }
@@ -339,6 +404,8 @@
   --appaccent-soft:     rgba(2, 132, 199, 0.16);
   --appaccent-border:   rgba(2, 132, 199, 0.42);
   --appaccent-text:     #bae6fd;
+  /* White on #0284c7 is 4.1:1 — under 4.5 for the 15px button labels. */
+  --appaccent-fg:       #020617;
   --appglow-accent:     rgba(2, 132, 199, 0.22);
 }
 
@@ -362,6 +429,8 @@
   --appaccent-soft:     rgba(234, 88, 12, 0.16);
   --appaccent-border:   rgba(234, 88, 12, 0.42);
   --appaccent-text:     #ffe1d0;
+  /* White on #ea580c is 3.6:1. */
+  --appaccent-fg:       #020617;
   --appglow-accent:     rgba(234, 88, 12, 0.22);
 }
 
@@ -385,6 +454,7 @@
   --appaccent-soft:     rgba(124, 58, 237, 0.16);
   --appaccent-border:   rgba(124, 58, 237, 0.42);
   --appaccent-text:     #dcc2ff;
+  --appaccent-fg:       #ffffff;   /* 5.7:1 */
   --appglow-accent:     rgba(124, 58, 237, 0.22);
 }
 

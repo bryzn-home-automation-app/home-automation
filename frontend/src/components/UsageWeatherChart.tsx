@@ -397,16 +397,21 @@ function UsageWeatherChart({
           <h3 className="mt-2 text-xl font-semibold text-apptext">Electric Usage vs Temperature</h3>
         </div>
         <div className="flex items-center gap-2">
+          {/* Text is --appaccent-text, not series.usage: the dark Violet/Ocean
+              usage lines (#7c3aed / #0284c7) are only 3-4:1 as 11px chip text. */}
           <span
             className="rounded-full border px-2.5 py-1 text-3xs font-semibold"
-            style={{ color: series.usage, backgroundColor: hexToRgba(series.usage, 0.1), borderColor: hexToRgba(series.usage, 0.22) }}
+            style={{ color: 'var(--appaccent-text)', backgroundColor: hexToRgba(series.usage, 0.1), borderColor: hexToRgba(series.usage, 0.22) }}
           >
             kWh
           </span>
+          {/* Light-mode temp lines are tuned for 3:1 as chart marks; as 11px text on
+              their own 10% tint they land at 4.3-4.5:1, so the label is pulled 30%
+              toward --apptext (same hue, >= 5:1). Dark keeps the raw series color. */}
           {hasWeather && (
             <span
               className="rounded-full border px-2.5 py-1 text-3xs font-semibold"
-              style={{ color: series.temp, backgroundColor: hexToRgba(series.temp, 0.1), borderColor: hexToRgba(series.temp, 0.22) }}
+              style={{ color: theme === 'light' ? `color-mix(in srgb, ${series.temp} 70%, var(--apptext))` : series.temp, backgroundColor: hexToRgba(series.temp, 0.1), borderColor: hexToRgba(series.temp, 0.22) }}
             >
               °F
             </span>

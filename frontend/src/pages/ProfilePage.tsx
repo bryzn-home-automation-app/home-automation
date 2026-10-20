@@ -84,7 +84,7 @@ export default function ProfilePage() {
       <PushSettings />
 
       {saveError && (
-        <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-appdanger">
+        <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
           {saveError}
         </div>
       )}

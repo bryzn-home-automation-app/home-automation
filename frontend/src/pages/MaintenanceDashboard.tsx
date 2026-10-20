@@ -446,7 +446,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
                 onError: () => alert('Could not delete this record. Please try again.'),
               });
             }}
-            className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm font-semibold text-appdanger hover:bg-appdanger/20 disabled:opacity-50"
+            className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm font-semibold text-apptext-danger hover:bg-appdanger/20 disabled:opacity-50"
           >
             {del.isPending ? '…' : '🗑️'}
           </button>
@@ -704,7 +704,7 @@ function FormModal({ editing, onClose, onSuccess }: {
             <button type="button" onClick={onClose}
               className="flex-1 rounded-2xl border border-appborder bg-appinset px-4 py-3 text-sm font-semibold text-apptext-soft hover:bg-appinset-strong">Cancel</button>
             <button type="submit" disabled={saving || !title.trim()}
-              className="flex-1 rounded-2xl bg-appaccent px-4 py-3 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] hover:brightness-110 disabled:opacity-50">
+              className="flex-1 rounded-2xl bg-appaccent px-4 py-3 text-sm font-semibold text-appaccent-fg shadow-[0_8px_24px_var(--appaccent-soft)] hover:brightness-110 disabled:opacity-50">
               {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Record'}
             </button>
           </div>
@@ -773,7 +773,7 @@ export default function MaintenanceDashboard() {
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="inline-flex items-center gap-2 rounded-2xl bg-appaccent px-5 py-3 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] hover:brightness-110 active:scale-[0.98]"
+            className="inline-flex items-center gap-2 rounded-2xl bg-appaccent px-5 py-3 text-sm font-semibold text-appaccent-fg shadow-[0_8px_24px_var(--appaccent-soft)] hover:brightness-110 active:scale-[0.98]"
           >
             + Add Maintenance
           </button>
@@ -836,7 +836,7 @@ export default function MaintenanceDashboard() {
             <span className="text-4xl">🔨</span>
             <p className="text-sm text-apptext-muted">No maintenance records yet. Start tracking your home's history.</p>
             <button onClick={() => setAdding(true)}
-              className="rounded-2xl bg-appaccent px-5 py-2.5 text-sm font-semibold text-white hover:brightness-110">
+              className="rounded-2xl bg-appaccent px-5 py-2.5 text-sm font-semibold text-appaccent-fg hover:brightness-110">
               + Add First Record
             </button>
           </div>

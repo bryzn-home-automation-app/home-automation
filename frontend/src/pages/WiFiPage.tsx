@@ -146,7 +146,7 @@ export default function WiFiPage() {
                 <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Security</p>
                 <p className="mt-0.5 text-sm text-apptext-soft">WPA2-Personal</p>
               </div>
-              <span className="text-sm font-medium text-appsuccess">Secure</span>
+              <span className="text-sm font-medium text-apptext-success">Secure</span>
             </div>
           </div>
 
