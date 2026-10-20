@@ -7,6 +7,7 @@ import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute, AdminRoute, MemberRoute } from './components/Guard';
 import PageSkeleton, { type PageSkeletonVariant } from './components/PageSkeleton';
 import App from './App';
+import { registerServiceWorker } from './utils/push';
 import './index.css';
 
 // ── Public pages (no auth required) ──
@@ -83,6 +84,9 @@ const UserManagementRoute = lazyRoute(UserManagement, 'list');
 const GuestManagementRoute = lazyRoute(GuestManagement, 'list');
 const AuditLogsRoute = lazyRoute(AuditLogs, 'list');
 const DebugDashboardRoute = lazyRoute(DebugDashboard, 'default');
+
+// Phone alerts: the worker only handles pushes (no caching), registered up front on HTTPS.
+registerServiceWorker();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

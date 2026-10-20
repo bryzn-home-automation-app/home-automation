@@ -744,3 +744,31 @@ CREATE TABLE IF NOT EXISTS camera_battery_readings (
 );
 
 CREATE INDEX IF NOT EXISTS idx_camera_battery_readings_device_time ON camera_battery_readings (device_id, recorded_at);
+
+-- ============================================================
+-- Web Push (phone alerts for the Home Screen app)
+-- ============================================================
+
+-- One row per device that turned alerts on. endpoint is the push service URL
+-- (Apple/Google/Mozilla); p256dh/auth are the browser's encryption keys.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id                  SERIAL PRIMARY KEY,
+    user_id             INTEGER        NOT NULL REFERENCES users(id),
+    endpoint            VARCHAR(1000)  NOT NULL UNIQUE,
+    p256dh              VARCHAR(200)   NOT NULL,
+    auth                VARCHAR(100)   NOT NULL,
+    user_agent          VARCHAR(300),
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW(),
+    last_success_at     TIMESTAMP,
+    failure_count       INTEGER        NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions (user_id);
+
+-- The server's VAPID key pair (generated once on first use). Single row, id = 1.
+CREATE TABLE IF NOT EXISTS push_vapid_keys (
+    id                  INTEGER        PRIMARY KEY,
+    public_key          VARCHAR(200)   NOT NULL,
+    private_key         VARCHAR(400)   NOT NULL,
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);

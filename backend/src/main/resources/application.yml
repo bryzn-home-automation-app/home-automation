@@ -59,6 +59,11 @@ app:
 
 server:
   port: 8080
+  # Honor X-Forwarded-Proto/Host from nginx so a request that arrived as HTTPS via
+  # Tailscale (tailscale serve -> nginx -> here over plain HTTP) is seen as
+  # https://nuc.<tailnet>.ts.net. Without it, every POST from that origin looked
+  # cross-origin and was refused by CORS. nginx sets these headers itself.
+  forward-headers-strategy: framework
 
 springdoc:
   api-docs:
