@@ -77,6 +77,10 @@ services:
       GUEST_INVITE_CODE: ${GUEST_INVITE_CODE:-}
       SPRINGDOC_API_DOCS_ENABLED: ${SPRINGDOC_API_DOCS_ENABLED:-false}
       SPRINGDOC_SWAGGER_UI_ENABLED: ${SPRINGDOC_SWAGGER_UI_ENABLED:-false}
+      # Home Assistant — blank/false keeps the integration off (stack still boots).
+      HA_ENABLED: ${HA_ENABLED:-false}
+      HA_URL: ${HA_URL:-http://homeassistant:8123}
+      HA_TOKEN: ${HA_TOKEN:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-homeplatform}
@@ -122,6 +126,24 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # Home Assistant (Container install) — the smart-home integration layer the backend
+  # talks to (ecobee now, Eufy later). Runs here rather than as a VM because the NUC is
+  # Windows 11 Home (no Hyper-V) and VirtualBox on the WSL2 hypervisor was CPU-starved.
+  # No add-on store and no LAN discovery in this mode; fine for cloud integrations
+  # like ecobee. Pinned version — bump deliberately, HA's backups live in the volume.
+  homeassistant:
+    image: ghcr.io/home-assistant/home-assistant:2026.10.2
+    container_name: homeplatform-homeassistant
+    environment:
+      TZ: America/Chicago
+    volumes:
+      - ha_config:/config
+    # Published so the HA UI is reachable on the LAN (setup, integrations). HA has its
+    # own login; the backend uses the internal URL http://homeassistant:8123.
+    ports:
+      - "8123:8123"
+    restart: unless-stopped
+
   nginx:
     build:
       context: .
@@ -140,3 +162,4 @@ volumes:
   postgres_data:
   redis_data:
   uploads_data:
+  ha_config:

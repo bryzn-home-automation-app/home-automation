@@ -49,6 +49,13 @@ app:
     login:
       max-attempts: ${LOGIN_MAX_ATTEMPTS:10}
       window-minutes: ${LOGIN_WINDOW_MINUTES:15}
+  # Home Assistant device layer (ecobee, Eufy). Active only when enabled AND url+token
+  # are set; otherwise the integration disables itself and /api/home/* returns 503.
+  home-assistant:
+    enabled: ${HA_ENABLED:false}
+    url: ${HA_URL:}
+    token: ${HA_TOKEN:}
+    request-timeout-seconds: ${HA_REQUEST_TIMEOUT_SECONDS:10}
 
 server:
   port: 8080
