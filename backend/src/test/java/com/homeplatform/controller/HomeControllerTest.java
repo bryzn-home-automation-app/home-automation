@@ -3,7 +3,11 @@ package com.homeplatform.controller;
 import com.homeplatform.dto.ThermostatResponse;
 import com.homeplatform.homeassistant.HomeAssistantClient;
 import com.homeplatform.homeassistant.HomeAssistantException;
+import com.homeplatform.dto.ThermostatChangeResponse;
 import com.homeplatform.homeassistant.HomeDeviceService;
+import com.homeplatform.homeassistant.ThermostatChangeRecorder;
+import com.homeplatform.model.User;
+import com.homeplatform.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -13,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
@@ -31,13 +36,15 @@ class HomeControllerTest {
     private static final String ID = "3f1c9a52-6a43-4f0e-9a8e-2d5c1f7b9e10";
 
     private HomeDeviceService service;
+    private UserRepository users;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         service = mock(HomeDeviceService.class);
+        users = mock(UserRepository.class);
         mvc = MockMvcBuilders
-                .standaloneSetup(new HomeController(service), new HomeAdminController(service))
+                .standaloneSetup(new HomeController(service, users), new HomeAdminController(service))
                 .setControllerAdvice(new HomeExceptionHandler())
                 .build();
     }
@@ -45,7 +52,7 @@ class HomeControllerTest {
     private static ThermostatResponse thermostat() {
         return new ThermostatResponse(ID, "Main Floor", true, 70.0, 40.0, 71.0, 71.0, null,
                 "heat", "heating", "home", "°F", 45.0, 92.0, List.of("heat", "off"), List.of("home", "away"),
-                "2026-10-19T12:00:00Z");
+                "2026-10-19T12:00:00Z", null);
     }
 
     @Nested
@@ -73,9 +80,9 @@ class HomeControllerTest {
                     .andExpect(status().isForbidden());
             mvc.perform(post("/api/home/thermostats/" + ID + "/resume").requestAttr("role", "GUEST"))
                     .andExpect(status().isForbidden());
-            verify(service, never()).setMode(anyString(), anyString());
-            verify(service, never()).setTemperature(anyString(), any());
-            verify(service, never()).resume(anyString());
+            verify(service, never()).setMode(anyString(), anyString(), any());
+            verify(service, never()).setTemperature(anyString(), any(), any());
+            verify(service, never()).resume(anyString(), any());
         }
 
         @Test
@@ -97,7 +104,7 @@ class HomeControllerTest {
     @Test
     @DisplayName("USER can control and fetch camera snapshots")
     void userAllowed() throws Exception {
-        when(service.setMode(ID, "cool")).thenReturn(thermostat());
+        when(service.setMode(eq(ID), eq("cool"), any())).thenReturn(thermostat());
         mvc.perform(post("/api/home/thermostats/" + ID + "/mode").requestAttr("role", "USER")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"cool\"}"))
                 .andExpect(status().isOk());
@@ -108,6 +115,44 @@ class HomeControllerTest {
                 .andExpect(content().contentType("image/jpeg"))
                 .andExpect(content().bytes(new byte[]{1, 2, 3}))
                 .andExpect(header().string("Cache-Control", containsString("no-store")));
+    }
+
+    @Test
+    @DisplayName("commands are attributed to the caller's display name")
+    void commandsCarryActor() throws Exception {
+        User bryan = new User();
+        bryan.setId(42L);
+        bryan.setUsername("bryan");
+        bryan.setDisplayName("Bryan");
+        when(users.findById(42L)).thenReturn(Optional.of(bryan));
+        when(service.setTemperature(eq(ID), any(), any())).thenReturn(thermostat());
+        mvc.perform(post("/api/home/thermostats/" + ID + "/temperature").requestAttr("role", "USER")
+                        .requestAttr("userId", 42L).requestAttr("username", "bryan")
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"temperature\":72}"))
+                .andExpect(status().isOk());
+        verify(service).setTemperature(eq(ID), any(), eq(new ThermostatChangeRecorder.Actor(42L, "Bryan")));
+    }
+
+    @Test
+    @DisplayName("unknown user falls back to the JWT username")
+    void actorFallsBackToUsername() throws Exception {
+        when(users.findById(7L)).thenReturn(Optional.empty());
+        when(service.resume(eq(ID), any())).thenReturn(thermostat());
+        mvc.perform(post("/api/home/thermostats/" + ID + "/resume").requestAttr("role", "ADMIN")
+                        .requestAttr("userId", 7L).requestAttr("username", "kim"))
+                .andExpect(status().isOk());
+        verify(service).resume(ID, new ThermostatChangeRecorder.Actor(7L, "kim"));
+    }
+
+    @Test
+    @DisplayName("change history is readable by guests")
+    void changesReadable() throws Exception {
+        when(service.changes(ID, 5)).thenReturn(List.of(new ThermostatChangeResponse("2026-10-20T05:00:00Z",
+                "ecobee", "ecobee", null, List.of("setpoint"), "cool", "temp", 73.0, null, 73.0)));
+        mvc.perform(get("/api/home/thermostats/" + ID + "/changes").param("limit", "5").requestAttr("role", "GUEST"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].actor").value("ecobee"))
+                .andExpect(jsonPath("$[0].fields[0]").value("setpoint"));
     }
 
     @Test
@@ -142,7 +187,7 @@ class HomeControllerTest {
         @Test
         @DisplayName("validation failure → 400 with message")
         void badRequest() throws Exception {
-            when(service.setTemperature(eq(ID), any())).thenThrow(new IllegalArgumentException("Temperature must be between 45.0 and 92.0"));
+            when(service.setTemperature(eq(ID), any(), any())).thenThrow(new IllegalArgumentException("Temperature must be between 45.0 and 92.0"));
             mvc.perform(post("/api/home/thermostats/" + ID + "/temperature").requestAttr("role", "USER")
                             .contentType(MediaType.APPLICATION_JSON).content("{\"temperature\":120}"))
                     .andExpect(status().isBadRequest())
@@ -160,10 +205,10 @@ class HomeControllerTest {
         @Test
         @DisplayName("resume unsupported → 501; preset unsupported → 422")
         void unsupported() throws Exception {
-            when(service.resume(ID)).thenThrow(new HomeDeviceService.Unsupported("no resume", true));
+            when(service.resume(eq(ID), any())).thenThrow(new HomeDeviceService.Unsupported("no resume", true));
             mvc.perform(post("/api/home/thermostats/" + ID + "/resume").requestAttr("role", "USER"))
                     .andExpect(status().isNotImplemented());
-            when(service.hold(ID, "vacation")).thenThrow(new HomeDeviceService.Unsupported("no presets", false));
+            when(service.hold(eq(ID), eq("vacation"), any())).thenThrow(new HomeDeviceService.Unsupported("no presets", false));
             mvc.perform(post("/api/home/thermostats/" + ID + "/hold").requestAttr("role", "USER")
                             .contentType(MediaType.APPLICATION_JSON).content("{\"preset\":\"vacation\"}"))
                     .andExpect(status().isUnprocessableEntity());
