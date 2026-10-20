@@ -45,6 +45,15 @@ export function socketUrl(path: string, location: Pick<Location, 'protocol' | 'h
   return `${scheme}//${location.host}${path}`;
 }
 
+/**
+ * go2rtc's errors are terse ("codecs not matched: …"). The eufy cameras send
+ * H.265, which Firefox and some PCs can't decode — say so plainly.
+ */
+export function friendlyError(raw: string | undefined): string {
+  if (raw && /codec/i.test(raw)) return "This browser can't play this camera's H.265 video — try Safari, Chrome or Edge";
+  return raw || 'The camera did not start';
+}
+
 export interface MsePlayerHandlers {
   /** First frame is on screen. */
   onPlaying?: () => void;
@@ -135,7 +144,7 @@ export class MsePlayer {
           return;
         }
         if (msg.type === 'mse' && msg.value) this.initBuffer(msg.value);
-        else if (msg.type === 'error') this.fail(msg.value || 'The camera did not start');
+        else if (msg.type === 'error') this.fail(friendlyError(msg.value));
       } else {
         this.append(new Uint8Array(ev.data as ArrayBuffer));
       }

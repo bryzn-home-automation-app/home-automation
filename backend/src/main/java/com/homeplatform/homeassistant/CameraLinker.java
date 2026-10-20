@@ -71,12 +71,21 @@ public final class CameraLinker {
             out.add(new Link(
                     camera,
                     serial != null && STREAM_NAME.matcher(serial).matches() ? serial : null,
-                    first(siblings, s -> "sensor".equals(s.domain()) && deviceClass(s, "battery")),
+                    battery(siblings),
                     charging(siblings),
                     first(siblings, s -> "binary_sensor".equals(s.domain()) && deviceClass(s, "motion")),
                     first(siblings, s -> "binary_sensor".equals(s.domain()) && s.entityId().contains("person"))));
         }
         return out;
+    }
+
+    /**
+     * The charge-level sensor. eufy-sdk also tags "battery health" (pack wear, a
+     * percentage) with the battery class, so skip that one.
+     */
+    private static String battery(List<HaEntityState> siblings) {
+        return first(siblings, s -> "sensor".equals(s.domain()) && deviceClass(s, "battery")
+                && !s.entityId().contains("health"));
     }
 
     /** A battery_charging binary sensor, else an enum sensor named after charging. */

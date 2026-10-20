@@ -15,7 +15,7 @@ import {
   nightWindows,
   shouldStream,
 } from '../utils/cameras';
-import { socketUrl, supportedCodecs } from '../utils/msePlayer';
+import { friendlyError, socketUrl, supportedCodecs } from '../utils/msePlayer';
 
 const players = vi.hoisted(() => ({
   started: [] as string[],
@@ -181,6 +181,11 @@ describe('mse player helpers', () => {
   it('builds a same-origin ws url', () => {
     expect(socketUrl('/camera-stream/a.b/ws', { protocol: 'http:', host: '192.168.4.228' })).toBe('ws://192.168.4.228/camera-stream/a.b/ws');
     expect(socketUrl('/x', { protocol: 'https:', host: 'home.example' })).toBe('wss://home.example/x');
+  });
+
+  it('explains codec mismatches in plain words', () => {
+    expect(friendlyError('codecs not matched: video:H265')).toMatch(/H\.265/);
+    expect(friendlyError(undefined)).toBe('The camera did not start');
   });
 
   it('offers only codecs the browser can play', () => {

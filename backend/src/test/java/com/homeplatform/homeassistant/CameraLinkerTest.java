@@ -32,13 +32,15 @@ class CameraLinkerTest {
         var m = states(
                 state("camera.driveway", "idle", null),
                 state("sensor.driveway_battery", "87", "battery"),
+                // Real eufy-sdk entity: pack health also carries the battery class.
+                state("sensor.driveway_battery_health", "91", "battery"),
                 state("binary_sensor.driveway_charging", "on", "battery_charging"),
                 state("binary_sensor.driveway_motion", "off", "motion"),
                 state("binary_sensor.driveway_person", "off", "occupancy"),
                 state("sensor.driveway_wifi_signal", "-60", "signal_strength"));
         String rendered = """
                 [{"camera":"camera.driveway","serial":"T8170P20231234",
-                  "entities":["sensor.driveway_wifi_signal","binary_sensor.driveway_person","camera.driveway",
+                  "entities":["sensor.driveway_battery_health","sensor.driveway_wifi_signal","binary_sensor.driveway_person","camera.driveway",
                               "sensor.driveway_battery","binary_sensor.driveway_motion",
                               "binary_sensor.driveway_charging","sensor.disabled_entity"]}]""";
 
