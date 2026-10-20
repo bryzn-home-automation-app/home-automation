@@ -144,6 +144,39 @@ services:
       - "8123:8123"
     restart: unless-stopped
 
+  # eufy-sdk bridge — logs into Eufy once and serves the cameras/HomeBase to HA's
+  # eufy-sdk integration (custom_components/eufy_sdk in the ha_config volume) over
+  # ws://eufy-bridge:3000/ws, with go2rtc bundled for video (RTSP 8554, API 1984).
+  # Replaces eufy-security-ws, which broke when Eufy moved accounts to "Eufy Mega".
+  #
+  # Off by default: it only starts when .env sets COMPOSE_PROFILES=eufy (plus the
+  # EUFY_* login), so the stack doesn't crash-loop a bridge with no account.
+  # Use a dedicated Eufy account with the HomeBase shared to it — Eufy allows one
+  # active login per account, so the bridge would log the phone app out otherwise.
+  # Internal network only: HA reaches it by service name. Host networking (which
+  # Docker Desktop on Windows can't really provide) is only needed for the bridge's
+  # own WebRTC; HA streams from its RTSP instead.
+  eufy-bridge:
+    image: ghcr.io/mega-yfue/ha-eufy-sdk-bridge:0.6.0
+    container_name: homeplatform-eufy-bridge
+    profiles: ["eufy"]
+    environment:
+      TZ: America/Chicago
+      # Not ":?"-required: compose interpolates every service even when its
+      # profile is off, so a required var here would break every deploy.
+      EUFY_EMAIL: ${EUFY_EMAIL:-}
+      EUFY_PASSWORD: ${EUFY_PASSWORD:-}
+      EUFY_COUNTRY: ${EUFY_COUNTRY:-US}
+    volumes:
+      # Login token, push registration and the generated go2rtc.yaml — keeps
+      # restarts from re-prompting for 2FA.
+      - eufy_data:/app/data
+    expose:
+      - "3000"
+      - "1984"
+      - "8554"
+    restart: unless-stopped
+
   nginx:
     build:
       context: .
@@ -163,3 +196,4 @@ volumes:
   redis_data:
   uploads_data:
   ha_config:
+  eufy_data:
