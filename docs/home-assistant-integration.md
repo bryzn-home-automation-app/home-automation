@@ -101,5 +101,40 @@ IDs or the token. 503 when HA is disabled/unreachable, 404 for unknown/disabled 
 - **Entity attributes**: verify `current_temperature`, `current_humidity`, `temperature`,
   `target_temp_low/high`, `hvac_action`, `hvac_modes`, `preset_modes`, `min_temp/max_temp`
   on the real climate entity.
-- **Eufy**: verify which HA integration is currently maintained and supports the installed
-  hardware before Phase 5. Don't assume live video works just because camera entities exist.
+- **Eufy**: decided 2026-10-20 — see "Eufy (Phase 5)" below. Still to verify on the real
+  hardware (3 cameras + HomeBase): live video over the NUC's Docker/Wi-Fi network.
+
+## Eufy (Phase 5)
+
+**Why this stack.** The long-standing setup (fuatakgun `eufy_security` + bropat
+`eufy-security-ws`) stopped returning devices when Eufy moved accounts to its "Eufy Mega"
+platform; eufy-security-ws was archived 2026-09-12 and points to `mega-yfue/eufy-sdk`.
+HomeKit isn't viable (HomeBase 3 pairing fails), and HomeBase RTSP is model-dependent and
+gives video only — kept as a fallback if live view through the bridge doesn't work here.
+
+**Pieces.**
+- `eufy-bridge` service in `docker-compose.yml` — `ghcr.io/mega-yfue/ha-eufy-sdk-bridge`,
+  pinned. Logs into Eufy once; WebSocket on 3000, bundled go2rtc (RTSP 8554, API 1984).
+  Internal network only. **Off unless `.env` has `COMPOSE_PROFILES=eufy`** plus `EUFY_*`.
+  Login token persists in the `eufy_data` volume.
+- `eufy_sdk` integration in HA's `/config/custom_components`, installed by
+  `scripts/ha-install-eufy-sdk.sh <version>` (no HACS; same files, pinned). Keep the bridge
+  image and the integration on the same release.
+
+**Account.** Use a dedicated Eufy account with the HomeBase shared to it (admin). Eufy allows
+one active login per account — the bridge on the main account would sign the phone app out.
+Run exactly one bridge per account.
+
+**Setup.**
+1. Shared account exists → on the NUC, add to `.env`: `COMPOSE_PROFILES=eufy`,
+   `EUFY_EMAIL`, `EUFY_PASSWORD`, `EUFY_COUNTRY`; deploy (`~/deploy-nuc.sh home`).
+2. HA → Settings → Devices & services → Add Integration → **eufy-sdk** → host `eufy-bridge`,
+   port `3000`. Enter the emailed 2FA code / captcha there (codes expire fast).
+3. Backend discovery picks up the `camera.*` entities (Admin → discover, or the 15-min
+   snapshot); `/api/home/cameras` and `/snapshot` then serve them (members only).
+
+**Known risks.** The project is young (0.x, Sep–Oct 2026); recurring Eufy auth breakage has
+been reported (eufy-sdk #182) — fix is re-login via the integration. Host networking is only
+needed for the bridge's own WebRTC; HA streams via RTSP. Whether streaming needs LAN P2P to
+the HomeBase (which Docker Desktop's NAT + the NUC's Wi-Fi may block) is unverified — if live
+view fails but snapshots/events work, try HomeBase RTSP or move HA to wired dedicated hardware.
