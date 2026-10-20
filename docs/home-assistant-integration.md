@@ -21,8 +21,8 @@ generic Express/React Native stack) to this repo's conventions.
 | Express API, `integrations/home-assistant/*.ts` | Spring Boot, package `com.homeplatform.homeassistant`            |
 | `HomeAssistantClient`                  | `HomeAssistantClient` — JDK `HttpClient` + Jackson, bearer auth, timeouts |
 | `HomeAssistantWebSocket`               | `HomeAssistantWebSocket` (JDK `java.net.http.WebSocket`, reconnect with backoff) + `HaWebSocketProtocol` (pure message handling, unit-tested) |
-| `HomeAssistantService` / `entity-mapper` | `HomeAssistantService`, `ThermostatIngestionService`, `EntityMapper`    |
-| JWT/RBAC middleware                    | `JwtAuthFilter` sets `role`; controllers check it (`HomeAccess`)          |
+| `HomeAssistantService` / `entity-mapper` | `HomeAssistantService` (HA calls), `HomeDeviceService` (validation + DTOs), `ThermostatIngestionService`, `DeviceDiscoveryService`, `EntityMapper`; 15-min `HomeAssistantSnapshotScheduler` |
+| JWT/RBAC middleware                    | `JwtAuthFilter` sets `role`; `HomeController` / `HomeAdminController` check it; errors mapped by `HomeExceptionHandler` |
 | Migrations                             | `schema.sql` is the source of truth; JPA `ddl-auto: update` creates new tables/columns |
 | Separate poller service                | Not used — the WebSocket runs **in the backend** so events can reach `AppEventService` / `AlertEngine` in-process |
 | React Native screens                   | React + Vite + Tailwind tab (Phase 4)                                     |
