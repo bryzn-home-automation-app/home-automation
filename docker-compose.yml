@@ -77,6 +77,10 @@ services:
       GUEST_INVITE_CODE: ${GUEST_INVITE_CODE:-}
       SPRINGDOC_API_DOCS_ENABLED: ${SPRINGDOC_API_DOCS_ENABLED:-false}
       SPRINGDOC_SWAGGER_UI_ENABLED: ${SPRINGDOC_SWAGGER_UI_ENABLED:-false}
+      # Home Assistant — blank/false keeps the integration off (stack still boots).
+      HA_ENABLED: ${HA_ENABLED:-false}
+      HA_URL: ${HA_URL:-}
+      HA_TOKEN: ${HA_TOKEN:-}
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
       POSTGRES_DB: ${POSTGRES_DB:-homeplatform}
