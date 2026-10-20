@@ -242,7 +242,8 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
         )}
         {!snapshotUrl && snapshotQuery.isLoading && <div className="absolute inset-0 animate-pulse bg-appinset" />}
         {!snapshotUrl && snapshotQuery.isError && !live && (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-apptext-muted">No snapshot yet</div>
+          // Corner, not centre — the play button / overlays own the middle.
+          <p className="absolute bottom-3 left-3 text-2xs text-white/60">No snapshot yet</p>
         )}
         {streaming && (
           <LiveVideo
