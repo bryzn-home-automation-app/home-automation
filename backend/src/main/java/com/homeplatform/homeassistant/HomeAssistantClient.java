@@ -86,6 +86,20 @@ public class HomeAssistantClient {
         return Optional.of(HaEntityState.fromJson(parseJson(resp)));
     }
 
+    /** Whether HA currently exposes {@code domain.service} (from {@code GET /api/services}). */
+    public boolean hasService(String domain, String service) {
+        JsonNode body = parseJson(send(get("/api/services")));
+        if (!body.isArray()) {
+            throw new HomeAssistantException.InvalidResponse("Expected a JSON array from /api/services");
+        }
+        for (JsonNode d : body) {
+            if (domain.equals(d.path("domain").asText()) && d.path("services").has(service)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /** {@code POST /api/services/{domain}/{service}} with a JSON body. */
     public void callService(String domain, String service, Map<String, ?> data) {
         if (domain == null || !SERVICE_PART.matcher(domain).matches()

@@ -94,6 +94,19 @@ class HomeAssistantClientTest {
     }
 
     @Test
+    @DisplayName("hasService checks /api/services for domain + service")
+    void hasService() {
+        responseBody = """
+                [{"domain":"climate","services":{"set_temperature":{},"set_hvac_mode":{}}},
+                 {"domain":"ecobee","services":{"resume_program":{}}}]""";
+        var c = client();
+        assertTrue(c.hasService("ecobee", "resume_program"));
+        assertTrue(c.hasService("climate", "set_hvac_mode"));
+        assertFalse(c.hasService("ecobee", "create_vacation"));
+        assertFalse(c.hasService("eufy", "anything"));
+    }
+
+    @Test
     @DisplayName("getState returns empty on 404")
     void getStateMissing() {
         status = 404;
