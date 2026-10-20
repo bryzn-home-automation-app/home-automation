@@ -86,11 +86,12 @@ public class WeatherService {
                         return !d1.isBefore(start) && !d1.isAfter(end);
                     })
                     .toList();
-            // Persist to DB (idempotent — skips already-cached dates)
-            saveDailyObservations(lat, lon, start, end, raw);
-            // Re-query the full range from DB for aggregation (cached + newly saved)
-            List<WeatherObservation> all = repo.findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(
-                    stationCode, start, end);
+            // Persist to DB (idempotent — skips dates already stored, which `cached`
+            // already lists, so no per-day lookups). Re-query for aggregation only
+            // when something new was written.
+            List<WeatherObservation> saved = saveDailyObservations(lat, lon, start, end, raw, cached);
+            List<WeatherObservation> all = saved.isEmpty() ? cached
+                    : repo.findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(stationCode, start, end);
             WeatherCurrent current = parseCurrent(raw);
             // The forecast URL always carries PAST_DAYS of hours (~2,200); return only the
             // requested dates — /current was shipping 380 KB for a 3-day window.
@@ -187,8 +188,14 @@ public class WeatherService {
 
     // ── Persistence ─────────────────────────────────────────────
 
+    /**
+     * Store the response's daily rows in [requestStart, requestEnd] that aren't stored yet.
+     * {@code existing} is what the caller already loaded for that range — it used to be
+     * one exists() query per day (~90 per Utility load, ~250 ms) to learn the same thing.
+     */
     private List<WeatherObservation> saveDailyObservations(
-            double lat, double lon, LocalDate requestStart, LocalDate requestEnd, JsonNode raw) {
+            double lat, double lon, LocalDate requestStart, LocalDate requestEnd, JsonNode raw,
+            List<WeatherObservation> existing) {
 
         JsonNode daily = raw.get("daily");
         if (daily == null || !daily.has("time")) {
@@ -200,6 +207,8 @@ public class WeatherService {
         String source = requestEnd.isBefore(LocalDate.now()) ? "open-meteo-archive" : "open-meteo-forecast";
         UUID batchId = UUID.randomUUID();
         List<WeatherObservation> saved = new ArrayList<>();
+        Set<LocalDate> stored = new HashSet<>();
+        for (WeatherObservation o : existing) stored.add(o.getObservationDate());
 
         JsonNode times = daily.get("time");
         JsonNode maxTemps = daily.get("temperature_2m_max");
@@ -212,8 +221,8 @@ public class WeatherService {
             LocalDate date = LocalDate.parse(times.get(i).asText());
             // Only save dates within the requested range
             if (date.isBefore(requestStart) || date.isAfter(requestEnd)) continue;
-            // Skip if already cached
-            if (repo.existsByStationCodeAndObservationDate(stationCode, date)) continue;
+            // Skip if already stored
+            if (stored.contains(date)) continue;
 
             WeatherObservation obs = WeatherObservation.builder()
                     .observationDate(date)
@@ -230,7 +239,9 @@ public class WeatherService {
                     .build();
             saved.add(repo.save(obs));
         }
-        log.info("Saved {} weather observations for {} (batch {})", saved.size(), stationCode, batchId);
+        if (!saved.isEmpty()) {
+            log.info("Saved {} weather observations for {} (batch {})", saved.size(), stationCode, batchId);
+        }
         return saved;
     }
 

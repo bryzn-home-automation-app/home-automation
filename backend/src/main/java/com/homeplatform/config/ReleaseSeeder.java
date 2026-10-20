@@ -35,168 +35,98 @@ public class ReleaseSeeder implements CommandLineRunner {
         this.repository = repository;
     }
 
-    /** Newest release first. */
+    /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.5.0", "stable", LocalDate.of(2026, 10, 20),
+                    "Thermostats, cameras and a faster app",
+                    "Run the ecobees and watch the Eufy cameras from the app, and everything loads faster.",
+                    List.of(
+                            change("new", "Climate tab: see and set both ecobee thermostats, with history and who changed them last."),
+                            change("new", "A heads-up before you override someone's thermostat change from the last 10 minutes."),
+                            change("new", "Cameras tab: latest snapshots, plus live video that only runs while you're watching."),
+                            change("new", "Battery and solar-charging history for the outdoor cameras."),
+                            change("new", "Camera alerts for low battery, no solar charging, offline cameras and people outside."),
+                            change("improved", "Pages load about twice as fast, especially on phones."),
+                            change("improved", "Bills now open only for signed-in members, and disabled accounts lose access right away."),
+                            change("fixed", "A day's electric total that first arrives as zero now corrects itself."))
+            ),
             define("1.4.0", "stable", LocalDate.of(2026, 9, 28),
-                    "Bills in the app, a clearer forecast, and robot upkeep",
-                    "Your electric, gas and water bills now open right inside the app, the "
-                            + "electric forecast is easier to read and more honest about how it's "
-                            + "doing, every tab got a little pixel-art scene up top, and the Roomba "
-                            + "tab now tells you when its filter, brushes, mop pad or dock bag need "
-                            + "attention.",
+                    "Bills, a clearer forecast and robot upkeep",
+                    "Bills open in the app, the forecast is easier to read, and the Roomba tracks its parts.",
                     List.of(
-                            change("new", "Bills, in the app: the CoServ electric + gas bill and the "
-                                    + "water bill are pulled in automatically and open full-screen right "
-                                    + "here — no more digging through email or the utility's site."),
-                            change("new", "The Electric tab is split into “Usage & Bills” and "
-                                    + "“Forecast & Stats”, so the everyday view stays simple and the "
-                                    + "forecasting detail has room to breathe."),
-                            change("new", "Trend & outlook: the last 30 days of actual usage next to the "
-                                    + "next 14 days predicted, with each day's high and low temperature; "
-                                    + "the Last Reading tile now shows what was predicted beside what "
-                                    + "actually happened."),
-                            change("new", "Forecast accuracy, day by day: see how close each day's "
-                                    + "prediction landed, with 1-week / 2-week / 1-month views for the "
-                                    + "hourly accuracy too."),
-                            change("new", "Roomba maintenance: a new Maintenance view on the Roomba tab "
-                                    + "shows the same counters the iRobot app tracks — filter, edge brush, "
-                                    + "rubber brushes, mop pad, dock bag and the routine clean-up — with how "
-                                    + "much life is left on each. Anything overdue is flagged under “Needs "
-                                    + "attention”, and the Overview stays focused on live status, the map "
-                                    + "and history."),
-                            change("new", "A pixel-art scene for every tab — a full panorama on desktop "
-                                    + "and a compact strip on your phone."),
-                            change("improved", "The forecast now learns from yesterday's miss and widens "
-                                    + "its range the further out it looks, so the next few days are "
-                                    + "tighter and far-out days are honest about being guesses. It also "
-                                    + "stays within the weather it was trained on instead of sliding to "
-                                    + "zero on extreme days."),
-                            change("improved", "Alerts moved to a bell icon next to Settings, and long "
-                                    + "lists (alerts, maintenance records, history) scroll smoothly however "
-                                    + "long they get."),
-                            change("improved", "The WiFi page is now a single direct-connect QR code — "
-                                    + "scan and you're on."),
-                            change("improved", "Pages load lighter and scroll more smoothly on the web, "
-                                    + "especially the Electric tab."),
-                            change("fixed", "The Gas tab's charts no longer come up blank, and its highs "
-                                    + "and lows no longer read 0."),
-                            change("fixed", "Signing in no longer cares about capital letters in your "
-                                    + "username."),
-                            change("fixed", "The forecast's predicted line no longer fakes the join between "
-                                    + "history and future, and an older prediction can no longer overwrite "
-                                    + "a fresher one."))),
+                            change("new", "Electric, gas and water bills open right in the app."),
+                            change("new", "The Electric tab is split into Usage & Bills and Forecast & Stats."),
+                            change("new", "The last 30 days next to the next 14 predicted, plus predicted vs. actual on Last Reading."),
+                            change("new", "Day-by-day forecast accuracy."),
+                            change("new", "Roomba Maintenance: how much life is left on the filter, brushes, mop pad and dock bag."),
+                            change("new", "A pixel-art scene on every tab."),
+                            change("improved", "The forecast learns from yesterday's miss and is honest about far-out days."),
+                            change("improved", "Alerts moved to a bell icon, and long lists scroll smoothly."),
+                            change("improved", "The WiFi page is a single QR code."),
+                            change("fixed", "Gas charts no longer come up blank or show highs and lows of 0."),
+                            change("fixed", "Sign-in ignores capital letters in your username."))
+            ),
             define("1.3.0", "stable", LocalDate.of(2026, 9, 12),
-                    "A forecast that reacts faster and looks better",
-                    "The electric usage forecast now updates within minutes of a new "
-                            + "reading instead of waiting for the next day, the shaded "
-                            + "confidence range is easier to see and no longer disappears "
-                            + "for yesterday, and a few screens got a visual tidy-up.",
+                    "A faster, clearer forecast",
+                    "The forecast updates within minutes and its range is easier to see.",
                     List.of(
-                            change("improved", "The forecast's actual-usage line and projection now "
-                                    + "update within minutes of a new electric reading arriving, "
-                                    + "instead of waiting for the overnight refresh."),
-                            change("improved", "The forecast is more resistant to a single unusual day "
-                                    + "(a huge spike or an oddly quiet one) throwing off future "
-                                    + "projections — one weird reading no longer skews the trend the "
-                                    + "way it used to."),
-                            change("improved", "The shaded confidence range now reacts faster to how "
-                                    + "accurate recent predictions have actually been, instead of "
-                                    + "barely moving over time."),
-                            change("fixed", "The confidence range is easier to see, and its color key "
-                                    + "is brighter and easier to read."),
-                            change("fixed", "Fixed a gap where yesterday's confidence range would "
-                                    + "briefly vanish from the chart before yesterday's real reading "
-                                    + "had arrived."),
-                            change("improved", "Section titles throughout the app are a bit larger and "
-                                    + "easier to read."),
-                            change("fixed", "The Water tab's bill amounts now show a $ sign at full "
-                                    + "size instead of a tiny one tacked on after the number."))),
+                            change("improved", "The forecast updates within minutes of a new reading."),
+                            change("improved", "One unusual day no longer throws off the trend."),
+                            change("improved", "The shaded range adapts faster to how accurate recent predictions were."),
+                            change("fixed", "The shaded range is easier to see and no longer vanishes for yesterday."),
+                            change("improved", "Section titles are larger and easier to read."),
+                            change("fixed", "Water bill amounts show a full-size $ sign."))
+            ),
             define("1.2.0", "stable", LocalDate.of(2026, 9, 6),
                     "Smarter forecasts, real schedules",
-                    "The electric usage forecast got noticeably smarter this round, and the "
-                            + "robot vacuum's cleaning schedules now write to the robot itself, so "
-                            + "they show up correctly in the official iRobot app too.",
+                    "The forecast got smarter, and Roomba schedules now save to the robot itself.",
                     List.of(
-                            change("new", "A new chart on the Electric tab shows which days of the "
-                                    + "week you tend to use more or less power than the weather alone "
-                                    + "would predict — the forecast's learned pattern, not a guess."),
-                            change("improved", "The 7-day and 14-day forecast views now actually show "
-                                    + "that many days — they used to cap out at two, no matter which "
-                                    + "view was picked."),
-                            change("improved", "Yesterday's real usage now shows up in the forecast a "
-                                    + "day sooner than before."),
-                            change("improved", "The forecast's shaded confidence range is noticeably "
-                                    + "narrower and easier to read at a glance."),
-                            change("new", "Robot vacuum cleaning schedules now write to the robot's "
-                                    + "own memory, so a schedule set here also appears — correctly — "
-                                    + "in the official iRobot app."),
-                            change("fixed", "Robot vacuum commands (start, stop, clean a room, and so "
-                                    + "on) are more reliable, thanks to the app making sure it has a "
-                                    + "fresh connection to the robot before sending one."),
-                            change("fixed", "Corrected how the daily electric usage trend and rolling "
-                                    + "averages were being calculated."),
-                            change("fixed", "The electric usage chart no longer shows a misleading "
-                                    + "daily total when only part of a day's hourly data has arrived."))),
+                            change("new", "See which weekdays you use more or less power than the weather predicts."),
+                            change("improved", "The 7- and 14-day forecast views show all their days."),
+                            change("improved", "Yesterday's usage shows up a day sooner."),
+                            change("improved", "A narrower, easier-to-read forecast range."),
+                            change("new", "Roomba schedules save to the robot and appear in the iRobot app."),
+                            change("fixed", "More reliable Roomba commands."),
+                            change("fixed", "Corrected daily trends, rolling averages and partial-day totals."))
+            ),
             define("1.1.2", "stable", LocalDate.of(2026, 8, 25),
                     "Clean your way",
-                    "Start a clean exactly how you want it — the whole house or just the rooms "
-                            + "you pick, at the strength and number of passes you choose.",
+                    "Start a clean for the whole house or just the rooms you pick.",
                     List.of(
-                            change("new", "New “Clean” option in the robot controls: choose the whole "
-                                    + "house or hand-pick specific rooms, then set the suction strength, number "
-                                    + "of passes, and (on the combo robot) vacuum / mop / both before it sets off."),
-                            change("improved", "The robot returns to its dock automatically when the clean is "
-                                    + "done, same as always."))),
+                            change("new", "Clean: choose rooms, suction, passes and vacuum, mop or both."),
+                            change("improved", "The robot still docks itself when it's done."))
+            ),
             define("1.1.1", "stable", LocalDate.of(2026, 8, 24),
                     "Smoother pop-ups",
-                    "A quick follow-up to v1.1.0 that makes the app's pop-up windows feel snappy.",
+                    "Pop-up windows feel snappy again.",
                     List.of(
-                            change("fixed", "Editing your profile — changing your accent color or adding a "
-                                    + "photo — is smooth again; the pop-up no longer lags or stutters."),
-                            change("fixed", "Other pop-up windows (maintenance, Wi‑Fi, and the admin tools) "
-                                    + "open and respond more smoothly too."))),
+                            change("fixed", "Editing your profile no longer lags."),
+                            change("fixed", "Other pop-ups respond more smoothly too."))
+            ),
             define("1.1.0", "stable", LocalDate.of(2026, 8, 24),
                     "Faster and smoother",
-                    "A big tune-up under the hood: the whole app feels quicker and lighter, the "
-                            + "live vacuum map stays smooth while it cleans, and the home screen now "
-                            + "welcomes you by name.",
+                    "The app feels quicker, the live vacuum map is smooth, and Home greets you by name.",
                     List.of(
-                            change("improved", "The app feels noticeably faster. It now does far less "
-                                    + "background work, so screens and charts respond more quickly and "
-                                    + "scrolling stays smooth."),
-                            change("improved", "The home screen greets you by name and loads lighter — "
-                                    + "it no longer pulls in data it doesn’t need just to show the summary."),
-                            change("improved", "Watching the robot vacuum clean is much smoother now, "
-                                    + "especially in homes with lots of mapped rooms."),
-                            change("improved", "Switching between light and dark mode — or changing the "
-                                    + "accent color — is now instant, with no flicker across the page."),
-                            change("improved", "Scrolling on a phone is smoother; the bottom menu bar no "
-                                    + "longer causes stutter."),
-                            change("improved", "Long lists like notifications stay responsive while you "
-                                    + "type to search or as new alerts arrive."),
-                            change("fixed", "Fixed a rare glitch where the usage charts could fail to "
-                                    + "appear right after opening a page."))),
+                            change("improved", "Screens and charts respond faster."),
+                            change("improved", "Home greets you by name and loads lighter."),
+                            change("improved", "The live vacuum map stays smooth while it cleans."),
+                            change("improved", "Theme and accent color changes are instant."),
+                            change("improved", "Smoother scrolling on phones and in long lists."),
+                            change("fixed", "Usage charts no longer fail to appear when a page opens."))
+            ),
             define("1.0.0", "beta", LocalDate.of(2026, 8, 22),
                     "Welcome to HomeOS",
-                    "The first release of our home dashboard — one place to see the house at a glance, "
-                            + "keep an eye on utilities, and run the robot vacuum.",
+                    "One place to see the house, track utilities and run the robot vacuum.",
                     List.of(
-                            change("new", "Electricity tracking: see how much power the house is using day to "
-                                    + "day, compared against the weather so you can tell why a day was high or low."),
-                            change("new", "Monthly bill estimate: a running guess at where this month’s electric "
-                                    + "bill is headed, so there are no surprises."),
-                            change("new", "Gas and water tabs: the same day-to-day view for the other utilities."),
-                            change("new", "Robot vacuum: watch it move around the house live on the floor plan, see "
-                                    + "a history of past cleanings, and send it to clean a single room with the "
-                                    + "settings you want."),
-                            change("new", "Guest WiFi page: share the WiFi with visitors using a QR code they can "
-                                    + "scan — no typing the password."),
-                            change("new", "Alerts: get notified about unusual usage, like a spike in electricity or "
-                                    + "a high-cost day."),
-                            change("new", "Household sign-in: everyone gets their own account with a name, photo, and "
-                                    + "light or dark theme. Guests can be given limited access."),
-                            change("new", "This “What’s New” tab: a plain-language rundown of what "
-                                    + "changed each time the app is updated."))));
+                            change("new", "Electricity tracking, compared against the weather."),
+                            change("new", "A running estimate of this month's electric bill."),
+                            change("new", "Gas and water tabs."),
+                            change("new", "The robot vacuum's live map, cleaning history and room cleaning."),
+                            change("new", "A guest WiFi QR code."),
+                            change("new", "Alerts for unusual usage."),
+                            change("new", "Personal accounts with a photo and theme, plus limited guest access."),
+                            change("new", "This What's New tab."))
+            ));
 
     @Override
     public void run(String... args) {
