@@ -3,9 +3,12 @@ package com.homeplatform.service;
 import com.homeplatform.model.Notification;
 import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.Notification.Severity;
+import com.homeplatform.push.NotificationCreatedEvent;
 import com.homeplatform.repository.NotificationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,9 +22,17 @@ public class NotificationService {
     private static final int DEFAULT_LIMIT = 50;
 
     private final NotificationRepository repo;
+    /** Phone alerts listen for this (PushService); null in plain unit tests. */
+    private final ApplicationEventPublisher events;
+
+    @Autowired
+    public NotificationService(NotificationRepository repo, ApplicationEventPublisher events) {
+        this.repo = repo;
+        this.events = events;
+    }
 
     public NotificationService(NotificationRepository repo) {
-        this.repo = repo;
+        this(repo, null);
     }
 
     // ── Query ──
@@ -78,7 +89,9 @@ public class NotificationService {
                 .title(title)
                 .message(message)
                 .build();
-        return repo.save(n);
+        Notification saved = repo.save(n);
+        if (events != null) events.publishEvent(new NotificationCreatedEvent(userId, category, severity, title, message));
+        return saved;
     }
 
 }
