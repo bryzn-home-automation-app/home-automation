@@ -121,6 +121,17 @@ gives video only — kept as a fallback if live view through the bridge doesn't 
   `scripts/ha-install-eufy-sdk.sh <version>` (no HACS; same files, pinned). Keep the bridge
   image and the integration on the same release.
 
+**Hardware (this home).** HomeBase S380 (HomeBase 3) + 2× SoloCam S340 (T8170, solar/battery)
++ Indoor Cam E30 (T8417, mains). Eufy lists both camera models as HomeBase 3 compatible.
+- **Attach the E30 to the HomeBase**, not standalone: standalone cameras can ignore commands
+  and never start live view through eufy-sdk (eufy-sdk#325, open); the same accounts'
+  HomeBase 3 cameras stream fine.
+- **S340s are battery cameras**: the bridge caps a live stream at ~55 s
+  (`STREAM_BATTERY_BUDGET_MS`), and HA's "Preload camera stream" must stay **off** for them
+  (it keeps waking the camera). Prefer snapshots/events over live tiles for these.
+- **RTSP fallback**: only the E30 has it (app → Storage → RTSP; drops to 1080p, community
+  reports of drops). The S340s and HomeBase 3 have none — bridge only.
+
 **Account.** Use a dedicated Eufy account with the HomeBase shared to it (admin). Eufy allows
 one active login per account — the bridge on the main account would sign the phone app out.
 Run exactly one bridge per account.
