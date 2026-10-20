@@ -1,12 +1,16 @@
-import { useMemo, useState } from 'react';
+import { lazy, Suspense, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { useUsageData } from '../hooks/useUsageData';
-import { ForecastStrip, ForecastModal } from '../components/WeatherForecast';
+import { ForecastStrip } from '../components/WeatherForecast';
+
+// The modal carries the chart (recharts) — loaded on first open, not with Home.
+const ForecastModal = lazy(() => import('../components/WeatherForecastModal'));
 import { fetchMaintenanceAnalytics } from '../api/maintenance';
 import { fetchNotifications } from '../api/notifications';
 import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
+import { useAuth } from '../context/AuthContext';
 import { fetchRoombaStatus, fetchRoombaRuns } from '../api/roomba';
 import { fetchWaterBills } from '../api/waterBills';
 import { fetchCurrentWeather } from '../api/weather';
@@ -14,6 +18,7 @@ import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 export default function HomeSummary() {
+  const { isAdmin } = useAuth();
   // Home only needs pre-aggregated daily data, so skip the heavy raw-hourly
   // fetches — no reason to transfer ~2,880 rows the landing screen never shows.
   const { electricDaily, config } = useUsageData({ hourly: false });
@@ -54,10 +59,14 @@ export default function HomeSummary() {
     staleTime: 30_000,
   });
 
+  // Admin-only endpoint: for everyone else it errored on every Home load (and was
+  // retried), so only admins ask.
   const guestCount = useQuery({
     queryKey: ['guest-session-count'],
     queryFn: fetchGuestSessionCount,
     staleTime: 30_000,
+    enabled: isAdmin,
+    retry: false,
   });
 
   // Live Roomba snapshot + last completed run for the summary card.
@@ -271,11 +280,13 @@ export default function HomeSummary() {
       </section>
 
       {showForecast && (
-        <ForecastModal
-          hourly={currentWeather?.hourly}
-          current={currentWx}
-          onClose={() => setShowForecast(false)}
-        />
+        <Suspense fallback={null}>
+          <ForecastModal
+            hourly={currentWeather?.hourly}
+            current={currentWx}
+            onClose={() => setShowForecast(false)}
+          />
+        </Suspense>
       )}
 
       {/* Module cards — quick access to every section (mobile nav aid) */}

@@ -109,6 +109,38 @@ class CameraServiceTest {
     }
 
     @Test
+    @DisplayName("an older still is served instantly and refreshed in the background")
+    void staleWhileRefreshing() {
+        var clock = new ThermostatChangeRecorderTest.MutableClock();
+        clock.now = NOW;
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, 32.78, -96.80, clock);
+        var first = new HomeAssistantClient.CameraImage(new byte[]{1}, "image/jpeg");
+        var second = new HomeAssistantClient.CameraImage(new byte[]{2}, "image/jpeg");
+        when(ha.cameraSnapshot(camera)).thenReturn(first, second);
+
+        assertSame(first, service.snapshot(ID));
+        clock.now = NOW.plusSeconds(120); // past the 20 s window, inside the stale window
+        assertSame(first, service.snapshot(ID), "no waiting on the camera");
+        verify(ha, timeout(2_000).times(2)).cameraSnapshot(camera);
+    }
+
+    @Test
+    @DisplayName("after a motion event the viewer waits for the new frame instead")
+    void eventForcesFreshStill() {
+        var clock = new ThermostatChangeRecorderTest.MutableClock();
+        clock.now = NOW;
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, 32.78, -96.80, clock);
+        var before = new HomeAssistantClient.CameraImage(new byte[]{1}, "image/jpeg");
+        var after = new HomeAssistantClient.CameraImage(new byte[]{2}, "image/jpeg");
+        when(ha.cameraSnapshot(camera)).thenReturn(before, after);
+
+        service.snapshot(ID);
+        clock.now = NOW.plusSeconds(120);
+        status.setLastMotionAt(LocalDateTime.ofInstant(NOW.plusSeconds(60), ZoneOffset.UTC));
+        assertSame(after, service.snapshot(ID));
+    }
+
+    @Test
     @DisplayName("live: ticket URL resolves back to the stream; none without a stream name")
     void live() {
         var live = service.startLive(ID);

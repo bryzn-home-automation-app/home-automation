@@ -417,4 +417,17 @@ class WeatherServiceTest {
                 .sourceProvider("open-meteo")
                 .build();
     }
+
+    @org.junit.jupiter.api.Test
+    @org.junit.jupiter.api.DisplayName("hourly rows are kept only for the requested dates")
+    void hourlyRange() {
+        var start = java.time.LocalDate.of(2026, 10, 19);
+        var end = java.time.LocalDate.of(2026, 10, 21);
+        org.junit.jupiter.api.Assertions.assertTrue(WeatherService.inRange("2026-10-19T00:00", start, end));
+        org.junit.jupiter.api.Assertions.assertTrue(WeatherService.inRange("2026-10-21T23:00", start, end));
+        org.junit.jupiter.api.Assertions.assertFalse(WeatherService.inRange("2026-10-18T23:00", start, end));
+        org.junit.jupiter.api.Assertions.assertFalse(WeatherService.inRange("2026-10-22T00:00", start, end));
+        org.junit.jupiter.api.Assertions.assertFalse(WeatherService.inRange(null, start, end));
+        org.junit.jupiter.api.Assertions.assertFalse(WeatherService.inRange("garbage", start, end));
+    }
 }

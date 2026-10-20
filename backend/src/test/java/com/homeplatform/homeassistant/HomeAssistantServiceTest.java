@@ -186,7 +186,8 @@ class HomeAssistantServiceTest {
     void schedulerTransitions() {
         HomeAssistantService svc = mock(HomeAssistantService.class);
         CameraAlertService alerts = mock(CameraAlertService.class);
-        var scheduler = new HomeAssistantSnapshotScheduler(svc, events, alerts);
+        CameraService cameraService = mock(CameraService.class);
+        var scheduler = new HomeAssistantSnapshotScheduler(svc, events, alerts, cameraService);
 
         when(svc.isActive()).thenReturn(false);
         scheduler.snapshot();
@@ -207,6 +208,7 @@ class HomeAssistantServiceTest {
         scheduler.snapshot();
         verify(events, times(1)).info(eq("home-assistant"), anyString(), contains("recovered"));
         verify(alerts, times(2)).evaluate(); // only after successful snapshots
+        verify(cameraService, times(2)).prewarmSnapshots();
     }
 
     @Test

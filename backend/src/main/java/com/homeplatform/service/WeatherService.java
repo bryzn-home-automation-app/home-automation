@@ -13,10 +13,13 @@ import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class WeatherService {
@@ -27,6 +30,14 @@ public class WeatherService {
     private static final double HDD_BASE_TEMP = 65.0;
     private static final int PAST_DAYS = 92;
     private static final ObjectMapper mapper = new ObjectMapper();
+    /**
+     * Open-Meteo responses are reused for this long. Home, Climate and Utility all hit
+     * the same forecast URL (past_days covers their ranges), and each fetch took
+     * 0.4-2 s — on every page load. Forecasts update hourly, so 10 min loses nothing.
+     */
+    static final Duration RESPONSE_TTL = Duration.ofMinutes(10);
+    private record CachedResponse(Instant at, JsonNode body) {}
+    private final Map<String, CachedResponse> responseCache = new ConcurrentHashMap<>();
 
     private final WeatherObservationRepository repo;
     private final RestTemplate restTemplate;
@@ -81,7 +92,11 @@ public class WeatherService {
             List<WeatherObservation> all = repo.findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(
                     stationCode, start, end);
             WeatherCurrent current = parseCurrent(raw);
-            List<WeatherHour> hourly = parseHourly(raw);
+            // The forecast URL always carries PAST_DAYS of hours (~2,200); return only the
+            // requested dates — /current was shipping 380 KB for a 3-day window.
+            List<WeatherHour> hourly = parseHourly(raw).stream()
+                    .filter(h -> inRange(h.time(), start, end))
+                    .toList();
             WeatherAggregation agg = computeAggregation(all);
             return new WeatherResponse(lat, lon, current, days, hourly, agg);
         } catch (Exception e) {
@@ -110,9 +125,27 @@ public class WeatherService {
             url = buildForecastUrl(lat, lon, end);
         }
 
+        CachedResponse hit = responseCache.get(url);
+        Instant now = Instant.now();
+        if (hit != null && hit.at().plus(RESPONSE_TTL).isAfter(now)) return hit.body();
+
         log.debug("Open-Meteo request: {}", url);
         String json = restTemplate.getForObject(url, String.class);
-        return mapper.readTree(json);
+        JsonNode body = mapper.readTree(json);
+        responseCache.entrySet().removeIf(e -> !e.getValue().at().plus(RESPONSE_TTL).isAfter(now));
+        responseCache.put(url, new CachedResponse(now, body));
+        return body;
+    }
+
+    /** Hourly `time` is local ISO ("YYYY-MM-DDTHH:00"); keep hours whose date is in [start, end]. */
+    static boolean inRange(String time, LocalDate start, LocalDate end) {
+        if (time == null || time.length() < 10) return false;
+        try {
+            LocalDate d = LocalDate.parse(time.substring(0, 10));
+            return !d.isBefore(start) && !d.isAfter(end);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private String buildForecastUrl(double lat, double lon, LocalDate end) {

@@ -47,9 +47,34 @@ function SidebarClock() {
   );
 }
 
+/**
+ * Fetch the chart-heavy tabs (and recharts with them) once the shell is idle, so
+ * the first tap on Utility or Climate doesn't wait on ~110 KB gz of JS — noticeable
+ * over LTE. The same import() calls React.lazy makes, so the routes then resolve
+ * instantly. Data-saver connections skip it.
+ */
+function usePrefetchTabs() {
+  useEffect(() => {
+    const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+    if (conn?.saveData) return;
+    const warm = () => {
+      void import('./pages/Utility');
+      void import('./pages/Climate');
+    };
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
+    if (w.requestIdleCallback) {
+      const id = w.requestIdleCallback(warm, { timeout: 6_000 });
+      return () => (window as Window & { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(id);
+    }
+    const t = setTimeout(warm, 3_000);
+    return () => clearTimeout(t);
+  }, []);
+}
+
 export default memo(function App() {
   const { toggleTheme, isDark } = useTheme();
   const { user, isAdmin, logout } = useAuth();
+  usePrefetchTabs();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
   const mobileSidebarRef = useRef<HTMLElement | null>(null);

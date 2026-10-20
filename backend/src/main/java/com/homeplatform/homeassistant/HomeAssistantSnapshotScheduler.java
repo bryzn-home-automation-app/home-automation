@@ -25,13 +25,15 @@ public class HomeAssistantSnapshotScheduler {
     private final HomeAssistantService service;
     private final AppEventService appEventService;
     private final CameraAlertService cameraAlerts;
+    private final CameraService cameras;
     private boolean failing;
 
     public HomeAssistantSnapshotScheduler(HomeAssistantService service, AppEventService appEventService,
-                                          CameraAlertService cameraAlerts) {
+                                          CameraAlertService cameraAlerts, CameraService cameras) {
         this.service = service;
         this.appEventService = appEventService;
         this.cameraAlerts = cameraAlerts;
+        this.cameras = cameras;
     }
 
     @Scheduled(initialDelayString = "PT2M", fixedDelayString = "PT15M")
@@ -41,6 +43,7 @@ public class HomeAssistantSnapshotScheduler {
             HomeAssistantService.SyncResult r = service.discoverAndSnapshot();
             log.debug("HA snapshot: {} thermostat reading(s), batch {}", r.readingsWritten(), r.batchId());
             cameraAlerts.evaluate();
+            cameras.prewarmSnapshots();
             if (failing) {
                 failing = false;
                 appEventService.info("home-assistant", "HomeAssistantSnapshotScheduler", "Home Assistant snapshot recovered");
