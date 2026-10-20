@@ -598,3 +598,77 @@ CREATE TABLE IF NOT EXISTS forecast_snapshot (
 CREATE INDEX IF NOT EXISTS idx_forecast_snapshot_target   ON forecast_snapshot (target_date);
 CREATE INDEX IF NOT EXISTS idx_forecast_snapshot_forecast ON forecast_snapshot (forecast_date);
 CREATE INDEX IF NOT EXISTS idx_forecast_snapshot_model    ON forecast_snapshot (model_id);
+
+-- ============================================================
+-- Home Assistant device layer (ecobee thermostat, Eufy cameras)
+-- See docs/home-assistant-integration.md. HA entity IDs stay in the
+-- backend; the API exposes only smart_devices.public_id.
+-- Numeric columns are DOUBLE PRECISION to match the JPA (Double)
+-- mapping, since ddl-auto: update creates these on existing DBs.
+-- ============================================================
+
+-- One row per discovered HA entity. Discovery upserts by provider_entity_id.
+CREATE TABLE IF NOT EXISTS smart_devices (
+    id                  SERIAL PRIMARY KEY,
+    public_id           UUID           NOT NULL UNIQUE,
+    provider            VARCHAR(30)    NOT NULL,
+    provider_entity_id  VARCHAR(255)   NOT NULL UNIQUE,
+    kind                VARCHAR(20)    NOT NULL,
+    name                VARCHAR(255),
+    enabled             BOOLEAN        NOT NULL DEFAULT TRUE,
+    last_seen_at        TIMESTAMP,
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_smart_devices_kind ON smart_devices (kind, enabled);
+
+-- Latest state per thermostat. Ingestion UPSERTs (UNIQUE device_id), like roomba_status.
+CREATE TABLE IF NOT EXISTS thermostat_status (
+    id                  SERIAL PRIMARY KEY,
+    device_id           INTEGER        NOT NULL UNIQUE REFERENCES smart_devices(id),
+    available           BOOLEAN        NOT NULL DEFAULT FALSE,
+    temperature         DOUBLE PRECISION,
+    humidity            DOUBLE PRECISION,
+    target_temperature  DOUBLE PRECISION,
+    heat_setpoint       DOUBLE PRECISION,
+    cool_setpoint       DOUBLE PRECISION,
+    hvac_mode           VARCHAR(30),
+    hvac_action         VARCHAR(30),
+    preset_mode         VARCHAR(60),
+    temperature_unit    VARCHAR(5),
+    min_temp            DOUBLE PRECISION,
+    max_temp            DOUBLE PRECISION,
+    hvac_modes          JSONB,
+    preset_modes        JSONB,
+    -- HA's last_updated for the entity state (UTC).
+    state_updated_at    TIMESTAMP,
+    -- Full HA state payload, for debugging only. Not exposed by the API.
+    raw                 JSONB,
+    updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+-- Append-only thermostat history. Written on meaningful state changes
+-- (WebSocket) and by a periodic snapshot fallback. Never updated/deleted.
+CREATE TABLE IF NOT EXISTS thermostat_readings (
+    id                  SERIAL PRIMARY KEY,
+    device_id           INTEGER        NOT NULL REFERENCES smart_devices(id),
+    -- When HA recorded the state (UTC), not when we ingested it.
+    recorded_at         TIMESTAMP      NOT NULL,
+    temperature         DOUBLE PRECISION,
+    humidity            DOUBLE PRECISION,
+    target_temperature  DOUBLE PRECISION,
+    heat_setpoint       DOUBLE PRECISION,
+    cool_setpoint       DOUBLE PRECISION,
+    hvac_mode           VARCHAR(30),
+    hvac_action         VARCHAR(30),
+    preset_mode         VARCHAR(60),
+    temperature_unit    VARCHAR(5),
+    source              VARCHAR(100)   NOT NULL,
+    source_provider     VARCHAR(50)    NOT NULL,
+    ingestion_batch_id  UUID,
+    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
+    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_thermostat_readings_device_time ON thermostat_readings (device_id, recorded_at);
