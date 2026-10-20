@@ -202,7 +202,7 @@ class HomeDeviceServiceTest {
         void expectsBeforeCall() {
             service.setTemperature(ID, new ThermostatTemperatureRequest(70.0, null, null), bryan);
             var order = inOrder(recorder, ha);
-            order.verify(recorder).expect(thermostat, bryan);
+            order.verify(recorder).expect(thermostat, bryan, ThermostatChangeRecorder.Command.SETPOINT);
             order.verify(ha).setTemperature(thermostat, 70.0);
             verify(recorder, never()).cancel(any(), any());
         }
@@ -212,7 +212,7 @@ class HomeDeviceServiceTest {
         void cancelsOnFailure() {
             doThrow(new HomeAssistantException.Http(500, "boom")).when(ha).setHvacMode(thermostat, "cool");
             assertThrows(HomeAssistantException.Http.class, () -> service.setMode(ID, "cool", bryan));
-            verify(recorder).expect(thermostat, bryan);
+            verify(recorder).expect(thermostat, bryan, ThermostatChangeRecorder.Command.MODE);
             verify(recorder).cancel(thermostat, bryan);
         }
 
@@ -220,7 +220,7 @@ class HomeDeviceServiceTest {
         @DisplayName("validation failures never register an actor")
         void noExpectOnBadInput() {
             assertThrows(IllegalArgumentException.class, () -> service.setMode(ID, "dry", bryan));
-            verify(recorder, never()).expect(any(), any());
+            verify(recorder, never()).expect(any(), any(), any());
         }
 
         @Test

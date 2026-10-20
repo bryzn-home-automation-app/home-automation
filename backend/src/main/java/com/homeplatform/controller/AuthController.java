@@ -1,6 +1,7 @@
 package com.homeplatform.controller;
 
 import com.homeplatform.dto.*;
+import com.homeplatform.service.LoginRateLimiter;
 import com.homeplatform.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -15,9 +16,11 @@ import java.util.Map;
 public class AuthController {
 
     private final UserService userService;
+    private final LoginRateLimiter rateLimiter;
 
-    public AuthController(UserService userService) {
+    public AuthController(UserService userService, LoginRateLimiter rateLimiter) {
         this.userService = userService;
+        this.rateLimiter = rateLimiter;
     }
 
     /** Self-registration — enters PENDING_APPROVAL, cannot log in until approved. */
@@ -53,14 +56,25 @@ public class AuthController {
             @Valid @RequestBody GuestLoginRequest req,
             @RequestParam(required = false) String code,
             HttpServletRequest httpReq) {
+        // Throttled like password login, so the invite code can't be brute-forced.
+        String ip = getClientIp(httpReq);
+        String limiterKey = "guest-login:" + ip;
+        if (rateLimiter.isBlocked(limiterKey)) {
+            return ResponseEntity.status(429)
+                    .body(Map.of("error", "Too many attempts. Try again later."));
+        }
         if (!userService.isGuestInviteCodeValid(code)) {
+            rateLimiter.recordFailure(limiterKey);
             return ResponseEntity.status(403)
                     .body(Map.of("error", "Guest access requires a valid invite code"));
         }
-        String ip = getClientIp(httpReq);
         String ua = httpReq.getHeader("User-Agent");
         GuestLoginRequest enriched = new GuestLoginRequest(req.displayName(), req.accentColor(), req.avatarUrl(), ip, ua);
-        return ResponseEntity.ok(userService.guestLogin(enriched));
+        try {
+            return ResponseEntity.ok(userService.guestLogin(enriched));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
+        }
     }
 
     /** Current guest invite code — members/admins only, so guests can't invite others. */

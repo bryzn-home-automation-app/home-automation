@@ -44,7 +44,7 @@ public class NotificationController {
             @PathVariable Long id,
             HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("userId");
-        int updated = service.markRead(id);
+        int updated = service.markRead(id, userId);
         return ResponseEntity.ok(Map.of("updated", updated, "unread", service.getUnreadCount(userId)));
     }
 

@@ -8,6 +8,7 @@ import com.homeplatform.model.User.Role;
 import com.homeplatform.repository.GuestSessionRepository;
 import com.homeplatform.repository.UserRepository;
 import com.homeplatform.security.JwtUtil;
+import com.homeplatform.security.UserAccessCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +34,7 @@ public class UserService {
     private final MaintenanceService maintenanceService;
     private final PasswordEncoder passwordEncoder;
     private final LoginRateLimiter rateLimiter;
+    private final UserAccessCache accessCache;
 
     /** Shared code required for guest check-in. Blank = guest login disabled. */
     @Value("${app.guest.invite-code:}")
@@ -44,7 +46,8 @@ public class UserService {
                        AlertEngine alertEngine,
                        MaintenanceService maintenanceService,
                        PasswordEncoder passwordEncoder,
-                       LoginRateLimiter rateLimiter) {
+                       LoginRateLimiter rateLimiter,
+                       UserAccessCache accessCache) {
         this.userRepo = userRepo;
         this.sessionRepo = sessionRepo;
         this.jwtUtil = jwtUtil;
@@ -52,6 +55,7 @@ public class UserService {
         this.maintenanceService = maintenanceService;
         this.passwordEncoder = passwordEncoder;
         this.rateLimiter = rateLimiter;
+        this.accessCache = accessCache;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -162,12 +166,17 @@ public class UserService {
                 .replaceAll("_+", "_");
 
         // Find existing guest by display name, or create new
-        Optional<User> existing = userRepo.findByDisplayName(req.displayName())
-                .filter(u -> u.getRole() == Role.GUEST);
+        // Display names aren't unique (a member can share one), so look up guests only.
+        Optional<User> existing = userRepo.findFirstByDisplayNameAndRoleOrderByIdAsc(req.displayName(), Role.GUEST);
 
         User user;
         if (existing.isPresent()) {
             user = existing.get();
+            // An admin's disable sticks; only a 30-day inactivity expiry is undone by
+            // signing in again with a valid invite code.
+            if (user.getStatus() == AccountStatus.DISABLED) {
+                throw new IllegalStateException("This guest has been disabled. Ask the host for access.");
+            }
             user.setConnectionCount(user.getConnectionCount() + 1);
             user.setLastLoginAt(LocalDateTime.now());
             user.setLoginCount(user.getLoginCount() + 1);
@@ -298,6 +307,7 @@ public class UserService {
         user.setApprovedBy(approvedBy);
         user.setApprovedAt(LocalDateTime.now());
         user = userRepo.save(user);
+        accessCache.evict(userId);
 
         log.info("User '{}' approved as {}", user.getUsername(), role);
         return toResponse(user, false);
@@ -310,6 +320,7 @@ public class UserService {
 
         log.info("User '{}' registration denied by admin {}", user.getUsername(), deniedBy);
         userRepo.delete(user);
+        accessCache.evict(userId);
     }
 
     public AdminUserResponse updateUserRole(Long userId, String newRole) {
@@ -317,6 +328,7 @@ public class UserService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         user.setRole(Role.valueOf(newRole.toUpperCase()));
         user = userRepo.save(user);
+        accessCache.evict(userId);
         log.info("User '{}' role updated to {}", user.getUsername(), newRole);
         return toResponse(user, false);
     }
@@ -327,6 +339,7 @@ public class UserService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         user.setStatus(AccountStatus.DISABLED);
         userRepo.save(user);
+        accessCache.evict(userId);
 
         sessionRepo.findByUserIdAndStatus(userId, GuestSession.Status.ACTIVE)
                 .forEach(s -> {
@@ -343,6 +356,7 @@ public class UserService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         user.setStatus(AccountStatus.ACTIVE);
         userRepo.save(user);
+        accessCache.evict(userId);
         log.info("User '{}' reactivated", user.getUsername());
     }
 
@@ -376,6 +390,7 @@ public class UserService {
             if (u.getRole() == Role.GUEST) {
                 u.setStatus(AccountStatus.EXPIRED);
                 userRepo.save(u);
+                accessCache.evict(u.getId());
             }
         });
 

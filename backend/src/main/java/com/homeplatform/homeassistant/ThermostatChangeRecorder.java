@@ -26,13 +26,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * HA's {@code state_changed} event can reach the WebSocket before the REST call that
  * caused it returns. When ingestion then sees a control field change ({@link #onIngested}):
  * <ol>
- *   <li>a command for that device within {@link #COMMAND_WINDOW} → the app user;</li>
+ *   <li>a command for that device within {@link #COMMAND_WINDOW} whose kind explains the
+ *       change ({@link Command#explains}) → the app user;</li>
  *   <li>else an HA context user (someone using HA's own UI) → "Home Assistant";</li>
  *   <li>else → "ecobee" (the thermostat screen, the ecobee app, or its schedule).</li>
  * </ol>
  * The window is generous because HA re-polls ecobee every 3 minutes and the hold's
- * echo (e.g. preset becoming "temp") can arrive on a later poll. Expectations live in
- * memory: after a backend restart, an in-flight command is credited to Home Assistant.
+ * echo (e.g. preset becoming "temp") can arrive on a later poll. Matching on the kind of
+ * change keeps that window from swallowing unrelated changes — e.g. the ecobee schedule
+ * switching comfort setting a minute after someone nudged the setpoint stays "ecobee".
+ * Expectations live in memory: after a backend restart, an in-flight command is
+ * credited to Home Assistant.
  */
 @Service
 public class ThermostatChangeRecorder {
@@ -44,6 +48,31 @@ public class ThermostatChangeRecorder {
     /** The app user behind a command. */
     public record Actor(Long userId, String name) {}
 
+    /** What an app command changes — and so which observed changes it can account for. */
+    public enum Command {
+        /** A new setpoint; ecobee echoes it as a manual hold (preset "temp"). */
+        SETPOINT,
+        /** A new HVAC mode; ecobee may report the new mode's setpoints alongside. */
+        MODE,
+        /** A comfort-setting hold, which brings that setting's setpoints. */
+        HOLD,
+        /** Back to the schedule: its current comfort setting and setpoints. */
+        RESUME;
+
+        boolean explains(List<String> fields, ControlState after) {
+            return switch (this) {
+                case SETPOINT -> only(fields, "setpoint", "preset")
+                        && (!fields.contains("preset") || "temp".equals(after.presetMode()));
+                case MODE -> only(fields, "mode", "setpoint");
+                case HOLD, RESUME -> only(fields, "preset", "setpoint");
+            };
+        }
+
+        private static boolean only(List<String> fields, String... allowed) {
+            return List.of(allowed).containsAll(fields);
+        }
+    }
+
     /** Control-relevant state, captured before ingestion overwrites the status row. */
     public record ControlState(boolean available, Double targetTemperature, Double heatSetpoint,
                                Double coolSetpoint, String hvacMode, String presetMode) {
@@ -54,7 +83,7 @@ public class ThermostatChangeRecorder {
         }
     }
 
-    private record Expectation(Actor actor, Instant at) {}
+    private record Expectation(Actor actor, Command command, Instant at) {}
 
     private final ThermostatChangeRepository repo;
     private final Clock clock;
@@ -70,10 +99,13 @@ public class ThermostatChangeRecorder {
         this.clock = clock;
     }
 
-    /** An app user is about to change this device; credit changes in the next few minutes to them. */
-    public void expect(SmartDevice device, Actor actor) {
+    /**
+     * An app user is about to change this device; credit matching changes in the next few
+     * minutes to them.
+     */
+    public void expect(SmartDevice device, Actor actor, Command command) {
         if (actor == null) return;
-        expected.put(device.getId(), new Expectation(actor, clock.instant()));
+        expected.put(device.getId(), new Expectation(actor, command, clock.instant()));
     }
 
     /** The command failed — don't credit the next ecobee-side change to this user. */
@@ -96,7 +128,9 @@ public class ThermostatChangeRecorder {
         ThermostatChange.ActorType type;
         Long userId = null;
         String name;
-        Optional<Actor> app = recentCommand(device.getId());
+        Optional<Actor> app = recentCommand(device.getId())
+                .filter(e -> e.command().explains(fields, after))
+                .map(Expectation::actor);
         if (app.isPresent()) {
             type = ThermostatChange.ActorType.APP;
             userId = app.get().userId();
@@ -141,14 +175,14 @@ public class ThermostatChangeRecorder {
         return out;
     }
 
-    private Optional<Actor> recentCommand(Long deviceId) {
+    private Optional<Expectation> recentCommand(Long deviceId) {
         Expectation e = expected.get(deviceId);
         if (e == null) return Optional.empty();
         if (Duration.between(e.at(), clock.instant()).compareTo(COMMAND_WINDOW) > 0) {
             expected.remove(deviceId, e);
             return Optional.empty();
         }
-        return Optional.of(e.actor());
+        return Optional.of(e);
     }
 
     /** {@code context.user_id} of the state — set when an HA user (or token) caused it. */

@@ -55,8 +55,9 @@ public class NotificationService {
     }
 
     @Transactional
-    public int markRead(Long id) {
-        return repo.markRead(id);
+    /** Marks one of the user's own notifications read; someone else's id is a no-op (0). */
+    public int markRead(Long id, Long userId) {
+        return repo.markRead(id, userId);
     }
 
     @Transactional

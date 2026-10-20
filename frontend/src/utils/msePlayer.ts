@@ -29,6 +29,17 @@ function mediaSourceCtor(): { ctor: MediaSourceCtor; managed: boolean } | null {
   return null;
 }
 
+function concat(chunks: Uint8Array[]): Uint8Array {
+  if (chunks.length === 1) return chunks[0];
+  const out = new Uint8Array(chunks.reduce((n, b) => n + b.byteLength, 0));
+  let off = 0;
+  for (const b of chunks) {
+    out.set(b, off);
+    off += b.byteLength;
+  }
+  return out;
+}
+
 /** Whether this browser can play live view at all. */
 export function liveSupported(): boolean {
   return typeof window !== 'undefined' && typeof WebSocket !== 'undefined' && mediaSourceCtor() !== null;
@@ -174,50 +185,52 @@ export class MsePlayer {
   }
 
   private append(data: Uint8Array) {
-    const sb = this.sb;
-    if (!sb) return;
-    if (sb.updating || this.pending.length) {
-      this.pending.push(data);
-      return;
-    }
-    try {
-      sb.appendBuffer(data as BufferSource);
-    } catch {
-      this.pending.push(data); // QuotaExceeded etc. — retry after the next trim
-    }
+    if (!this.sb) return;
+    this.pending.push(data);
+    if (!this.sb.updating) this.flush();
   }
 
+  /**
+   * Runs whenever the SourceBuffer is idle (on each fragment and after every
+   * append/remove): trim old video first, then append everything queued. Each path
+   * either starts an operation — whose updateend calls flush again — or leaves the
+   * queue empty, so a failed append can't stall it (it used to: a QuotaExceeded
+   * append queued the data with no updateend coming, and video froze for good).
+   */
   private flush() {
     const sb = this.sb;
     if (!sb || sb.updating || this.stopped) return;
-    if (this.pending.length) {
-      const total = this.pending.reduce((n, b) => n + b.byteLength, 0);
-      const merged = new Uint8Array(total);
-      let off = 0;
-      for (const b of this.pending) {
-        merged.set(b, off);
-        off += b.byteLength;
-      }
-      this.pending = [];
-      try {
-        sb.appendBuffer(merged as BufferSource);
-      } catch {
-        /* dropped — the next keyframe recovers */
-      }
-      return;
-    }
     const buffered = sb.buffered;
-    if (!buffered.length) return;
-    const start = buffered.start(0);
-    const end = buffered.end(buffered.length - 1);
-    if (end - start > KEEP_SECONDS * 2) {
-      try {
-        sb.remove(start, end - KEEP_SECONDS);
-      } catch {
-        /* ignore */
+    const start = buffered.length ? buffered.start(0) : 0;
+    if (buffered.length) {
+      const end = buffered.end(buffered.length - 1);
+      if (end - this.video.currentTime > MAX_LAG_SECONDS) this.video.currentTime = end - 0.3;
+      if (end - start > KEEP_SECONDS * 2) {
+        try {
+          sb.remove(start, end - KEEP_SECONDS);
+          return; // updateend → flush appends the queue
+        } catch {
+          /* fall through and try the append anyway */
+        }
       }
     }
-    if (end - this.video.currentTime > MAX_LAG_SECONDS) this.video.currentTime = end - 0.3;
+    if (!this.pending.length) return;
+    const merged = concat(this.pending);
+    this.pending = [];
+    try {
+      sb.appendBuffer(merged as BufferSource);
+    } catch {
+      // Buffer full (QuotaExceeded): drop this data and everything behind the
+      // playhead; playback picks up again at the next keyframe.
+      const behind = this.video.currentTime - 1;
+      if (behind > start) {
+        try {
+          sb.remove(start, behind);
+        } catch {
+          /* nothing more to do */
+        }
+      }
+    }
   }
 
   private fail(message: string) {

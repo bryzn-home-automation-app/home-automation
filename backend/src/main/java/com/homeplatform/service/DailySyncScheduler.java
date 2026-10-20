@@ -8,8 +8,6 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -179,19 +177,8 @@ public class DailySyncScheduler {
     /** Spawn sync.js and record the result as an app event (with full output in details). */
     void runSync(List<String> command, String label) {
         try {
-            ProcessBuilder pb = new ProcessBuilder(command);
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
             StringBuilder output = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                }
-            }
-
-            int exitCode = process.waitFor();
+            int exitCode = ScriptRunner.run(command, output);
             String full = output.toString();
             String tail = full.length() > 2000
                     ? "…\n" + full.substring(full.length() - 2000) : full;

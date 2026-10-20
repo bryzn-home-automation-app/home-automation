@@ -16,6 +16,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 
+import static com.homeplatform.homeassistant.ThermostatChangeRecorder.Command.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -71,7 +72,7 @@ class ThermostatChangeRecorderTest {
     @Test
     @DisplayName("a change after an app command is credited to that user")
     void appUser() throws Exception {
-        recorder.expect(device, bryan);
+        recorder.expect(device, bryan, SETPOINT);
         clock.now = T0.plusSeconds(4);
         ThermostatChange c = record(cool(72, "sleep"), cool(73, "temp"), "ha-token-user");
         assertNotNull(c);
@@ -87,9 +88,33 @@ class ThermostatChangeRecorderTest {
     @Test
     @DisplayName("the hold's later echo (next ecobee poll) is still credited to the app user")
     void echoWithinWindow() throws Exception {
-        recorder.expect(device, bryan);
+        recorder.expect(device, bryan, SETPOINT);
         clock.now = T0.plus(Duration.ofMinutes(3));
         assertEquals("Bryan", record(cool(73, "sleep"), cool(73, "temp"), null).getActorName());
+    }
+
+    @Test
+    @DisplayName("the schedule switching comfort setting soon after a setpoint nudge stays 'ecobee'")
+    void scheduleAfterSetpoint() throws Exception {
+        recorder.expect(device, bryan, SETPOINT);
+        clock.now = T0.plus(Duration.ofMinutes(2));
+        // home → sleep with sleep's setpoint: not the manual-hold echo of a setpoint change.
+        assertEquals(ThermostatChange.ActorType.ECOBEE, record(cool(73, "home"), cool(76, "sleep"), null).getActorType());
+    }
+
+    @Test
+    @DisplayName("each command kind claims only the changes it causes")
+    void commandKinds() {
+        var before = cool(72, "home");
+        assertTrue(SETPOINT.explains(List.of("setpoint"), cool(73, "home")));
+        assertTrue(SETPOINT.explains(List.of("setpoint", "preset"), cool(73, "temp")));
+        assertFalse(SETPOINT.explains(List.of("preset"), cool(72, "sleep")));
+        assertFalse(SETPOINT.explains(List.of("mode"), before));
+        assertTrue(MODE.explains(List.of("mode", "setpoint"), before));
+        assertFalse(MODE.explains(List.of("preset"), before));
+        assertTrue(HOLD.explains(List.of("preset", "setpoint"), before));
+        assertFalse(HOLD.explains(List.of("mode"), before));
+        assertTrue(RESUME.explains(List.of("preset"), before));
     }
 
     @Test
@@ -106,7 +131,7 @@ class ThermostatChangeRecorderTest {
     @Test
     @DisplayName("an app command older than the window no longer claims changes")
     void windowExpires() throws Exception {
-        recorder.expect(device, bryan);
+        recorder.expect(device, bryan, SETPOINT);
         clock.now = T0.plus(ThermostatChangeRecorder.COMMAND_WINDOW).plusSeconds(1);
         assertEquals(ThermostatChange.ActorType.ECOBEE, record(cool(72, null), cool(74, null), null).getActorType());
     }
@@ -114,7 +139,7 @@ class ThermostatChangeRecorderTest {
     @Test
     @DisplayName("a failed command is withdrawn")
     void cancelled() throws Exception {
-        recorder.expect(device, bryan);
+        recorder.expect(device, bryan, SETPOINT);
         recorder.cancel(device, bryan);
         assertEquals(ThermostatChange.ActorType.ECOBEE, record(cool(72, null), cool(74, null), null).getActorType());
     }
@@ -123,8 +148,8 @@ class ThermostatChangeRecorderTest {
     @DisplayName("cancel leaves another user's newer command alone")
     void cancelOnlyOwn() throws Exception {
         ThermostatChangeRecorder.Actor kim = new ThermostatChangeRecorder.Actor(7L, "Kim");
-        recorder.expect(device, bryan);
-        recorder.expect(device, kim);
+        recorder.expect(device, bryan, SETPOINT);
+        recorder.expect(device, kim, SETPOINT);
         recorder.cancel(device, bryan);
         assertEquals("Kim", record(cool(72, null), cool(74, null), null).getActorName());
     }

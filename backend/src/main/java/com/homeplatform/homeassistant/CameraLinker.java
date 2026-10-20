@@ -131,8 +131,9 @@ public final class CameraLinker {
             return "on".equals(v) ? Boolean.TRUE : "off".equals(v) ? Boolean.FALSE : null;
         }
         if (v.contains("discharg") || v.contains("not") || v.contains("unplug")) return false;
+        // "Fully charged" / "Charged" / "Full" mean done, not charging — check before "charg".
+        if (v.contains("full") || v.contains("charged") || v.contains("plugged")) return false;
         if (v.contains("charg")) return true;
-        if (v.contains("full") || v.contains("plugged")) return false;
         return null;
     }
 

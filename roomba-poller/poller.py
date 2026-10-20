@@ -186,6 +186,7 @@ class PollerState:
         self.fast_poll_until = 0.0    # monotonic ts: poll at the fast cadence until this time (set after a mission-starting command)
         self.last_parts_at = None     # monotonic ts of the last successful parts refresh (None = never → due now)
         self.parts_refresh_due = None # monotonic ts: re-read the part counters soon (set after a run completes)
+        self.unsaved_runs = {}        # mission_id -> (run dict, status) whose DB write failed; retried each poll
 
 
 def _snapshot(cms):
@@ -550,7 +551,9 @@ async def run_live_map(robot, conninfo, robot_id):
                     continue  # throttle DB writes; keep only ~1 sample/sec
                 sample = msg.updates[-1]  # newest point in this trajectory-like message
                 x, y = sample.point
-                upsert_position(conninfo, robot_id, x, y, sample.orientation)
+                # Blocking psycopg write — off the event loop so ~1/s writes don't
+                # stall the robot connection's other tasks.
+                await asyncio.to_thread(upsert_position, conninfo, robot_id, x, y, sample.orientation)
                 last_write = now
             except Exception as e:  # noqa: BLE001 — one bad sample must not end the stream
                 log.warning("live sample failed: %s: %s", type(e).__name__, e)
@@ -595,6 +598,27 @@ async def _manage_live_task(task, robot, conninfo, state):
 # ---------------------------------------------------------------------------
 # Mission completion detection
 # ---------------------------------------------------------------------------
+def _record_run(state, conninfo, run, status):
+    """Persist one finished mission (idempotent by start time). False when the DB
+    write failed — the caller keeps the run and retries on the next poll."""
+    started = run.get("started_at")
+    try:
+        if run_exists(conninfo, started):
+            log.info("Mission %s already persisted (started %s); skipping", run.get("mission_id"), started)
+        else:
+            insert_run(conninfo, run, status)
+            log.info(
+                "Recorded mission %s status=%s sqft=%s duration=%smin",
+                run.get("mission_id"), status, run.get("sqft"), run.get("runtime_minutes"),
+            )
+        state.completed_missions.add(run.get("mission_id"))
+        return True
+    except Exception as e:  # noqa: BLE001 — fail-open; retried next poll
+        log.warning("Failed to record mission %s (will retry): %s: %s",
+                    run.get("mission_id"), type(e).__name__, e)
+        return False
+
+
 def detect_completion(state, rep, conninfo):
     """Compare this poll's cleanMissionStatus to the last-seen running mission
     and INSERT a roomba_runs row on a running->terminal transition or a
@@ -623,25 +647,15 @@ def detect_completion(state, rep, conninfo):
             completed = dict(prev)
             status = _classify(None, prev.get("error"))
 
+    # Runs whose write failed earlier (e.g. Postgres restarting) — retry before
+    # anything new, so a DB blip at mission end doesn't lose the run.
+    for mid, (run, run_status) in list(state.unsaved_runs.items()):
+        if _record_run(state, conninfo, run, run_status):
+            state.unsaved_runs.pop(mid, None)
+
     if completed and completed.get("mission_id") not in state.completed_missions:
-        started = completed.get("started_at")
-        try:
-            if run_exists(conninfo, started):
-                log.info(
-                    "Mission %s already persisted (started %s); skipping",
-                    completed.get("mission_id"), started,
-                )
-            else:
-                insert_run(conninfo, completed, status)
-                log.info(
-                    "Recorded mission %s status=%s sqft=%s duration=%smin",
-                    completed.get("mission_id"), status,
-                    completed.get("sqft"), completed.get("runtime_minutes"),
-                )
-            state.completed_missions.add(completed.get("mission_id"))
-        except Exception as e:  # noqa: BLE001 — fail-open
-            log.warning("Failed to record mission %s: %s: %s",
-                        completed.get("mission_id"), type(e).__name__, e)
+        if not _record_run(state, conninfo, completed, status):
+            state.unsaved_runs[completed.get("mission_id")] = (completed, status)
         state.active = None
         # A finished mission means the robot has regenerated its floor plan — schedule a
         # prompt bundle re-fetch (same one-shot the map-edit path uses) so the newly
@@ -1129,7 +1143,8 @@ def _replace_native_schedules(conninfo, robot_id, schedules):
     `schedules` is a list of (household_schedule_id, options_dict)."""
     with psycopg.connect(conninfo, autocommit=False) as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM roomba_native_schedule")
+            # Only this robot's rows — another robot's schedules aren't in `schedules`.
+            cur.execute("DELETE FROM roomba_native_schedule WHERE robot_id = %s", (robot_id,))
             for household_schedule_id, options in schedules:
                 cur.execute(
                     "INSERT INTO roomba_native_schedule "

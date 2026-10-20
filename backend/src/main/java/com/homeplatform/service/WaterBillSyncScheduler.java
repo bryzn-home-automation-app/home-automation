@@ -5,8 +5,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -80,15 +78,6 @@ public class WaterBillSyncScheduler {
 
     /** Spawn a child process, capturing merged stdout+stderr into {@code output}. Returns exit code. */
     int spawn(List<String> command, StringBuilder output) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder(command);
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                output.append(line).append("\n");
-            }
-        }
-        return process.waitFor();
+        return ScriptRunner.run(command, output);
     }
 }

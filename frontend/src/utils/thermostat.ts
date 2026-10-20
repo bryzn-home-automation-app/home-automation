@@ -11,8 +11,12 @@ import type { Thermostat, ThermostatChange } from '../types';
  */
 export const HEAT_COOL_MIN_GAP = 3;
 
-/** Data older than this is called out as stale (HA polls ecobee every 3 min). */
-export const STALE_AFTER_MS = 10 * 60_000;
+/**
+ * Data older than this is called out as stale. A steady reading only refreshes on
+ * the backend's 15-minute snapshot (HA sends no event when nothing changes), so
+ * anything under ~15 min is normal — 20 leaves room for jitter.
+ */
+export const STALE_AFTER_MS = 20 * 60_000;
 
 const MODE_LABELS: Record<string, string> = {
   heat_cool: 'Auto',
@@ -103,6 +107,7 @@ export type Setpoint =
 export function currentSetpoint(t: Thermostat): Setpoint {
   switch (t.hvacMode) {
     case 'heat_cool':
+    case 'auto': // some HA climate integrations call the range mode "auto" (the backend accepts both)
       return { kind: 'range', low: t.heatSetpoint, high: t.coolSetpoint };
     case 'heat':
       return { kind: 'single', value: t.targetTemperature ?? t.heatSetpoint };
@@ -113,9 +118,13 @@ export function currentSetpoint(t: Thermostat): Setpoint {
   }
 }
 
-/** Whole-degree limits, rounded inward (ecobee reports e.g. 44.6). */
+/**
+ * Whole-degree limits, rounded inward (ecobee reports e.g. 44.6). The fallbacks
+ * match the backend's (HomeDeviceService.bounds, °F) so the UI never offers a
+ * setpoint the API would reject.
+ */
 export function limits(t: Pick<Thermostat, 'minTemp' | 'maxTemp'>): { min: number; max: number } {
-  return { min: Math.ceil(t.minTemp ?? 45), max: Math.floor(t.maxTemp ?? 95) };
+  return { min: Math.ceil(t.minTemp ?? 45), max: Math.floor(t.maxTemp ?? 92) };
 }
 
 /** Keep a setpoint within the thermostat's limits; whole degrees for the ± buttons. */

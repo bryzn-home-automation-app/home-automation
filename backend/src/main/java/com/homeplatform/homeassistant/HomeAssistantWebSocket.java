@@ -114,7 +114,7 @@ public class HomeAssistantWebSocket {
         generation++; // invalidate any further callbacks from the dead socket
         if (connected) {
             connected = false;
-            appEventService.warn("home-assistant", SOURCE, "Disconnected from Home Assistant: " + reason);
+            event(() -> appEventService.warn("home-assistant", SOURCE, "Disconnected from Home Assistant: " + reason));
         } else {
             log.debug("Home Assistant WebSocket not connected: {}", reason);
         }
@@ -128,6 +128,15 @@ public class HomeAssistantWebSocket {
     }
 
     private void heartbeat() {
+        // An exception here would cancel the fixed-rate schedule for good.
+        try {
+            checkHeartbeat();
+        } catch (Exception e) {
+            log.warn("Home Assistant heartbeat failed: {}", e.getMessage());
+        }
+    }
+
+    private void checkHeartbeat() {
         WebSocket ws = socket;
         HaWebSocketProtocol p = protocol;
         if (ws == null || p == null) return;
@@ -145,6 +154,18 @@ public class HomeAssistantWebSocket {
         WebSocket ws = socket;
         for (String out : protocol.onMessage(text)) {
             if (ws != null) ws.sendText(out, true);
+        }
+    }
+
+    /**
+     * Writes an app_events row without letting a database error escape: these run on
+     * the reconnect path, and a throw there would leave ingestion dead until restart.
+     */
+    private static void event(Runnable write) {
+        try {
+            write.run();
+        } catch (Exception e) {
+            log.warn("Could not record Home Assistant connection event: {}", e.getMessage());
         }
     }
 
@@ -169,7 +190,7 @@ public class HomeAssistantWebSocket {
         public void onSubscribed() {
             attempts = 0;
             connected = true;
-            appEventService.info("home-assistant", SOURCE, "Connected to Home Assistant (state_changed subscribed)");
+            event(() -> appEventService.info("home-assistant", SOURCE, "Connected to Home Assistant (state_changed subscribed)"));
             // Make sure devices/status exist before relying on events.
             try {
                 service.discoverAndSnapshot();
@@ -181,8 +202,8 @@ public class HomeAssistantWebSocket {
         @Override
         public void onAuthFailed(String message) {
             authFailed = true;
-            appEventService.error("home-assistant", SOURCE,
-                    "Home Assistant rejected the WebSocket login — check HA_TOKEN", message);
+            event(() -> appEventService.error("home-assistant", SOURCE,
+                    "Home Assistant rejected the WebSocket login — check HA_TOKEN", message));
             WebSocket ws = socket;
             if (ws != null) ws.abort();
             disconnected(gen, "auth failed");

@@ -155,6 +155,22 @@ class CameraAlertServiceTest {
     }
 
     @Test
+    @DisplayName("a failed weather lookup is retried next tick, not cached for the day")
+    void weatherFailureRetried() {
+        frontStatus.setBatteryPercent(70.0);
+        when(readingRepo.findByDeviceIdAndRecordedAtBetweenOrderByRecordedAtAsc(eq(1L), any(), any())).thenReturn(List.of(
+                reading(UTC_NOW.minusHours(47), 76, false), reading(UTC_NOW.minusHours(1), 70, false)));
+        when(weather.getWeatherForDateRange(anyDouble(), anyDouble(), any(), any())).thenThrow(new RuntimeException("timeout"));
+        service.evaluate();
+        verify(notifications, never()).create(anyLong(), any(), any(), eq("Front camera isn't charging"), anyString());
+
+        reset(weather);
+        weatherCodes(1, 0);
+        service.evaluate();
+        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.WARNING), eq("Front camera isn't charging"), anyString());
+    }
+
+    @Test
     @DisplayName("not charging is skipped on cloudy days, after any gain, or with under 2 days of history")
     void notChargingGuards() {
         frontStatus.setBatteryPercent(70.0);
