@@ -229,18 +229,25 @@ public class CameraAlertService {
     boolean lastTwoDaysSunny() {
         if (latitude == 0 && longitude == 0) return false;
         LocalDate today = LocalDate.now(clock);
-        return sunnyCache.computeIfAbsent(today, t -> {
-            try {
-                WeatherResponse w = weather.getWeatherForDateRange(latitude, longitude, t.minusDays(2), t.minusDays(1));
-                List<WeatherResponse.WeatherDay> days = w == null || w.daily() == null ? List.of() : w.daily().stream()
-                        .filter(d -> d.date().equals(t.minusDays(2).toString()) || d.date().equals(t.minusDays(1).toString()))
-                        .toList();
-                return days.size() == 2 && days.stream().allMatch(d -> d.weatherCode() <= SUNNY_MAX_WEATHER_CODE);
-            } catch (Exception e) {
-                log.debug("Weather lookup for camera alerts failed: {}", e.getMessage());
-                return false;
-            }
-        });
+        Boolean cached = sunnyCache.get(today);
+        if (cached != null) return cached;
+        try {
+            WeatherResponse w = weather.getWeatherForDateRange(latitude, longitude, today.minusDays(2), today.minusDays(1));
+            List<WeatherResponse.WeatherDay> days = w == null || w.daily() == null ? List.of() : w.daily().stream()
+                    .filter(d -> d.date().equals(today.minusDays(2).toString()) || d.date().equals(today.minusDays(1).toString()))
+                    .toList();
+            // Missing days = the lookup didn't really answer; ask again next tick.
+            if (days.size() != 2) return false;
+            boolean sunny = days.stream().allMatch(d -> d.weatherCode() <= SUNNY_MAX_WEATHER_CODE);
+            // Only a real answer is cached, and only today's — a failed lookup is retried
+            // on the next 15-minute tick instead of silencing the alert for the day.
+            sunnyCache.keySet().removeIf(d -> !d.equals(today));
+            sunnyCache.put(today, sunny);
+            return sunny;
+        } catch (Exception e) {
+            log.debug("Weather lookup for camera alerts failed: {}", e.getMessage());
+            return false;
+        }
     }
 
     private void sendDaily(List<Long> recipients, Severity severity, String title, String message) {

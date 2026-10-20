@@ -392,16 +392,20 @@ async function main(cfg) {
         } else if (records.length > 0 && client) {
           let inserted = 0;
           for (const r of records) {
-            // ON CONFLICT DO NOTHING is a true no-op on a duplicate — check
-            // rowCount rather than assuming the query wrote a row. Otherwise
-            // a re-run against an already-populated day (e.g. a manual
-            // Debug Dashboard trigger, which forces a sync with no
-            // idempotency skip) logs "N written" when N rows were actually
-            // silently skipped as duplicates.
+            // A day CoServ first reports as 0 (or a partial total) must be
+            // corrected by a later run — with DO NOTHING it stayed wrong forever
+            // and DailySyncScheduler re-synced it every tick. Only a non-zero
+            // value that differs replaces the row, so an identical re-run (e.g.
+            // a Debug Dashboard trigger) still writes nothing; rowCount tells
+            // the two apart rather than assuming the query wrote a row.
             const result = await client.query(
               `INSERT INTO electric_usage (meter_id, timestamp, usage_kwh, cost, source, source_provider, ingestion_batch_id, processing_version)
                VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-               ON CONFLICT DO NOTHING`,
+               ON CONFLICT (meter_id, timestamp, source_provider) DO UPDATE SET
+                 usage_kwh = EXCLUDED.usage_kwh, cost = EXCLUDED.cost, source = EXCLUDED.source,
+                 ingestion_batch_id = EXCLUDED.ingestion_batch_id, processing_version = EXCLUDED.processing_version
+               WHERE EXCLUDED.usage_kwh > 0
+                 AND EXCLUDED.usage_kwh IS DISTINCT FROM electric_usage.usage_kwh`,
               [meterId, r.timestamp, r.usageKwh, r.cost, r.source, r.sourceProvider, batchId, r.processingVersion]
             );
             if (result.rowCount > 0) inserted++;

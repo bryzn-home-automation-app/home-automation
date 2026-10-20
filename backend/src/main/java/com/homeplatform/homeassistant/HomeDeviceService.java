@@ -127,7 +127,7 @@ public class HomeDeviceService {
         List<String> supported = st == null ? List.of() : list(st.getHvacModes());
         boolean ok = supported.isEmpty() ? EntityMapper.KNOWN_HVAC_MODES.contains(mode) : supported.contains(mode);
         if (!ok) throw new IllegalArgumentException("Unsupported mode: " + mode);
-        attributed(d, actor, () -> ha.setHvacMode(d, mode));
+        attributed(d, actor, ThermostatChangeRecorder.Command.MODE, () -> ha.setHvacMode(d, mode));
         return toThermostat(d);
     }
 
@@ -155,7 +155,7 @@ public class HomeDeviceService {
                 throw new IllegalArgumentException("Mode " + mode + " needs 'low' and 'high'");
             }
             double t = checkTemp(req.temperature(), bounds);
-            attributed(d, actor, () -> ha.setTemperature(d, t));
+            attributed(d, actor, ThermostatChangeRecorder.Command.SETPOINT, () -> ha.setTemperature(d, t));
         } else {
             if (req.low() == null || req.high() == null) {
                 throw new IllegalArgumentException("Both 'low' and 'high' are required");
@@ -166,7 +166,7 @@ public class HomeDeviceService {
             double low = checkTemp(req.low(), bounds);
             double high = checkTemp(req.high(), bounds);
             if (low >= high) throw new IllegalArgumentException("'low' must be below 'high'");
-            attributed(d, actor, () -> ha.setTemperatureRange(d, low, high));
+            attributed(d, actor, ThermostatChangeRecorder.Command.SETPOINT, () -> ha.setTemperatureRange(d, low, high));
         }
         return toThermostat(d);
     }
@@ -183,7 +183,7 @@ public class HomeDeviceService {
         if (presets.isEmpty()) throw new Unsupported("This thermostat exposes no presets to hold", false);
         if (preset == null || preset.isBlank()) throw new IllegalArgumentException("'preset' is required");
         if (!presets.contains(preset)) throw new IllegalArgumentException("Unsupported preset: " + preset);
-        attributed(d, actor, () -> ha.setPreset(d, preset));
+        attributed(d, actor, ThermostatChangeRecorder.Command.HOLD, () -> ha.setPreset(d, preset));
         return toThermostat(d);
     }
 
@@ -195,7 +195,7 @@ public class HomeDeviceService {
         requireConfigured();
         SmartDevice d = device(id, SmartDevice.Kind.THERMOSTAT);
         boolean[] supported = {false};
-        attributed(d, actor, () -> supported[0] = ha.resumeProgram(d));
+        attributed(d, actor, ThermostatChangeRecorder.Command.RESUME, () -> supported[0] = ha.resumeProgram(d));
         if (!supported[0]) {
             recorder.cancel(d, actor);
             throw new Unsupported("Home Assistant has no ecobee.resume_program service", true);
@@ -207,8 +207,9 @@ public class HomeDeviceService {
      * Registers the actor before calling HA — the resulting state_changed event can
      * arrive before the call returns — and withdraws it if the call fails.
      */
-    private void attributed(SmartDevice d, ThermostatChangeRecorder.Actor actor, Runnable call) {
-        recorder.expect(d, actor);
+    private void attributed(SmartDevice d, ThermostatChangeRecorder.Actor actor,
+                            ThermostatChangeRecorder.Command command, Runnable call) {
+        recorder.expect(d, actor, command);
         try {
             call.run();
         } catch (RuntimeException e) {

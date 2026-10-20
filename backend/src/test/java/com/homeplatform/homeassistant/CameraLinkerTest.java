@@ -106,6 +106,8 @@ class CameraLinkerTest {
         assertEquals(false, CameraLinker.charging(state("sensor.c", "Discharging", null)));
         assertEquals(false, CameraLinker.charging(state("sensor.c", "Unplugged", null)));
         assertEquals(false, CameraLinker.charging(state("sensor.c", "Plugged", null)));
+        assertEquals(false, CameraLinker.charging(state("sensor.c", "Fully charged", null)));
+        assertEquals(false, CameraLinker.charging(state("sensor.c", "Charged", null)));
         assertNull(CameraLinker.charging(state("sensor.c", "Mystery", null)));
         assertNull(CameraLinker.charging(state("sensor.c", "unknown", null)));
 

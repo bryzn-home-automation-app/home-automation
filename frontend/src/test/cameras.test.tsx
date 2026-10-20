@@ -75,7 +75,10 @@ const reading = (at: string, percent: number, charging: boolean | null = null): 
 describe('battery helpers', () => {
   it('tones by threshold', () => {
     expect(batteryTone(80)).toBe('ok');
-    expect(batteryTone(29)).toBe('low');
+    expect(batteryTone(31)).toBe('ok');
+    // Exactly at a threshold matches the backend alert (≤).
+    expect(batteryTone(30)).toBe('low');
+    expect(batteryTone(15)).toBe('critical');
     expect(batteryTone(14)).toBe('critical');
     expect(batteryTone(null)).toBe('unknown');
   });

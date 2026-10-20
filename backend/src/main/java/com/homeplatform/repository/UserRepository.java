@@ -19,6 +19,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByDisplayName(String displayName);
 
+    /** Display names aren't unique (a member and a guest can share one) — pick the oldest guest. */
+    Optional<User> findFirstByDisplayNameAndRoleOrderByIdAsc(String displayName, User.Role role);
+
     boolean existsByUsername(String username);
 
     /** Case-insensitive existence check, used everywhere a username needs to stay globally unique regardless of case. */

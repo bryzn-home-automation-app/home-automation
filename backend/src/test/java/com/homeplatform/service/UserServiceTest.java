@@ -177,6 +177,27 @@ class UserServiceTest {
         }
 
         @Test
+        @DisplayName("a guest an admin disabled can't sign back in with the same name")
+        void disabledGuestStaysDisabled() {
+            var first = userService.guestLogin(new GuestLoginRequest("Bob", null, null, "10.0.0.9", "Chrome"));
+            userService.disableUser(first.userId());
+
+            assertThrows(IllegalStateException.class, () ->
+                userService.guestLogin(new GuestLoginRequest("Bob", null, null, "10.0.0.9", "Chrome")));
+            assertEquals(AccountStatus.DISABLED, userRepo.findById(first.userId()).orElseThrow().getStatus());
+        }
+
+        @Test
+        @DisplayName("a member and guests sharing a display name don't break guest login")
+        void sharedDisplayName() {
+            userService.register(new RegisterRequest("bryan@test.com", "bryan_member", "password123", "Bryan"));
+            var g1 = userService.guestLogin(new GuestLoginRequest("Bryan", null, null, "10.0.0.2", "Safari"));
+            var g2 = userService.guestLogin(new GuestLoginRequest("Bryan", null, null, "10.0.0.2", "Safari"));
+            assertEquals(g1.userId(), g2.userId(), "reuses the guest, not the member");
+            assertEquals("GUEST", g2.role());
+        }
+
+        @Test
         @DisplayName("should create guest session on each login")
         void createsGuestSession() {
             userService.guestLogin(new GuestLoginRequest("Mike", null, null, "10.0.0.1", "Chrome"));

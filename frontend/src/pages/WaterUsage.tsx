@@ -259,7 +259,7 @@ export default memo(function WaterUsage() {
                         {bill.pdfPath ? (
                           <button
                             type="button"
-                            onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
+                            onClick={() => setViewingUrl(bill.pdfPath ?? null)}
                             className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                           >
                             View Bill
@@ -310,7 +310,7 @@ export default memo(function WaterUsage() {
                         {bill.pdfPath ? (
                           <button
                             type="button"
-                            onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
+                            onClick={() => setViewingUrl(bill.pdfPath ?? null)}
                             className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                           >
                             View Bill
@@ -329,7 +329,7 @@ export default memo(function WaterUsage() {
       </section>
       {viewingUrl && (
         <Suspense fallback={null}>
-          <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
+          <BillPdfModal pdfPath={viewingUrl} onClose={() => setViewingUrl(null)} />
         </Suspense>
       )}
     </div>

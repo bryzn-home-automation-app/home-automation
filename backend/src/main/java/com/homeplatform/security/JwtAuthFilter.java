@@ -12,6 +12,7 @@ import java.util.List;
 public class JwtAuthFilter implements Filter {
 
     private final JwtUtil jwtUtil;
+    private final UserAccessCache accessCache;
 
     // Only these specific auth endpoints are public — /api/auth/me and
     // /api/auth/heartbeat require a valid token.
@@ -28,8 +29,9 @@ public class JwtAuthFilter implements Filter {
             // nothing for now — exact match only
     );
 
-    public JwtAuthFilter(JwtUtil jwtUtil) {
+    public JwtAuthFilter(JwtUtil jwtUtil, UserAccessCache accessCache) {
         this.jwtUtil = jwtUtil;
+        this.accessCache = accessCache;
     }
 
     @Override
@@ -79,10 +81,20 @@ public class JwtAuthFilter implements Filter {
             return;
         }
 
+        // The token says who the user was when it was issued; the database says who
+        // they are now. A disabled/expired/deleted account is rejected, and the role
+        // comes from the database so a demotion applies immediately.
+        Long userId = jwtUtil.getUserId(token);
+        UserAccessCache.Access access = accessCache.get(userId).orElse(null);
+        if (access == null || !access.active()) {
+            sendUnauthorized(httpResp, "Session is no longer valid");
+            return;
+        }
+
         // Set user attributes on the request for controllers to consume
-        httpReq.setAttribute("userId", jwtUtil.getUserId(token));
+        httpReq.setAttribute("userId", userId);
         httpReq.setAttribute("username", jwtUtil.getUsername(token));
-        httpReq.setAttribute("role", jwtUtil.getRole(token));
+        httpReq.setAttribute("role", access.role().name());
 
         chain.doFilter(request, response);
     }

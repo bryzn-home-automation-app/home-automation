@@ -43,6 +43,7 @@ function sides(
 ): { heat: number | null; cool: number | null } {
   switch (mode) {
     case 'heat_cool':
+    case 'auto':
       return { heat, cool };
     case 'heat':
       return { heat: target ?? heat, cool: null };

@@ -158,13 +158,21 @@ class NotificationServiceTest {
     class MarkRead {
 
         @Test
-        @DisplayName("delegates to repository")
+        @DisplayName("delegates to repository, scoped to the caller")
         void delegatesToRepo() {
-            when(repo.markRead(42L)).thenReturn(1);
+            when(repo.markRead(42L, 7L)).thenReturn(1);
 
-            int updated = notificationService.markRead(42L);
+            int updated = notificationService.markRead(42L, 7L);
 
             assertEquals(1, updated);
+        }
+
+        @Test
+        @DisplayName("someone else's notification is not touched")
+        void otherUsersNotification() {
+            when(repo.markRead(42L, 8L)).thenReturn(0);
+
+            assertEquals(0, notificationService.markRead(42L, 8L));
         }
     }
 

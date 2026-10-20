@@ -17,6 +17,7 @@ import {
   statusChip,
 } from '../utils/thermostat';
 import { buildSeries } from '../components/ThermostatHistoryChart';
+import { isStale, limits, STALE_AFTER_MS } from '../utils/thermostat';
 
 vi.mock('../api/climate', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../api/climate')>();
@@ -276,17 +277,19 @@ describe('recent change by someone else', () => {
     localStorage.clear();
   });
 
-  const minsAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
-  const byKim = (m: number) => change({ at: minsAgo(m), by: 'Kim', byUserId: 7 });
+  // Optional fixed `now`: the pure-function test must measure from the same instant
+  // it built the changes at, or a millisecond tick turns "4 minutes" into 3.
+  const minsAgo = (m: number, now = Date.now()) => new Date(now - m * 60_000).toISOString();
+  const byKim = (m: number, now?: number) => change({ at: minsAgo(m, now), by: 'Kim', byUserId: 7 });
 
   it('detects only other people within 10 minutes', () => {
     const now = Date.now();
-    expect(recentChangeByOther(byKim(4), 42, now)).toEqual({ name: 'Kim', ago: '4 minutes ago' });
-    expect(recentChangeByOther(byKim(0), 42, now)?.ago).toBe('just now');
-    expect(recentChangeByOther(byKim(1), 42, now)?.ago).toBe('1 minute ago');
-    expect(recentChangeByOther(byKim(11), 42, now)).toBeNull();
-    expect(recentChangeByOther(change({ at: minsAgo(2) }), 42, now)).toBeNull(); // you
-    expect(recentChangeByOther(change({ at: minsAgo(2), actor: 'ecobee', byUserId: null }), 42, now)).toBeNull();
+    expect(recentChangeByOther(byKim(4, now), 42, now)).toEqual({ name: 'Kim', ago: '4 minutes ago' });
+    expect(recentChangeByOther(byKim(0, now), 42, now)?.ago).toBe('just now');
+    expect(recentChangeByOther(byKim(1, now), 42, now)?.ago).toBe('1 minute ago');
+    expect(recentChangeByOther(byKim(11, now), 42, now)).toBeNull();
+    expect(recentChangeByOther(change({ at: minsAgo(2, now) }), 42, now)).toBeNull(); // you
+    expect(recentChangeByOther(change({ at: minsAgo(2, now), actor: 'ecobee', byUserId: null }), 42, now)).toBeNull();
     expect(recentChangeByOther(null, 42, now)).toBeNull();
   });
 
@@ -334,5 +337,25 @@ describe('recent change by someone else', () => {
     fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
     expect(screen.queryByRole('dialog')).toBeNull();
     await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('a1b2', 'heat'));
+  });
+});
+
+describe('review fixes', () => {
+  it('a steady reading between 15-min snapshots is not stale', () => {
+    const now = Date.now();
+    expect(isStale(new Date(now - 16 * 60_000).toISOString(), now)).toBe(false);
+    expect(isStale(new Date(now - STALE_AFTER_MS - 60_000).toISOString(), now)).toBe(true);
+  });
+
+  it('falls back to the same 45–92°F limits as the backend', () => {
+    expect(limits({ minTemp: null, maxTemp: null })).toEqual({ min: 45, max: 92 });
+  });
+
+  it("treats HA's 'auto' mode as a heat/cool range", () => {
+    expect(currentSetpoint({ ...upstairs, hvacMode: 'auto', heatSetpoint: 68, coolSetpoint: 75 })).toEqual({
+      kind: 'range',
+      low: 68,
+      high: 75,
+    });
   });
 });

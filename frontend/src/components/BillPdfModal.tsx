@@ -1,8 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { fetchBillPdf } from '../api/coservBills';
+import { errorMessage } from '../api/climate';
 
 // Firefox for iOS (and some other mobile browsers) doesn't honor the HTML
 // `download` attribute and intercepts direct PDF navigation into a broken
@@ -15,22 +17,51 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 interface BillPdfModalProps {
-  url: string | null;
+  /** The bill's stored `pdfPath` (e.g. "bills/…pdf"); null = closed. */
+  pdfPath: string | null;
   onClose: () => void;
 }
 
-export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
+export default function BillPdfModal({ pdfPath, onClose }: BillPdfModalProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [pageWidth, setPageWidth] = useState(560);
   const viewerRef = useRef<HTMLDivElement | null>(null);
 
+  // Bills aren't publicly served: fetch through the API (with the session), then
+  // hand pdf.js the bytes and give "Open raw PDF" a local blob URL.
+  const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
+  const [rawUrl, setRawUrl] = useState<string | null>(null);
+
   useEffect(() => {
     setNumPages(null);
     setPageNumber(1);
     setError(null);
-  }, [url]);
+    setPdf(null);
+    if (!pdfPath) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    fetchBillPdf(pdfPath)
+      .then((buf) => {
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+        setRawUrl(objectUrl);
+        setPdf(buf);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(errorMessage(err, "couldn't load the bill"));
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setRawUrl(null);
+    };
+  }, [pdfPath]);
+
+  // pdf.js transfers (detaches) the buffer it's given, so pass a copy; memoized
+  // so re-renders don't reload the document.
+  const file = useMemo(() => (pdf ? { data: new Uint8Array(pdf.slice(0)) } : null), [pdf]);
 
   // Fill the actual available width (full-screen on mobile, capped on
   // desktop) instead of a fixed pixel width — a hardcoded width rendered
@@ -44,20 +75,20 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [url]);
+  }, [pdfPath]);
 
   const close = useCallback(() => onClose(), [onClose]);
 
   useEffect(() => {
-    if (!url) return;
+    if (!pdfPath) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') close();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [url, close]);
+  }, [pdfPath, close]);
 
-  if (!url) return null;
+  if (!pdfPath) return null;
 
   // Rendered via a portal into document.body rather than in place: any
   // ancestor with `content-visibility: auto` (used by .perf-section, which
@@ -82,7 +113,10 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
           <h3 className="text-lg font-semibold tracking-[-0.02em] text-apptext">Bill</h3>
           <div className="flex items-center gap-2">
             <a
-              href={url}
+              href={rawUrl ?? undefined}
+              target="_blank"
+              rel="noreferrer"
+              aria-disabled={!rawUrl}
               className="rounded-lg px-2 py-1.5 text-xs font-medium text-appaccent-text transition-colors hover:bg-appinset"
             >
               Open raw PDF
@@ -103,9 +137,11 @@ export default function BillPdfModal({ url, onClose }: BillPdfModalProps) {
             <p className="text-sm text-apptext-muted">
               Couldn't render this PDF inline ({error}). Try "Open raw PDF" above.
             </p>
+          ) : !file ? (
+            <p className="text-sm text-apptext-muted">Loading bill…</p>
           ) : (
             <Document
-              file={url}
+              file={file}
               onLoadSuccess={({ numPages: n }) => setNumPages(n)}
               onLoadError={(e) => setError(e.message)}
               loading={<p className="text-sm text-apptext-muted">Loading bill…</p>}

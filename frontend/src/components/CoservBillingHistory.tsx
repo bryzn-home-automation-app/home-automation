@@ -74,7 +74,7 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
                         {bill.pdfPath ? (
                           <button
                             type="button"
-                            onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
+                            onClick={() => setViewingUrl(bill.pdfPath ?? null)}
                             className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                           >
                             View Bill
@@ -119,7 +119,7 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
                         {bill.pdfPath ? (
                           <button
                             type="button"
-                            onClick={() => setViewingUrl(`/uploads/${bill.pdfPath}`)}
+                            onClick={() => setViewingUrl(bill.pdfPath ?? null)}
                             className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
                           >
                             View Bill
@@ -136,7 +136,7 @@ export default memo(function CoservBillingHistory({ service }: { service: 'elect
           </div>
         )
       )}
-      <BillPdfModal url={viewingUrl} onClose={() => setViewingUrl(null)} />
+      <BillPdfModal pdfPath={viewingUrl} onClose={() => setViewingUrl(null)} />
     </section>
   );
 });

@@ -16,6 +16,7 @@ export const IDLE_STOP_MS = 3 * 60_000;
 /** Motion/person events newer than this get the highlight ring on the tile. */
 export const RECENT_EVENT_MS = 2 * 60_000;
 
+/** Same thresholds and comparisons (≤) as CameraAlertService, so a tile and its alert agree. */
 export const BATTERY_LOW = 30;
 export const BATTERY_CRITICAL = 15;
 
@@ -23,8 +24,8 @@ export type BatteryTone = 'ok' | 'low' | 'critical' | 'unknown';
 
 export function batteryTone(pct: number | null | undefined): BatteryTone {
   if (pct == null || !Number.isFinite(pct)) return 'unknown';
-  if (pct < BATTERY_CRITICAL) return 'critical';
-  if (pct < BATTERY_LOW) return 'low';
+  if (pct <= BATTERY_CRITICAL) return 'critical';
+  if (pct <= BATTERY_LOW) return 'low';
   return 'ok';
 }
 
