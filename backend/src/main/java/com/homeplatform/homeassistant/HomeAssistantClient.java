@@ -13,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -116,6 +117,24 @@ public class HomeAssistantClient {
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofByteArray(json))
                 .build());
+    }
+
+    /**
+     * Render a Jinja template ({@code POST /api/template}) and return the text. The
+     * only REST route into HA's device registry ({@code device_id}, {@code device_entities}).
+     */
+    public String renderTemplate(String template) {
+        byte[] json;
+        try {
+            json = mapper.writeValueAsBytes(Map.of("template", template));
+        } catch (JsonProcessingException e) {
+            throw new IllegalArgumentException("Unserializable template", e);
+        }
+        HttpResponse<byte[]> resp = send(request("/api/template")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofByteArray(json))
+                .build());
+        return resp.body() == null ? "" : new String(resp.body(), StandardCharsets.UTF_8);
     }
 
     /** Current still image from a camera entity via HA's camera proxy. */

@@ -25,6 +25,7 @@ class HomeAssistantServiceTest {
     private HomeAssistantClient client;
     private DeviceDiscoveryService discovery;
     private ThermostatIngestionService ingestion;
+    private CameraIngestionService cameras;
     private SmartDeviceRepository deviceRepo;
     private AppEventService events;
     private HomeAssistantService service;
@@ -35,9 +36,10 @@ class HomeAssistantServiceTest {
         client = mock(HomeAssistantClient.class);
         discovery = mock(DeviceDiscoveryService.class);
         ingestion = mock(ThermostatIngestionService.class);
+        cameras = mock(CameraIngestionService.class);
         deviceRepo = mock(SmartDeviceRepository.class);
         events = mock(AppEventService.class);
-        service = new HomeAssistantService(client, discovery, ingestion, deviceRepo, events);
+        service = new HomeAssistantService(client, discovery, ingestion, cameras, deviceRepo, events, JSON);
         thermostat = SmartDevice.builder().id(5L).publicId(UUID.randomUUID()).providerEntityId("climate.main")
                 .kind(SmartDevice.Kind.THERMOSTAT).enabled(true).build();
         when(deviceRepo.findByProviderEntityId("climate.main")).thenReturn(Optional.of(thermostat));
@@ -84,6 +86,53 @@ class HomeAssistantServiceTest {
         verify(ingestion).ingest(eq(thermostat), same(states.get(0)), eq("°F"),
                 eq(ThermostatIngestionService.Source.SNAPSHOT), eq(r.batchId()));
         verify(events).info(eq("home-assistant"), anyString(), contains("2 new device"));
+    }
+
+    @Test
+    @DisplayName("camera entities: live events go to camera ingestion only when linked")
+    void cameraEventsRouted() throws Exception {
+        UUID batch = UUID.randomUUID();
+        when(cameras.handles("sensor.porch_battery")).thenReturn(true);
+        service.handleStateChanged(state("sensor.porch_battery"), batch);
+        service.handleStateChanged(state("sensor.outdoor"), batch);
+        verify(cameras).onStateChanged(argThat(s -> s.entityId().equals("sensor.porch_battery")), eq(batch));
+        verify(cameras, times(1)).onStateChanged(any(), any());
+        verifyNoInteractions(ingestion);
+
+        doThrow(new RuntimeException("db down")).when(cameras).onStateChanged(any(), any());
+        assertDoesNotThrow(() -> service.handleStateChanged(state("sensor.porch_battery"), batch));
+    }
+
+    @Test
+    @DisplayName("discovery links enabled cameras from the rendered device-registry template")
+    void linksCameras() throws Exception {
+        var states = List.of(state("camera.porch"), state("sensor.porch_battery"));
+        SmartDevice porch = SmartDevice.builder().id(9L).publicId(UUID.randomUUID()).providerEntityId("camera.porch")
+                .kind(SmartDevice.Kind.CAMERA).enabled(true).build();
+        when(client.getStates()).thenReturn(states);
+        when(discovery.upsertAll(states)).thenReturn(new DeviceDiscoveryService.Result(0, 1, 0));
+        when(deviceRepo.findByProviderEntityId("camera.porch")).thenReturn(Optional.of(porch));
+        when(client.renderTemplate(CameraLinker.TEMPLATE)).thenReturn(
+                "[{\"camera\":\"camera.porch\",\"serial\":\"T8170P1234\",\"entities\":[\"camera.porch\",\"sensor.porch_battery\"]}]");
+
+        var r = service.discoverAndSnapshot();
+
+        verify(cameras).link(same(porch), argThat(l -> "T8170P1234".equals(l.streamName())), anyMap(),
+                eq(ThermostatIngestionService.Source.SNAPSHOT), eq(r.batchId()));
+        verify(cameras).reindex();
+    }
+
+    @Test
+    @DisplayName("a failing camera template never fails discovery")
+    void cameraTemplateFailure() throws Exception {
+        var states = List.of(state("camera.porch"));
+        when(client.getStates()).thenReturn(states);
+        when(discovery.upsertAll(states)).thenReturn(new DeviceDiscoveryService.Result(0, 1, 0));
+        when(client.renderTemplate(any())).thenThrow(new HomeAssistantException.Http(400, "bad template"));
+
+        assertDoesNotThrow(() -> service.discoverAndSnapshot());
+        verify(cameras, never()).link(any(), any(), any(), any(), any());
+        verify(cameras).reindex();
     }
 
     @Test

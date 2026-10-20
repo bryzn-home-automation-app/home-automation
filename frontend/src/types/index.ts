@@ -574,3 +574,40 @@ export interface ThermostatReading {
   presetMode: string | null;
   source: string | null;
 }
+
+/**
+ * GET /api/home/cameras (members only). `id` is the app's device ID. Battery
+ * fields are null for wired cameras (`powerSource` "wired") and until a battery
+ * camera first reports. `charging` is null when the camera doesn't report it —
+ * the UI infers it from the level's trend instead.
+ */
+export interface Camera {
+  id: string;
+  name: string;
+  available: boolean;
+  powerSource: 'battery' | 'wired' | null;
+  batteryPercent: number | null;
+  charging: boolean | null;
+  /** The camera's own label when it has one, e.g. "Solar charging". */
+  chargingStatus: string | null;
+  batteryUpdatedAt: string | null;
+  lastMotionAt: string | null;
+  lastPersonAt: string | null;
+  /** The camera streams through the eufy bridge (live view possible). */
+  liveAvailable: boolean;
+  lastSeenAt: string | null;
+}
+
+/** One battery history point (oldest first in a history response). */
+export interface CameraBatteryReading {
+  at: string;
+  percent: number;
+  charging: boolean | null;
+  chargingStatus: string | null;
+}
+
+/** GET /api/home/cameras/{id}/battery — readings plus sunrise→sunset windows. */
+export interface CameraBatteryHistory {
+  readings: CameraBatteryReading[];
+  daylight: Array<{ from: string; to: string }>;
+}

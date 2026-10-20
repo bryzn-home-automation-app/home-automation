@@ -1,7 +1,6 @@
 package com.homeplatform.controller;
 
 import com.homeplatform.dto.ThermostatResponse;
-import com.homeplatform.homeassistant.HomeAssistantClient;
 import com.homeplatform.homeassistant.HomeAssistantException;
 import com.homeplatform.dto.ThermostatChangeResponse;
 import com.homeplatform.homeassistant.HomeDeviceService;
@@ -84,15 +83,6 @@ class HomeControllerTest {
             verify(service, never()).setTemperature(anyString(), any(), any());
             verify(service, never()).resume(anyString(), any());
         }
-
-        @Test
-        @DisplayName("cannot see cameras or snapshots")
-        void noCameras() throws Exception {
-            mvc.perform(get("/api/home/cameras").requestAttr("role", "GUEST")).andExpect(status().isForbidden());
-            mvc.perform(get("/api/home/cameras/" + ID + "/snapshot").requestAttr("role", "GUEST"))
-                    .andExpect(status().isForbidden());
-            verify(service, never()).cameraSnapshot(anyString());
-        }
     }
 
     @Test
@@ -102,19 +92,13 @@ class HomeControllerTest {
     }
 
     @Test
-    @DisplayName("USER can control and fetch camera snapshots")
+    @DisplayName("USER can control thermostats")
     void userAllowed() throws Exception {
         when(service.setMode(eq(ID), eq("cool"), any())).thenReturn(thermostat());
         mvc.perform(post("/api/home/thermostats/" + ID + "/mode").requestAttr("role", "USER")
                         .contentType(MediaType.APPLICATION_JSON).content("{\"mode\":\"cool\"}"))
                 .andExpect(status().isOk());
 
-        when(service.cameraSnapshot(ID)).thenReturn(new HomeAssistantClient.CameraImage(new byte[]{1, 2, 3}, "image/jpeg"));
-        mvc.perform(get("/api/home/cameras/" + ID + "/snapshot").requestAttr("role", "USER"))
-                .andExpect(status().isOk())
-                .andExpect(content().contentType("image/jpeg"))
-                .andExpect(content().bytes(new byte[]{1, 2, 3}))
-                .andExpect(header().string("Cache-Control", containsString("no-store")));
     }
 
     @Test

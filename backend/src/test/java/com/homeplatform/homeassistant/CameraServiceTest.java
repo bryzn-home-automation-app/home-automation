@@ -1,0 +1,136 @@
+package com.homeplatform.homeassistant;
+
+import com.homeplatform.model.CameraBatteryReading;
+import com.homeplatform.model.CameraStatus;
+import com.homeplatform.model.SmartDevice;
+import com.homeplatform.repository.CameraBatteryReadingRepository;
+import com.homeplatform.repository.CameraStatusRepository;
+import com.homeplatform.repository.SmartDeviceRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.*;
+
+class CameraServiceTest {
+
+    private static final UUID PUBLIC_ID = UUID.randomUUID();
+    private static final String ID = PUBLIC_ID.toString();
+    private static final Instant NOW = Instant.parse("2026-10-20T18:00:00Z");
+
+    private HomeAssistantService ha;
+    private SmartDeviceRepository deviceRepo;
+    private CameraStatusRepository statusRepo;
+    private CameraBatteryReadingRepository readingRepo;
+    private CameraStreamTickets tickets;
+    private CameraService service;
+    private SmartDevice camera;
+    private CameraStatus status;
+
+    @BeforeEach
+    void setUp() {
+        ha = mock(HomeAssistantService.class);
+        deviceRepo = mock(SmartDeviceRepository.class);
+        statusRepo = mock(CameraStatusRepository.class);
+        readingRepo = mock(CameraBatteryReadingRepository.class);
+        tickets = new CameraStreamTickets(Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, 32.78, -96.80,
+                Clock.fixed(NOW, ZoneOffset.UTC));
+        when(ha.isActive()).thenReturn(true);
+        camera = SmartDevice.builder().id(3L).publicId(PUBLIC_ID).providerEntityId("camera.driveway")
+                .kind(SmartDevice.Kind.CAMERA).name("Driveway").enabled(true).build();
+        status = CameraStatus.builder().deviceId(3L).available(true).streamName("T8170X")
+                .powerSource(CameraStatus.POWER_BATTERY).batteryPercent(64.0).charging(true)
+                .chargingStatus("Solar charging").build();
+        when(deviceRepo.findByPublicId(PUBLIC_ID)).thenReturn(Optional.of(camera));
+        when(deviceRepo.findByKindAndEnabledTrueOrderByNameAsc(SmartDevice.Kind.CAMERA)).thenReturn(List.of(camera));
+        when(statusRepo.findByDeviceId(3L)).thenReturn(Optional.of(status));
+    }
+
+    @Test
+    @DisplayName("list exposes battery + live availability, never the stream name or entity ids")
+    void list() {
+        var cams = service.listCameras();
+        assertEquals(1, cams.size());
+        var c = cams.get(0);
+        assertEquals(ID, c.id());
+        assertEquals(64.0, c.batteryPercent());
+        assertEquals(true, c.charging());
+        assertTrue(c.liveAvailable());
+        assertFalse(c.toString().contains("T8170X"));
+        assertFalse(c.toString().contains("camera.driveway"));
+    }
+
+    @Test
+    @DisplayName("wired cameras report no battery fields even if stale values are stored")
+    void wired() {
+        status.setPowerSource(CameraStatus.POWER_WIRED);
+        var c = service.listCameras().get(0);
+        assertNull(c.batteryPercent());
+        assertNull(c.charging());
+        assertEquals("wired", c.powerSource());
+    }
+
+    @Test
+    @DisplayName("battery history: readings + daylight windows; range validated")
+    void history() {
+        LocalDateTime at = LocalDateTime.ofInstant(NOW.minus(1, ChronoUnit.HOURS), ZoneOffset.UTC);
+        when(readingRepo.findByDeviceIdAndRecordedAtBetweenOrderByRecordedAtAsc(eq(3L), any(), any()))
+                .thenReturn(List.of(CameraBatteryReading.builder().recordedAt(at).batteryPercent(63.0).charging(true).build()));
+
+        var h = service.batteryHistory(ID, null, null);
+
+        assertEquals(1, h.readings().size());
+        assertEquals(63.0, h.readings().get(0).percent());
+        assertFalse(h.daylight().isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> service.batteryHistory(ID, NOW, NOW.minusSeconds(1)));
+        assertThrows(IllegalArgumentException.class, () -> service.batteryHistory(ID, NOW.minus(100, ChronoUnit.DAYS), NOW));
+    }
+
+    @Test
+    @DisplayName("snapshots are cached briefly so several viewers share one camera wake-up")
+    void snapshotCache() {
+        when(ha.cameraSnapshot(camera)).thenReturn(new HomeAssistantClient.CameraImage(new byte[]{1}, "image/jpeg"));
+        service.snapshot(ID);
+        service.snapshot(ID);
+        verify(ha, times(1)).cameraSnapshot(camera);
+    }
+
+    @Test
+    @DisplayName("live: ticket URL resolves back to the stream; none without a stream name")
+    void live() {
+        var live = service.startLive(ID);
+        assertTrue(live.url().startsWith("/camera-stream/") && live.url().endsWith("/ws"));
+        String ticket = live.url().substring("/camera-stream/".length(), live.url().length() - "/ws".length());
+        assertEquals(Optional.of("T8170X"), service.streamForTicket(ticket));
+
+        camera.setEnabled(false);
+        assertTrue(service.streamForTicket(ticket).isEmpty(), "disabled after issue");
+        camera.setEnabled(true);
+
+        status.setStreamName(null);
+        assertThrows(HomeDeviceService.Unsupported.class, () -> service.startLive(ID));
+    }
+
+    @Test
+    @DisplayName("bad ids, thermostats, and integration-off are rejected")
+    void guards() {
+        assertThrows(HomeDeviceService.NotFound.class, () -> service.snapshot("nope"));
+        camera.setKind(SmartDevice.Kind.THERMOSTAT);
+        assertThrows(HomeDeviceService.NotFound.class, () -> service.startLive(ID));
+        when(ha.isActive()).thenReturn(false);
+        assertThrows(HomeAssistantException.Unavailable.class, () -> service.listCameras());
+    }
+}

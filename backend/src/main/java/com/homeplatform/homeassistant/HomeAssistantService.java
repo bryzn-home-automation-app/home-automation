@@ -1,5 +1,6 @@
 package com.homeplatform.homeassistant;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homeplatform.model.SmartDevice;
 import com.homeplatform.repository.SmartDeviceRepository;
 import com.homeplatform.service.AppEventService;
@@ -7,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -25,8 +27,10 @@ public class HomeAssistantService {
     private final HomeAssistantClient client;
     private final DeviceDiscoveryService discovery;
     private final ThermostatIngestionService ingestion;
+    private final CameraIngestionService cameras;
     private final SmartDeviceRepository deviceRepo;
     private final AppEventService appEventService;
+    private final ObjectMapper mapper;
 
     /** HA's configured temperature unit, fetched once per process (null until known). */
     private volatile String temperatureUnit;
@@ -34,20 +38,27 @@ public class HomeAssistantService {
     public HomeAssistantService(HomeAssistantClient client,
                                 DeviceDiscoveryService discovery,
                                 ThermostatIngestionService ingestion,
+                                CameraIngestionService cameras,
                                 SmartDeviceRepository deviceRepo,
-                                AppEventService appEventService) {
+                                AppEventService appEventService,
+                                ObjectMapper mapper) {
         this.client = client;
         this.discovery = discovery;
         this.ingestion = ingestion;
+        this.cameras = cameras;
         this.deviceRepo = deviceRepo;
         this.appEventService = appEventService;
+        this.mapper = mapper;
     }
 
     public boolean isActive() {
         return client.isActive();
     }
 
-    /** Pull all HA states, upsert devices, and record a snapshot reading for each enabled thermostat. */
+    /**
+     * Pull all HA states, upsert devices, record a snapshot reading for each enabled
+     * thermostat, and refresh camera links + battery snapshots.
+     */
     public SyncResult discoverAndSnapshot() {
         List<HaEntityState> states = client.getStates();
         DeviceDiscoveryService.Result found = discovery.upsertAll(states);
@@ -65,14 +76,43 @@ public class HomeAssistantService {
             if (d == null || !d.isEnabled()) continue;
             if (ingestion.ingest(d, s, unit, ThermostatIngestionService.Source.SNAPSHOT, batch)) written++;
         }
+        if (found.cameras() > 0) linkCameras(states, batch);
         return new SyncResult(found, written, batch);
+    }
+
+    /**
+     * Resolve each camera's battery/charging/motion/person entities and stream name.
+     * Best-effort: a failure leaves cameras listed, just without battery or live view.
+     */
+    void linkCameras(List<HaEntityState> states, UUID batch) {
+        Map<String, HaEntityState> byId = new HashMap<>();
+        for (HaEntityState s : states) byId.put(s.entityId(), s);
+        try {
+            for (CameraLinker.Link link : CameraLinker.parse(client.renderTemplate(CameraLinker.TEMPLATE), mapper, byId)) {
+                deviceRepo.findByProviderEntityId(link.cameraEntityId())
+                        .filter(SmartDevice::isEnabled)
+                        .filter(d -> d.getKind() == SmartDevice.Kind.CAMERA)
+                        .ifPresent(d -> cameras.link(d, link, byId, ThermostatIngestionService.Source.SNAPSHOT, batch));
+            }
+        } catch (HomeAssistantException e) {
+            log.warn("Could not resolve camera entities: {}", e.getMessage());
+        } finally {
+            cameras.reindex();
+        }
     }
 
     public record SyncResult(DeviceDiscoveryService.Result devices, int readingsWritten, UUID batchId) {}
 
-    /** Live WebSocket update. Ignores entities that aren't enabled thermostats. Never throws. */
+    /** Live WebSocket update for an enabled thermostat or a camera's entities. Never throws. */
     public void handleStateChanged(HaEntityState state, UUID sessionBatchId) {
-        if (!"climate".equals(state.domain())) return;
+        if (!"climate".equals(state.domain())) {
+            try {
+                if (cameras.handles(state.entityId())) cameras.onStateChanged(state, sessionBatchId);
+            } catch (Exception e) {
+                log.warn("Failed to ingest HA state for a camera: {}", e.getMessage());
+            }
+            return;
+        }
         try {
             deviceRepo.findByProviderEntityId(state.entityId())
                     .filter(SmartDevice::isEnabled)

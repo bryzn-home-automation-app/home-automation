@@ -485,6 +485,60 @@ const FLAME: PixelArt = {
   palette: { R: '#e8574a', O: '#f59e0b', Y: '#ffe08a', L: '#7a5236' },
 };
 
+// ── Camera props ──
+
+/** SoloCam S340: dual-lens camera on a post, solar panel on top. */
+const SOLOCAM: PixelArt = {
+  grid: [
+    'SSSSSSSSS..',
+    'SBSBSBSBS..',
+    'SSSSSSSSS..',
+    'SBSBSBSBS..',
+    'SSSSSSSSS..',
+    '....M......',
+    '..WWWWWWW..',
+    '.WWWWWWWWW.',
+    '.WKKWWWKKW.',
+    '.WKLWWWKLW.',
+    '.WWWWWRWWW.',
+    '..WWWWWWW..',
+    '....M......',
+    '....M......',
+    '....M......',
+    '....M......',
+    '...MMM.....',
+  ],
+  palette: { S: '#2c4a8a', B: '#6fa8ff', W: '#e8edf5', K: '#131a2a', L: '#5fd0ff', M: '#7a8496', R: '#e8574a' },
+};
+
+/** Indoor pan/tilt cam (E30) on its stand. */
+const INDOOR_CAM: PixelArt = {
+  grid: [
+    '..WWWWW..',
+    '.WWWWWWW.',
+    'WWKKKKKWW',
+    'WWKLLLKWW',
+    'WWKKKKKWW',
+    '.WWWWWWW.',
+    '..WWWWW..',
+    '...GGG...',
+    '.GGGGGGG.',
+  ],
+  palette: { W: '#f1f4f9', K: '#131a2a', L: '#38bdf8', G: '#9aa5b8' },
+};
+
+/** Blinking record light. */
+const REC: PixelArt = {
+  grid: [
+    '.RRR.',
+    'RRRRR',
+    'RRRRR',
+    'RRRRR',
+    '.RRR.',
+  ],
+  palette: { R: '#ef4444' },
+};
+
 // ── Cast ──
 const BRYAN =chibi({ hair: '#3a2c22', shirt: '#4f7cd1', wave: true });
 const GREEN = chibi({ hair: '#4ea45c', shirt: '#e0e4ee' });
@@ -547,6 +601,16 @@ const SCENES: Array<[prefix: string, spec: SceneSpec]> = [
     { ...ground(FLAME, 72, 4, 'px-flicker'), hero: true },
     ground(CAT, 82, 4, 'px-bob-slow'),
     ground(PLANT, 94, 4),
+  ]],
+  // Sunny yard on watch: the solar SoloCam charging under the sun, a cat
+  // strolling past (motion!), the record light blinking, the indoor cam by the house.
+  ['/cameras', [
+    sky(SUN, 4, 0, 'px-spin-slow'),
+    sky(REC, 58, 6, 'px-flicker'),
+    { ...ground(SOLOCAM, 16, 4), hero: true },
+    { art: CAT, left: 36, scale: 4, cls: 'px-drive', hero: true },
+    ground(HOUSE, 64, 4),
+    { ...ground(INDOOR_CAM, 84, 4, 'px-bob-slow'), hero: true },
   ]],
   ['/roomba', [
     ground(PLANT, 4, 4),
