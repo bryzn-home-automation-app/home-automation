@@ -33,7 +33,7 @@ generic Express/React Native stack) to this repo's conventions.
 | Env var        | Default | Meaning |
 |----------------|---------|---------|
 | `HA_ENABLED`   | `false` | Master switch. Off = no HA calls, no WebSocket, endpoints return 503. |
-| `HA_URL`       | blank   | e.g. `http://192.168.4.50:8123` (no trailing slash needed). |
+| `HA_URL`       | `http://homeassistant:8123` (compose) | The bundled `homeassistant` service. Override only if HA moves elsewhere. |
 | `HA_TOKEN`     | blank   | HA long-lived access token (Profile → Security). Never commit it. |
 
 The integration is active only when `HA_ENABLED=true` **and** both `HA_URL` and `HA_TOKEN`
@@ -69,7 +69,7 @@ IDs or the token. 503 when HA is disabled/unreachable, 404 for unknown/disabled 
 
 ## Phases
 
-1. **Infrastructure** — host HA (TBD, see open items), stable LAN IP, long-lived token.
+1. **Infrastructure** — `homeassistant` compose service (see open items for why), long-lived token.
 2. **ecobee** — add the official HA ecobee integration; record real entity IDs/attributes.
 3. **Backend** — this branch: client, WebSocket, schema, ingestion, endpoints, tests (mocked HA).
 4. **Frontend** — Thermostat tab: current state, controls, history chart, unavailable states.
@@ -85,9 +85,15 @@ IDs or the token. 503 when HA is disabled/unreachable, 404 for unknown/disabled 
 
 ## Open items (unverified — web search was unavailable when this was written)
 
-- **HA hosting**: the NUC runs Windows 11 Home, so Hyper-V (the original plan) isn't available.
-  Options: VirtualBox VM with a bridged adapter, dedicated hardware (e.g. Raspberry Pi / HA Green),
-  or a container. Decide before Phase 1.
+- **HA hosting (decided 2026-10-19)**: HA runs as the `homeassistant` service in
+  `docker-compose.yml` (Container install, UI on host port 8123, config in the `ha_config`
+  volume). Why not the plan's HAOS VM: the NUC is Windows 11 Home (no Hyper-V), and a
+  VirtualBox HAOS VM — forced onto the WSL2 hypervisor via Windows Hypervisor Platform —
+  pinned one core at 99% and downloaded at ~125 KB/s (bridged over Wi-Fi *and* NAT) vs
+  ~30 MB/s on the host; it also hung once in EFI `CpuMpPei`. The NUC is Wi-Fi only, so LAN
+  bridging was unreliable regardless. Trade-offs: no add-on store, no LAN discovery —
+  fine for the cloud-based ecobee integration. **Revisit before Eufy (Phase 5)**: likely
+  dedicated hardware (HA Green / Pi) or a wired NUC; migrate via HA backup/restore.
 - **ecobee auth**: confirm the official HA ecobee integration really works with account
   credentials and no developer API key.
 - **ecobee hold/resume**: the backend uses `climate.set_preset_mode` for hold and
