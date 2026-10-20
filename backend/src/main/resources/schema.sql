@@ -490,7 +490,7 @@ CREATE INDEX IF NOT EXISTS idx_guest_sessions_expiry ON guest_sessions (expires_
 CREATE TABLE IF NOT EXISTS notifications (
     id            SERIAL PRIMARY KEY,
     user_id       INTEGER      NOT NULL REFERENCES users(id),
-    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI
+    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI, CAMERA
     severity      VARCHAR(20)  NOT NULL DEFAULT 'INFO',  -- CRITICAL, WARNING, INFO, SUCCESS
     title         VARCHAR(200) NOT NULL,
     message       VARCHAR(1000),
@@ -720,6 +720,8 @@ CREATE TABLE IF NOT EXISTS camera_status (
     -- The integration's own label, e.g. 'Solar charging' (enum sensors only).
     charging_status     VARCHAR(60),
     battery_updated_at  TIMESTAMP,
+    -- Set when the camera entity goes unavailable, cleared when it's back (offline alerts).
+    unavailable_since   TIMESTAMP,
     last_motion_at      TIMESTAMP,
     last_person_at      TIMESTAMP,
     updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()

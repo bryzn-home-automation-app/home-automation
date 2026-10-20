@@ -26,6 +26,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     long countByUserIdAndIsReadFalse(Long userId);
 
+    /** Dedupe check: the same alert already sent to this user since {@code since}. */
+    boolean existsByUserIdAndCategoryAndTitleAndCreatedAtAfter(
+            Long userId, Notification.Category category, String title, java.time.LocalDateTime since);
+
     @Modifying
     @Transactional
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.userId = :userId AND n.isRead = false")

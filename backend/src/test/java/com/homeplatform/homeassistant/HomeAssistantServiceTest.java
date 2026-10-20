@@ -185,11 +185,13 @@ class HomeAssistantServiceTest {
     @DisplayName("snapshot scheduler: no-op when inactive; logs only on failure/recovery transitions")
     void schedulerTransitions() {
         HomeAssistantService svc = mock(HomeAssistantService.class);
-        var scheduler = new HomeAssistantSnapshotScheduler(svc, events);
+        CameraAlertService alerts = mock(CameraAlertService.class);
+        var scheduler = new HomeAssistantSnapshotScheduler(svc, events, alerts);
 
         when(svc.isActive()).thenReturn(false);
         scheduler.snapshot();
         verify(svc, never()).discoverAndSnapshot();
+        verifyNoInteractions(alerts);
 
         when(svc.isActive()).thenReturn(true);
         when(svc.discoverAndSnapshot()).thenThrow(new HomeAssistantException.Unavailable("down"));
@@ -204,6 +206,7 @@ class HomeAssistantServiceTest {
         scheduler.snapshot();
         scheduler.snapshot();
         verify(events, times(1)).info(eq("home-assistant"), anyString(), contains("recovered"));
+        verify(alerts, times(2)).evaluate(); // only after successful snapshots
     }
 
     @Test

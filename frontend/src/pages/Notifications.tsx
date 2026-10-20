@@ -18,6 +18,7 @@ const CATEGORIES = [
   { key: 'GAS', label: 'Gas', icon: '🔥' },
   { key: 'WATER', label: 'Water', icon: '💧' },
   { key: 'ROOMBA', label: 'Roomba', icon: '🤖' },
+  { key: 'CAMERA', label: 'Cameras', icon: '📷' },
   { key: 'WIFI', label: 'WiFi', icon: '📶' },
 ] as const;
 
@@ -30,11 +31,11 @@ const SEVERITIES = [
 ] as const;
 
 const categoryIcons: Record<string, string> = {
-  ELECTRICAL: '⚡', GAS: '🔥', WATER: '💧', ROOMBA: '🤖', WIFI: '📶',
+  ELECTRICAL: '⚡', GAS: '🔥', WATER: '💧', ROOMBA: '🤖', CAMERA: '📷', WIFI: '📶',
 };
 
 const categoryLabels: Record<string, string> = {
-  ELECTRICAL: 'Electric', GAS: 'Gas', WATER: 'Water', ROOMBA: 'Roomba', WIFI: 'WiFi',
+  ELECTRICAL: 'Electric', GAS: 'Gas', WATER: 'Water', ROOMBA: 'Roomba', CAMERA: 'Cameras', WIFI: 'WiFi',
 };
 
 const severityColors: Record<string, string> = {

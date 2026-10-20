@@ -61,6 +61,9 @@ public class CameraStatus {
     @Column(name = "battery_updated_at")
     private LocalDateTime batteryUpdatedAt;
 
+    @Column(name = "unavailable_since")
+    private LocalDateTime unavailableSince;
+
     @Column(name = "last_motion_at")
     private LocalDateTime lastMotionAt;
 
