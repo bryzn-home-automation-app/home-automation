@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 /**
  * Periodic fallback ingestion: every 15 minutes, re-discover HA devices and append a
  * snapshot reading per enabled thermostat, so history keeps a steady resolution even
- * when the WebSocket is down or nothing changed. No-op while the integration is inactive.
+ * when the WebSocket is down or nothing changed, then run the camera alert checks
+ * (battery, not charging, offline). No-op while the integration is inactive.
  *
  * <p>To keep the Debug Dashboard quiet, {@code app_events} rows are written only when
  * HA becomes unreachable and when it recovers — not on every failed tick.
@@ -23,11 +24,14 @@ public class HomeAssistantSnapshotScheduler {
 
     private final HomeAssistantService service;
     private final AppEventService appEventService;
+    private final CameraAlertService cameraAlerts;
     private boolean failing;
 
-    public HomeAssistantSnapshotScheduler(HomeAssistantService service, AppEventService appEventService) {
+    public HomeAssistantSnapshotScheduler(HomeAssistantService service, AppEventService appEventService,
+                                          CameraAlertService cameraAlerts) {
         this.service = service;
         this.appEventService = appEventService;
+        this.cameraAlerts = cameraAlerts;
     }
 
     @Scheduled(initialDelayString = "PT2M", fixedDelayString = "PT15M")
@@ -36,6 +40,7 @@ public class HomeAssistantSnapshotScheduler {
         try {
             HomeAssistantService.SyncResult r = service.discoverAndSnapshot();
             log.debug("HA snapshot: {} thermostat reading(s), batch {}", r.readingsWritten(), r.batchId());
+            cameraAlerts.evaluate();
             if (failing) {
                 failing = false;
                 appEventService.info("home-assistant", "HomeAssistantSnapshotScheduler", "Home Assistant snapshot recovered");

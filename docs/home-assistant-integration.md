@@ -183,3 +183,26 @@ doesn't report charging, the UI infers it from the trend and says "Likely chargi
 **To verify on the real bridge.** That go2rtc listens on `0.0.0.0:1984` inside the bridge;
 the S340/E30 entity names (battery `sensor`, charging sensor, motion/person); and that a
 battery camera's stream starts over the NUC's network.
+
+## Camera alerts
+
+`CameraAlertService` writes `CAMERA` notifications for active members (never guests).
+Dedupe is by title against `notifications`, so restarts don't re-alert.
+
+| Alert | Severity | When | Repeats |
+|---|---|---|---|
+| `<Camera> camera battery low` | WARNING | ≤ 30% and not charging | once a day |
+| `<Camera> camera battery critical` | CRITICAL | ≤ 15% and not charging | once a day |
+| `<Camera> camera isn't charging` | WARNING | below 90%, no charge gained in 48 h, and both previous days sunny (Open-Meteo WMO code ≤ 2); needs 2 days of history | once a day |
+| `<Camera> camera offline` | WARNING | unavailable for 30 min | once a day |
+| `Eufy cameras disconnected` | WARNING | every camera offline 30 min — usually the bridge was signed out | once a day |
+| `Person detected — <Camera>` | INFO | live person event, outdoor (battery) cameras only | at most every 15 min per camera |
+
+Battery, charging and offline checks run after each 15-minute HA snapshot; person alerts
+fire from live ingestion. The indoor E30 is excluded from person alerts (it sees the
+household all day).
+
+**Bridge sign-outs.** Eufy allows one session per account. Signing into the bridge's
+account in the eufy app bumps the bridge; it re-logs in on its own (which signs the app
+out again) and may need a new 2FA code entered in Home Assistant. Keep the phone on the
+main account.

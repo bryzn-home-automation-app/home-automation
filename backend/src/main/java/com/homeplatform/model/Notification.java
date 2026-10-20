@@ -47,7 +47,8 @@ public class Notification {
         GAS,
         WATER,
         ROOMBA,
-        WIFI
+        WIFI,
+        CAMERA
     }
 
     public enum Severity {

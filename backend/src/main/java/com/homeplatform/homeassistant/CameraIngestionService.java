@@ -33,16 +33,19 @@ public class CameraIngestionService {
     private final CameraStatusRepository statusRepo;
     private final CameraBatteryReadingRepository readingRepo;
     private final SmartDeviceRepository deviceRepo;
+    private final CameraAlertService alerts;
 
     /** Linked HA entity → smart_devices.id; rebuilt after every link pass. */
     private volatile Map<String, Long> index;
 
     public CameraIngestionService(CameraStatusRepository statusRepo,
                                   CameraBatteryReadingRepository readingRepo,
-                                  SmartDeviceRepository deviceRepo) {
+                                  SmartDeviceRepository deviceRepo,
+                                  CameraAlertService alerts) {
         this.statusRepo = statusRepo;
         this.readingRepo = readingRepo;
         this.deviceRepo = deviceRepo;
+        this.alerts = alerts;
     }
 
     /** Store the camera's links and apply the current state of everything linked. */
@@ -59,7 +62,7 @@ public class CameraIngestionService {
         if (link.batteryEntityId() == null) st.setPowerSource(CameraStatus.POWER_WIRED);
 
         HaEntityState cam = states.get(camera.getProviderEntityId());
-        if (cam != null) st.setAvailable(cam.isAvailable());
+        if (cam != null) setAvailable(st, cam.isAvailable());
         applyMotion(st, states.get(link.motionEntityId()), states.get(link.personEntityId()));
         boolean batteryChanged = applyBattery(st, states.get(link.batteryEntityId()), states.get(link.chargingEntityId()));
         st.setUpdatedAt(now());
@@ -102,8 +105,9 @@ public class CameraIngestionService {
         CameraStatus st = found.get();
         String id = s.entityId();
         boolean batteryChanged = false;
+        LocalDateTime personBefore = st.getLastPersonAt();
         if (id.equals(device.get().getProviderEntityId())) {
-            st.setAvailable(s.isAvailable());
+            setAvailable(st, s.isAvailable());
         } else if (id.equals(st.getBatteryEntityId())) {
             batteryChanged = applyBattery(st, s, null);
         } else if (id.equals(st.getChargingEntityId())) {
@@ -116,6 +120,17 @@ public class CameraIngestionService {
         st.setUpdatedAt(now());
         statusRepo.save(st);
         record(st, ThermostatIngestionService.Source.EVENT, batteryChanged, batchId);
+        // Only a live "on" edge is an event — never the state re-read by a link pass.
+        if (st.getLastPersonAt() != null && !st.getLastPersonAt().equals(personBefore)) {
+            alerts.personDetected(device.get(), st);
+        }
+    }
+
+    /** Tracks when a camera went offline, for the offline alert's grace period. */
+    private static void setAvailable(CameraStatus st, boolean available) {
+        if (available) st.setUnavailableSince(null);
+        else if (st.getUnavailableSince() == null || st.isAvailable()) st.setUnavailableSince(now());
+        st.setAvailable(available);
     }
 
     // ── state application (mutates st; returns whether battery state changed) ──

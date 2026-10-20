@@ -28,11 +28,13 @@ class CameraIngestionServiceTest {
     private CameraStatusRepository statusRepo;
     private CameraBatteryReadingRepository readingRepo;
     private SmartDeviceRepository deviceRepo;
+    private CameraAlertService alerts;
     private CameraIngestionService service;
     private final SmartDevice camera = SmartDevice.builder().id(3L).publicId(UUID.randomUUID())
             .providerEntityId("camera.driveway").kind(SmartDevice.Kind.CAMERA).enabled(true).build();
     private final CameraLinker.Link link = new CameraLinker.Link("camera.driveway", "T8170X",
-            "sensor.driveway_battery", "binary_sensor.driveway_charging", "binary_sensor.driveway_motion", null);
+            "sensor.driveway_battery", "binary_sensor.driveway_charging", "binary_sensor.driveway_motion",
+            "binary_sensor.driveway_person");
     private CameraStatus stored;
 
     @BeforeEach
@@ -40,7 +42,8 @@ class CameraIngestionServiceTest {
         statusRepo = mock(CameraStatusRepository.class);
         readingRepo = mock(CameraBatteryReadingRepository.class);
         deviceRepo = mock(SmartDeviceRepository.class);
-        service = new CameraIngestionService(statusRepo, readingRepo, deviceRepo);
+        alerts = mock(CameraAlertService.class);
+        service = new CameraIngestionService(statusRepo, readingRepo, deviceRepo, alerts);
         // The repository hands back whatever was last saved, like the real one.
         when(statusRepo.findByDeviceId(3L)).thenAnswer(i -> Optional.ofNullable(stored));
         when(statusRepo.save(any())).thenAnswer(i -> stored = i.getArgument(0));
@@ -117,6 +120,42 @@ class CameraIngestionServiceTest {
         assertNotNull(stored.getLastMotionAt());
         service.onStateChanged(state("camera.driveway", "unavailable", null), UUID.randomUUID());
         assertFalse(stored.isAvailable());
+    }
+
+    @Test
+    @DisplayName("a live person 'on' edge raises the alert; the link pass never does")
+    void personAlert() throws Exception {
+        Map<String, HaEntityState> m = current("50", "off");
+        m.put("binary_sensor.driveway_person", state("binary_sensor.driveway_person", "on", "occupancy"));
+        service.link(camera, link, m, SNAPSHOT, UUID.randomUUID());
+        service.reindex();
+        verifyNoInteractions(alerts);
+
+        service.onStateChanged(stateAt("binary_sensor.driveway_person", "on", "2026-10-20T18:00:00+00:00"), UUID.randomUUID());
+        verify(alerts).personDetected(camera, stored);
+        service.onStateChanged(stateAt("binary_sensor.driveway_person", "off", "2026-10-20T18:00:30+00:00"), UUID.randomUUID());
+        verify(alerts, times(1)).personDetected(any(), any());
+    }
+
+    @Test
+    @DisplayName("offline time starts when the camera goes unavailable and clears when it's back")
+    void unavailableSince() throws Exception {
+        service.link(camera, link, current("50", "off"), SNAPSHOT, UUID.randomUUID());
+        service.reindex();
+        assertNull(stored.getUnavailableSince());
+        service.onStateChanged(state("camera.driveway", "unavailable", null), UUID.randomUUID());
+        var since = stored.getUnavailableSince();
+        assertNotNull(since);
+        service.onStateChanged(state("camera.driveway", "unavailable", null), UUID.randomUUID());
+        assertEquals(since, stored.getUnavailableSince(), "still offline keeps the original time");
+        service.onStateChanged(state("camera.driveway", "idle", null), UUID.randomUUID());
+        assertNull(stored.getUnavailableSince());
+    }
+
+    private static HaEntityState stateAt(String id, String state, String changedAt) throws Exception {
+        return HaEntityState.fromJson(new com.fasterxml.jackson.databind.ObjectMapper().readTree(
+                "{\"entity_id\":\"" + id + "\",\"state\":\"" + state + "\",\"attributes\":{},"
+                        + "\"last_changed\":\"" + changedAt + "\",\"last_updated\":\"" + changedAt + "\"}"));
     }
 
     @Test
