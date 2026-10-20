@@ -1,7 +1,22 @@
-import { useTheme, PALETTES } from '../context/ThemeContext';
+import { useTheme, PALETTES, type ThemeMode } from '../context/ThemeContext';
+
+const MODES: Array<{ mode: ThemeMode; label: string }> = [
+  { mode: 'light', label: '☀️ Light' },
+  { mode: 'dark', label: '🌙 Dark' },
+  { mode: 'auto', label: '🌗 Auto (sunset)' },
+];
+
+/** "Switches to dark at 6:52 PM" / "… tomorrow at 7:21 AM". */
+function nextChangeText(theme: 'light' | 'dark', next: Date | null): string {
+  if (!next) return 'Follows sunrise and sunset at home once the app has loaded the home location.';
+  const target = theme === 'light' ? 'dark' : 'light';
+  const time = next.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const tomorrow = next.getDate() !== new Date().getDate();
+  return `Follows sunrise and sunset at home — switches to ${target} ${tomorrow ? 'tomorrow ' : ''}at ${time}.`;
+}
 
 export default function ThemePicker() {
-  const { theme, toggleTheme, isDark, palette, setPalette } = useTheme();
+  const { theme, mode, setMode, nextThemeChange, isDark, palette, setPalette } = useTheme();
 
   return (
     <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
@@ -12,23 +27,32 @@ export default function ThemePicker() {
         </div>
       </div>
 
-      {/* Mode toggle */}
-      <div className="mb-5 flex items-center gap-2">
-        {(['light', 'dark'] as const).map((mode) => (
-          <button
-            key={mode}
-            type="button"
-            onClick={() => { if (mode !== theme) toggleTheme(); }}
-            className={`rounded-full px-4 py-2 text-sm font-medium capitalize transition-colors ${
-              theme === mode
-                ? 'border border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                : 'border border-transparent text-apptext-muted hover:border-appborder hover:text-apptext-soft'
-            }`}
-          >
-            {mode === 'dark' ? '🌙 Dark' : '☀️ Light'}
-          </button>
-        ))}
+      {/* Mode: Light / Dark / Auto (follows sunrise & sunset at home) */}
+      <div className="mb-2 flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Theme">
+        {MODES.map(({ mode: m, label }) => {
+          // 'system' (never chosen) highlights whichever theme it resolved to.
+          const active = mode === m || (mode === 'system' && m === theme);
+          return (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              onClick={() => setMode(m)}
+              className={`rounded-full px-4 py-2 text-sm font-medium transition-colors ${
+                active
+                  ? 'border border-appaccent-border bg-appaccent-soft text-appaccent-text'
+                  : 'border border-transparent text-apptext-muted hover:border-appborder hover:text-apptext-soft'
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
+      <p className="mb-5 min-h-4 text-xs text-apptext-muted">
+        {mode === 'auto' ? nextChangeText(theme, nextThemeChange) : mode === 'system' ? 'Following your device setting.' : ''}
+      </p>
 
       {/* Palette swatches for the current mode */}
       <p className="mb-3 text-xs text-apptext-muted">

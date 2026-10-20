@@ -46,6 +46,7 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("new", "Cameras tab: latest snapshots, plus live video that only runs while you're watching."),
                             change("new", "Battery and solar-charging history for the outdoor cameras."),
                             change("new", "Camera alerts for low battery, no solar charging, offline cameras and people outside."),
+                            change("new", "Auto theme: light by day, dark after sunset at home (Profile → Appearance)."),
                             change("improved", "Pages load about twice as fast, especially on phones."),
                             change("improved", "Bills now open only for signed-in members, and disabled accounts lose access right away."),
                             change("fixed", "A day's electric total that first arrives as zero now corrects itself."))
