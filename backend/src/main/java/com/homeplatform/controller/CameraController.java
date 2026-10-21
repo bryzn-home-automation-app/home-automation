@@ -67,9 +67,10 @@ public class CameraController {
 
     /** A short-lived ticketed URL for the live-view WebSocket (see CameraStreamAuthController). */
     @PostMapping("/{id}/live")
-    public CameraLiveResponse live(@PathVariable String id, HttpServletRequest request) {
+    public CameraLiveResponse live(@PathVariable String id, @RequestParam(defaultValue = "mse") String format,
+                                   HttpServletRequest request) {
         HomeController.requireMember(request);
-        return service.startLive(id);
+        return service.startLive(id, format);
     }
 
     /**

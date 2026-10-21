@@ -152,6 +152,11 @@ class CameraServiceTest {
         assertTrue(service.streamForTicket(ticket).isEmpty(), "disabled after issue");
         camera.setEnabled(true);
 
+        // iPhone path: an HLS playlist URL with a longer-lived ticket.
+        var hls = service.startLive(ID, "hls");
+        assertTrue(hls.url().endsWith("/stream.m3u8"));
+        assertEquals(NOW.plus(CameraStreamTickets.HLS_TTL).toString(), hls.expiresAt());
+
         status.setStreamName(null);
         assertThrows(HomeDeviceService.Unsupported.class, () -> service.startLive(ID));
     }

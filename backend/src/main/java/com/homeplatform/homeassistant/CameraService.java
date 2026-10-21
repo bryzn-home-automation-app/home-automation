@@ -186,12 +186,22 @@ public class CameraService {
 
     /** A ticketed live-view URL. 422 when the camera has no stream (not via eufy-sdk). */
     public CameraLiveResponse startLive(String id) {
+        return startLive(id, "mse");
+    }
+
+    /**
+     * {@code format} "mse": a WebSocket of fMP4 for the in-page player (lowest latency).
+     * "hls": Apple's HTTP Live Streaming, which iPhone Safari plays natively — its
+     * MediaSource path gave black tiles there.
+     */
+    public CameraLiveResponse startLive(String id, String format) {
         requireConfigured();
         SmartDevice d = camera(id);
         String stream = statusRepo.findByDeviceId(d.getId()).map(CameraStatus::getStreamName).orElse(null);
         if (stream == null) throw new HomeDeviceService.Unsupported("Live view isn't available for this camera", false);
-        CameraStreamTickets.Ticket t = tickets.issue(d.getPublicId());
-        return new CameraLiveResponse(LIVE_PATH + t.value() + "/ws", t.expiresAt().toString());
+        boolean hls = "hls".equalsIgnoreCase(format);
+        CameraStreamTickets.Ticket t = tickets.issue(d.getPublicId(), hls ? CameraStreamTickets.HLS_TTL : CameraStreamTickets.TTL);
+        return new CameraLiveResponse(LIVE_PATH + t.value() + (hls ? "/stream.m3u8" : "/ws"), t.expiresAt().toString());
     }
 
     /**

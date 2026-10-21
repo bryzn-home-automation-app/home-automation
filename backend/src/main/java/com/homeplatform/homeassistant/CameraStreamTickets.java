@@ -30,6 +30,11 @@ import java.util.UUID;
 public class CameraStreamTickets {
 
     static final Duration TTL = Duration.ofSeconds(60);
+    /**
+     * HLS (the iPhone path) authorizes every playlist/segment request with the same
+     * ticket for as long as someone watches, so it has to outlive a viewing session.
+     */
+    static final Duration HLS_TTL = Duration.ofMinutes(15);
     private static final Base64.Encoder B64 = Base64.getUrlEncoder().withoutPadding();
     private static final Base64.Decoder B64D = Base64.getUrlDecoder();
 
@@ -49,7 +54,11 @@ public class CameraStreamTickets {
     public record Ticket(String value, Instant expiresAt) {}
 
     public Ticket issue(UUID deviceId) {
-        Instant exp = clock.instant().plus(TTL);
+        return issue(deviceId, TTL);
+    }
+
+    public Ticket issue(UUID deviceId, Duration ttl) {
+        Instant exp = clock.instant().plus(ttl);
         String payload = deviceId + "|" + exp.getEpochSecond();
         String body = B64.encodeToString(payload.getBytes(StandardCharsets.UTF_8));
         return new Ticket(body + "." + B64.encodeToString(sign(body)), exp);

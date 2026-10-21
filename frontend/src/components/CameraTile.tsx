@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { fetchCameraSnapshot, reportLiveDiagnostics, startCameraLive } from '../api/cameras';
 import { errorMessage } from '../api/climate';
-import { MsePlayer, liveSupported } from '../utils/msePlayer';
+import { HlsPlayer, MsePlayer, liveSupported, preferHls, type LivePlayer } from '../utils/msePlayer';
 import { useOnScreen } from '../hooks/useViewerPresence';
 import {
   BATTERY_LIVE_BUDGET_MS,
@@ -92,7 +92,9 @@ function LiveVideo({
     if (!video) return;
     let cancelled = false;
     let playing = false;
-    const player = new MsePlayer(video, {
+    const hls = preferHls();
+    const Player = hls ? HlsPlayer : MsePlayer;
+    const player: LivePlayer = new Player(video, {
       onPlaying: () => {
         playing = true;
         cb.current.onStatus('playing');
@@ -101,7 +103,7 @@ function LiveVideo({
       onEnded: () => cb.current.onEnded(),
     });
     cb.current.onStatus('connecting');
-    startCameraLive(cameraId)
+    startCameraLive(cameraId, hls ? 'hls' : 'mse')
       .then(({ url }) => {
         if (!cancelled) player.start(url);
       })

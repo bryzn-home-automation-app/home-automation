@@ -78,7 +78,7 @@ class CameraControllerTest {
                 .andExpect(content().bytes(new byte[]{1, 2, 3}))
                 .andExpect(header().string("Cache-Control", containsString("no-store")));
 
-        when(service.startLive(ID)).thenReturn(new CameraLiveResponse("/camera-stream/a.b/ws", "2026-10-20T18:01:00Z"));
+        when(service.startLive(ID, "mse")).thenReturn(new CameraLiveResponse("/camera-stream/a.b/ws", "2026-10-20T18:01:00Z"));
         mvc.perform(post("/api/home/cameras/" + ID + "/live").requestAttr("role", "USER"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.url").value("/camera-stream/a.b/ws"));
@@ -92,7 +92,7 @@ class CameraControllerTest {
         when(service.snapshot(anyString())).thenThrow(new HomeDeviceService.NotFound());
         mvc.perform(get("/api/home/cameras/" + ID + "/snapshot").requestAttr("role", "USER"))
                 .andExpect(status().isNotFound());
-        when(service.startLive(anyString())).thenThrow(new HomeDeviceService.Unsupported("no stream", false));
+        when(service.startLive(anyString(), anyString())).thenThrow(new HomeDeviceService.Unsupported("no stream", false));
         mvc.perform(post("/api/home/cameras/" + ID + "/live").requestAttr("role", "USER"))
                 .andExpect(status().isUnprocessableEntity());
     }
@@ -110,7 +110,14 @@ class CameraControllerTest {
                 .andExpect(status().isForbidden());
         mvc.perform(get("/internal/camera-stream/auth").header("X-Original-URI", "/camera-stream/good.sig/../api/streams"))
                 .andExpect(status().isForbidden());
+        // HLS: the master playlist and the files it references, same ticket.
+        for (String ok : new String[]{"/camera-stream/good.sig/stream.m3u8", "/camera-stream/good.sig/hls/playlist.m3u8?id=abc",
+                "/camera-stream/good.sig/hls/segment.m4s?id=abc&n=3", "/camera-stream/good.sig/hls/init.mp4?id=abc"}) {
+            mvc.perform(get("/internal/camera-stream/auth").header("X-Original-URI", ok)).andExpect(status().isNoContent());
+        }
+        mvc.perform(get("/internal/camera-stream/auth").header("X-Original-URI", "/camera-stream/good.sig/hls/../streams"))
+                .andExpect(status().isForbidden());
         mvc.perform(get("/internal/camera-stream/auth")).andExpect(status().isForbidden());
-        verify(service, times(2)).streamForTicket(any());
+        verify(service, times(6)).streamForTicket(any());
     }
 }

@@ -44,9 +44,29 @@ function concat(chunks: Uint8Array[]): Uint8Array {
   return out;
 }
 
+/** iPhone/iPad (incl. iPadOS reporting as a Mac). */
+function isAppleMobile(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function canPlayNativeHls(): boolean {
+  if (typeof document === 'undefined') return false;
+  return document.createElement('video').canPlayType('application/vnd.apple.mpegurl') !== '';
+}
+
+/**
+ * Use Safari's built-in HLS player instead of MSE: on iPhone/iPad (MSE there gave
+ * black tiles with these H.265 streams), and anywhere MSE is missing but HLS isn't.
+ */
+export function preferHls(): boolean {
+  return (isAppleMobile() && canPlayNativeHls()) || (mediaSourceCtor() === null && canPlayNativeHls());
+}
+
 /** Whether this browser can play live view at all. */
 export function liveSupported(): boolean {
-  return typeof window !== 'undefined' && typeof WebSocket !== 'undefined' && mediaSourceCtor() !== null;
+  if (typeof window === 'undefined') return false;
+  return (typeof WebSocket !== 'undefined' && mediaSourceCtor() !== null) || canPlayNativeHls();
 }
 
 /** The codec list go2rtc picks from, filtered to what this browser can decode. */
@@ -94,7 +114,85 @@ export interface MsePlayerHandlers {
   onEnded?: () => void;
 }
 
-export class MsePlayer {
+/** What CameraTile drives: MSE over a WebSocket, or the browser's own HLS player. */
+export interface LivePlayer {
+  start(url: string): void;
+  stop(): void;
+  diagnostics(): MseDiagnostics | Record<string, unknown>;
+}
+
+/**
+ * Safari's native HLS: point the video at the playlist URL and let the OS player do
+ * buffering and decoding (hardware H.265). A few seconds more latency than MSE.
+ */
+export class HlsPlayer implements LivePlayer {
+  private stopped = false;
+  private playing = false;
+  private playError: string | null = null;
+
+  constructor(
+    private readonly video: HTMLVideoElement,
+    private readonly handlers: MsePlayerHandlers = {},
+  ) {}
+
+  start(url: string): void {
+    const v = this.video;
+    v.muted = true;
+    v.playsInline = true;
+    v.setAttribute('playsinline', '');
+    v.addEventListener('playing', this.onPlaying);
+    v.addEventListener('error', this.onError);
+    v.addEventListener('ended', this.onEnded);
+    v.src = url;
+    v.play().catch((err: unknown) => {
+      this.playError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      v.addEventListener('canplay', () => void v.play().catch(() => {}), { once: true });
+    });
+  }
+
+  stop(): void {
+    this.stopped = true;
+    const v = this.video;
+    v.removeEventListener('playing', this.onPlaying);
+    v.removeEventListener('error', this.onError);
+    v.removeEventListener('ended', this.onEnded);
+    v.pause();
+    v.removeAttribute('src');
+    v.load();
+  }
+
+  diagnostics() {
+    const v = this.video;
+    return {
+      player: 'hls',
+      readyState: v.readyState,
+      networkState: v.networkState,
+      paused: v.paused,
+      currentTime: Math.round(v.currentTime * 10) / 10,
+      videoSize: `${v.videoWidth}x${v.videoHeight}`,
+      error: v.error ? `code ${v.error.code}${v.error.message ? `: ${v.error.message}` : ''}` : null,
+      playError: this.playError,
+    };
+  }
+
+  private onPlaying = () => {
+    if (this.playing || this.stopped) return;
+    this.playing = true;
+    this.handlers.onPlaying?.();
+  };
+
+  private onError = () => {
+    if (this.stopped) return;
+    const code = this.video.error?.code;
+    this.handlers.onError?.(code === 4 ? "This camera's video format isn't supported here" : 'Live view stopped — try again');
+  };
+
+  private onEnded = () => {
+    if (!this.stopped) this.handlers.onEnded?.();
+  };
+}
+
+export class MsePlayer implements LivePlayer {
   private ws: WebSocket | null = null;
   private ms: MediaSource | null = null;
   private sb: SourceBuffer | null = null;

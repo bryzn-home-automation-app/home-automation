@@ -21,7 +21,9 @@ import java.util.regex.Pattern;
 public class CameraStreamAuthController {
 
     static final String STREAM_HEADER = "X-Stream-Src";
-    private static final Pattern URI = Pattern.compile("^/camera-stream/([A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+)/ws(\\?.*)?$");
+    /** The MSE WebSocket, or the HLS master playlist and the files it references. */
+    private static final Pattern URI = Pattern.compile(
+            "^/camera-stream/([A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+)/(ws|stream\\.m3u8|hls/(playlist\\.m3u8|segment\\.(ts|m4s)|init\\.mp4))(\\?.*)?$");
 
     private final CameraService cameras;
 

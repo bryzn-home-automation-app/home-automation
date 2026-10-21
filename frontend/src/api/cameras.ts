@@ -33,8 +33,10 @@ export async function fetchCameraSnapshot(id: string): Promise<Blob> {
 }
 
 /** A same-origin WebSocket path with a short-lived ticket for this camera's live view. */
-export async function startCameraLive(id: string): Promise<{ url: string; expiresAt: string }> {
-  const res = await api.post<{ url: string; expiresAt: string }>(`/home/cameras/${encodeURIComponent(id)}/live`);
+export async function startCameraLive(id: string, format: 'mse' | 'hls' = 'mse'): Promise<{ url: string; expiresAt: string }> {
+  const res = await api.post<{ url: string; expiresAt: string }>(`/home/cameras/${encodeURIComponent(id)}/live`, undefined, {
+    params: { format },
+  });
   return res.data;
 }
 

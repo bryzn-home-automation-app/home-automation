@@ -114,3 +114,21 @@ describe('MsePlayer', () => {
     player.stop();
   });
 });
+
+describe('player choice', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('iPhone gets Safari native HLS; a desktop with MediaSource keeps MSE', async () => {
+    const { preferHls } = await import('../utils/msePlayer');
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+    const ua = vi.spyOn(navigator, 'userAgent', 'get');
+
+    ua.mockReturnValue('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148');
+    expect(preferHls()).toBe(true);
+
+    ua.mockReturnValue('Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140.0 Safari/537.36');
+    vi.stubGlobal('MediaSource', class {});
+    expect(preferHls()).toBe(false);
+    vi.unstubAllGlobals();
+  });
+});
