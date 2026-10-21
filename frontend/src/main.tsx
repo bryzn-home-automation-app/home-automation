@@ -8,6 +8,7 @@ import { ProtectedRoute, AdminRoute, MemberRoute } from './components/Guard';
 import PageSkeleton, { type PageSkeletonVariant } from './components/PageSkeleton';
 import App from './App';
 import { registerServiceWorker } from './utils/push';
+import { watchForAppUpdates } from './utils/appUpdate';
 import './index.css';
 
 // ── Public pages (no auth required) ──
@@ -87,6 +88,8 @@ const DebugDashboardRoute = lazyRoute(DebugDashboard, 'default');
 
 // Phone alerts: the worker only handles pushes (no caching), registered up front on HTTPS.
 registerServiceWorker();
+// Home Screen apps resume old code after a deploy; reload when a newer build is out.
+watchForAppUpdates();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

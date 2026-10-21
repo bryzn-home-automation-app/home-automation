@@ -31,3 +31,12 @@ describe('PushSettings', () => {
     expect(screen.getByRole('link').getAttribute('href')).toBe(SECURE_APP_URL);
   });
 });
+
+describe('app update check', () => {
+  it('finds the hashed entry bundle in index.html', async () => {
+    const { entryScript } = await import('../utils/appUpdate');
+    const html = '<head><script type="module" crossorigin src="/assets/index-CqA4vaMr.js"></script><link rel="modulepreload" href="/assets/react-D_Q0CZ0m.js"></head>';
+    expect(entryScript(html)).toBe('/assets/index-CqA4vaMr.js');
+    expect(entryScript('<html><script src="/src/main.tsx"></script></html>')).toBeNull();
+  });
+});
