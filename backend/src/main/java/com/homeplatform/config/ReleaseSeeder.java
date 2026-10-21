@@ -43,7 +43,7 @@ public class ReleaseSeeder implements CommandLineRunner {
                     List.of(
                             change("new", "Climate tab: see and set both ecobee thermostats, with history and who changed them last."),
                             change("new", "A heads-up before you override someone's thermostat change from the last 10 minutes."),
-                            change("new", "Cameras tab: latest snapshots, plus live video that only runs while you're watching."),
+                            change("new", "Cameras tab: latest snapshots, plus live video that runs while you're watching (pauses after 5 idle minutes)."),
                             change("new", "Battery and solar-charging history for the outdoor cameras."),
                             change("new", "Send cameras to their saved positions, and pan or tilt them during live view."),
                             change("new", "Camera alerts for low battery, no solar charging, offline cameras and people outside."),

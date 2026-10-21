@@ -5,13 +5,14 @@ import type { Camera, CameraBatteryReading } from '../types';
 
 /**
  * A battery camera's live view stops after this long and asks "Still watching?".
- * The bridge cuts battery streams at ~55 s anyway; stopping first means the
- * page asks instead of the video just dying.
+ * The bridge is set to let battery streams run a little longer
+ * (STREAM_BATTERY_BUDGET_MS in docker-compose.yml), so the page asks before the
+ * video would die.
  */
-export const BATTERY_LIVE_BUDGET_MS = 45_000;
+export const BATTERY_LIVE_BUDGET_MS = 5 * 60_000;
 
 /** No pointer/key/scroll/touch for this long → every live view stops. */
-export const IDLE_STOP_MS = 3 * 60_000;
+export const IDLE_STOP_MS = 5 * 60_000;
 
 /** Motion/person events newer than this get the highlight ring on the tile. */
 export const RECENT_EVENT_MS = 2 * 60_000;

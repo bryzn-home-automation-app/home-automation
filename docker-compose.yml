@@ -167,6 +167,11 @@ services:
       EUFY_EMAIL: ${EUFY_EMAIL:-}
       EUFY_PASSWORD: ${EUFY_PASSWORD:-}
       EUFY_COUNTRY: ${EUFY_COUNTRY:-US}
+      # Battery live view runs up to 5 minutes in the app (BATTERY_LIVE_BUDGET_MS);
+      # without these the SDK ends a battery stream at ~55 s and the bridge cuts one
+      # with no motion at 5 min. Both sit just past the app's limit so it asks first.
+      STREAM_BATTERY_BUDGET_MS: "330000"
+      STREAM_IDLE_MS: "360000"
     volumes:
       # Login token, push registration and the generated go2rtc.yaml — keeps
       # restarts from re-prompting for 2FA.
@@ -175,6 +180,24 @@ services:
       - "3000"
       - "1984"
       - "8554"
+    restart: unless-stopped
+
+  # Sits between go2rtc and the bridge's /stream feed and drops the outdoor
+  # cameras' small warm-up frames, so live view starts at full size instead of
+  # switching mid-stream (black/corrupt video). Points go2rtc at itself; see
+  # eufy-gate/gate.mjs.
+  eufy-gate:
+    build: ./eufy-gate
+    container_name: homeplatform-eufy-gate
+    profiles: ["eufy"]
+    environment:
+      STATE_FILE: /data/full-sizes.json
+    volumes:
+      - eufy_gate_data:/data
+    expose:
+      - "3000"
+    depends_on:
+      - eufy-bridge
     restart: unless-stopped
 
   nginx:
@@ -197,3 +220,4 @@ volumes:
   uploads_data:
   ha_config:
   eufy_data:
+  eufy_gate_data:
