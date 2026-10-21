@@ -302,8 +302,10 @@ async function syncSources() {
     const streams = await (await fetch(`${GO2RTC}/api/streams`)).json();
     for (const [name, s] of Object.entries(streams ?? {})) {
       if (!/^[A-Za-z0-9]+$/.test(name)) continue;
+      // A running producer reports its bare URL ("http://eufy-gate:3000/stream/SN"), an idle one
+      // the source line — either way, pointing at us means done. Re-PUTting would cut viewers off.
       const urls = (s?.producers ?? []).map((p) => p.url ?? "");
-      if (!urls.some((u) => u.includes(`/stream/${name}`)) || urls.includes(wanted(name))) continue;
+      if (!urls.some((u) => u.includes(`/stream/${name}`)) || urls.some((u) => u.includes(`${SELF}/stream/${name}`))) continue;
       const q = new URLSearchParams({ name, src: wanted(name) });
       const r = await fetch(`${GO2RTC}/api/streams?${q}`, { method: "PUT" });
       log(`go2rtc ${name} → gate (${r.status})`);
