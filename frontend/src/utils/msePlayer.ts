@@ -15,10 +15,14 @@ const CODECS = [
   'opus',
 ];
 
-/** Seconds of video kept behind the live edge; older data is dropped. */
+/** Seconds of video kept behind the playhead; older data is dropped. */
 const KEEP_SECONDS = 10;
-/** Further than this behind the live edge → jump forward. */
-const MAX_LAG_SECONDS = 2;
+/**
+ * Further than this behind the live edge while playing → jump forward. Generous on
+ * purpose: seeking lands mid-GOP, and a Safari that's re-seeked on every fragment
+ * never shows a frame.
+ */
+const CATCH_UP_SECONDS = 6;
 
 type MediaSourceCtor = typeof MediaSource;
 
@@ -65,6 +69,22 @@ export function friendlyError(raw: string | undefined): string {
   return raw || 'The camera did not start';
 }
 
+/** What the player saw — sent to the backend log when live view doesn't start. */
+export interface MseDiagnostics {
+  managed: boolean;
+  codecsOffered: string;
+  mime: string | null;
+  fragments: number;
+  bytes: number;
+  readyState: number;
+  networkState: number;
+  paused: boolean;
+  currentTime: number;
+  buffered: Array<[number, number]>;
+  error: string | null;
+  playError: string | null;
+}
+
 export interface MsePlayerHandlers {
   /** First frame is on screen. */
   onPlaying?: () => void;
@@ -81,6 +101,13 @@ export class MsePlayer {
   private pending: Uint8Array[] = [];
   private stopped = false;
   private playing = false;
+  private started = false;
+  private managed = false;
+  private codecsOffered = '';
+  private mime: string | null = null;
+  private fragments = 0;
+  private bytes = 0;
+  private playError: string | null = null;
 
   constructor(
     private readonly video: HTMLVideoElement,
@@ -95,6 +122,11 @@ export class MsePlayer {
     }
     const ms = new source.ctor();
     this.ms = ms;
+    this.managed = source.managed;
+    // iOS only autoplays inline + muted; set both as properties, not just attributes.
+    this.video.muted = true;
+    this.video.playsInline = true;
+    this.video.setAttribute('playsinline', '');
     ms.addEventListener(
       'sourceopen',
       () => {
@@ -144,7 +176,10 @@ export class MsePlayer {
     const ws = new WebSocket(socketUrl(path, window.location));
     ws.binaryType = 'arraybuffer';
     this.ws = ws;
-    ws.onopen = () => ws.send(JSON.stringify({ type: 'mse', value: supportedCodecs((t) => ctor.isTypeSupported(t)) }));
+    ws.onopen = () => {
+      this.codecsOffered = supportedCodecs((t) => ctor.isTypeSupported(t));
+      ws.send(JSON.stringify({ type: 'mse', value: this.codecsOffered }));
+    };
     ws.onmessage = (ev) => {
       if (this.stopped) return;
       if (typeof ev.data === 'string') {
@@ -157,7 +192,10 @@ export class MsePlayer {
         if (msg.type === 'mse' && msg.value) this.initBuffer(msg.value);
         else if (msg.type === 'error') this.fail(friendlyError(msg.value));
       } else {
-        this.append(new Uint8Array(ev.data as ArrayBuffer));
+        const chunk = new Uint8Array(ev.data as ArrayBuffer);
+        this.fragments++;
+        this.bytes += chunk.byteLength;
+        this.append(chunk);
       }
     };
     ws.onerror = () => this.fail('Lost the connection to the camera');
@@ -172,13 +210,13 @@ export class MsePlayer {
   private initBuffer(mime: string) {
     if (!this.ms || this.sb) return;
     try {
+      this.mime = mime;
       const sb = this.ms.addSourceBuffer(mime);
       sb.mode = 'segments';
       sb.addEventListener('updateend', () => this.flush());
       this.sb = sb;
-      void this.video.play().catch(() => {
-        /* muted autoplay can still be refused; the first frame shows anyway */
-      });
+      // play() waits for the first buffered data (see flush): Safari needs the
+      // playhead moved onto it first.
     } catch {
       this.fail("This browser can't decode this camera's video");
     }
@@ -204,10 +242,22 @@ export class MsePlayer {
     const start = buffered.length ? buffered.start(0) : 0;
     if (buffered.length) {
       const end = buffered.end(buffered.length - 1);
-      if (end - this.video.currentTime > MAX_LAG_SECONDS) this.video.currentTime = end - 0.3;
-      if (end - start > KEEP_SECONDS * 2) {
+      const v = this.video;
+      if (!this.started) {
+        // The first fragment rarely starts at 0. Chrome skips the gap by itself;
+        // Safari waits at 0 forever — a black tile. Start where the data starts.
+        this.started = true;
+        if (v.currentTime < start) v.currentTime = start;
+        this.play();
+      } else if (!v.paused && !v.seeking && end - v.currentTime > CATCH_UP_SECONDS) {
+        // Fell well behind while playing (a stall, a backgrounded tab): rejoin live.
+        v.currentTime = end - 1;
+      }
+      // Drop old data, but never anything at or ahead of the playhead.
+      const trimTo = Math.min(end - KEEP_SECONDS, v.currentTime - 2);
+      if (trimTo - start > KEEP_SECONDS) {
         try {
-          sb.remove(start, end - KEEP_SECONDS);
+          sb.remove(start, trimTo);
           return; // updateend → flush appends the queue
         } catch {
           /* fall through and try the append anyway */
@@ -231,6 +281,37 @@ export class MsePlayer {
         }
       }
     }
+  }
+
+  /** Muted inline play, retried once the browser can actually play. */
+  private play() {
+    const v = this.video;
+    v.muted = true;
+    v.play().catch((err: unknown) => {
+      this.playError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      v.addEventListener('canplay', () => void v.play().catch(() => {}), { once: true });
+    });
+  }
+
+  diagnostics(): MseDiagnostics {
+    const v = this.video;
+    const b = this.sb?.buffered;
+    const ranges: Array<[number, number]> = [];
+    if (b) for (let i = 0; i < b.length; i++) ranges.push([Math.round(b.start(i) * 10) / 10, Math.round(b.end(i) * 10) / 10]);
+    return {
+      managed: this.managed,
+      codecsOffered: this.codecsOffered,
+      mime: this.mime,
+      fragments: this.fragments,
+      bytes: this.bytes,
+      readyState: v.readyState,
+      networkState: v.networkState,
+      paused: v.paused,
+      currentTime: Math.round(v.currentTime * 10) / 10,
+      buffered: ranges,
+      error: v.error ? `code ${v.error.code}${v.error.message ? `: ${v.error.message}` : ''}` : null,
+      playError: this.playError,
+    };
   }
 
   private fail(message: string) {

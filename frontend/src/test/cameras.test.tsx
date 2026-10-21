@@ -35,6 +35,9 @@ vi.mock('../utils/msePlayer', async (importOriginal) => {
     stop() {
       players.stopped++;
     }
+    diagnostics() {
+      return {};
+    }
   }
   return { ...actual, liveSupported: () => true, MsePlayer: FakePlayer };
 });
@@ -42,6 +45,7 @@ vi.mock('../utils/msePlayer', async (importOriginal) => {
 vi.mock('../api/cameras', () => ({
   fetchCameraSnapshot: vi.fn().mockResolvedValue(new Blob(['jpg'], { type: 'image/jpeg' })),
   startCameraLive: vi.fn().mockResolvedValue({ url: '/camera-stream/t.s/ws', expiresAt: '' }),
+  reportLiveDiagnostics: vi.fn().mockResolvedValue(undefined),
   fetchCameras: vi.fn(),
   fetchCameraBattery: vi.fn(),
 }));

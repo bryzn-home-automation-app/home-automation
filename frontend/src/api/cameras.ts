@@ -37,3 +37,8 @@ export async function startCameraLive(id: string): Promise<{ url: string; expire
   const res = await api.post<{ url: string; expiresAt: string }>(`/home/cameras/${encodeURIComponent(id)}/live`);
   return res.data;
 }
+
+/** What the live player saw ~8 s in — logged by the backend to debug black tiles. Best-effort. */
+export async function reportLiveDiagnostics(id: string, report: Record<string, unknown>): Promise<void> {
+  await api.post(`/home/cameras/${encodeURIComponent(id)}/live/diagnostics`, report).catch(() => {});
+}

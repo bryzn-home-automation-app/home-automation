@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchCameraSnapshot, startCameraLive } from '../api/cameras';
+import { fetchCameraSnapshot, reportLiveDiagnostics, startCameraLive } from '../api/cameras';
 import { errorMessage } from '../api/climate';
 import { MsePlayer, liveSupported } from '../utils/msePlayer';
 import { useOnScreen } from '../hooks/useViewerPresence';
@@ -91,8 +91,12 @@ function LiveVideo({
     const video = videoRef.current;
     if (!video) return;
     let cancelled = false;
+    let playing = false;
     const player = new MsePlayer(video, {
-      onPlaying: () => cb.current.onStatus('playing'),
+      onPlaying: () => {
+        playing = true;
+        cb.current.onStatus('playing');
+      },
       onError: (m) => cb.current.onError(m),
       onEnded: () => cb.current.onEnded(),
     });
@@ -104,8 +108,16 @@ function LiveVideo({
       .catch((err) => {
         if (!cancelled) cb.current.onError(errorMessage(err, "Couldn't start live view"));
       });
+    // One report per live session, so a black tile on some phone shows up in the
+    // backend log with the codec, bytes received and the video element's state.
+    const report = setTimeout(() => {
+      if (!cancelled) {
+        void reportLiveDiagnostics(cameraId, { ...player.diagnostics(), playing, userAgent: navigator.userAgent });
+      }
+    }, 8_000);
     return () => {
       cancelled = true;
+      clearTimeout(report);
       player.stop();
     };
   }, [cameraId]);
