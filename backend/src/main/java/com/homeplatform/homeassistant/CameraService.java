@@ -3,6 +3,9 @@ package com.homeplatform.homeassistant;
 import com.homeplatform.dto.CameraBatteryHistoryResponse;
 import com.homeplatform.dto.CameraBatteryReadingResponse;
 import com.homeplatform.dto.CameraLiveResponse;
+import com.homeplatform.dto.CameraPreset;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homeplatform.dto.CameraResponse;
 import com.homeplatform.model.CameraStatus;
 import com.homeplatform.model.SmartDevice;
@@ -52,6 +55,9 @@ public class CameraService {
     static final Duration SNAPSHOT_STALE_OK = Duration.ofMinutes(20);
 
     private static final Logger log = LoggerFactory.getLogger(CameraService.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
+
+    public enum Direction { LEFT, RIGHT, UP, DOWN }
     static final String LIVE_PATH = "/camera-stream/";
 
     private final HomeAssistantService ha;
@@ -184,6 +190,62 @@ public class CameraService {
         return t != null && t.isAfter(since);
     }
 
+    /**
+     * Move a pan/tilt camera to a stored preset: point eufy-sdk's preset select at the
+     * slot, then press its "Go to preset" button. Wakes a battery camera.
+     */
+    public void goToPreset(String id, int index) {
+        requireConfigured();
+        SmartDevice d = camera(id);
+        CameraStatus st = statusRepo.findByDeviceId(d.getId()).orElseThrow(HomeDeviceService.NotFound::new);
+        CameraLinker.Controls c = controls(st);
+        if (c == null || c.presetSelect() == null || c.gotoPreset() == null) {
+            throw new HomeDeviceService.Unsupported("This camera has no presets", false);
+        }
+        CameraLinker.PresetSlot slot = slots(st).stream().filter(p -> p.index() == index).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("No preset saved in slot " + index));
+        ha.selectOption(c.presetSelect(), slot.option());
+        ha.pressButton(c.gotoPreset());
+    }
+
+    /** Nudge a pan/tilt camera one step. */
+    public void nudge(String id, Direction direction) {
+        requireConfigured();
+        SmartDevice d = camera(id);
+        CameraLinker.Controls c = statusRepo.findByDeviceId(d.getId()).map(CameraService::controls).orElse(null);
+        if (c == null || !c.canPanTilt()) throw new HomeDeviceService.Unsupported("This camera can't pan or tilt", false);
+        ha.pressButton(switch (direction) {
+            case LEFT -> c.panLeft();
+            case RIGHT -> c.panRight();
+            case UP -> c.tiltUp();
+            case DOWN -> c.tiltDown();
+        });
+    }
+
+    static CameraLinker.Controls controls(CameraStatus st) {
+        if (st == null || st.getControls() == null) return null;
+        try {
+            return JSON.readValue(st.getControls(), CameraLinker.Controls.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    static List<CameraLinker.PresetSlot> slots(CameraStatus st) {
+        if (st == null || st.getPresetSlots() == null) return List.of();
+        try {
+            return JSON.readValue(st.getPresetSlots(), new TypeReference<List<CameraLinker.PresetSlot>>() {});
+        } catch (Exception e) {
+            return List.of();
+        }
+    }
+
+    static List<CameraPreset> presets(CameraStatus st) {
+        return slots(st).stream()
+                .map(p -> new CameraPreset(p.index(), p.home() ? "Home" : "Position " + p.index()))
+                .toList();
+    }
+
     /** A ticketed live-view URL. 422 when the camera has no stream (not via eufy-sdk). */
     public CameraLiveResponse startLive(String id) {
         return startLive(id, "mse");
@@ -240,7 +302,7 @@ public class CameraService {
         CameraStatus st = statusRepo.findByDeviceId(d.getId()).orElse(null);
         if (st == null) {
             return new CameraResponse(d.getPublicId().toString(), d.getName(), true, null,
-                    null, null, null, null, null, null, false, iso(d.getLastSeenAt()));
+                    null, null, null, null, null, null, false, iso(d.getLastSeenAt()), List.of(), false);
         }
         boolean battery = CameraStatus.POWER_BATTERY.equals(st.getPowerSource());
         return new CameraResponse(
@@ -250,7 +312,8 @@ public class CameraService {
                 battery ? st.getChargingStatus() : null,
                 battery ? iso(st.getBatteryUpdatedAt()) : null,
                 iso(st.getLastMotionAt()), iso(st.getLastPersonAt()),
-                st.getStreamName() != null, iso(d.getLastSeenAt()));
+                st.getStreamName() != null, iso(d.getLastSeenAt()),
+                presets(st), Optional.ofNullable(controls(st)).map(CameraLinker.Controls::canPanTilt).orElse(false));
     }
 
     private static LocalDateTime utc(Instant i) {

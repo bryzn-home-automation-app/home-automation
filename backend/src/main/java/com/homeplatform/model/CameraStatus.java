@@ -47,6 +47,14 @@ public class CameraStatus {
     @Column(name = "person_entity_id")
     private String personEntityId;
 
+    /** JSON of CameraLinker.Controls (entity ids), null for cameras without movement. */
+    @Column(name = "controls", columnDefinition = "text")
+    private String controls;
+
+    /** JSON list of occupied preset slots: [{index, option, home}]. */
+    @Column(name = "preset_slots", columnDefinition = "text")
+    private String presetSlots;
+
     @Column(nullable = false)
     private boolean available;
 

@@ -1,6 +1,6 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { fetchCameraSnapshot, reportLiveDiagnostics, startCameraLive } from '../api/cameras';
+import { fetchCameraSnapshot, goToCameraPreset, nudgeCamera, reportLiveDiagnostics, startCameraLive, type PanTiltDirection } from '../api/cameras';
 import { errorMessage } from '../api/climate';
 import { HlsPlayer, MsePlayer, liveSupported, preferHls, type LivePlayer } from '../utils/msePlayer';
 import { useOnScreen } from '../hooks/useViewerPresence';
@@ -280,6 +280,7 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
           )}
         </div>
         {overlay && <div className="absolute inset-0 flex items-center justify-center bg-black/35 p-4">{overlay}</div>}
+        {live && camera.canPanTilt && <PanTiltPad cameraId={camera.id} name={camera.name} />}
         {live && battery && (
           <button
             type="button"
@@ -303,7 +304,98 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
         </div>
         <BatteryBadge camera={camera} state={charge.state} inferred={charge.inferred} />
       </div>
+      {camera.presets.length > 0 && (
+        <PresetBar camera={camera} watching={live} onWatch={battery && !streaming ? start : undefined} />
+      )}
     </div>
+  );
+}
+
+/**
+ * Stored positions (saved in the eufy app). Tapping one swings the camera there; a
+ * battery camera wakes to do it, so offer to watch it move.
+ */
+function PresetBar({ camera, watching, onWatch }: { camera: Camera; watching: boolean; onWatch?: () => void }) {
+  const [moving, setMoving] = useState<number | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  const go = async (index: number, name: string) => {
+    setMoving(index);
+    setNote(null);
+    try {
+      await goToCameraPreset(camera.id, index);
+      setNote(watching ? `Moving to ${name}…` : `Moving to ${name}.`);
+    } catch (err) {
+      setNote(errorMessage(err, "Couldn't move the camera"));
+    } finally {
+      setMoving(null);
+    }
+  };
+
+  return (
+    <div className="border-t border-appborder px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`${camera.name} positions`}>
+        {camera.presets.map((p) => (
+          <button
+            key={p.index}
+            type="button"
+            onClick={() => go(p.index, p.name)}
+            disabled={moving !== null}
+            className={`h-9 rounded-full border border-appborder bg-appinset px-3 text-xs font-semibold text-apptext-soft transition-colors hover:border-appborder-hover hover:text-apptext disabled:opacity-50 ${FOCUS_RING}`}
+          >
+            {moving === p.index ? 'Moving…' : p.index === 0 && p.name === 'Home' ? '⌂ Home' : p.name}
+          </button>
+        ))}
+      </div>
+      {note && (
+        <p role="status" className="mt-2 text-2xs text-apptext-muted">
+          {note}
+          {onWatch && !watching && (
+            <>
+              {' '}
+              <button type="button" onClick={onWatch} className="font-semibold text-appaccent-text underline">
+                Watch live
+              </button>
+            </>
+          )}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Pan/tilt arrows over the live picture — only while live, when the move is visible. */
+function PanTiltPad({ cameraId, name }: { cameraId: string; name: string }) {
+  const [busy, setBusy] = useState(false);
+  const nudge = async (d: PanTiltDirection) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      await nudgeCamera(cameraId, d);
+    } catch {
+      /* the picture shows whether it moved */
+    } finally {
+      setBusy(false);
+    }
+  };
+  const arrow = (d: PanTiltDirection, label: string, pos: string, glyph: string) => (
+    <button
+      type="button"
+      onClick={() => nudge(d)}
+      disabled={busy}
+      aria-label={`${label} ${name}`}
+      className={`absolute ${pos} flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-lg text-white transition-colors hover:bg-black/70 disabled:opacity-60 ${FOCUS_RING}`}
+    >
+      {glyph}
+    </button>
+  );
+  return (
+    <>
+      {arrow('up', 'Tilt up', 'left-1/2 top-3 -translate-x-1/2', '▲')}
+      {arrow('down', 'Tilt down', 'bottom-3 left-1/2 -translate-x-1/2', '▼')}
+      {arrow('left', 'Pan left', 'left-3 top-1/2 -translate-y-1/2', '◀')}
+      {arrow('right', 'Pan right', 'right-3 top-1/2 -translate-y-1/2', '▶')}
+    </>
   );
 }
 

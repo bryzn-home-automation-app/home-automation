@@ -161,6 +161,44 @@ class CameraServiceTest {
         assertThrows(HomeDeviceService.Unsupported.class, () -> service.startLive(ID));
     }
 
+    private void withControls() {
+        status.setControls("{\"presetSelect\":\"select.front_preset\",\"gotoPreset\":\"button.front_go_to_preset\","
+                + "\"panLeft\":\"button.front_pan_left\",\"panRight\":\"button.front_pan_right\","
+                + "\"tiltUp\":\"button.front_tilt_up\",\"tiltDown\":\"button.front_tilt_down\"}");
+        status.setPresetSlots("[{\"index\":0,\"option\":\"0 · HOME\",\"home\":true},{\"index\":2,\"option\":\"2\",\"home\":false}]");
+    }
+
+    @Test
+    @DisplayName("presets: listed with names, and going to one selects the slot then presses go-to")
+    void presets() {
+        withControls();
+        var c = service.listCameras().get(0);
+        assertEquals(List.of("Home", "Position 2"), c.presets().stream().map(com.homeplatform.dto.CameraPreset::name).toList());
+        assertTrue(c.canPanTilt());
+
+        service.goToPreset(ID, 2);
+        var order = inOrder(ha);
+        order.verify(ha).selectOption("select.front_preset", "2");
+        order.verify(ha).pressButton("button.front_go_to_preset");
+
+        assertThrows(IllegalArgumentException.class, () -> service.goToPreset(ID, 5), "empty slot");
+    }
+
+    @Test
+    @DisplayName("pan/tilt nudges press the matching button; cameras without controls refuse")
+    void nudge() {
+        withControls();
+        service.nudge(ID, CameraService.Direction.LEFT);
+        service.nudge(ID, CameraService.Direction.DOWN);
+        verify(ha).pressButton("button.front_pan_left");
+        verify(ha).pressButton("button.front_tilt_down");
+
+        status.setControls(null);
+        assertThrows(HomeDeviceService.Unsupported.class, () -> service.nudge(ID, CameraService.Direction.UP));
+        assertThrows(HomeDeviceService.Unsupported.class, () -> service.goToPreset(ID, 0));
+        assertFalse(service.listCameras().get(0).canPanTilt());
+    }
+
     @Test
     @DisplayName("bad ids, thermostats, and integration-off are rejected")
     void guards() {

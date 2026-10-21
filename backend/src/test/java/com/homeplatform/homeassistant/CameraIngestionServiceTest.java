@@ -159,6 +159,27 @@ class CameraIngestionServiceTest {
     }
 
     @Test
+    @DisplayName("controls are stored on link; a preset saved later in the eufy app updates the slots")
+    void presetSlotsFollowEvents() throws Exception {
+        var controls = new CameraLinker.Controls("select.driveway_preset", "button.driveway_go_to_preset",
+                "button.driveway_pan_left", "button.driveway_pan_right", "button.driveway_tilt_up", "button.driveway_tilt_down");
+        var withControls = new CameraLinker.Link("camera.driveway", "T8170X", "sensor.driveway_battery",
+                "binary_sensor.driveway_charging", "binary_sensor.driveway_motion", null, controls);
+        Map<String, HaEntityState> m = current("80", "off");
+        m.put("select.driveway_preset", CameraLinkerTest.presetSelect("select.driveway_preset", "0 · HOME", "1 · empty"));
+
+        service.link(camera, withControls, m, SNAPSHOT, UUID.randomUUID());
+        service.reindex();
+        assertTrue(stored.getControls().contains("button.driveway_go_to_preset"));
+        assertTrue(stored.getPresetSlots().contains("0 · HOME"));
+        assertFalse(stored.getPresetSlots().contains("\"index\":1"));
+
+        assertTrue(service.handles("select.driveway_preset"));
+        service.onStateChanged(CameraLinkerTest.presetSelect("select.driveway_preset", "0 · HOME", "1"), UUID.randomUUID());
+        assertTrue(stored.getPresetSlots().contains("\"index\":1"));
+    }
+
+    @Test
     @DisplayName("events for a disabled camera are ignored")
     void disabledCamera() throws Exception {
         service.link(camera, link, current("50", "off"), SNAPSHOT, UUID.randomUUID());

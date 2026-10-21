@@ -187,6 +187,16 @@ public class HomeAssistantService {
         return true;
     }
 
+    /** Press an HA button entity (camera pan/tilt, go to preset). */
+    public void pressButton(String entityId) {
+        client.callService("button", "press", Map.of("entity_id", entityId));
+    }
+
+    /** Choose an option on an HA select entity (e.g. which preset slot to move to). */
+    public void selectOption(String entityId, String option) {
+        client.callService("select", "select_option", Map.of("entity_id", entityId, "option", option));
+    }
+
     public HomeAssistantClient.CameraImage cameraSnapshot(SmartDevice d) {
         return client.getCameraSnapshot(d.getProviderEntityId());
     }

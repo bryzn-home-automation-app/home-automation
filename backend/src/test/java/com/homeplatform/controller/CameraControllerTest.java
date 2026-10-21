@@ -65,7 +65,7 @@ class CameraControllerTest {
     @DisplayName("members list cameras, fetch snapshots, and get live tickets")
     void members() throws Exception {
         when(service.listCameras()).thenReturn(List.of(new CameraResponse(ID, "Driveway", true, "battery",
-                64.0, true, "Solar charging", null, null, null, true, null)));
+                64.0, true, "Solar charging", null, null, null, true, null, List.of(), false)));
         mvc.perform(get("/api/home/cameras").requestAttr("role", "USER"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].batteryPercent").value(64.0))

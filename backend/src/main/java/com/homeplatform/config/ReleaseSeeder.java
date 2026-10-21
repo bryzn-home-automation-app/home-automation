@@ -45,6 +45,7 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("new", "A heads-up before you override someone's thermostat change from the last 10 minutes."),
                             change("new", "Cameras tab: latest snapshots, plus live video that only runs while you're watching."),
                             change("new", "Battery and solar-charging history for the outdoor cameras."),
+                            change("new", "Send cameras to their saved positions, and pan or tilt them during live view."),
                             change("new", "Camera alerts for low battery, no solar charging, offline cameras and people outside."),
                             change("new", "Auto theme: light by day, dark after sunset at home (Profile → Theme → Auto)."),
                             change("new", "Phone alerts for camera and critical alerts from the Home Screen app (Profile → Phone alerts)."),

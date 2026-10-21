@@ -37,7 +37,27 @@ public final class CameraLinker {
     private static final Pattern STREAM_NAME = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
     public record Link(String cameraEntityId, String streamName, String batteryEntityId,
-                       String chargingEntityId, String motionEntityId, String personEntityId) {}
+                       String chargingEntityId, String motionEntityId, String personEntityId, Controls controls) {
+
+        public Link(String cameraEntityId, String streamName, String batteryEntityId,
+                    String chargingEntityId, String motionEntityId, String personEntityId) {
+            this(cameraEntityId, streamName, batteryEntityId, chargingEntityId, motionEntityId, personEntityId, Controls.NONE);
+        }
+    }
+
+    /**
+     * Movement controls eufy-sdk exposes for pan/tilt cameras: a select choosing the
+     * stored preset slot, a button that moves to it, and pan/tilt nudge buttons. Any may
+     * be null (fixed cameras have none).
+     */
+    public record Controls(String presetSelect, String gotoPreset, String panLeft, String panRight,
+                           String tiltUp, String tiltDown) {
+        public static final Controls NONE = new Controls(null, null, null, null, null, null);
+
+        public boolean canPanTilt() {
+            return panLeft != null && panRight != null && tiltUp != null && tiltDown != null;
+        }
+    }
 
     private CameraLinker() {}
 
@@ -74,7 +94,39 @@ public final class CameraLinker {
                     battery(siblings),
                     charging(siblings),
                     first(siblings, s -> "binary_sensor".equals(s.domain()) && deviceClass(s, "motion")),
-                    first(siblings, s -> "binary_sensor".equals(s.domain()) && s.entityId().contains("person"))));
+                    first(siblings, s -> "binary_sensor".equals(s.domain()) && s.entityId().contains("person")),
+                    controls(siblings)));
+        }
+        return out;
+    }
+
+    private static Controls controls(List<HaEntityState> siblings) {
+        return new Controls(
+                first(siblings, s -> "select".equals(s.domain()) && s.entityId().endsWith("_preset")),
+                first(siblings, s -> "button".equals(s.domain()) && s.entityId().endsWith("_go_to_preset")),
+                first(siblings, s -> "button".equals(s.domain()) && s.entityId().endsWith("_pan_left")),
+                first(siblings, s -> "button".equals(s.domain()) && s.entityId().endsWith("_pan_right")),
+                first(siblings, s -> "button".equals(s.domain()) && s.entityId().endsWith("_tilt_up")),
+                first(siblings, s -> "button".equals(s.domain()) && s.entityId().endsWith("_tilt_down")));
+    }
+
+    /** A stored position the camera can move to: its slot index and the select's raw option. */
+    public record PresetSlot(int index, String option, boolean home) {}
+
+    /**
+     * Occupied preset slots from the preset select's options: "0 · HOME" (the default
+     * position), "1", "2" … are stored; "4 · empty" isn't. Unknown shapes are skipped.
+     */
+    public static List<PresetSlot> presetSlots(HaEntityState presetSelect) {
+        List<PresetSlot> out = new ArrayList<>();
+        if (presetSelect == null) return out;
+        for (JsonNode o : presetSelect.attributes().path("options")) {
+            String option = o.asText("").trim();
+            String[] parts = option.split("\\s*·\\s*", 2);
+            if (!parts[0].matches("\\d+")) continue;
+            String tag = parts.length > 1 ? parts[1].trim().toLowerCase() : "";
+            if (tag.equals("empty")) continue;
+            out.add(new PresetSlot(Integer.parseInt(parts[0]), option, tag.equals("home")));
         }
         return out;
     }

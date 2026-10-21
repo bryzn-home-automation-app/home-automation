@@ -46,6 +46,8 @@ vi.mock('../api/cameras', () => ({
   fetchCameraSnapshot: vi.fn().mockResolvedValue(new Blob(['jpg'], { type: 'image/jpeg' })),
   startCameraLive: vi.fn().mockResolvedValue({ url: '/camera-stream/t.s/ws', expiresAt: '' }),
   reportLiveDiagnostics: vi.fn().mockResolvedValue(undefined),
+  goToCameraPreset: vi.fn().mockResolvedValue(undefined),
+  nudgeCamera: vi.fn().mockResolvedValue(undefined),
   fetchCameras: vi.fn(),
   fetchCameraBattery: vi.fn(),
 }));
@@ -66,6 +68,8 @@ const driveway: Camera = {
   lastPersonAt: null,
   liveAvailable: true,
   lastSeenAt: null,
+  presets: [],
+  canPanTilt: false,
 };
 const indoor: Camera = { ...driveway, id: 'cam-2', name: 'Living Room', powerSource: 'wired', batteryPercent: null, charging: null, chargingStatus: null };
 
@@ -275,6 +279,25 @@ describe('CameraTile', () => {
     renderTile(indoor);
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
     expect(camerasApi.startCameraLive).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows saved positions and moves the camera to one', async () => {
+    renderTile({ ...driveway, presets: [{ index: 0, name: 'Home' }, { index: 2, name: 'Position 2' }], canPanTilt: true });
+    fireEvent.click(screen.getByRole('button', { name: 'Position 2' }));
+    await waitFor(() => expect(camerasApi.goToCameraPreset).toHaveBeenCalledWith('cam-1', 2));
+    expect(await screen.findByText(/Moving to Position 2/)).toBeInTheDocument();
+    // Battery camera not streaming → offer to watch it move.
+    expect(screen.getByRole('button', { name: 'Watch live' })).toBeInTheDocument();
+  });
+
+  it('pan/tilt arrows appear only while live', async () => {
+    const cam = { ...indoor, canPanTilt: true };
+    renderTile(cam);
+    expect(screen.queryByRole('button', { name: /Pan left/ })).toBeNull();
+    await waitFor(() => expect(players.handlers.length).toBeGreaterThan(0));
+    act(() => players.handlers[players.handlers.length - 1].onPlaying?.());
+    fireEvent.click(await screen.findByRole('button', { name: 'Pan left Living Room' }));
+    await waitFor(() => expect(camerasApi.nudgeCamera).toHaveBeenCalledWith('cam-2', 'left'));
   });
 
   it('highlights a recent person detection', () => {

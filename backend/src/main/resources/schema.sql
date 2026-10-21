@@ -713,6 +713,9 @@ CREATE TABLE IF NOT EXISTS camera_status (
     charging_entity_id  VARCHAR(255),
     motion_entity_id    VARCHAR(255),
     person_entity_id    VARCHAR(255),
+    -- Pan/tilt controls (JSON of entity ids) and stored preset positions (JSON list).
+    controls            TEXT,
+    preset_slots        TEXT,
     available           BOOLEAN        NOT NULL DEFAULT FALSE,
     battery_percent     DOUBLE PRECISION,
     -- NULL = the camera doesn't report charging; the UI then infers it from the trend.

@@ -44,3 +44,15 @@ export async function startCameraLive(id: string, format: 'mse' | 'hls' = 'mse')
 export async function reportLiveDiagnostics(id: string, report: Record<string, unknown>): Promise<void> {
   await api.post(`/home/cameras/${encodeURIComponent(id)}/live/diagnostics`, report).catch(() => {});
 }
+
+/** Move a pan/tilt camera to one of its stored presets (wakes a battery camera). */
+export async function goToCameraPreset(id: string, index: number): Promise<void> {
+  await api.post(`/home/cameras/${encodeURIComponent(id)}/preset`, { index });
+}
+
+export type PanTiltDirection = 'left' | 'right' | 'up' | 'down';
+
+/** Nudge a pan/tilt camera one step. */
+export async function nudgeCamera(id: string, direction: PanTiltDirection): Promise<void> {
+  await api.post(`/home/cameras/${encodeURIComponent(id)}/ptz`, { direction });
+}

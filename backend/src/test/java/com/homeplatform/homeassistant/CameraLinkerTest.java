@@ -77,6 +77,39 @@ class CameraLinkerTest {
         assertNull(links.get(1).streamName());
     }
 
+    static HaEntityState presetSelect(String id, String... options) throws Exception {
+        String opts = String.join(",", java.util.Arrays.stream(options).map(o -> "\"" + o + "\"").toList());
+        return HaEntityState.fromJson(JSON.readTree(
+                "{\"entity_id\":\"" + id + "\",\"state\":\"" + options[0] + "\",\"attributes\":{\"options\":[" + opts + "]}}"));
+    }
+
+    @Test
+    @DisplayName("pan/tilt controls and the preset select are linked; occupied slots parsed")
+    void controlsAndPresets() throws Exception {
+        var m = states(
+                presetSelect("select.front_preset", "0 · HOME", "1", "2", "3 · empty"),
+                state("button.front_go_to_preset", "unknown", null),
+                state("button.front_pan_left", "unknown", null),
+                state("button.front_pan_right", "unknown", null),
+                state("button.front_tilt_up", "unknown", null),
+                state("button.front_tilt_down", "unknown", null));
+        String rendered = """
+                [{"camera":"camera.front","serial":"T8170X","entities":["select.front_preset","button.front_go_to_preset",
+                  "button.front_pan_left","button.front_pan_right","button.front_tilt_up","button.front_tilt_down"]}]""";
+
+        var c = CameraLinker.parse(rendered, JSON, m).get(0).controls();
+
+        assertEquals("select.front_preset", c.presetSelect());
+        assertEquals("button.front_go_to_preset", c.gotoPreset());
+        assertTrue(c.canPanTilt());
+        var slots = CameraLinker.presetSlots(m.get("select.front_preset"));
+        assertEquals(List.of(0, 1, 2), slots.stream().map(CameraLinker.PresetSlot::index).toList());
+        assertTrue(slots.get(0).home());
+        assertEquals("0 · HOME", slots.get(0).option());
+        assertTrue(CameraLinker.presetSlots(presetSelect("select.x_preset", "0 · empty", "1 · empty")).isEmpty());
+        assertTrue(CameraLinker.presetSlots(null).isEmpty());
+    }
+
     @Test
     @DisplayName("non-JSON or non-array output is an InvalidResponse")
     void badTemplateOutput() {

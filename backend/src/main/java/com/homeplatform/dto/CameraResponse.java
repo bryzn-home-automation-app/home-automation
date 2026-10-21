@@ -18,5 +18,9 @@ public record CameraResponse(
         String lastMotionAt,
         String lastPersonAt,
         boolean liveAvailable,
-        String lastSeenAt
+        String lastSeenAt,
+        /** Stored positions it can move to (empty for fixed cameras or none saved). */
+        java.util.List<CameraPreset> presets,
+        /** Pan/tilt nudge controls are available. */
+        boolean canPanTilt
 ) {}

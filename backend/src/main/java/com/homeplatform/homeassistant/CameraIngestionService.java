@@ -1,5 +1,7 @@
 package com.homeplatform.homeassistant;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homeplatform.model.CameraBatteryReading;
 import com.homeplatform.model.CameraStatus;
 import com.homeplatform.model.SmartDevice;
@@ -34,6 +36,7 @@ public class CameraIngestionService {
     private final CameraBatteryReadingRepository readingRepo;
     private final SmartDeviceRepository deviceRepo;
     private final CameraAlertService alerts;
+    private final ObjectMapper mapper = new ObjectMapper();
 
     /** Linked HA entity → smart_devices.id; rebuilt after every link pass. */
     private volatile Map<String, Long> index;
@@ -59,6 +62,9 @@ public class CameraIngestionService {
         st.setChargingEntityId(link.chargingEntityId());
         st.setMotionEntityId(link.motionEntityId());
         st.setPersonEntityId(link.personEntityId());
+        CameraLinker.Controls c = link.controls() == null ? CameraLinker.Controls.NONE : link.controls();
+        st.setControls(c.equals(CameraLinker.Controls.NONE) ? null : json(c));
+        if (c.presetSelect() != null) st.setPresetSlots(json(CameraLinker.presetSlots(states.get(c.presetSelect()))));
         if (link.batteryEntityId() == null) st.setPowerSource(CameraStatus.POWER_WIRED);
 
         HaEntityState cam = states.get(camera.getProviderEntityId());
@@ -79,6 +85,7 @@ public class CameraIngestionService {
             put(m, st.getChargingEntityId(), st.getDeviceId());
             put(m, st.getMotionEntityId(), st.getDeviceId());
             put(m, st.getPersonEntityId(), st.getDeviceId());
+            put(m, presetSelectOf(st), st.getDeviceId());
         }
         index = Map.copyOf(m);
     }
@@ -116,6 +123,9 @@ public class CameraIngestionService {
             applyMotion(st, s, null);
         } else if (id.equals(st.getPersonEntityId())) {
             applyMotion(st, null, s);
+        } else if (id.equals(presetSelectOf(st))) {
+            // Presets saved/removed in the eufy app show up as new select options.
+            st.setPresetSlots(json(CameraLinker.presetSlots(s)));
         }
         st.setUpdatedAt(now());
         statusRepo.save(st);
@@ -196,6 +206,29 @@ public class CameraIngestionService {
 
     private static Instant changedAt(HaEntityState s) {
         return s.lastChanged() != null ? s.lastChanged() : stamp(s);
+    }
+
+    /** The preset select's entity id from a status row's controls JSON, or null. */
+    String presetSelectOf(CameraStatus st) {
+        CameraLinker.Controls c = controlsOf(st);
+        return c == null ? null : c.presetSelect();
+    }
+
+    CameraLinker.Controls controlsOf(CameraStatus st) {
+        if (st.getControls() == null) return null;
+        try {
+            return mapper.readValue(st.getControls(), CameraLinker.Controls.class);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+    }
+
+    private String json(Object o) {
+        try {
+            return mapper.writeValueAsString(o);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
     }
 
     private static void put(Map<String, Long> m, String entityId, Long deviceId) {

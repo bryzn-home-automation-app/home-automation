@@ -65,6 +65,33 @@ public class CameraController {
                 .body(img.bytes());
     }
 
+    public record PresetRequest(Integer index) {}
+
+    public record NudgeRequest(String direction) {}
+
+    /** Move a pan/tilt camera to a stored preset ({@code {"index": 1}}). */
+    @PostMapping("/{id}/preset")
+    public Map<String, Object> goToPreset(@PathVariable String id, @RequestBody PresetRequest body, HttpServletRequest request) {
+        HomeController.requireMember(request);
+        if (body == null || body.index() == null) throw new IllegalArgumentException("'index' is required");
+        service.goToPreset(id, body.index());
+        return Map.of("ok", true);
+    }
+
+    /** Nudge a pan/tilt camera: {@code {"direction": "left|right|up|down"}}. */
+    @PostMapping("/{id}/ptz")
+    public Map<String, Object> nudge(@PathVariable String id, @RequestBody NudgeRequest body, HttpServletRequest request) {
+        HomeController.requireMember(request);
+        CameraService.Direction dir;
+        try {
+            dir = CameraService.Direction.valueOf(String.valueOf(body == null ? null : body.direction()).toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("'direction' must be left, right, up or down");
+        }
+        service.nudge(id, dir);
+        return Map.of("ok", true);
+    }
+
     /** A short-lived ticketed URL for the live-view WebSocket (see CameraStreamAuthController). */
     @PostMapping("/{id}/live")
     public CameraLiveResponse live(@PathVariable String id, @RequestParam(defaultValue = "mse") String format,

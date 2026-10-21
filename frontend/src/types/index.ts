@@ -596,6 +596,15 @@ export interface Camera {
   /** The camera streams through the eufy bridge (live view possible). */
   liveAvailable: boolean;
   lastSeenAt: string | null;
+  /** Stored positions saved in the eufy app ("Home", "Position 1"…); empty if none. */
+  presets: CameraPreset[];
+  /** Pan/tilt nudges available. */
+  canPanTilt: boolean;
+}
+
+export interface CameraPreset {
+  index: number;
+  name: string;
 }
 
 /** One battery history point (oldest first in a history response). */
