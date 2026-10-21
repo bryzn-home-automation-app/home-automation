@@ -127,7 +127,7 @@ public class PushService {
     /** Push in-app notifications worth an interruption, once the row has committed. */
     @TransactionalEventListener(fallbackExecution = true)
     public void onNotification(NotificationCreatedEvent e) {
-        if (!shouldPush(e.category(), e.severity())) return;
+        if (e.push() != null ? !e.push() : !shouldPush(e.category(), e.severity())) return;
         Map<String, Object> payload = payload(e.title(), e.message(), urlFor(e.category()), e.title());
         boolean urgent = e.severity() == Severity.CRITICAL || e.category() == Category.CAMERA;
         sender.execute(() -> {

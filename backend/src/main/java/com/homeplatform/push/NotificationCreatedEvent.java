@@ -8,5 +8,12 @@ public record NotificationCreatedEvent(
         Notification.Category category,
         Notification.Severity severity,
         String title,
-        String message
-) {}
+        String message,
+        /** The member's phone-alert choice for this alert's type; null = the built-in rule. */
+        Boolean push
+) {
+    public NotificationCreatedEvent(Long userId, Notification.Category category, Notification.Severity severity,
+                                    String title, String message) {
+        this(userId, category, severity, title, message, null);
+    }
+}

@@ -1,6 +1,7 @@
 package com.homeplatform.homeassistant;
 
 import com.homeplatform.dto.WeatherResponse;
+import com.homeplatform.model.AlertType;
 import com.homeplatform.model.CameraBatteryReading;
 import com.homeplatform.model.CameraStatus;
 import com.homeplatform.model.Notification.Category;
@@ -74,6 +75,7 @@ class CameraAlertServiceTest {
         notificationRepo = mock(NotificationRepository.class);
         notifications = mock(NotificationService.class);
         users = mock(UserRepository.class);
+        when(notifications.wanting(anyList(), any())).thenAnswer(i -> i.getArgument(0));
         weather = mock(WeatherService.class);
         service = new CameraAlertService(deviceRepo, statusRepo, readingRepo, notificationRepo, notifications, users,
                 weather, 32.78, -96.80, Clock.fixed(NOW, ZoneId.of("America/Chicago")));
@@ -88,7 +90,7 @@ class CameraAlertServiceTest {
                 .thenReturn(List.of(user(10L, User.Role.ADMIN), user(11L, User.Role.USER), user(12L, User.Role.GUEST)));
         when(notificationRepo.existsByUserIdAndCategoryAndTitleAndCreatedAtAfter(anyLong(), eq(Category.CAMERA), anyString(), any()))
                 .thenAnswer(i -> sent.contains(i.getArgument(0, Long.class) + "|" + i.getArgument(2, String.class)));
-        when(notifications.create(anyLong(), eq(Category.CAMERA), any(), anyString(), anyString())).thenAnswer(i -> {
+        when(notifications.send(anyLong(), any(AlertType.class), any(), anyString(), anyString())).thenAnswer(i -> {
             sent.add(i.getArgument(0, Long.class) + "|" + i.getArgument(3, String.class));
             return null;
         });
@@ -121,11 +123,11 @@ class CameraAlertServiceTest {
         service.evaluate();
         service.evaluate(); // a later tick the same day
 
-        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.WARNING), eq("Front camera battery low"), contains("28%"));
-        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.CRITICAL), eq("Backyard camera battery critical"), contains("12%"));
-        verify(notifications, never()).create(eq(12L), any(), any(), any(), any());
+        verify(notifications).send(eq(10L), eq(AlertType.CAMERA_BATTERY), eq(Severity.WARNING), eq("Front camera battery low"), contains("28%"));
+        verify(notifications).send(eq(10L), eq(AlertType.CAMERA_BATTERY), eq(Severity.CRITICAL), eq("Backyard camera battery critical"), contains("12%"));
+        verify(notifications, never()).send(eq(12L), any(), any(), any(), any());
         // 2 alerts × 2 members, not repeated by the second tick.
-        verify(notifications, times(4)).create(anyLong(), any(), any(), any(), any());
+        verify(notifications, times(4)).send(anyLong(), any(), any(), any(), any());
     }
 
     @Test
@@ -136,7 +138,7 @@ class CameraAlertServiceTest {
         backyardStatus.setPowerSource(CameraStatus.POWER_WIRED);
         backyardStatus.setBatteryPercent(5.0);
         service.evaluate();
-        verifyNoInteractions(notifications);
+        verify(notifications, never()).send(anyLong(), any(), any(), anyString(), anyString());
     }
 
     @Test
@@ -151,7 +153,7 @@ class CameraAlertServiceTest {
 
         service.evaluate();
 
-        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.WARNING), eq("Front camera isn't charging"), contains("panel"));
+        verify(notifications).send(eq(10L), eq(AlertType.CAMERA_NOT_CHARGING), eq(Severity.WARNING), eq("Front camera isn't charging"), contains("panel"));
     }
 
     @Test
@@ -162,12 +164,12 @@ class CameraAlertServiceTest {
                 reading(UTC_NOW.minusHours(47), 76, false), reading(UTC_NOW.minusHours(1), 70, false)));
         when(weather.getWeatherForDateRange(anyDouble(), anyDouble(), any(), any())).thenThrow(new RuntimeException("timeout"));
         service.evaluate();
-        verify(notifications, never()).create(anyLong(), any(), any(), eq("Front camera isn't charging"), anyString());
+        verify(notifications, never()).send(anyLong(), any(), any(), eq("Front camera isn't charging"), anyString());
 
         reset(weather);
         weatherCodes(1, 0);
         service.evaluate();
-        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.WARNING), eq("Front camera isn't charging"), anyString());
+        verify(notifications).send(eq(10L), eq(AlertType.CAMERA_NOT_CHARGING), eq(Severity.WARNING), eq("Front camera isn't charging"), anyString());
     }
 
     @Test
@@ -179,7 +181,7 @@ class CameraAlertServiceTest {
 
         weatherCodes(0, 3); // yesterday overcast
         service.evaluate();
-        verifyNoInteractions(notifications);
+        verify(notifications, never()).send(anyLong(), any(), any(), anyString(), anyString());
 
         assertTrue(CameraAlertService.gainedCharge(List.of(reading(UTC_NOW.minusHours(30), 70, false), reading(UTC_NOW.minusHours(20), 72, false))));
         assertTrue(CameraAlertService.gainedCharge(List.of(reading(UTC_NOW.minusHours(30), 70, true))));
@@ -193,18 +195,19 @@ class CameraAlertServiceTest {
         frontStatus.setAvailable(false);
         frontStatus.setUnavailableSince(UTC_NOW.minusMinutes(45));
         service.evaluate();
-        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.WARNING), eq("Front camera offline"), anyString());
+        verify(notifications).send(eq(10L), eq(AlertType.CAMERA_OFFLINE), eq(Severity.WARNING), eq("Front camera offline"), anyString());
 
         reset(notifications);
+        when(notifications.wanting(anyList(), any())).thenAnswer(i -> i.getArgument(0));
         sent.clear();
         backyardStatus.setAvailable(false);
         backyardStatus.setUnavailableSince(UTC_NOW.minusMinutes(10)); // not long enough yet
         service.evaluate();
-        verify(notifications, never()).create(anyLong(), any(), any(), eq("Eufy cameras disconnected"), anyString());
+        verify(notifications, never()).send(anyLong(), any(), any(), eq("Eufy cameras disconnected"), anyString());
 
         backyardStatus.setUnavailableSince(UTC_NOW.minusMinutes(40));
         service.evaluate();
-        verify(notifications).create(eq(10L), eq(Category.CAMERA), eq(Severity.WARNING), eq("Eufy cameras disconnected"), contains("signed out"));
+        verify(notifications).send(eq(10L), eq(AlertType.CAMERA_OFFLINE), eq(Severity.WARNING), eq("Eufy cameras disconnected"), contains("signed out"));
     }
 
     @Test
@@ -212,12 +215,26 @@ class CameraAlertServiceTest {
     void person() {
         service.personDetected(front, frontStatus);
         service.personDetected(front, frontStatus);
-        verify(notifications, times(2)).create(anyLong(), eq(Category.CAMERA), eq(Severity.INFO), eq("Person detected — Front"), contains("2:00 PM"));
+        verify(notifications, times(2)).send(anyLong(), eq(AlertType.PERSON_DETECTED), eq(Severity.INFO), eq("Person detected — Front"), contains("2:00 PM"));
 
         SmartDevice living = cam(3L, "Living Room");
         CameraStatus wired = CameraStatus.builder().deviceId(3L).available(true).powerSource(CameraStatus.POWER_WIRED).build();
         service.personDetected(living, wired);
-        verify(notifications, never()).create(anyLong(), any(), any(), eq("Person detected — Living Room"), anyString());
+        verify(notifications, never()).send(anyLong(), any(), any(), eq("Person detected — Living Room"), anyString());
+    }
+
+    @Test
+    @DisplayName("members who turned a type off aren't sent it, and nothing is checked when nobody wants it")
+    void preferences() {
+        when(notifications.wanting(anyList(), eq(AlertType.PERSON_DETECTED))).thenAnswer(i -> List.of(11L));
+        service.personDetected(front, frontStatus);
+        verify(notifications).send(eq(11L), eq(AlertType.PERSON_DETECTED), any(), anyString(), anyString());
+        verify(notifications, never()).send(eq(10L), any(), any(), anyString(), anyString());
+
+        when(notifications.wanting(anyList(), eq(AlertType.CAMERA_NOT_CHARGING))).thenReturn(List.of());
+        frontStatus = battery(1L, 40.0);
+        service.evaluate();
+        verify(readingRepo, never()).findByDeviceIdAndRecordedAtBetweenOrderByRecordedAtAsc(anyLong(), any(), any());
     }
 
     @Test

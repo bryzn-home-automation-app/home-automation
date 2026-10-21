@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import * as notificationsApi from '../api/notifications';
 import type { Notification } from '../api/notifications';
 
@@ -48,9 +49,11 @@ async function renderNotifications() {
   const { default: Notifications } = await import('../pages/Notifications');
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } });
   return render(
-    <QueryClientProvider client={qc}>
-      <Notifications />
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={qc}>
+        <Notifications />
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 

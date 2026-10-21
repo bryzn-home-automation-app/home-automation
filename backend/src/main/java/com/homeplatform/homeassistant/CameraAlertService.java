@@ -1,6 +1,7 @@
 package com.homeplatform.homeassistant;
 
 import com.homeplatform.dto.WeatherResponse;
+import com.homeplatform.model.AlertType;
 import com.homeplatform.model.CameraBatteryReading;
 import com.homeplatform.model.CameraStatus;
 import com.homeplatform.model.Notification.Category;
@@ -121,11 +122,13 @@ public class CameraAlertService {
             if (cams.isEmpty()) return;
             List<Long> recipients = recipients();
             if (recipients.isEmpty()) return;
-            offline(cams, recipients);
+            offline(cams, notifications.wanting(recipients, AlertType.CAMERA_OFFLINE));
+            List<Long> forBattery = notifications.wanting(recipients, AlertType.CAMERA_BATTERY);
+            List<Long> forCharging = notifications.wanting(recipients, AlertType.CAMERA_NOT_CHARGING);
             for (Camera c : cams) {
                 if (!c.status().isAvailable() || !battery(c.status())) continue;
-                batteryLevel(c, recipients);
-                notCharging(c, recipients);
+                batteryLevel(c, forBattery);
+                notCharging(c, forCharging);
             }
         } catch (Exception e) {
             log.warn("Camera alert evaluation failed: {}", e.getMessage());
@@ -138,11 +141,11 @@ public class CameraAlertService {
             if (!battery(st)) return; // outdoor (battery) cameras only — see class doc
             String title = "Person detected — " + device.getName();
             LocalDateTime since = now().minus(PERSON_COOLDOWN);
-            for (Long user : recipients()) {
+            for (Long user : notifications.wanting(recipients(), AlertType.PERSON_DETECTED)) {
                 if (notificationRepo.existsByUserIdAndCategoryAndTitleAndCreatedAtAfter(user, Category.CAMERA, title, since)) {
                     continue;
                 }
-                notifications.create(user, Category.CAMERA, Severity.INFO, title,
+                notifications.send(user, AlertType.PERSON_DETECTED, Severity.INFO, title,
                         "Someone was seen by the " + device.getName() + " camera at "
                                 + now().format(CLOCK_TIME) + ". Open Cameras to look.");
             }
@@ -154,16 +157,17 @@ public class CameraAlertService {
     // ── checks ──
 
     private void batteryLevel(Camera c, List<Long> recipients) {
+        if (recipients.isEmpty()) return;
         CameraStatus st = c.status();
         Double pct = st.getBatteryPercent();
         if (pct == null || Boolean.TRUE.equals(st.getCharging())) return;
         String name = c.device().getName();
         int level = (int) Math.round(pct);
         if (pct <= BATTERY_CRITICAL) {
-            sendDaily(recipients, Severity.CRITICAL, name + " camera battery critical",
+            sendDaily(recipients, AlertType.CAMERA_BATTERY, Severity.CRITICAL, name + " camera battery critical",
                     "Battery at " + level + "%. It will go offline soon — charge it or check the solar panel.");
         } else if (pct <= BATTERY_LOW) {
-            sendDaily(recipients, Severity.WARNING, name + " camera battery low",
+            sendDaily(recipients, AlertType.CAMERA_BATTERY, Severity.WARNING, name + " camera battery low",
                     "Battery at " + level + "% and not charging.");
         }
     }
@@ -180,12 +184,13 @@ public class CameraAlertService {
                 st.getDeviceId(), end.minus(NOT_CHARGING_WINDOW), end);
         if (!coversWindow(rs, end) || gainedCharge(rs)) return;
         if (!lastTwoDaysSunny()) return;
-        sendDaily(recipients, Severity.WARNING, title,
+        sendDaily(recipients, AlertType.CAMERA_NOT_CHARGING, Severity.WARNING, title,
                 "No solar charge in the last two sunny days (battery " + Math.round(st.getBatteryPercent())
                         + "%). Check that the panel is plugged in, clean and not shaded.");
     }
 
     private void offline(List<Camera> cams, List<Long> recipients) {
+        if (recipients.isEmpty()) return;
         LocalDateTime cutoff = utcNow().minus(OFFLINE_AFTER);
         List<Camera> down = cams.stream()
                 .filter(c -> !c.status().isAvailable() && c.status().getUnavailableSince() != null
@@ -193,14 +198,14 @@ public class CameraAlertService {
                 .toList();
         if (down.isEmpty()) return;
         if (down.size() == cams.size() && cams.size() > 1) {
-            sendDaily(recipients, Severity.WARNING, "Eufy cameras disconnected",
+            sendDaily(recipients, AlertType.CAMERA_OFFLINE, Severity.WARNING, "Eufy cameras disconnected",
                     "All cameras have been offline for over " + OFFLINE_AFTER.toMinutes() + " minutes. The eufy bridge "
                             + "may have been signed out (for example by signing into its account in the eufy app) — "
                             + "check Home Assistant for a re-authentication prompt.");
             return;
         }
         for (Camera c : down) {
-            sendDaily(recipients, Severity.WARNING, c.device().getName() + " camera offline",
+            sendDaily(recipients, AlertType.CAMERA_OFFLINE, Severity.WARNING, c.device().getName() + " camera offline",
                     "Offline for over " + OFFLINE_AFTER.toMinutes() + " minutes"
                             + (battery(c.status()) ? " — the battery may be empty or the HomeBase out of range." : "."));
         }
@@ -250,14 +255,14 @@ public class CameraAlertService {
         }
     }
 
-    private void sendDaily(List<Long> recipients, Severity severity, String title, String message) {
+    private void sendDaily(List<Long> recipients, AlertType type, Severity severity, String title, String message) {
         LocalDateTime startOfDay = LocalDate.now(clock).atStartOfDay();
         for (Long user : recipients) {
             if (notificationRepo.existsByUserIdAndCategoryAndTitleAndCreatedAtAfter(user, Category.CAMERA, title, startOfDay)) {
                 continue;
             }
             log.info("Camera alert: {} — {}", severity, title);
-            notifications.create(user, Category.CAMERA, severity, title, message);
+            notifications.send(user, type, severity, title, message);
         }
     }
 

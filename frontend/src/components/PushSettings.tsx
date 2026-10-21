@@ -127,8 +127,8 @@ export default function PushSettings() {
       <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Notifications</p>
       <h3 className="mt-2 text-xl font-semibold text-apptext">Phone alerts</h3>
       <p className="mt-1 mb-4 text-xs text-apptext-muted">
-        Camera alerts (people outside, low or no-charge batteries, cameras offline) and anything critical, even
-        when the app is closed. Everything else stays in Alerts.
+        Alerts on this device even when the app is closed. Pick which ones under Alert types below — by
+        default, camera alerts and Roomba errors.
       </p>
       {body}
       {note && (

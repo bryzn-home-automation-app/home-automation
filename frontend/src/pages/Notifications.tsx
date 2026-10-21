@@ -6,6 +6,8 @@ import {
   markAllRead,
   type Notification,
 } from '../api/notifications';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import VirtualizedList from '../components/VirtualizedList';
 
@@ -115,6 +117,7 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
 NotificationRow.displayName = 'NotificationRow';
 
 export default function NotificationsPage() {
+  const { isGuest } = useAuth();
   const queryClient = useQueryClient();
   const [categoryFilter, setCategoryFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
@@ -182,6 +185,14 @@ export default function NotificationsPage() {
               <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Unread</p>
               <p className="mt-2 text-lg font-semibold text-apptext">{unread}</p>
             </div>
+            {!isGuest && (
+              <Link
+                to="/profile#alert-types"
+                className="rounded-2xl border border-appborder px-4 py-3 text-sm font-semibold text-apptext-soft transition-colors hover:border-appborder-hover hover:text-apptext"
+              >
+                Alert settings
+              </Link>
+            )}
             <button
               type="button"
               onClick={() => markAllMut.mutate()}

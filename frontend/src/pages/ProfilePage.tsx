@@ -6,6 +6,7 @@ import UserProfileCard from '../components/profile/UserProfileCard';
 import UserEditModal from '../components/profile/UserEditModal';
 import ThemePicker from '../components/ThemePicker';
 import PushSettings from '../components/PushSettings';
+import AlertTypeSettings from '../components/AlertTypeSettings';
 
 export default function ProfilePage() {
   const queryClient = useQueryClient();
@@ -82,6 +83,7 @@ export default function ProfilePage() {
       {/* Theme & palette picker */}
       <ThemePicker />
       <PushSettings />
+      <AlertTypeSettings />
 
       {saveError && (
         <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">

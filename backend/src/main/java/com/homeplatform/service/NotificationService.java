@@ -1,5 +1,6 @@
 package com.homeplatform.service;
 
+import com.homeplatform.model.AlertType;
 import com.homeplatform.model.Notification;
 import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.Notification.Severity;
@@ -24,15 +25,19 @@ public class NotificationService {
     private final NotificationRepository repo;
     /** Phone alerts listen for this (PushService); null in plain unit tests. */
     private final ApplicationEventPublisher events;
+    /** Each member's alert-type choices; null in plain unit tests (everyone gets the defaults). */
+    private final NotificationPreferenceService preferences;
 
     @Autowired
-    public NotificationService(NotificationRepository repo, ApplicationEventPublisher events) {
+    public NotificationService(NotificationRepository repo, ApplicationEventPublisher events,
+                               NotificationPreferenceService preferences) {
         this.repo = repo;
         this.events = events;
+        this.preferences = preferences;
     }
 
     public NotificationService(NotificationRepository repo) {
-        this(repo, null);
+        this(repo, null, null);
     }
 
     // ── Query ──
@@ -92,6 +97,38 @@ public class NotificationService {
         Notification saved = repo.save(n);
         if (events != null) events.publishEvent(new NotificationCreatedEvent(userId, category, severity, title, message));
         return saved;
+    }
+
+    /**
+     * An alert of a known type, honoring the member's settings: not created at all when
+     * they turned the type off, and pushed to their phone only when they chose that.
+     * Returns null when skipped.
+     */
+    @Transactional
+    public Notification send(Long userId, AlertType type, Severity severity, String title, String message) {
+        NotificationPreferenceService.Effective pref = preferences != null
+                ? preferences.effective(userId, type)
+                : new NotificationPreferenceService.Effective(type.defaultInApp(), type.defaultInApp() && type.defaultPush());
+        if (!pref.inApp()) {
+            log.debug("Alert {} skipped for user {} (turned off)", type, userId);
+            return null;
+        }
+        Notification saved = repo.save(Notification.builder()
+                .userId(userId)
+                .category(type.category())
+                .severity(severity)
+                .title(title)
+                .message(message)
+                .build());
+        if (events != null) {
+            events.publishEvent(new NotificationCreatedEvent(userId, type.category(), severity, title, message, pref.push()));
+        }
+        return saved;
+    }
+
+    /** {@code users} minus those who turned {@code type} off, so callers can skip work nobody wants. */
+    public List<Long> wanting(List<Long> users, AlertType type) {
+        return preferences == null ? users : preferences.wanting(users, type);
     }
 
 }

@@ -2,6 +2,7 @@ package com.homeplatform.service;
 
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
+import com.homeplatform.model.AlertType;
 import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.Notification.Severity;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,7 +51,7 @@ class AlertEngineTest {
         void skipsWhenNoMeter() {
             // no meter, no data -> no notifications
             alertEngine.generateElectricAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), anyString());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), anyString());
         }
 
         @Test
@@ -65,7 +66,7 @@ class AlertEngineTest {
                 }
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), anyString());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), anyString());
         }
 
         @Test
@@ -80,7 +81,7 @@ class AlertEngineTest {
                 boolean isNew(Long uid, String prefix) { return true; }
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ELECTRICAL),
+            verify(notificationService).send(eq(1L), eq(AlertType.ENERGY_DAILY),
                     eq(Severity.INFO), contains("Daily usage report"), anyString());
         }
 
@@ -96,7 +97,7 @@ class AlertEngineTest {
                 boolean isNew(Long uid, String prefix) { return true; }
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ELECTRICAL),
+            verify(notificationService).send(eq(1L), eq(AlertType.ENERGY_SPIKE),
                     eq(Severity.WARNING), contains("Usage spike"), anyString());
         }
 
@@ -112,9 +113,9 @@ class AlertEngineTest {
                 boolean isNew(Long uid, String prefix) { return true; }
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ELECTRICAL),
+            verify(notificationService).send(eq(1L), eq(AlertType.ENERGY_DAILY),
                     eq(Severity.INFO), contains("Daily usage report"), anyString());
-            verify(notificationService, never()).create(eq(1L), eq(Category.ELECTRICAL),
+            verify(notificationService, never()).send(eq(1L), eq(AlertType.ENERGY_SPIKE),
                     eq(Severity.WARNING), contains("Usage spike"), anyString());
         }
 
@@ -130,7 +131,7 @@ class AlertEngineTest {
                 boolean isNew(Long uid, String prefix) { return true; }
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ELECTRICAL),
+            verify(notificationService).send(eq(1L), eq(AlertType.ENERGY_SPIKE),
                     eq(Severity.WARNING), contains("Peak usage hour"), anyString());
         }
 
@@ -146,7 +147,7 @@ class AlertEngineTest {
                 boolean isNew(Long uid, String prefix) { return true; }
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService, never()).create(eq(1L), eq(Category.ELECTRICAL),
+            verify(notificationService, never()).send(eq(1L), eq(AlertType.ENERGY_SPIKE),
                     eq(Severity.WARNING), contains("Peak usage hour"), anyString());
         }
 
@@ -162,7 +163,7 @@ class AlertEngineTest {
                 boolean isNew(Long uid, String prefix) { return false; }  // already exists
             };
             engine.generateElectricAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), anyString());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), anyString());
         }
     }
 
@@ -206,7 +207,7 @@ class AlertEngineTest {
         @DisplayName("no status and no run -> nothing created")
         void noData() {
             roombaEngine(null, null).generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), any());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
 
         @Test
@@ -214,7 +215,7 @@ class AlertEngineTest {
         void cleaningComplete() {
             var engine = roombaEngine(run(Instant.now().toString(), 0, 250, 42, 5), null);
             engine.generateRoombaAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ROOMBA),
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_DONE),
                     eq(Severity.SUCCESS), contains("Cleaning complete"), contains("250 sq ft"));
         }
 
@@ -223,7 +224,7 @@ class AlertEngineTest {
         void erroredRunNoCompletion() {
             var engine = roombaEngine(run(Instant.now().toString(), 6, 100, 10, 5), null);
             engine.generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), eq(Category.ROOMBA),
+            verify(notificationService, never()).send(anyLong(), eq(AlertType.ROOMBA_DONE),
                     eq(Severity.SUCCESS), anyString(), any());
         }
 
@@ -233,7 +234,7 @@ class AlertEngineTest {
             String old = Instant.now().minusSeconds(60 * 60 * 48).toString();
             var engine = roombaEngine(run(old, 0, 100, 10, 5), null);
             engine.generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), any());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
 
         @Test
@@ -241,7 +242,7 @@ class AlertEngineTest {
         void runningNoAlert() {
             var engine = roombaEngine(run(null, 0, 100, 10, 5), null);
             engine.generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), any());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
 
         @Test
@@ -250,7 +251,7 @@ class AlertEngineTest {
             var engine = roombaEngine(null,
                     status(80, "stop", 6, "Roomba is stuck", true, List.of("Roomba is stuck")));
             engine.generateRoombaAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ROOMBA),
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ERROR),
                     eq(Severity.CRITICAL), contains("Roomba error"), contains("stuck"));
         }
 
@@ -260,7 +261,7 @@ class AlertEngineTest {
             var engine = roombaEngine(null,
                     status(80, "stop", 0, null, true, List.of("Bin removed", "Water tank removed")));
             engine.generateRoombaAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ROOMBA),
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION),
                     eq(Severity.WARNING), contains("needs attention"), contains("Bin removed"));
         }
 
@@ -270,9 +271,9 @@ class AlertEngineTest {
             var engine = roombaEngine(null,
                     status(80, "stop", 6, "Cliff detected", true, List.of("Cliff detected")));
             engine.generateRoombaAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ROOMBA),
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ERROR),
                     eq(Severity.CRITICAL), anyString(), any());
-            verify(notificationService, never()).create(anyLong(), eq(Category.ROOMBA),
+            verify(notificationService, never()).send(anyLong(), eq(AlertType.ROOMBA_ATTENTION),
                     eq(Severity.WARNING), contains("needs attention"), any());
         }
 
@@ -281,7 +282,7 @@ class AlertEngineTest {
         void lowBatteryAlert() {
             var engine = roombaEngine(null, status(10, "stop", 0, null, false, List.of()));
             engine.generateRoombaAlerts(1L);
-            verify(notificationService).create(eq(1L), eq(Category.ROOMBA),
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION),
                     eq(Severity.WARNING), contains("battery low"), contains("10%"));
         }
 
@@ -290,7 +291,7 @@ class AlertEngineTest {
         void lowBatteryChargingNoAlert() {
             var engine = roombaEngine(null, status(10, "charge", 0, null, false, List.of()));
             engine.generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), eq(Category.ROOMBA),
+            verify(notificationService, never()).send(anyLong(), eq(AlertType.ROOMBA_ATTENTION),
                     eq(Severity.WARNING), contains("battery low"), any());
         }
 
@@ -299,7 +300,7 @@ class AlertEngineTest {
         void healthyNoAlert() {
             var engine = roombaEngine(null, status(90, "charge", 0, null, false, List.of()));
             engine.generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), any());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
 
         @Test
@@ -313,7 +314,7 @@ class AlertEngineTest {
                 @Override boolean isNewRoomba(Long uid, String title, boolean todayOnly) { return false; }
             };
             engine.generateRoombaAlerts(1L);
-            verify(notificationService, never()).create(anyLong(), any(), any(), any(), any());
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
     }
 }

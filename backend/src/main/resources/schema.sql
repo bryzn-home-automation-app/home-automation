@@ -502,6 +502,18 @@ CREATE INDEX IF NOT EXISTS idx_notifications_user     ON notifications (user_id,
 CREATE INDEX IF NOT EXISTS idx_notifications_unread   ON notifications (user_id, is_read);
 CREATE INDEX IF NOT EXISTS idx_notifications_category ON notifications (user_id, category, created_at DESC);
 
+-- Each member's alert-type choices (Profile -> Alert types). Only changed types have
+-- a row; the rest follow AlertType's defaults. push only applies when in_app is on.
+CREATE TABLE IF NOT EXISTS notification_preferences (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    alert_type  VARCHAR(40) NOT NULL,
+    in_app      BOOLEAN     NOT NULL,
+    push        BOOLEAN     NOT NULL,
+    updated_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, alert_type)
+);
+
 -- ============================================================
 -- Maintenance Log
 -- ============================================================

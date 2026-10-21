@@ -155,12 +155,15 @@ class PushServiceTest {
     }
 
     @Test
-    @DisplayName("a camera notification is pushed in the background; an electric warning isn't")
+    @DisplayName("by default a camera alert is pushed and an electric warning isn't; a member's choice overrides that")
     void eventsPushed() throws Exception {
         pushServiceAnswers(201);
         service.subscribe(1L, APPLE, p256dh, auth, "iPhone");
         service.onNotification(new NotificationCreatedEvent(1L, Category.ELECTRICAL, Severity.WARNING, "Spike", "x"));
         service.onNotification(new NotificationCreatedEvent(1L, Category.CAMERA, Severity.INFO, "Person detected — Front", "x"));
-        verify(http, timeout(2_000).times(1)).send(any(HttpRequest.class), any());
+        // A member's own choice wins over the built-in rule, both ways.
+        service.onNotification(new NotificationCreatedEvent(1L, Category.CAMERA, Severity.INFO, "Muted person", "x", false));
+        service.onNotification(new NotificationCreatedEvent(1L, Category.ELECTRICAL, Severity.INFO, "Wanted report", "x", true));
+        verify(http, timeout(2_000).times(2)).send(any(HttpRequest.class), any());
     }
 }

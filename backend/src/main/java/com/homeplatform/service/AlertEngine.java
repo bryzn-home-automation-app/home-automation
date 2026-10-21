@@ -2,6 +2,7 @@ package com.homeplatform.service;
 
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
+import com.homeplatform.model.AlertType;
 import com.homeplatform.model.Notification;
 import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.Notification.Severity;
@@ -117,7 +118,7 @@ public class AlertEngine {
             String msg = String.format(
                     "%s: %.1f kWh from %d hourly readings. 7-day avg: %.1f kWh/day. 30-day avg: %.1f kWh/day.",
                     dateLabel, yesterdayMetrics.totalKwh, yesterdayMetrics.readingCount, avg7, avg30);
-            create(userId, Severity.INFO, reportTitle, msg, "daily:" + yyyyMmDd);
+            create(userId, AlertType.ENERGY_DAILY, Severity.INFO, reportTitle, msg, "daily:" + yyyyMmDd);
         }
 
         // ── Usage Spike (WARNING) — 30%+ above 7-day avg ──
@@ -128,7 +129,7 @@ public class AlertEngine {
                 String msg = String.format(
                         "Yesterday's usage (%.1f kWh) was %.0f%% above your 7-day average (%.1f kWh/day).",
                         yesterdayMetrics.totalKwh, pct, avg7);
-                create(userId, Severity.WARNING, spikeTitle, msg, "spike:" + yyyyMmDd);
+                create(userId, AlertType.ENERGY_SPIKE, Severity.WARNING, spikeTitle, msg, "spike:" + yyyyMmDd);
             }
         }
 
@@ -139,7 +140,7 @@ public class AlertEngine {
                 String msg = String.format(
                         "Highest consumption was %d:00–%d:00 at %.1f kWh.",
                         yesterdayMetrics.maxHour, yesterdayMetrics.maxHour + 1, yesterdayMetrics.maxHourKwh);
-                create(userId, Severity.WARNING, peakTitle, msg, "peak:" + yyyyMmDd);
+                create(userId, AlertType.ENERGY_SPIKE, Severity.WARNING, peakTitle, msg, "peak:" + yyyyMmDd);
             }
         }
 
@@ -157,7 +158,7 @@ public class AlertEngine {
                     String msg = String.format(
                             "Month-to-date: %.0f kWh used. Estimated bill: $%.2f at $%.4f/kWh.",
                             monthKwh, monthKwh * rate, rate);
-                    create(userId, Severity.INFO, billTitle, msg, "bill:" + today.format(DateTimeFormatter.ofPattern("yyyy-MM")));
+                    create(userId, AlertType.ENERGY_BILL, Severity.INFO, billTitle, msg, "bill:" + today.format(DateTimeFormatter.ofPattern("yyyy-MM")));
                 }
             }
         }
@@ -233,7 +234,7 @@ public class AlertEngine {
         } else {
             msg = "The robot finished a cleaning mission.";
         }
-        createRoomba(userId, Severity.SUCCESS, title, msg);
+        createRoomba(userId, AlertType.ROOMBA_DONE, Severity.SUCCESS, title, msg);
     }
 
     void maybeRoombaStatusAlerts(Long userId, RoombaStatusResponse s) {
@@ -243,7 +244,7 @@ public class AlertEngine {
                     ? s.errorText() : "Error code " + s.error();
             String title = "Roomba error — " + reason;
             if (isNewRoomba(userId, title, true)) {
-                createRoomba(userId, Severity.CRITICAL, title,
+                createRoomba(userId, AlertType.ROOMBA_ERROR, Severity.CRITICAL, title,
                         "The robot reported: " + reason + ". It may be stuck and need a hand to continue.");
             }
         } else if (s.needsAttention() && s.attentionReasons() != null && !s.attentionReasons().isEmpty()) {
@@ -252,7 +253,7 @@ public class AlertEngine {
             // day still alerts (rather than being deduped against an unrelated one).
             String title = "Roomba needs attention — " + s.attentionReasons().get(0);
             if (isNewRoomba(userId, title, true)) {
-                createRoomba(userId, Severity.WARNING, title,
+                createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title,
                         String.join("; ", s.attentionReasons()) + ".");
             }
         }
@@ -263,7 +264,7 @@ public class AlertEngine {
         if (batt != null && batt <= LOW_BATTERY_PCT && !charging) {
             String title = "Roomba battery low";
             if (isNewRoomba(userId, title, true)) {
-                createRoomba(userId, Severity.WARNING, title, String.format(
+                createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title, String.format(
                         "Battery at %d%%. The robot may not have enough charge to finish or return to its dock.",
                         batt));
             }
@@ -387,9 +388,9 @@ public class AlertEngine {
         }
     }
 
-    void create(Long userId, Severity severity, String title, String message, String sourceKey) {
+    void create(Long userId, AlertType type, Severity severity, String title, String message, String sourceKey) {
         log.info("AlertEngine: {} — {}", severity, title);
-        notificationService.create(userId, Category.ELECTRICAL, severity, title, message);
+        notificationService.send(userId, type, severity, title, message);
     }
 
     /**
@@ -410,9 +411,9 @@ public class AlertEngine {
         }
     }
 
-    void createRoomba(Long userId, Severity severity, String title, String message) {
+    void createRoomba(Long userId, AlertType type, Severity severity, String title, String message) {
         log.info("AlertEngine[roomba]: {} — {}", severity, title);
-        notificationService.create(userId, Category.ROOMBA, severity, title, message);
+        notificationService.send(userId, type, severity, title, message);
     }
 
     // ──────────────────────────────────────────
