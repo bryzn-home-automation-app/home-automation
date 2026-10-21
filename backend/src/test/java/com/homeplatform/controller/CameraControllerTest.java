@@ -28,15 +28,39 @@ class CameraControllerTest {
     private static final String ID = "3f1c9a52-6a43-4f0e-9a8e-2d5c1f7b9e10";
 
     private CameraService service;
+    private com.homeplatform.homeassistant.CameraRecordingService recordings;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         service = mock(CameraService.class);
+        recordings = mock(com.homeplatform.homeassistant.CameraRecordingService.class);
         mvc = MockMvcBuilders
-                .standaloneSetup(new CameraController(service), new CameraStreamAuthController(service))
+                .standaloneSetup(new CameraController(service, recordings), new CameraStreamAuthController(service))
                 .setControllerAdvice(new HomeExceptionHandler())
                 .build();
+    }
+
+    @Test
+    @DisplayName("members list recordings and get a recording's video; an offline service is a 503 with its reason")
+    void recordings() throws Exception {
+        when(recordings.list(7)).thenReturn(List.of(new com.homeplatform.dto.CameraRecordingResponse(
+                "2026102000042", ID, "Front", "2026-10-20T19:47:51-05:00", "2026-10-20T19:48:11-05:00", 20_000L, 4_693_164L, true)));
+        mvc.perform(get("/api/home/cameras/recordings").param("days", "7").requestAttr("role", "USER"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].cameraName").value("Front"))
+                .andExpect(jsonPath("$[0].durationMs").value(20000));
+
+        when(recordings.video("2026102000042")).thenReturn(new byte[]{1, 2, 3});
+        mvc.perform(get("/api/home/cameras/recordings/2026102000042/video").requestAttr("role", "USER"))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("video/mp4"))
+                .andExpect(content().bytes(new byte[]{1, 2, 3}));
+
+        when(recordings.thumbnail("1")).thenThrow(new com.homeplatform.homeassistant.RecordingsClient.Unavailable("HomeBase didn't answer"));
+        mvc.perform(get("/api/home/cameras/recordings/1/thumbnail").requestAttr("role", "ADMIN"))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.error").value(containsString("HomeBase didn't answer")));
     }
 
     @Test
@@ -47,18 +71,16 @@ class CameraControllerTest {
             var snap = get("/api/home/cameras/" + ID + "/snapshot");
             var battery = get("/api/home/cameras/" + ID + "/battery");
             var live = post("/api/home/cameras/" + ID + "/live");
-            if (role != null) {
-                list.requestAttr("role", role);
-                snap.requestAttr("role", role);
-                battery.requestAttr("role", role);
-                live.requestAttr("role", role);
+            var recs = get("/api/home/cameras/recordings");
+            var video = get("/api/home/cameras/recordings/2026102000042/video");
+            var thumb = get("/api/home/cameras/recordings/2026102000042/thumbnail");
+            for (var r : List.of(list, snap, battery, live, recs, video, thumb)) {
+                if (role != null) r.requestAttr("role", role);
+                mvc.perform(r).andExpect(status().isForbidden());
             }
-            mvc.perform(list).andExpect(status().isForbidden());
-            mvc.perform(snap).andExpect(status().isForbidden());
-            mvc.perform(battery).andExpect(status().isForbidden());
-            mvc.perform(live).andExpect(status().isForbidden());
         }
         verifyNoInteractions(service);
+        verifyNoInteractions(recordings);
     }
 
     @Test

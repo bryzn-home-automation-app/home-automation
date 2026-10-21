@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.homeassistant.HomeAssistantException;
 import com.homeplatform.homeassistant.HomeDeviceService;
+import com.homeplatform.homeassistant.RecordingsClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -38,6 +39,18 @@ public class HomeExceptionHandler {
     @ExceptionHandler(HomeDeviceService.Unsupported.class)
     public ResponseEntity<Map<String, String>> unsupported(HomeDeviceService.Unsupported e) {
         return error(e.isNotImplemented() ? HttpStatus.NOT_IMPLEMENTED : HttpStatus.UNPROCESSABLE_ENTITY, e.getMessage());
+    }
+
+    @ExceptionHandler(RecordingsClient.Missing.class)
+    public ResponseEntity<Map<String, String>> recordingMissing(RecordingsClient.Missing e) {
+        return error(HttpStatus.NOT_FOUND, e.getMessage());
+    }
+
+    /** eufy-recordings' messages are its own (never eufy's), so they're safe to show. */
+    @ExceptionHandler(RecordingsClient.Unavailable.class)
+    public ResponseEntity<Map<String, String>> recordingsUnavailable(RecordingsClient.Unavailable e) {
+        log.warn("Recordings unavailable: {}", e.getMessage());
+        return error(HttpStatus.SERVICE_UNAVAILABLE, "Recordings are unavailable: " + e.getMessage());
     }
 
     @ExceptionHandler(HomeAssistantException.Http.class)

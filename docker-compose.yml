@@ -200,6 +200,29 @@ services:
       - eufy-bridge
     restart: unless-stopped
 
+  # The HomeBase 3's own recordings (full 3K) for the Recordings view: lists them and
+  # pulls clips over P2P on demand, caching MP4s and stills. Reuses the bridge's saved
+  # eufy session read-only (no password, so it can never log in afresh and kick the
+  # bridge). Internal only — the backend is its one caller. See eufy-recordings/src.
+  eufy-recordings:
+    build: ./eufy-recordings
+    container_name: homeplatform-eufy-recordings
+    profiles: ["eufy"]
+    environment:
+      TZ: America/Chicago
+      EUFY_EMAIL: ${EUFY_EMAIL:-}
+      EUFY_COUNTRY: ${EUFY_COUNTRY:-US}
+      EUFY_SESSION_FILE: /eufy/.eufy-session.json
+      MAX_CACHE_MB: "3000"
+    volumes:
+      - eufy_data:/eufy:ro
+      - eufy_recordings_cache:/cache
+    expose:
+      - "3000"
+    depends_on:
+      - eufy-bridge
+    restart: unless-stopped
+
   nginx:
     build:
       context: .
@@ -221,3 +244,4 @@ volumes:
   ha_config:
   eufy_data:
   eufy_gate_data:
+  eufy_recordings_cache:

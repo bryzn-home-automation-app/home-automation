@@ -1,0 +1,16 @@
+{
+  "name": "eufy-recordings",
+  "private": true,
+  "type": "module",
+  "description": "Lists and serves a eufy HomeBase 3's stored recordings over P2P (see src/server.mjs).",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test src/hb3.test.mjs"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@mega-yfue/eufy-sdk": "0.4.0"
+  }
+}

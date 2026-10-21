@@ -2,7 +2,9 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.CameraBatteryHistoryResponse;
 import com.homeplatform.dto.CameraLiveResponse;
+import com.homeplatform.dto.CameraRecordingResponse;
 import com.homeplatform.dto.CameraResponse;
+import com.homeplatform.homeassistant.CameraRecordingService;
 import com.homeplatform.homeassistant.CameraService;
 import com.homeplatform.homeassistant.HomeAssistantClient;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,15 +29,44 @@ public class CameraController {
     private static final Logger log = LoggerFactory.getLogger(CameraController.class);
 
     private final CameraService service;
+    private final CameraRecordingService recordings;
 
-    public CameraController(CameraService service) {
+    public CameraController(CameraService service, CameraRecordingService recordings) {
         this.service = service;
+        this.recordings = recordings;
     }
 
     @GetMapping
     public List<CameraResponse> cameras(HttpServletRequest request) {
         HomeController.requireMember(request);
         return service.listCameras();
+    }
+
+    /** Recordings stored on the HomeBase, newest first, for the last {@code days} (default 7). */
+    @GetMapping("/recordings")
+    public List<CameraRecordingResponse> recordings(@RequestParam(required = false) Integer days, HttpServletRequest request) {
+        HomeController.requireMember(request);
+        return recordings.list(days);
+    }
+
+    /** The HomeBase's still for a recording (small JPEG; recordings never change, so cacheable). */
+    @GetMapping("/recordings/{recordingId}/thumbnail")
+    public ResponseEntity<byte[]> recordingThumbnail(@PathVariable String recordingId, HttpServletRequest request) {
+        HomeController.requireMember(request);
+        return ResponseEntity.ok()
+                .contentType(MediaType.IMAGE_JPEG)
+                .cacheControl(CacheControl.maxAge(java.time.Duration.ofDays(7)).cachePrivate())
+                .body(recordings.thumbnail(recordingId));
+    }
+
+    /** A recording as MP4 (H.265, full size). The first request pulls it off the HomeBase (a few seconds). */
+    @GetMapping("/recordings/{recordingId}/video")
+    public ResponseEntity<byte[]> recordingVideo(@PathVariable String recordingId, HttpServletRequest request) {
+        HomeController.requireMember(request);
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("video/mp4"))
+                .cacheControl(CacheControl.noStore())
+                .body(recordings.video(recordingId));
     }
 
     /** Battery history ({@code from}/{@code to} as ISO-8601 instants; defaults to the last 24h). */

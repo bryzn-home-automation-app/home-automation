@@ -1,5 +1,5 @@
 import api from './client';
-import type { Camera, CameraBatteryHistory } from '../types';
+import type { Camera, CameraBatteryHistory, CameraRecording } from '../types';
 
 /** Enabled cameras by name (members only). 503 when Home Assistant isn't connected. */
 export async function fetchCameras(): Promise<Camera[]> {
@@ -55,4 +55,32 @@ export type PanTiltDirection = 'left' | 'right' | 'up' | 'down';
 /** Nudge a pan/tilt camera one step. */
 export async function nudgeCamera(id: string, direction: PanTiltDirection): Promise<void> {
   await api.post(`/home/cameras/${encodeURIComponent(id)}/ptz`, { direction });
+}
+
+/** Recordings stored on the HomeBase over the last `days`, newest first. */
+export async function fetchCameraRecordings(days: number): Promise<CameraRecording[]> {
+  const res = await api.get<CameraRecording[]>('/home/cameras/recordings', { params: { days }, timeout: 60_000 });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/** A recording's still (small JPEG). */
+export async function fetchRecordingThumbnail(id: string): Promise<Blob> {
+  const res = await api.get<Blob>(`/home/cameras/recordings/${encodeURIComponent(id)}/thumbnail`, {
+    responseType: 'blob',
+    timeout: 30_000,
+  });
+  return res.data;
+}
+
+/**
+ * A recording as an MP4 Blob (H.265, full size). The first fetch pulls it off the
+ * HomeBase, a few seconds for a typical clip; later ones come from the NUC's cache.
+ */
+export async function fetchRecordingVideo(id: string, signal?: AbortSignal): Promise<Blob> {
+  const res = await api.get<Blob>(`/home/cameras/recordings/${encodeURIComponent(id)}/video`, {
+    responseType: 'blob',
+    timeout: 200_000,
+    signal,
+  });
+  return res.data;
 }

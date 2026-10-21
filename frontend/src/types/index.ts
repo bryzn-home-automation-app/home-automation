@@ -616,6 +616,18 @@ export interface CameraBatteryReading {
 }
 
 /** GET /api/home/cameras/{id}/battery — readings plus sunrise→sunset windows. */
+/** A recording the camera's HomeBase stored (full quality). Times are ISO-8601. */
+export interface CameraRecording {
+  id: string;
+  cameraId: string;
+  cameraName: string;
+  startedAt: string;
+  endedAt: string | null;
+  durationMs: number | null;
+  sizeBytes: number;
+  hasThumbnail: boolean;
+}
+
 export interface CameraBatteryHistory {
   readings: CameraBatteryReading[];
   daylight: Array<{ from: string; to: string }>;

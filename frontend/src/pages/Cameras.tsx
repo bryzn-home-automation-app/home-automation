@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { Suspense, lazy, memo, useCallback, useMemo, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import CameraTile from '../components/CameraTile';
 import CameraBatteryChart, { type BatteryRange } from '../components/CameraBatteryChart';
@@ -10,6 +10,41 @@ import { useAuth } from '../context/AuthContext';
 import { FOCUS_RING } from '../components/ThermostatControls';
 import { IDLE_STOP_MS, chargeState } from '../utils/cameras';
 import type { CameraBatteryHistory } from '../types';
+
+const CameraRecordings = lazy(() => import('../components/CameraRecordings'));
+
+type CamerasView = 'live' | 'recordings';
+const VIEW_KEY = 'cameras-view';
+
+function storedView(): CamerasView {
+  try {
+    return localStorage.getItem(VIEW_KEY) === 'recordings' ? 'recordings' : 'live';
+  } catch {
+    return 'live';
+  }
+}
+
+function ViewSwitch({ view, onChange }: { view: CamerasView; onChange: (v: CamerasView) => void }) {
+  const tab = (v: CamerasView, label: string) => (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={view === v}
+      onClick={() => onChange(v)}
+      className={`h-9 flex-1 rounded-lg px-4 text-sm font-semibold transition-colors sm:flex-none ${FOCUS_RING} ${
+        view === v ? 'bg-appsurface-raised text-apptext shadow-sm' : 'text-apptext-muted hover:text-apptext'
+      }`}
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div role="tablist" aria-label="Cameras view" className="flex gap-1 self-start rounded-xl bg-appinset p-1 max-sm:self-stretch">
+      {tab('live', 'Live')}
+      {tab('recordings', 'Recordings')}
+    </div>
+  );
+}
 
 function Notice({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -38,6 +73,15 @@ export default memo(function Cameras() {
   const pageVisible = usePageVisible();
   const { idle, wake } = useIdle(IDLE_STOP_MS);
   const [ranges, setRanges] = useState<Record<string, BatteryRange>>({});
+  const [view, setViewState] = useState<CamerasView>(storedView);
+  const setView = useCallback((v: CamerasView) => {
+    setViewState(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      /* private mode — just don't remember */
+    }
+  }, []);
 
   const camerasInterval = useJitteredInterval(30_000, 5_000);
   const batteryInterval = useJitteredInterval(300_000, 30_000);
@@ -141,8 +185,20 @@ export default memo(function Cameras() {
     );
   }
 
+  if (view === 'recordings') {
+    return (
+      <div className="flex flex-col gap-4 lg:gap-5">
+        <ViewSwitch view={view} onChange={setView} />
+        <Suspense fallback={<div className="h-20 animate-pulse rounded-2xl bg-appinset" />}>
+          <CameraRecordings />
+        </Suspense>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 lg:gap-5">
+      <ViewSwitch view={view} onChange={setView} />
       {camerasQuery.isError && (
         <div role="alert" className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs text-amber-400">
           Can't reach Home Assistant — showing the last known state.
