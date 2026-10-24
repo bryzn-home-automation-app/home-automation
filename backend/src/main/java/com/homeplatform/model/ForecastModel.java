@@ -79,6 +79,23 @@ public class ForecastModel {
     @Column(name = "lag_mean", precision = 10, scale = 3)
     private BigDecimal lagMean;
 
+    /**
+     * kWh a Saturday or Sunday adds over a weekday at the same temperature. Set on models
+     * trained since Oct 2026; those predict weather + weekend + a share of the most recent
+     * day's miss ({@link #residualRho}), with no day-of-week or monthly multipliers and no
+     * lag on yesterday's total. Null on older models, which keep their old formula.
+     */
+    @Column(name = "weekend_coeff", precision = 12, scale = 6)
+    private BigDecimal weekendCoeff;
+
+    /**
+     * How much of a day's miss (actual minus expected) carries into the next day, from
+     * consecutive training-day misses (0 to 0.9). A forecast n days after the last full day
+     * adds rho^n of that day's miss. Set together with {@link #weekendCoeff}.
+     */
+    @Column(name = "residual_rho", precision = 8, scale = 6)
+    private BigDecimal residualRho;
+
     @Column(name = "cdd_min", precision = 10, scale = 3)
     private BigDecimal cddMin;
 

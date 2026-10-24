@@ -13,5 +13,9 @@ public interface WeatherObservationRepository extends JpaRepository<WeatherObser
     List<WeatherObservation> findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(
             String stationCode, LocalDate start, LocalDate end);
 
+    /** Rows from {@code source} dated before {@code date}: stored forecasts for days that have passed. */
+    List<WeatherObservation> findByStationCodeAndSourceAndObservationDateBefore(
+            String stationCode, String source, LocalDate date);
+
     boolean existsByStationCodeAndObservationDate(String stationCode, LocalDate observationDate);
 }

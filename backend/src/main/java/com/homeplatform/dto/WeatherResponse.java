@@ -26,7 +26,18 @@ public record WeatherResponse(
             double meanTemperature,
             double precipitation,
             int weatherCode
-    ) {}
+    ) {
+        /**
+         * The day's mean temperature, the same measure the forecast model trains on.
+         * Falls back to (high + low) / 2 when the mean is missing (stored as 0) or
+         * outside the high/low range.
+         */
+        public double avgTemperature() {
+            boolean usable = meanTemperature >= minTemperature && meanTemperature <= maxTemperature
+                    && !(meanTemperature == 0 && minTemperature == 0 && maxTemperature == 0);
+            return usable ? meanTemperature : (maxTemperature + minTemperature) / 2;
+        }
+    }
 
     public record WeatherHour(
             String time,

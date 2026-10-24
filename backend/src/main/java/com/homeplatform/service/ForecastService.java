@@ -24,11 +24,17 @@ public class ForecastService {
     private static final Logger log = LoggerFactory.getLogger(ForecastService.class);
     private static final double COMFORT_BASE = 65.0;
     private static final int MIN_DATA_POINTS = 7;
-    // Hourly rows needed before a day's total is trusted as the AR(1) lag input,
-    // and before it is final enough to grade a stored prediction against (the
-    // same 20-hour "complete day" threshold the usage UI applies).
+    // Hourly rows needed before a day's total is used for training, as the carry-over
+    // (or a legacy model's AR(1) lag) input, and before it is final enough to grade a
+    // stored prediction against (the same 20-hour "complete day" threshold the usage
+    // UI applies). CoServ sometimes skips a 3-hour block; requiring all 24 hours was
+    // tried in Oct 2026 and replayed worse (same-day MAE 5.0 -> 5.3 kWh), as did
+    // scaling those days up to 24 hours, so they're used as they are.
     private static final int LAG_MIN_HOURLY_ROWS = 18;
     private static final int FINAL_DAY_MIN_HOURLY_ROWS = 20;
+    // How far back generateForecasts looks for the last complete day whose miss
+    // carries forward. rho^7 is ~1% at rho 0.5, so older misses add nothing.
+    static final int CARRY_LOOKBACK_DAYS = 7;
 
     // ── Recency-weighted confidence-band tuning ─────────────────
     // The band is derived from RECENT out-of-sample forecast errors (graded
@@ -56,9 +62,9 @@ public class ForecastService {
     // for a day `lead` days out is therefore widened by sqrt(1 + 0.4*lead):
     // x1.0 same-day, ~x2.0 at lead 7 — matching that observed error ratio.
     static final double BAND_LEAD_GROWTH = 0.4;
-    // AR(1) stability clamp: |lag coefficient| above this would let the
-    // day-over-day forecast chain amplify instead of damp. Physically the
-    // coefficient sits well inside this range; the clamp only guards a
+    // Stability clamp for the carry-over of a miss (rho) and a legacy model's AR(1)
+    // lag coefficient: above this a run of misses would amplify instead of damp.
+    // Physically the value sits well inside this range; the clamp only guards a
     // degenerate fit on a weird window.
     private static final double LAG_COEFF_CLAMP = 0.9;
 
@@ -413,103 +419,78 @@ public class ForecastService {
             return null;
         }
 
-        // Phase 1: CDD/HDD multiple regression, fit robustly (Huber IRLS) on the
-        // FULL history. A single extreme day (doc's example: expected 65, actual
-        // 140) no longer drags the intercept/CDD/HDD coefficients — it keeps full
-        // least-squares influence only while within HUBER_K robust-sigmas, then
-        // its leverage is tapered. The original actual values are untouched: the
-        // down-weighting lives only inside the fit, so every historical kwh stays
-        // queryable for diagnostics / anomaly scoring.
+        // Phase 1: expected usage from weather (CDD/HDD) and a weekend term, fit robustly
+        // (Huber IRLS) on the FULL history. A single extreme day (doc's example: expected
+        // 65, actual 140) no longer drags the coefficients — it keeps full least-squares
+        // influence only while within HUBER_K robust-sigmas, then its leverage is tapered.
+        // The original actual values are untouched: the down-weighting lives only inside
+        // the fit, so every historical kwh stays queryable for diagnostics / anomaly scoring.
+        //
+        // Weekends are an added kWh amount, not a per-weekday multiplier, and there is no
+        // monthly factor and no lag on yesterday's total. Replayed day by day on Jul-Oct 2026
+        // (training only on earlier days), the old lag x weekday x month model missed by
+        // 7.6 kWh same-day and 10.5 next-day, worst on cool days (it carried a hot day's
+        // level into a cool one) and weekends; this one missed by 5.0 and 5.3.
         int n = data.size();
         double[] kwhArr = new double[n];
-        double[][] xArr = new double[n][2];
+        double[][] xArr = new double[n][3];
         for (int i = 0; i < n; i++) {
-            kwhArr[i] = data.get(i).kwh;
-            xArr[i][0] = data.get(i).cdd;
-            xArr[i][1] = data.get(i).hdd;
+            DailyDataPoint dp = data.get(i);
+            kwhArr[i] = dp.kwh;
+            xArr[i][0] = dp.cdd;
+            xArr[i][1] = dp.hdd;
+            xArr[i][2] = isWeekend(dp.dow) ? 1 : 0;
         }
 
-        // Phase 1c: AR(1) lag feature — yesterday's total kWh, for rows where a
-        // consecutive previous day exists in the training set. Home usage is
-        // strongly autocorrelated (high-usage days cluster); with a narrow
-        // seasonal temperature range (e.g. two months of uniform summer) the
-        // degree-day regression alone explains little day-to-day variance, and
-        // the lag term picks up the behavioral remainder.
-        Map<LocalDate, Double> kwhByDate = new HashMap<>();
-        for (DailyDataPoint dp : data) kwhByDate.put(dp.date, dp.kwh);
-        double[] lagArr = new double[n];
-        boolean[] hasLag = new boolean[n];
-        int lagCount = 0;
-        double lagSum = 0;
+        double[] c = robustRegression(kwhArr, xArr);
+        if (!allFinite(c)) {
+            // Degenerate fit (a weekend column with no weekends just gets 0): try weather alone.
+            double[][] weatherOnly = new double[n][];
+            for (int i = 0; i < n; i++) weatherOnly[i] = new double[]{xArr[i][0], xArr[i][1]};
+            double[] w = robustRegression(kwhArr, weatherOnly);
+            c = allFinite(w) ? new double[]{w[0], w[1], w[2], 0} : null;
+        }
+        if (c == null) {
+            log.warn("ForecastService: regression produced non-finite coefficients — falling back to mean model");
+            c = new double[]{Arrays.stream(kwhArr).average().orElse(0), 0, 0, 0};
+        }
+        double intercept = c[0], cddCoeff = c[1], hddCoeff = c[2], weekendCoeff = c[3];
+
+        double[] expected = new double[n];
         for (int i = 0; i < n; i++) {
-            Double prev = kwhByDate.get(data.get(i).date.minusDays(1));
-            if (prev != null && prev > 0) {
-                lagArr[i] = prev;
-                hasLag[i] = true;
-                lagCount++;
-                lagSum += prev;
-            }
-        }
-        double lagMean = lagCount > 0 ? lagSum / lagCount : 0;
-
-        // Fit with the lag as a third regressor when enough consecutive-day
-        // pairs exist; otherwise (or on a degenerate fit) fall back to the
-        // legacy CDD/HDD-only fit — lagCoeff stays null and predict() behaves
-        // exactly like the pre-lag model.
-        Double lagCoeff = null;
-        double intercept = 0, cddCoeff = 0, hddCoeff = 0;
-        boolean lagFitOk = false;
-        if (lagCount >= MIN_DATA_POINTS) {
-            double[] yFit = new double[lagCount];
-            double[][] xFit = new double[lagCount][3];
-            int k = 0;
-            for (int i = 0; i < n; i++) {
-                if (!hasLag[i]) continue;
-                yFit[k] = kwhArr[i];
-                xFit[k][0] = xArr[i][0];
-                xFit[k][1] = xArr[i][1];
-                xFit[k][2] = lagArr[i];
-                k++;
-            }
-            double[] c = robustRegression(yFit, xFit);
-            if (Double.isFinite(c[0]) && Double.isFinite(c[1]) && Double.isFinite(c[2]) && Double.isFinite(c[3])) {
-                intercept = c[0];
-                cddCoeff = c[1];
-                hddCoeff = c[2];
-                lagCoeff = clamp(c[3], -LAG_COEFF_CLAMP, LAG_COEFF_CLAMP);
-                lagFitOk = true;
-            }
+            expected[i] = intercept + cddCoeff * xArr[i][0] + hddCoeff * xArr[i][1] + weekendCoeff * xArr[i][2];
         }
 
-        if (!lagFitOk) {
-            double[] coeffs = robustRegression(kwhArr, xArr);
-            intercept = coeffs[0];
-            cddCoeff = coeffs[1];
-            hddCoeff = coeffs[2];
-
-            // Guard: singular matrix produces NaN/Inf — fall back to mean-based model
-            if (!Double.isFinite(intercept) || !Double.isFinite(cddCoeff) || !Double.isFinite(hddCoeff)) {
-                log.warn("ForecastService: OLS produced non-finite coefficients — falling back to mean model");
-                intercept = Arrays.stream(kwhArr).average().orElse(0);
-                cddCoeff = 0;
-                hddCoeff = 0;
-            }
-        }
-
-        // Regression-only prediction per training point (pre-DOW/seasonal).
-        // Rows without a usable lag get the training lag mean, mirroring
-        // predict()'s fallback for a missing previous-day reading.
-        double[] basePred = new double[n];
+        // Phase 1b: misses carry over. A day that runs above its expected usage tends to be
+        // followed by another (guests, a project, the AC working harder than the daily
+        // mean temperature suggests), so the next day's forecast adds rho times that miss.
+        // rho is the lag-1 regression of each miss on the previous day's, over consecutive
+        // training days, clamped to [0, LAG_COEFF_CLAMP].
+        Map<LocalDate, Double> missByDate = new HashMap<>();
+        for (int i = 0; i < n; i++) missByDate.put(data.get(i).date, kwhArr[i] - expected[i]);
+        double num = 0, den = 0;
         for (int i = 0; i < n; i++) {
-            double lagTerm = lagCoeff != null ? lagCoeff * (hasLag[i] ? lagArr[i] : lagMean) : 0;
-            basePred[i] = intercept + cddCoeff * xArr[i][0] + hddCoeff * xArr[i][1] + lagTerm;
+            Double prev = missByDate.get(data.get(i).date.minusDays(1));
+            if (prev == null) continue;
+            num += prev * (kwhArr[i] - expected[i]);
+            den += prev * prev;
+        }
+        double rho = den > 0 ? clamp(num / den, 0, LAG_COEFF_CLAMP) : 0;
+
+        // Fit stats use the forecast the model would have made the evening before each
+        // day (expected + rho x the previous day's miss), so the in-sample MAE that seeds
+        // the band and the drift baseline is comparable to graded same-day forecasts.
+        double[] fitted = new double[n];
+        for (int i = 0; i < n; i++) {
+            Double prev = missByDate.get(data.get(i).date.minusDays(1));
+            fitted[i] = expected[i] + (prev != null ? rho * prev : 0);
         }
 
         // R-squared
         double meanY = Arrays.stream(kwhArr).average().orElse(0);
         double ssTot = 0, ssRes = 0;
         for (int i = 0; i < n; i++) {
-            ssRes += Math.pow(kwhArr[i] - basePred[i], 2);
+            ssRes += Math.pow(kwhArr[i] - fitted[i], 2);
             ssTot += Math.pow(kwhArr[i] - meanY, 2);
         }
         double rSquared = ssTot > 0 ? 1.0 - (ssRes / ssTot) : 0;
@@ -517,7 +498,7 @@ public class ForecastService {
         // MAE
         double sumAbsErr = 0;
         for (int i = 0; i < n; i++) {
-            sumAbsErr += Math.abs(kwhArr[i] - basePred[i]);
+            sumAbsErr += Math.abs(kwhArr[i] - fitted[i]);
         }
         double mae = sumAbsErr / n;
 
@@ -526,24 +507,23 @@ public class ForecastService {
         int mapeCount = 0;
         for (int i = 0; i < n; i++) {
             if (kwhArr[i] > 0) {
-                sumAbsPctErr += Math.abs(kwhArr[i] - basePred[i]) / kwhArr[i];
+                sumAbsPctErr += Math.abs(kwhArr[i] - fitted[i]) / kwhArr[i];
                 mapeCount++;
             }
         }
         double mape = mapeCount > 0 ? (sumAbsPctErr / mapeCount) * 100 : 0;
 
-        // Phase 1 DOW adjustments: ratio of actual to regression-predicted, by day of week
+        // Day-of-week pattern for the Forecast tab's "Usage by Day of Week" card only
+        // (predict() doesn't use it): the MEDIAN ratio of actual to the weekday,
+        // weather-only expectation, so weekends show their lift. Median, not mean,
+        // because per-weekday samples are small and one odd Monday shouldn't skew it.
         Map<DayOfWeek, List<Double>> dowRatios = new EnumMap<>(DayOfWeek.class);
         for (int i = 0; i < n; i++) {
-            DailyDataPoint dp = data.get(i);
-            if (basePred[i] > 0) {
-                dowRatios.computeIfAbsent(dp.dow, k -> new ArrayList<>()).add(dp.kwh / basePred[i]);
+            double weekdayExpected = expected[i] - weekendCoeff * xArr[i][2];
+            if (weekdayExpected > 0) {
+                dowRatios.computeIfAbsent(data.get(i).dow, k -> new ArrayList<>()).add(kwhArr[i] / weekdayExpected);
             }
         }
-        // Robust DOW factor: MEDIAN of the actual/predicted ratios per weekday,
-        // not the arithmetic mean. Per-weekday samples are tiny (~7 with 49 total
-        // points), so one bizarre Monday would otherwise permanently skew the
-        // Monday multiplier; the median shrugs it off.
         Map<String, Double> dowAdj = new HashMap<>();
         for (var e : dowRatios.entrySet()) {
             double med = median(e.getValue());
@@ -552,10 +532,6 @@ public class ForecastService {
 
         // Phase 2: Hourly load shape profiles
         Map<String, Object> hourlyProfiles = buildHourlyProfiles(data);
-
-        // Phase 3: Seasonal factors — computed from DOW-adjusted residuals so the
-        // two corrections don't double-count day-of-week effects.
-        Map<String, Double> seasonalFactors = buildSeasonalFactors(data, basePred, dowAdj);
 
         LocalDate start = data.get(0).date;
         LocalDate end = data.get(data.size() - 1).date;
@@ -576,32 +552,42 @@ public class ForecastService {
                 .intercept(BigDecimal.valueOf(intercept))
                 .cddCoeff(BigDecimal.valueOf(cddCoeff))
                 .hddCoeff(BigDecimal.valueOf(hddCoeff))
-                .lagCoeff(lagCoeff != null ? BigDecimal.valueOf(lagCoeff) : null)
-                .lagMean(lagCoeff != null ? BigDecimal.valueOf(lagMean) : null)
+                .weekendCoeff(BigDecimal.valueOf(weekendCoeff))
+                .residualRho(BigDecimal.valueOf(rho))
                 .cddMin(BigDecimal.valueOf(cddMin))
                 .cddMax(BigDecimal.valueOf(cddMax))
                 .hddMin(BigDecimal.valueOf(hddMin))
                 .hddMax(BigDecimal.valueOf(hddMax))
                 .dowAdjustments(dowAdj)
                 .hourlyProfiles(hourlyProfiles)
-                .seasonalFactors(seasonalFactors)
+                .seasonalFactors(Map.of())
                 .trainingStart(start)
                 .trainingEnd(end)
                 .build();
 
         model = modelRepo.save(model);
-        log.info("ForecastService: trained model #{} — {} points, R²={}, MAE={}, MAPE={}%, lag={}",
+        log.info("ForecastService: trained model #{} — {} points, R²={}, MAE={}, MAPE={}%, weekend={}, rho={}",
                 model.getId(), data.size(),
                 String.format("%.4f", rSquared),
                 String.format("%.2f", mae),
                 String.format("%.1f", mape),
-                lagCoeff != null ? String.format("%.3f", lagCoeff) : "n/a");
+                String.format("%.2f", weekendCoeff),
+                String.format("%.3f", rho));
 
         appEventService.info("forecast", "ForecastService",
                 String.format("Model #%d trained: %d data points, R²=%.4f, MAE=%.2f kWh, MAPE=%.1f%%",
                         model.getId(), data.size(), rSquared, mae, mape));
 
         return model;
+    }
+
+    private static boolean isWeekend(DayOfWeek dow) {
+        return dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY;
+    }
+
+    private static boolean allFinite(double[] c) {
+        for (double v : c) if (!Double.isFinite(v)) return false;
+        return true;
     }
 
     // ── Prediction ──────────────────────────────────────────
@@ -611,11 +597,15 @@ public class ForecastService {
     }
 
     /**
-     * Predict a day's total kWh. {@code prevDayKwh} feeds the AR(1) lag term:
-     * pass the previous day's actual total (or, when chaining a multi-day
-     * forecast, the previous day's own prediction). Null — or a model trained
-     * without the lag feature — falls back to the training lag mean, so the
-     * lag term contributes its average effect rather than dropping to zero.
+     * Predict a day's total kWh. For a current model (weekendCoeff set) that is the
+     * expected usage from weather and the weekend term alone; generateForecasts adds
+     * the carry-over of the latest miss, and {@code prevDayKwh} is ignored.
+     *
+     * <p>Legacy models: {@code prevDayKwh} feeds the AR(1) lag term: pass the
+     * previous day's actual total (or, when chaining a multi-day forecast, the
+     * previous day's own prediction). Null — or a model trained without the lag
+     * feature — falls back to the training lag mean, so the lag term contributes
+     * its average effect rather than dropping to zero.
      */
     public double predict(ForecastModel model, double avgTempF, DayOfWeek dow, int month, Double prevDayKwh) {
         double cdd = Math.max(0, avgTempF - COMFORT_BASE);
@@ -634,6 +624,11 @@ public class ForecastService {
         double base = model.getIntercept().doubleValue()
                 + model.getCddCoeff().doubleValue() * cdd
                 + model.getHddCoeff().doubleValue() * hdd;
+
+        if (model.getWeekendCoeff() != null) {
+            if (isWeekend(dow)) base += model.getWeekendCoeff().doubleValue();
+            return Math.max(0, base);
+        }
 
         // AR(1) lag term (null-safe for models trained before the feature).
         if (model.getLagCoeff() != null) {
@@ -662,29 +657,49 @@ public class ForecastService {
         LocalDate today = LocalDate.now();
         double sigma = computeIntervalSigma(model, today);
 
-        // Chain the AR(1) lag forward through the horizon in date order. The
-        // lag for a day is the previous day's ACTUAL total whenever one exists
-        // (any day before today) and otherwise the previous day's own
-        // prediction — so the live projection always uses the latest reading,
-        // exactly as ForecastScheduler's saved snapshots do. A date gap breaks
-        // the chain (predict() then falls back to the training lag mean).
+        // Current model: each day's expected usage plus the carry-over of the
+        // latest complete day's miss (see carryOver). Legacy model: chain the AR(1)
+        // lag forward through the horizon in date order. The lag for a day is the
+        // previous day's ACTUAL total whenever one exists (any day before today)
+        // and otherwise the previous day's own prediction — so the live projection
+        // always uses the latest reading, exactly as ForecastScheduler's saved
+        // snapshots do. A date gap breaks the chain (predict() then falls back to
+        // the training lag mean).
         List<WeatherForecastDay> days = new ArrayList<>(forecastWeather);
         days.sort(Comparator.comparing(WeatherForecastDay::date));
+
+        boolean carry = model.getWeekendCoeff() != null;
+        Map<LocalDate, DailyDataPoint> recent = new HashMap<>();
+        if (carry) {
+            try {
+                for (DailyDataPoint dp : loadHourlyDays(today.minusDays(CARRY_LOOKBACK_DAYS + 1))) {
+                    if (dp.date.isBefore(today)) recent.put(dp.date, dp);
+                }
+            } catch (Exception e) {
+                log.warn("ForecastService: recent-days query failed, forecasting without carry-over: {}", e.getMessage());
+            }
+        }
 
         Double lag = null;
         LocalDate prevDate = null;
 
         List<DailyForecast> results = new ArrayList<>();
         for (WeatherForecastDay wx : days) {
-            if (prevDate != null && !wx.date().equals(prevDate.plusDays(1))) lag = null;
-            LocalDate prevDay = wx.date().minusDays(1);
-            if (model.getLagCoeff() != null && prevDay.isBefore(today)) {
-                Double actualPrev = queryDailyKwh(prevDay.toString(), LAG_MIN_HOURLY_ROWS);
-                if (actualPrev != null && actualPrev > 0) lag = actualPrev;
+            double kwh;
+            if (carry) {
+                kwh = Math.max(0, predict(model, wx.avgTemp, wx.date.getDayOfWeek(), wx.date.getMonthValue())
+                        + carryOver(model, recent, wx.date));
+            } else {
+                if (prevDate != null && !wx.date().equals(prevDate.plusDays(1))) lag = null;
+                LocalDate prevDay = wx.date().minusDays(1);
+                if (model.getLagCoeff() != null && prevDay.isBefore(today)) {
+                    Double actualPrev = queryDailyKwh(prevDay.toString(), LAG_MIN_HOURLY_ROWS);
+                    if (actualPrev != null && actualPrev > 0) lag = actualPrev;
+                }
+                kwh = predict(model, wx.avgTemp, wx.date.getDayOfWeek(), wx.date.getMonthValue(), lag);
+                lag = kwh;
+                prevDate = wx.date();
             }
-            double kwh = predict(model, wx.avgTemp, wx.date.getDayOfWeek(), wx.date.getMonthValue(), lag);
-            lag = kwh;
-            prevDate = wx.date();
             double cost = kwh * kwhRate;
             double cdd = Math.max(0, wx.avgTemp - COMFORT_BASE);
             double hdd = Math.max(0, COMFORT_BASE - wx.avgTemp);
@@ -718,6 +733,25 @@ public class ForecastService {
                     round2(cdd), round2(hdd), round2(confidencePct * 100)));
         }
         return results;
+    }
+
+    /**
+     * The share of a recent miss that carries into {@code target}: rho^n times
+     * (actual minus expected) for the latest complete day before it, n days back.
+     * Same-day forecasts use yesterday's miss; a day further out gets less of it.
+     * Zero when no complete day falls in the {@link #CARRY_LOOKBACK_DAYS} before it.
+     * {@code recent} holds days before today with enough hourly rows only.
+     */
+    double carryOver(ForecastModel model, Map<LocalDate, DailyDataPoint> recent, LocalDate target) {
+        if (model.getResidualRho() == null) return 0;
+        double rho = model.getResidualRho().doubleValue();
+        for (int back = 1; back <= CARRY_LOOKBACK_DAYS; back++) {
+            DailyDataPoint dp = recent.get(target.minusDays(back));
+            if (dp == null) continue;
+            double miss = dp.kwh - predict(model, dp.avgTemp, dp.dow, dp.date.getMonthValue());
+            return Math.pow(rho, back) * miss;
+        }
+        return 0;
     }
 
     /**
@@ -1398,34 +1432,6 @@ public class ForecastService {
         return profileKey(avgTemp, weekend);
     }
 
-    // ── Phase 3: Seasonal factors ───────────────────────────
-
-    private Map<String, Double> buildSeasonalFactors(List<DailyDataPoint> data,
-                                                      double[] basePred,
-                                                      Map<String, Double> dowAdj) {
-        Map<Integer, List<Double>> monthRatios = new HashMap<>();
-        for (int i = 0; i < data.size(); i++) {
-            DailyDataPoint dp = data.get(i);
-            double predicted = basePred[i];
-            Double dowFactor = dowAdj.get(dp.dow.name());
-            if (dowFactor != null && dowFactor > 0) predicted *= dowFactor;
-            if (predicted > 0) {
-                monthRatios.computeIfAbsent(dp.date.getMonthValue(), k -> new ArrayList<>())
-                        .add(dp.kwh / predicted);
-            }
-        }
-
-        // Only include months with enough data (5+ days)
-        Map<String, Double> factors = new HashMap<>();
-        for (var e : monthRatios.entrySet()) {
-            if (e.getValue().size() >= 5) {
-                double avg = e.getValue().stream().mapToDouble(d -> d).average().orElse(1.0);
-                factors.put(String.valueOf(e.getKey()), round4(avg));
-            }
-        }
-        return factors;
-    }
-
     // ── Confidence ──────────────────────────────────────────
 
     // Legacy confidence heuristic. As of the recency-weighted band redesign this
@@ -1434,8 +1440,8 @@ public class ForecastService {
     // The steady-state band comes from computeIntervalSigma() instead.
     private double computeConfidence(ForecastModel model, LocalDate targetDate) {
         int dataPoints = model.getDataPointsUsed();
-        int month = targetDate.getMonthValue();
-        boolean hasSeasonal = model.getSeasonalFactors().containsKey(String.valueOf(month));
+        boolean hasSeasonal = model.getSeasonalFactors().containsKey(String.valueOf(targetDate.getMonthValue()))
+                || trainedOnMonth(model, targetDate);
 
         // Base confidence from data volume: ramps faster and starts higher than
         // before (was 50% at 7 days / 80% at 60 days, which put a ~43-point model
@@ -1461,26 +1467,42 @@ public class ForecastService {
         return Math.max(0.35, Math.min(0.95, base));
     }
 
+    /** Whether the model's training days include {@code targetDate}'s month. */
+    private static boolean trainedOnMonth(ForecastModel model, LocalDate targetDate) {
+        if (model.getTrainingStart() == null || model.getTrainingEnd() == null) return false;
+        for (LocalDate m = model.getTrainingStart().withDayOfMonth(1); !m.isAfter(model.getTrainingEnd()); m = m.plusMonths(1)) {
+            if (m.getMonthValue() == targetDate.getMonthValue()) return true;
+        }
+        return false;
+    }
+
     // ── Training data loader ────────────────────────────────
+
+    /**
+     * Days from {@code since} on with at least {@link #LAG_MIN_HOURLY_ROWS} hours of
+     * usage and a weather row, oldest first. Throws on a query failure.
+     */
+    private List<DailyDataPoint> loadHourlyDays(LocalDate since) {
+        return jdbc.query("""
+            SELECT
+                CAST(h.timestamp AS DATE) AS usage_day,
+                SUM(h.usage_kwh) AS total_kwh,
+                w.avg_temp_f,
+                COUNT(*) AS readings
+            FROM hourly_electric_usage h
+            JOIN weather_observations w ON CAST(h.timestamp AS DATE) = w.observation_date
+            WHERE h.usage_kwh > 0 AND w.avg_temp_f IS NOT NULL AND h.timestamp >= ?
+            GROUP BY CAST(h.timestamp AS DATE), w.avg_temp_f
+            HAVING COUNT(*) >= ?
+            ORDER BY usage_day
+            """, (rs, rowNum) -> mapDataPoint(rs),
+                java.sql.Timestamp.valueOf(since.atStartOfDay()), LAG_MIN_HOURLY_ROWS);
+    }
 
     private List<DailyDataPoint> loadTrainingData() {
         try {
-            // Try hourly data first (more granular, HAVING >= 18 readings/day)
-            List<DailyDataPoint> data = jdbc.query("""
-                SELECT
-                    h.timestamp::date AS day,
-                    SUM(h.usage_kwh) AS total_kwh,
-                    w.avg_temp_f,
-                    w.high_temp_f,
-                    w.low_temp_f,
-                    COUNT(h.*) AS readings
-                FROM hourly_electric_usage h
-                JOIN weather_observations w ON h.timestamp::date = w.observation_date
-                WHERE h.usage_kwh > 0 AND w.avg_temp_f IS NOT NULL
-                GROUP BY h.timestamp::date, w.avg_temp_f, w.high_temp_f, w.low_temp_f
-                HAVING COUNT(h.*) >= 18
-                ORDER BY day
-                """, (rs, rowNum) -> mapDataPoint(rs));
+            // Try hourly data first (more granular)
+            List<DailyDataPoint> data = loadHourlyDays(LocalDate.of(2000, 1, 1));
 
             if (data.size() >= MIN_DATA_POINTS) {
                 return data;
@@ -1490,7 +1512,7 @@ public class ForecastService {
             log.info("ForecastService: hourly data insufficient ({} pts), falling back to daily electric_usage", data.size());
             return jdbc.query("""
                 SELECT
-                    e.timestamp::date AS day,
+                    e.timestamp::date AS usage_day,
                     SUM(e.usage_kwh) AS total_kwh,
                     w.avg_temp_f,
                     w.high_temp_f,
@@ -1500,7 +1522,7 @@ public class ForecastService {
                 JOIN weather_observations w ON e.timestamp::date = w.observation_date
                 WHERE e.usage_kwh > 0 AND w.avg_temp_f IS NOT NULL
                 GROUP BY e.timestamp::date, w.avg_temp_f, w.high_temp_f, w.low_temp_f
-                ORDER BY day
+                ORDER BY usage_day
                 """, (rs, rowNum) -> mapDataPoint(rs));
         } catch (Exception e) {
             log.error("ForecastService: failed to load training data", e);
@@ -1509,7 +1531,7 @@ public class ForecastService {
     }
 
     private DailyDataPoint mapDataPoint(java.sql.ResultSet rs) throws java.sql.SQLException {
-        LocalDate date = rs.getDate("day").toLocalDate();
+        LocalDate date = rs.getDate("usage_day").toLocalDate();
         double kwh = rs.getDouble("total_kwh");
         double avgTemp = rs.getDouble("avg_temp_f");
         double cdd = Math.max(0, avgTemp - COMFORT_BASE);

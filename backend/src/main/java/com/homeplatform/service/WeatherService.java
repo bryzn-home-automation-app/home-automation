@@ -29,6 +29,11 @@ public class WeatherService {
     private static final String ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
     private static final double HDD_BASE_TEMP = 65.0;
     private static final int PAST_DAYS = 92;
+    static final String SOURCE_FORECAST = "open-meteo-forecast";
+    static final String SOURCE_OBSERVED = "open-meteo-observed";
+    static final String SOURCE_ARCHIVE = "open-meteo-archive";
+    /** The forecast API's last day or two can still shift, so they're refreshed again. */
+    static final int SETTLE_DAYS = 2;
     private static final ObjectMapper mapper = new ObjectMapper();
     /**
      * Open-Meteo responses are reused for this long. Home, Climate and Utility all hit
@@ -111,6 +116,106 @@ public class WeatherService {
             }
             return emptyResponse(lat, lon);
         }
+    }
+
+    /**
+     * Replace stored forecasts for days that have passed with the weather that happened.
+     * A date's row used to be written once and never touched, so a day first stored a week
+     * ahead kept that week-old forecast for good, and the electric forecast trained on it
+     * (40 of 91 days were 7+ days stale, 4.8°F off on average). The forecast each prediction
+     * was made with is kept in forecast_snapshot, so nothing is lost by overwriting here.
+     *
+     * Days inside the forecast API's {@link #PAST_DAYS} come from it (already fetched for
+     * the Home page, so usually a cache hit); older stale days come from the archive API.
+     * The last {@link #SETTLE_DAYS} are refreshed even when already observed, and filled
+     * in when missing. Returns the number of rows written.
+     */
+    public int refreshObservedDays(double lat, double lon) throws Exception {
+        LocalDate today = LocalDate.now();
+        LocalDate windowStart = today.minusDays(PAST_DAYS);
+        LocalDate settleStart = today.minusDays(SETTLE_DAYS);
+        String stationCode = formatStationCode(lat, lon);
+
+        Map<LocalDate, WeatherObservation> rows = new TreeMap<>();
+        for (WeatherObservation o : repo.findByStationCodeAndSourceAndObservationDateBefore(stationCode, SOURCE_FORECAST, today)) {
+            rows.put(o.getObservationDate(), o);
+        }
+        for (WeatherObservation o : repo.findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(
+                stationCode, settleStart, today.minusDays(1))) {
+            rows.put(o.getObservationDate(), o);
+        }
+
+        Map<LocalDate, WeatherObservation> observed = new HashMap<>();
+        observed.putAll(dailyValues(fetchFromOpenMeteo(lat, lon, today, today.plusDays(1)), SOURCE_OBSERVED));
+        LocalDate oldest = rows.isEmpty() ? null : rows.keySet().iterator().next();
+        if (oldest != null && oldest.isBefore(windowStart)) {
+            observed.putAll(dailyValues(fetchFromOpenMeteo(lat, lon, oldest, windowStart.minusDays(1)), SOURCE_ARCHIVE));
+        }
+
+        UUID batchId = UUID.randomUUID();
+        int written = 0;
+        for (LocalDate date = settleStart; date.isBefore(today); date = date.plusDays(1)) {
+            rows.putIfAbsent(date, null);
+        }
+        for (var e : rows.entrySet()) {
+            WeatherObservation fresh = observed.get(e.getKey());
+            if (fresh == null || fresh.getAvgTempF() == null) continue;
+            WeatherObservation row = e.getValue();
+            if (row == null) {
+                row = fresh;
+                row.setStationCode(stationCode);
+            } else if (row.getSource().equals(fresh.getSource()) && sameValues(row, fresh)) {
+                continue;
+            } else {
+                row.setHighTempF(fresh.getHighTempF());
+                row.setLowTempF(fresh.getLowTempF());
+                row.setAvgTempF(fresh.getAvgTempF());
+                row.setPrecipitationInches(fresh.getPrecipitationInches());
+                row.setSource(fresh.getSource());
+            }
+            row.setIngestionBatchId(batchId);
+            repo.save(row);
+            written++;
+        }
+        if (written > 0) {
+            log.info("Replaced or added observed weather for {} past day(s) at {} (batch {})", written, stationCode, batchId);
+        }
+        return written;
+    }
+
+    private static boolean sameValues(WeatherObservation a, WeatherObservation b) {
+        return sameNumber(a.getHighTempF(), b.getHighTempF()) && sameNumber(a.getLowTempF(), b.getLowTempF())
+                && sameNumber(a.getAvgTempF(), b.getAvgTempF())
+                && sameNumber(a.getPrecipitationInches(), b.getPrecipitationInches());
+    }
+
+    private static boolean sameNumber(BigDecimal a, BigDecimal b) {
+        return a == null ? b == null : b != null && a.compareTo(b) == 0;
+    }
+
+    /** The response's daily rows for days before today, unsaved, keyed by date. */
+    private static Map<LocalDate, WeatherObservation> dailyValues(JsonNode raw, String source) {
+        Map<LocalDate, WeatherObservation> out = new HashMap<>();
+        JsonNode daily = raw.get("daily");
+        if (daily == null || !daily.has("time")) return out;
+        LocalDate today = LocalDate.now();
+        JsonNode times = daily.get("time");
+        for (int i = 0; i < times.size(); i++) {
+            LocalDate date = LocalDate.parse(times.get(i).asText());
+            if (!date.isBefore(today)) continue;
+            out.put(date, WeatherObservation.builder()
+                    .observationDate(date)
+                    .highTempF(safeDecimal(daily.get("temperature_2m_max"), i))
+                    .lowTempF(safeDecimal(daily.get("temperature_2m_min"), i))
+                    .avgTempF(safeDecimal(daily.get("temperature_2m_mean"), i))
+                    .humidityPct(null)
+                    .precipitationInches(safeDecimal(daily.get("precipitation_sum"), i))
+                    .source(source)
+                    .sourceProvider("open-meteo")
+                    .processingVersion("1.0")
+                    .build());
+        }
+        return out;
     }
 
     // ── Open-Meteo HTTP ─────────────────────────────────────────
@@ -204,7 +309,9 @@ public class WeatherService {
         }
 
         String stationCode = formatStationCode(lat, lon);
-        String source = requestEnd.isBefore(LocalDate.now()) ? "open-meteo-archive" : "open-meteo-forecast";
+        LocalDate today = LocalDate.now();
+        // A forecast-API response's past days are what happened; only today on are forecasts.
+        boolean archive = requestEnd.isBefore(today);
         UUID batchId = UUID.randomUUID();
         List<WeatherObservation> saved = new ArrayList<>();
         Set<LocalDate> stored = new HashSet<>();
@@ -224,6 +331,7 @@ public class WeatherService {
             // Skip if already stored
             if (stored.contains(date)) continue;
 
+            String source = archive ? SOURCE_ARCHIVE : date.isBefore(today) ? SOURCE_OBSERVED : SOURCE_FORECAST;
             WeatherObservation obs = WeatherObservation.builder()
                     .observationDate(date)
                     .stationCode(stationCode)

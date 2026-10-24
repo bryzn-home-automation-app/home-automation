@@ -244,6 +244,31 @@ class ForecastServiceTest {
         assertEquals(20, svc.predict(legacy, 70, DayOfWeek.MONDAY, 6, 60.0), EPS);
     }
 
+    @Test
+    @DisplayName("carry-over uses the latest complete day before the target, shrinking by rho per day")
+    void carryOverFromLatestCompleteDay() {
+        ForecastService svc = new ForecastService(null, null, null, null);
+        ForecastModel m = ForecastModel.builder()
+                .intercept(BigDecimal.valueOf(20))
+                .cddCoeff(BigDecimal.ZERO)
+                .hddCoeff(BigDecimal.ZERO)
+                .weekendCoeff(BigDecimal.ZERO)
+                .residualRho(BigDecimal.valueOf(0.5))
+                .build();
+        LocalDate today = LocalDate.of(2026, 10, 21);
+        // The day before yesterday ran 8 over; yesterday has too few hourly rows, so it isn't in `recent`.
+        LocalDate twoBack = today.minusDays(2);
+        var recent = Map.of(twoBack, new ForecastService.DailyDataPoint(twoBack, 28, 70, 5, 0, twoBack.getDayOfWeek()));
+
+        assertEquals(0.25 * 8, svc.carryOver(m, recent, today), EPS);
+        assertEquals(0.125 * 8, svc.carryOver(m, recent, today.plusDays(1)), EPS);
+        assertEquals(0, svc.carryOver(m, recent, twoBack.plusDays(ForecastService.CARRY_LOOKBACK_DAYS + 1)), EPS);
+        assertEquals(0, svc.carryOver(m, Map.of(), today), EPS);
+        ForecastModel legacy = ForecastModel.builder()
+                .intercept(BigDecimal.valueOf(20)).cddCoeff(BigDecimal.ZERO).hddCoeff(BigDecimal.ZERO).build();
+        assertEquals(0, svc.carryOver(legacy, recent, today), EPS);
+    }
+
     // ── Lead-time band widening ───────────────────────────────────────────
 
     @Test

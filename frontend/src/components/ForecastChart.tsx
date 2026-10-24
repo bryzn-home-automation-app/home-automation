@@ -78,10 +78,11 @@ const DOW_SHORT_LABEL: Record<string, string> = {
 };
 
 /**
- * Learned per-weekday multiplier on top of the weather-only prediction
- * (ForecastService's dowAdjustments) — e.g. THURSDAY: 1.08 means Thursdays
- * run ~8% above what weather alone would predict for that day. Diverges from
- * a 1.0 (average) center line so above/below reads at a glance.
+ * Learned per-weekday ratio to the weather-only prediction (ForecastService's
+ * dowAdjustments) — e.g. SATURDAY: 1.2 means Saturdays run ~20% above what
+ * weather alone would predict for that day. Descriptive only: the forecast adds
+ * a weekend amount rather than multiplying by these. Diverges from a 1.0
+ * (average) center line so above/below reads at a glance.
  */
 function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, number> }) {
   const entries = DOW_DISPLAY_ORDER

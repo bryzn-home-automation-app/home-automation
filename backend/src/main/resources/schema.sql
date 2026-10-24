@@ -96,6 +96,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_gas_usage_unique ON gas_usage (meter_id, t
 -- (water_usage was dropped in Oct 2026: never written. Water arrives as bills, below.)
 
 -- Shared enrichment for electric and gas dashboards.
+-- One row per day. A forecast row (source open-meteo-forecast) is replaced with the
+-- observed weather (open-meteo-observed / -archive) once its day has passed.
 CREATE TABLE IF NOT EXISTS weather_observations (
     id                    SERIAL PRIMARY KEY,
     observation_date      DATE           NOT NULL,
@@ -542,6 +544,8 @@ CREATE TABLE IF NOT EXISTS forecast_model (
     hdd_coeff           NUMERIC(12,6)  NOT NULL,
     lag_coeff           NUMERIC(12,6),
     lag_mean            NUMERIC(10,3),
+    weekend_coeff       NUMERIC(12,6),               -- set on models since Oct 2026 (see ForecastModel)
+    residual_rho        NUMERIC(8,6),
     cdd_min             NUMERIC(10,3),
     cdd_max             NUMERIC(10,3),
     hdd_min             NUMERIC(10,3),

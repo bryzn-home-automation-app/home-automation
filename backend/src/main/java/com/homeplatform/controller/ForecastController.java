@@ -67,7 +67,7 @@ public class ForecastController {
             for (var d : wx.daily()) {
                 LocalDate date = LocalDate.parse(d.date());
                 if (!date.isBefore(rangeStart) && !date.isAfter(end)) {
-                    double avg = (d.maxTemperature() + d.minTemperature()) / 2;
+                    double avg = d.avgTemperature();
                     forecastDays.add(new WeatherForecastDay(date, d.maxTemperature(), d.minTemperature(), avg));
                 }
             }
@@ -154,7 +154,7 @@ public class ForecastController {
         double avgTemp = 80; // fallback
         if (wx.daily() != null && !wx.daily().isEmpty()) {
             var d = wx.daily().get(0);
-            avgTemp = (d.maxTemperature() + d.minTemperature()) / 2;
+            avgTemp = d.avgTemperature();
         }
 
         List<HourlyForecast> hours = forecastService.generateHourlyForecast(modelOpt.get(), target, avgTemp);
@@ -197,6 +197,8 @@ public class ForecastController {
         result.put("intercept", m.getIntercept());
         result.put("cddCoeff", m.getCddCoeff());
         result.put("hddCoeff", m.getHddCoeff());
+        result.put("weekendCoeff", m.getWeekendCoeff());
+        result.put("residualRho", m.getResidualRho());
         result.put("trainingStart", m.getTrainingStart());
         result.put("trainingEnd", m.getTrainingEnd());
         result.put("dowAdjustments", m.getDowAdjustments());

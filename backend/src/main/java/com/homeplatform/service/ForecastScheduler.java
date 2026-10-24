@@ -89,6 +89,16 @@ public class ForecastScheduler {
         try {
             log.info("ForecastScheduler: backfilled {} actuals", filled);
 
+            // Train on the weather that happened, not the forecast a day was first
+            // stored with (see WeatherService.refreshObservedDays).
+            try {
+                weatherService.refreshObservedDays(lat, lon);
+            } catch (Exception e) {
+                log.warn("ForecastScheduler: observed-weather refresh failed: {}", e.getMessage());
+                appEventService.warn("forecast", "ForecastScheduler",
+                        "Observed-weather refresh failed, training on stored weather: " + e.getMessage());
+            }
+
             // Retrain the model
             ForecastModel model = forecastService.trainModel();
             if (model == null) {
@@ -108,7 +118,7 @@ public class ForecastScheduler {
                 for (var d : wx.daily()) {
                     LocalDate date = LocalDate.parse(d.date());
                     if (!date.isBefore(today) && !date.isAfter(forecastEnd)) {
-                        double avg = (d.maxTemperature() + d.minTemperature()) / 2;
+                        double avg = d.avgTemperature();
                         forecastDays.add(new WeatherForecastDay(date, d.maxTemperature(), d.minTemperature(), avg));
                     }
                 }
