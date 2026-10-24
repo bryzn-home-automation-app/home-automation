@@ -47,10 +47,10 @@ class WeatherRefreshTest {
     private static String json(LocalDate from, LocalDate to, Function<LocalDate, Double> mean) {
         List<String> t = new ArrayList<>(), hi = new ArrayList<>(), lo = new ArrayList<>(), avg = new ArrayList<>(), p = new ArrayList<>();
         for (LocalDate d = from; !d.isAfter(to); d = d.plusDays(1)) {
-            double m = mean.apply(d);
+            Double m = mean.apply(d);
             t.add("\"" + d + "\"");
-            hi.add(String.valueOf(m + 8));
-            lo.add(String.valueOf(m - 8));
+            hi.add(m == null ? "null" : String.valueOf(m + 8));
+            lo.add(m == null ? "null" : String.valueOf(m - 8));
             avg.add(String.valueOf(m));
             p.add("0.0");
         }
@@ -132,7 +132,31 @@ class WeatherRefreshTest {
         WeatherObservation fixed = saved(3).get(old); // plus the two missing recent days
         assertEquals(0, fixed.getAvgTempF().compareTo(BigDecimal.valueOf(84.0)));
         assertEquals(WeatherService.SOURCE_ARCHIVE, fixed.getSource());
-        verify(rest).getForObject(contains("start_date=" + old + "&end_date=" + TODAY.minusDays(93)), eq(String.class));
+        verify(rest).getForObject(contains("start_date=" + old + "&end_date=" + old), eq(String.class));
+    }
+
+    @Test
+    @DisplayName("days the forecast API leaves blank (past ~2 months) come from the archive; recent blanks wait")
+    void blankForecastDaysUseArchive() throws Exception {
+        LocalDate blank = TODAY.minusDays(70), tooRecent = TODAY.minusDays(3);
+        when(repo.findByStationCodeAndSourceAndObservationDateBefore(STATION, WeatherService.SOURCE_FORECAST, TODAY))
+                .thenReturn(List.of(stored(blank, 90, WeatherService.SOURCE_FORECAST),
+                        stored(tooRecent, 90, WeatherService.SOURCE_FORECAST)));
+        when(repo.findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(STATION, TODAY.minusDays(2), TODAY.minusDays(1)))
+                .thenReturn(List.of(stored(TODAY.minusDays(2), 70, WeatherService.SOURCE_OBSERVED),
+                        stored(TODAY.minusDays(1), 70, WeatherService.SOURCE_OBSERVED)));
+        when(rest.getForObject(contains("api.open-meteo.com/v1/forecast"), eq(String.class)))
+                .thenReturn(json(TODAY.minusDays(92), TODAY.plusDays(1),
+                        d -> d.isBefore(TODAY.minusDays(67)) || d.equals(tooRecent) ? null : 70.0));
+        when(rest.getForObject(contains("archive-api"), eq(String.class)))
+                .thenReturn(json(blank, blank, d -> 86.0));
+
+        assertEquals(1, service.refreshObservedDays(LAT, LON));
+
+        WeatherObservation fixed = saved(1).get(blank);
+        assertEquals(0, fixed.getAvgTempF().compareTo(BigDecimal.valueOf(86.0)));
+        assertEquals(WeatherService.SOURCE_ARCHIVE, fixed.getSource());
+        verify(rest).getForObject(contains("start_date=" + blank + "&end_date=" + blank), eq(String.class));
     }
 
     @Test

@@ -34,6 +34,8 @@ public class WeatherService {
     static final String SOURCE_ARCHIVE = "open-meteo-archive";
     /** The forecast API's last day or two can still shift, so they're refreshed again. */
     static final int SETTLE_DAYS = 2;
+    /** The archive API runs about five days behind. */
+    static final int ARCHIVE_LAG_DAYS = 6;
     private static final ObjectMapper mapper = new ObjectMapper();
     /**
      * Open-Meteo responses are reused for this long. Home, Climate and Utility all hit
@@ -125,14 +127,15 @@ public class WeatherService {
      * (40 of 91 days were 7+ days stale, 4.8°F off on average). The forecast each prediction
      * was made with is kept in forecast_snapshot, so nothing is lost by overwriting here.
      *
-     * Days inside the forecast API's {@link #PAST_DAYS} come from it (already fetched for
-     * the Home page, so usually a cache hit); older stale days come from the archive API.
+     * Recent days come from the forecast API's past days (already fetched for the Home
+     * page, so usually a cache hit). Its daily means come back null beyond about two
+     * months, though {@link #PAST_DAYS} asks for 92, so any day it leaves blank that is
+     * old enough for the archive API ({@link #ARCHIVE_LAG_DAYS}) comes from there.
      * The last {@link #SETTLE_DAYS} are refreshed even when already observed, and filled
      * in when missing. Returns the number of rows written.
      */
     public int refreshObservedDays(double lat, double lon) throws Exception {
         LocalDate today = LocalDate.now();
-        LocalDate windowStart = today.minusDays(PAST_DAYS);
         LocalDate settleStart = today.minusDays(SETTLE_DAYS);
         String stationCode = formatStationCode(lat, lon);
 
@@ -147,9 +150,17 @@ public class WeatherService {
 
         Map<LocalDate, WeatherObservation> observed = new HashMap<>();
         observed.putAll(dailyValues(fetchFromOpenMeteo(lat, lon, today, today.plusDays(1)), SOURCE_OBSERVED));
-        LocalDate oldest = rows.isEmpty() ? null : rows.keySet().iterator().next();
-        if (oldest != null && oldest.isBefore(windowStart)) {
-            observed.putAll(dailyValues(fetchFromOpenMeteo(lat, lon, oldest, windowStart.minusDays(1)), SOURCE_ARCHIVE));
+        LocalDate archiveEnd = today.minusDays(ARCHIVE_LAG_DAYS);
+        List<LocalDate> blank = rows.keySet().stream()
+                .filter(d -> !d.isAfter(archiveEnd))
+                .filter(d -> observed.get(d) == null || observed.get(d).getAvgTempF() == null)
+                .toList();
+        if (!blank.isEmpty()) {
+            Map<LocalDate, WeatherObservation> archived = dailyValues(
+                    fetchFromOpenMeteo(lat, lon, blank.get(0), blank.get(blank.size() - 1)), SOURCE_ARCHIVE);
+            for (LocalDate d : blank) {
+                if (archived.containsKey(d)) observed.put(d, archived.get(d));
+            }
         }
 
         UUID batchId = UUID.randomUUID();
