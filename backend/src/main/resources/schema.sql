@@ -787,3 +787,19 @@ CREATE TABLE IF NOT EXISTS push_vapid_keys (
     private_key         VARCHAR(400)   NOT NULL,
     created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
 );
+
+-- ============================================================
+-- App usage: which tabs members open and spend time on
+-- ============================================================
+
+-- Append-only. VIEW = a member opened the tab; ACTIVE = one minute spent active on it
+-- (the app's once-a-minute heartbeat while the page is visible and in use). `at` is UTC.
+CREATE TABLE IF NOT EXISTS tab_activity (
+    id          BIGSERIAL PRIMARY KEY,
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    tab         VARCHAR(40) NOT NULL,
+    kind        VARCHAR(10) NOT NULL,
+    at          TIMESTAMP   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tab_activity_at ON tab_activity (at);

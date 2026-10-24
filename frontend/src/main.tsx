@@ -36,6 +36,7 @@ const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
 const GuestManagement = lazy(() => import('./pages/admin/GuestManagement'));
 const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const DebugDashboard = lazy(() => import('./pages/admin/DebugDashboard'));
+const TabUsage = lazy(() => import('./pages/admin/TabUsage'));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,6 +86,7 @@ const UserManagementRoute = lazyRoute(UserManagement, 'list');
 const GuestManagementRoute = lazyRoute(GuestManagement, 'list');
 const AuditLogsRoute = lazyRoute(AuditLogs, 'list');
 const DebugDashboardRoute = lazyRoute(DebugDashboard, 'default');
+const TabUsageRoute = lazyRoute(TabUsage, 'list');
 
 // Phone alerts: the worker only handles pushes (no caching), registered up front on HTTPS.
 registerServiceWorker();
@@ -130,6 +132,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="admin/guests" element={<GuestManagementRoute />} />
                     <Route path="admin/logs" element={<AuditLogsRoute />} />
                     <Route path="admin/debug" element={<DebugDashboardRoute />} />
+                    <Route path="admin/usage" element={<TabUsageRoute />} />
                   </Route>
                 </Route>
               </Route>

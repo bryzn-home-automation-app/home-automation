@@ -29,14 +29,16 @@ class CameraControllerTest {
 
     private CameraService service;
     private com.homeplatform.homeassistant.CameraRecordingService recordings;
+    private com.homeplatform.homeassistant.CameraPrimer primer;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         service = mock(CameraService.class);
         recordings = mock(com.homeplatform.homeassistant.CameraRecordingService.class);
+        primer = mock(com.homeplatform.homeassistant.CameraPrimer.class);
         mvc = MockMvcBuilders
-                .standaloneSetup(new CameraController(service, recordings), new CameraStreamAuthController(service))
+                .standaloneSetup(new CameraController(service, recordings, primer), new CameraStreamAuthController(service))
                 .setControllerAdvice(new HomeExceptionHandler())
                 .build();
     }
@@ -74,13 +76,24 @@ class CameraControllerTest {
             var recs = get("/api/home/cameras/recordings");
             var video = get("/api/home/cameras/recordings/2026102000042/video");
             var thumb = get("/api/home/cameras/recordings/2026102000042/thumbnail");
-            for (var r : List.of(list, snap, battery, live, recs, video, thumb)) {
+            var prime = post("/api/home/cameras/prime");
+            for (var r : List.of(list, snap, battery, live, recs, video, thumb, prime)) {
                 if (role != null) r.requestAttr("role", role);
                 mvc.perform(r).andExpect(status().isForbidden());
             }
         }
         verifyNoInteractions(service);
         verifyNoInteractions(recordings);
+        verifyNoInteractions(primer);
+    }
+
+    @Test
+    @DisplayName("a member's heartbeat primes every online camera's stream")
+    void prime() throws Exception {
+        when(service.liveStreams()).thenReturn(List.of("T8170A", "T8417B"));
+        mvc.perform(post("/api/home/cameras/prime").requestAttr("role", "USER"))
+                .andExpect(status().isOk());
+        verify(primer).prime(List.of("T8170A", "T8417B"));
     }
 
     @Test

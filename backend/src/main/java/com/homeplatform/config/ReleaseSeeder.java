@@ -55,6 +55,8 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("improved", "Colors that were hard to read in light or dark mode are fixed."),
                             change("improved", "Bills now open only for signed-in members, and disabled accounts lose access right away."),
                             change("improved", "Every camera goes live as soon as you open the Cameras tab, the outdoor ones too (no tap needed)."),
+                            change("improved", "The cameras warm up while you're using any part of the app, so the Cameras tab opens already live."),
+                            change("new", "Usage (Admin): see which tabs house members use the most."),
                             change("fixed", "A day's electric total that first arrives as zero now corrects itself."),
                             change("fixed", "Recordings no longer stop loading after the HomeBase connection goes quiet."))
             ),

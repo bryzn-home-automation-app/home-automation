@@ -4,6 +4,7 @@ import com.homeplatform.dto.CameraBatteryHistoryResponse;
 import com.homeplatform.dto.CameraLiveResponse;
 import com.homeplatform.dto.CameraRecordingResponse;
 import com.homeplatform.dto.CameraResponse;
+import com.homeplatform.homeassistant.CameraPrimer;
 import com.homeplatform.homeassistant.CameraRecordingService;
 import com.homeplatform.homeassistant.CameraService;
 import com.homeplatform.homeassistant.HomeAssistantClient;
@@ -30,10 +31,12 @@ public class CameraController {
 
     private final CameraService service;
     private final CameraRecordingService recordings;
+    private final CameraPrimer primer;
 
-    public CameraController(CameraService service, CameraRecordingService recordings) {
+    public CameraController(CameraService service, CameraRecordingService recordings, CameraPrimer primer) {
         this.service = service;
         this.recordings = recordings;
+        this.primer = primer;
     }
 
     @GetMapping
@@ -120,6 +123,17 @@ public class CameraController {
             throw new IllegalArgumentException("'direction' must be left, right, up or down");
         }
         service.nudge(id, dir);
+        return Map.of("ok", true);
+    }
+
+    /**
+     * The app's heartbeat while a member is active on any tab: keeps every camera's live
+     * stream running for the next ~90 s, so the Cameras tab opens already live.
+     */
+    @PostMapping("/prime")
+    public Map<String, Object> prime(HttpServletRequest request) {
+        HomeController.requireMember(request);
+        primer.prime(service.liveStreams());
         return Map.of("ok", true);
     }
 

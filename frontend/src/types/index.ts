@@ -632,3 +632,29 @@ export interface CameraBatteryHistory {
   readings: CameraBatteryReading[];
   daylight: Array<{ from: string; to: string }>;
 }
+
+/** Visits and active minutes on one tab ("home", "cameras", "admin/debug"). */
+export interface TabTotal {
+  tab: string;
+  visits: number;
+  activeMinutes: number;
+}
+
+export interface MemberTabUsage {
+  userId: number;
+  username: string;
+  displayName: string | null;
+  role: string;
+  lastActiveAt: string | null;
+  visits: number;
+  activeMinutes: number;
+  /** Most used first. */
+  tabs: TabTotal[];
+}
+
+/** Admin view of which tabs house members use, over the last `days`. */
+export interface TabUsage {
+  days: number;
+  household: TabTotal[];
+  members: MemberTabUsage[];
+}

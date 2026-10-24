@@ -13,6 +13,7 @@ import OnlineDot from './components/profile/OnlineDot';
 import { PageHeader } from './components/PageHeader';
 import { HeaderPixelScene } from './components/PixelScene';
 import ReleaseNotesModal from './components/ReleaseNotesModal';
+import { useAppPresence } from './hooks/useAppPresence';
 
 /**
  * Live date/time for the sidebar. Isolated so its per-minute tick re-renders
@@ -114,6 +115,7 @@ export default memo(function App() {
     '/admin/guests': { eyebrow: 'Admin', title: 'Guests' },
     '/admin/debug': { eyebrow: 'Admin', title: 'Debug' },
     '/admin/logs': { eyebrow: 'Admin', title: 'Audit Logs' },
+    '/admin/usage': { eyebrow: 'Admin', title: 'Usage', subtitle: 'Which tabs house members use the most.' },
   };
   const pageHeader =
     PAGE_HEADERS[pathname] ??
@@ -121,6 +123,9 @@ export default memo(function App() {
       .filter(([k]) => k !== '/' && pathname.startsWith(k))
       .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ??
     PAGE_HEADERS['/'];
+
+  // Members: record tab visits/active minutes, and keep the cameras warm while they're here.
+  useAppPresence(pathname, !!user && user.role !== 'GUEST');
 
   // Default document title; per-page pages should override with their own useDocumentTitle call.
   useDocumentTitle(pageHeader.title);
@@ -175,6 +180,7 @@ export default memo(function App() {
     { path: '/admin/guests', label: 'Guests', icon: '🪪', end: false },
     { path: '/admin/debug', label: 'Debug', icon: '🔧', end: false },
     { path: '/admin/logs', label: 'Logs', icon: '📋', end: false },
+    { path: '/admin/usage', label: 'Usage', icon: '📊', end: false },
   ];
 
   // ── Sidebar content (shared between desktop and mobile overlay) ──

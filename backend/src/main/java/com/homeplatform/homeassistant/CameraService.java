@@ -266,6 +266,17 @@ public class CameraService {
         return new CameraLiveResponse(LIVE_PATH + t.value() + (hls ? "/stream.m3u8" : "/ws"), t.expiresAt().toString());
     }
 
+    /** The go2rtc streams of every enabled camera that's online, for {@link CameraPrimer}. */
+    public List<String> liveStreams() {
+        if (!ha.isActive()) return List.of();
+        return deviceRepo.findByKindAndEnabledTrueOrderByNameAsc(SmartDevice.Kind.CAMERA).stream()
+                .flatMap(d -> statusRepo.findByDeviceId(d.getId()).stream())
+                .filter(CameraStatus::isAvailable)
+                .map(CameraStatus::getStreamName)
+                .filter(s -> s != null && !s.isBlank())
+                .toList();
+    }
+
     /**
      * For nginx's {@code auth_request}: the go2rtc stream a ticket opens, or empty when
      * the ticket is invalid/expired or the camera is gone or disabled.

@@ -191,12 +191,11 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
     setBudgetHit(false);
   };
 
+  // The stream ended under us. For a battery camera that's usually the bridge's own
+  // budget recycling a stream the app primed before this tab opened (CameraPrimer),
+  // so reconnect rather than ask. Our budget above still decides when to ask.
   const onEnded = () => {
-    if (battery) {
-      // The bridge ended a battery stream (its own budget) — same prompt as ours.
-      setBudgetHit(true);
-      setRequested(false);
-    } else if (reconnects < 3) {
+    if (reconnects < 3) {
       setReconnects((n) => n + 1);
       window.setTimeout(() => setSession((s) => s + 1), 2_000);
     } else {

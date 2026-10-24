@@ -264,6 +264,18 @@ describe('CameraTile', () => {
     expect(screen.queryByText(/Still watching\?/)).not.toBeInTheDocument();
   });
 
+  it('reconnects a battery stream the bridge ended, instead of asking "Still watching?"', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderTile(driveway);
+    await waitFor(() => expect(players.started).toHaveLength(1));
+    act(() => players.handlers[players.handlers.length - 1].onEnded?.());
+    await act(async () => {
+      vi.advanceTimersByTime(2_100);
+    });
+    await waitFor(() => expect(players.started).toHaveLength(2));
+    expect(screen.queryByText(/Still watching\?/)).not.toBeInTheDocument();
+  });
+
   it('a wired camera streams by itself and stops when the tab is hidden', async () => {
     const { update } = renderTile(indoor);
     expect(screen.getByText('🔌 Wired power')).toBeInTheDocument();
