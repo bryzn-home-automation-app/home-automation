@@ -4,6 +4,7 @@ import api from '../../api/client';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import VirtualizedList from '../../components/VirtualizedList';
+import { startSleepTest } from '../../hooks/useAppSleep';
 
 const EVENT_ROW_HEIGHT = 104;
 
@@ -558,6 +559,8 @@ export default function DebugDashboard() {
         </section>
       )}
 
+      <SleepTestCard />
+
       {/* Manual Sync Triggers */}
       <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">
@@ -892,6 +895,36 @@ interface TableInfo {
   name: string;
   size: string;
   columns: number;
+}
+
+/** Try the sleep screen without waiting 10 minutes. */
+function SleepTestCard() {
+  const [started, setStarted] = useState(false);
+  return (
+    <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sleep Screen</p>
+          <h3 className="mt-2 text-xl font-semibold text-apptext">Test sleep</h3>
+          <p className="mt-1 max-w-xl text-xs text-apptext-muted">
+            {started
+              ? 'On: hands off the mouse and keys. The countdown shows in 20 s and the app sleeps at 30 s. Waking puts it back to 10 minutes.'
+              : 'Makes the next sleep come after 30 s of no activity instead of 10 minutes, once. On a phone, open any page with ?sleepTest on the address instead.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            startSleepTest();
+            setStarted(true);
+          }}
+          className="h-10 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 text-sm font-semibold text-apptext transition-colors hover:bg-appaccent/20"
+        >
+          {started ? 'Restart test' : 'Start 30 s test'}
+        </button>
+      </div>
+    </section>
+  );
 }
 
 function DbExplorer() {

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { FOCUS_RING } from './ThermostatControls';
 
 /** The app at rest: a dim clock over everything, until someone taps or presses a key. */
-export function SleepScreen({ onWake }: { onWake: () => void }) {
+export function SleepScreen({ onWake, testing = false }: { onWake: () => void; testing?: boolean }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const t = window.setInterval(() => setNow(new Date()), 15_000);
@@ -22,7 +22,8 @@ export function SleepScreen({ onWake }: { onWake: () => void }) {
       </p>
       <p className="text-sm text-white/60">{now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</p>
       <p className="mt-6 max-w-xs text-xs text-white/50">
-        Asleep after 10 minutes with no activity. Cameras and live data are paused.
+        {testing ? 'Sleep test: asleep after 30 seconds with no activity. Waking returns to the usual 10 minutes.' : 'Asleep after 10 minutes with no activity.'}{' '}
+        Cameras and live data are paused.
       </p>
       <button
         type="button"

@@ -5,6 +5,23 @@ export const SLEEP_AFTER_MS = 10 * 60_000;
 /** For this last stretch before sleeping, a "Still there?" countdown shows. */
 export const SLEEP_WARNING_MS = 60_000;
 
+/**
+ * Trying it out without waiting 10 minutes: Debug → "Test sleep", or any page opened
+ * with ?sleepTest. The next sleep comes after 30 s (countdown in the last 10 s), and
+ * waking from it goes back to the normal timer.
+ */
+export const SLEEP_TEST_AFTER_MS = 30_000;
+export const SLEEP_TEST_WARNING_MS = 10_000;
+const SLEEP_TEST_EVENT = 'app-sleep-test';
+
+export function startSleepTest() {
+  window.dispatchEvent(new Event(SLEEP_TEST_EVENT));
+}
+
+function sleepTestRequested(): boolean {
+  return typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('sleepTest');
+}
+
 /** Anything that shows someone's there, while awake (the countdown included). */
 const PRESENCE_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll'] as const;
 /**
@@ -18,6 +35,8 @@ export interface AppSleep {
   asleep: boolean;
   /** Seconds until sleep while the countdown shows, else null. */
   secondsLeft: number | null;
+  /** The one-time 30-second test timer is on. */
+  testing: boolean;
   wake: () => void;
 }
 
@@ -32,11 +51,15 @@ export interface AppSleep {
 export function useAppSleep(enabled: boolean): AppSleep {
   const [asleep, setAsleep] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [testing, setTesting] = useState(sleepTestRequested);
   const lastActive = useRef(Date.now());
   const asleepRef = useRef(false);
+  const after = testing ? SLEEP_TEST_AFTER_MS : SLEEP_AFTER_MS;
+  const warning = testing ? SLEEP_TEST_WARNING_MS : SLEEP_WARNING_MS;
 
   const wake = useCallback(() => {
     lastActive.current = Date.now();
+    if (asleepRef.current) setTesting(false); // a test is one sleep
     asleepRef.current = false;
     setAsleep(false);
     setSecondsLeft(null);
@@ -60,26 +83,32 @@ export function useAppSleep(enabled: boolean): AppSleep {
     const onVisibility = () => {
       if (document.visibilityState !== 'hidden') wake();
     };
+    const onTest = () => {
+      setTesting(true);
+      wake();
+    };
     const tick = () => {
       if (asleepRef.current || document.visibilityState === 'hidden') return;
       const idleFor = Date.now() - lastActive.current;
-      if (idleFor >= SLEEP_AFTER_MS) {
+      if (idleFor >= after) {
         asleepRef.current = true;
         setAsleep(true);
         setSecondsLeft(null);
-      } else if (idleFor >= SLEEP_AFTER_MS - SLEEP_WARNING_MS) {
-        setSecondsLeft(Math.ceil((SLEEP_AFTER_MS - idleFor) / 1000));
+      } else if (idleFor >= after - warning) {
+        setSecondsLeft(Math.ceil((after - idleFor) / 1000));
       }
     };
     PRESENCE_EVENTS.forEach((e) => window.addEventListener(e, onInput, { passive: true, capture: true }));
     document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener(SLEEP_TEST_EVENT, onTest);
     const timer = window.setInterval(tick, 1_000);
     return () => {
       PRESENCE_EVENTS.forEach((e) => window.removeEventListener(e, onInput, { capture: true }));
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener(SLEEP_TEST_EVENT, onTest);
       window.clearInterval(timer);
     };
-  }, [enabled, wake]);
+  }, [enabled, wake, after, warning]);
 
-  return { asleep, secondsLeft, wake };
+  return { asleep, secondsLeft, testing, wake };
 }

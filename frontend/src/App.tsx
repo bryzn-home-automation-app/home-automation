@@ -128,7 +128,7 @@ export default memo(function App() {
 
   // Left open and untouched for 10 minutes, the app sleeps: the page unmounts (live
   // video stops), and so do the camera warm-up, active minutes and shell polling.
-  const { asleep, secondsLeft, wake } = useAppSleep(!!user);
+  const { asleep, secondsLeft, testing: sleepTesting, wake } = useAppSleep(!!user);
 
   // Members: record tab visits/active minutes, and keep the cameras warm while they're here.
   useAppPresence(pathname, !!user && user.role !== 'GUEST', asleep);
@@ -515,7 +515,7 @@ export default memo(function App() {
         </div>
       </nav>
 
-      {asleep && <SleepScreen onWake={wake} />}
+      {asleep && <SleepScreen onWake={wake} testing={sleepTesting} />}
       {!asleep && secondsLeft !== null && <SleepWarning secondsLeft={secondsLeft} onStay={wake} />}
 
       {/* One-time "What's New" popup shown after a new version ships. */}

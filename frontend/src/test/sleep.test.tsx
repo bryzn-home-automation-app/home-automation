@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { SLEEP_AFTER_MS, SLEEP_WARNING_MS, useAppSleep } from '../hooks/useAppSleep';
+import {
+  SLEEP_AFTER_MS,
+  SLEEP_TEST_AFTER_MS,
+  SLEEP_TEST_WARNING_MS,
+  SLEEP_WARNING_MS,
+  startSleepTest,
+  useAppSleep,
+} from '../hooks/useAppSleep';
 import { SleepScreen } from '../components/SleepScreen';
 
 vi.mock('../api/activity', () => ({
@@ -79,6 +86,32 @@ describe('useAppSleep', () => {
     act(() => setVisibility('hidden'));
     act(() => setVisibility('visible'));
     expect(result.current.asleep).toBe(false);
+  });
+
+  it('a sleep test sleeps after 30 s once, then goes back to 10 minutes', () => {
+    const { result } = renderHook(() => useAppSleep(true));
+    act(() => startSleepTest());
+    expect(result.current.testing).toBe(true);
+    advance(SLEEP_TEST_AFTER_MS - SLEEP_TEST_WARNING_MS + 1_000);
+    expect(result.current.secondsLeft).not.toBeNull();
+    advance(SLEEP_TEST_WARNING_MS);
+    expect(result.current.asleep).toBe(true);
+
+    act(() => result.current.wake());
+    expect(result.current.asleep).toBe(false);
+    expect(result.current.testing).toBe(false);
+    advance(SLEEP_TEST_AFTER_MS * 2);
+    expect(result.current.asleep).toBe(false);
+    expect(result.current.secondsLeft).toBeNull();
+  });
+
+  it('?sleepTest on the address starts a test', () => {
+    window.history.replaceState(null, '', '/cameras?sleepTest');
+    const { result } = renderHook(() => useAppSleep(true));
+    window.history.replaceState(null, '', '/');
+    expect(result.current.testing).toBe(true);
+    advance(SLEEP_TEST_AFTER_MS + 1_000);
+    expect(result.current.asleep).toBe(true);
   });
 
   it('does nothing when signed out', () => {
