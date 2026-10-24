@@ -12,8 +12,13 @@ import java.util.UUID;
 /**
  * Append-only energy usage record. Never updated or deleted.
  * Each ingestion batch creates new rows with traceable metadata.
+ *
+ * Read-only: {@code energy_usage} is a view (hourly electric + gas, see
+ * UsageStorageMigration), so Hibernate must not try to alter it. Without the
+ * no-constraint join it tried to add a meters foreign key to the view on every boot.
  */
 @Entity
+@org.hibernate.annotations.Immutable
 @Table(name = "energy_usage")
 @Data
 @NoArgsConstructor
@@ -27,7 +32,7 @@ public class EnergyUsage {
 
     @JsonIgnore
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "meter_id", nullable = false)
+    @JoinColumn(name = "meter_id", nullable = false, foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private Meter meter;
 
     @NotNull

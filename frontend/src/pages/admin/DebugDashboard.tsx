@@ -1053,9 +1053,9 @@ LIMIT 50`);
 
   // Preset buttons for common queries — use timestamp ordering where available
   const timestampTables = new Set([
-    'electric_usage', 'hourly_electric_usage', 'gas_usage', 'water_usage',
+    'electric_usage', 'hourly_electric_usage', 'gas_usage',
     'weather_observations', 'app_events', 'notifications', 'guest_sessions',
-    'utility_bills', 'roomba_runs', 'maintenance_records',
+    'roomba_runs', 'maintenance_records',
   ]);
   const presets = tables?.map((t) => ({
     label: t.name,

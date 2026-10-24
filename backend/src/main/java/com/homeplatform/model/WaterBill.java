@@ -12,7 +12,7 @@ import java.util.UUID;
 
 /**
  * Itemized water bill (Water/Sewer/Refuse/Tax/Stormwater), parsed from the monthly
- * PDF forwarded to Gmail. Append-only, like {@link UtilityBill} — never updated
+ * PDF forwarded to Gmail. Append-only, like {@link CoservBill} — never updated
  * or deleted; a re-processed bill for the same period upserts via the unique
  * constraint on (account_id, billing_period_start, billing_period_end).
  */

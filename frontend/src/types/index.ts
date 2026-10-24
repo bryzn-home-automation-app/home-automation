@@ -45,24 +45,6 @@ export interface EnergyUsage {
   createdAt: string;
 }
 
-/** Append-only — new statement = new row, never overwritten. */
-export interface UtilityBill {
-  id: number;
-  accountId: number;
-  account?: UtilityAccount;
-  billingPeriodStart: string;
-  billingPeriodEnd: string;
-  usageKwh?: number;
-  amount: number;
-  dueDate?: string;
-  status: 'ISSUED' | 'PAID' | 'OVERDUE';
-  source: string;
-  sourceProvider: string;
-  ingestionBatchId: string;   // UUID — ties records from one sync together
-  processingVersion: string;  // parser version that produced this record
-  createdAt: string;
-}
-
 /** Itemized water bill parsed from the Gmail-forwarded PDF. Append-only. */
 export interface WaterBill {
   id: number;

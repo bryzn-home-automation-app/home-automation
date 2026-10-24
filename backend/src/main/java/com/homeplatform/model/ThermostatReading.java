@@ -11,7 +11,8 @@ import java.util.UUID;
  * changes and by the periodic snapshot; never updated or deleted. Timestamps are UTC.
  */
 @Entity
-@Table(name = "thermostat_readings")
+@Table(name = "thermostat_readings",
+        indexes = @Index(name = "idx_thermostat_readings_device_time", columnList = "device_id, recorded_at"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

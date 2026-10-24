@@ -93,21 +93,7 @@ CREATE INDEX IF NOT EXISTS idx_gas_usage_timestamp   ON gas_usage (timestamp);
 CREATE INDEX IF NOT EXISTS idx_gas_usage_batch       ON gas_usage (ingestion_batch_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_gas_usage_unique ON gas_usage (meter_id, timestamp, source_provider);
 
--- Water tab storage. Kept isolated from the energy datasets.
-CREATE TABLE IF NOT EXISTS water_usage (
-    id                  SERIAL PRIMARY KEY,
-    timestamp           TIMESTAMP      NOT NULL,
-    usage_gallons       NUMERIC(12,3)  NOT NULL,
-    cost                NUMERIC(10,2),
-    source              VARCHAR(100)   NOT NULL,
-    source_provider     VARCHAR(50)    NOT NULL,
-    ingestion_batch_id  UUID           NOT NULL,
-    processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
-    created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX IF NOT EXISTS idx_water_usage_timestamp ON water_usage (timestamp);
-CREATE INDEX IF NOT EXISTS idx_water_usage_batch     ON water_usage (ingestion_batch_id);
+-- (water_usage was dropped in Oct 2026: never written. Water arrives as bills, below.)
 
 -- Shared enrichment for electric and gas dashboards.
 CREATE TABLE IF NOT EXISTS weather_observations (
@@ -345,25 +331,8 @@ CREATE TABLE IF NOT EXISTS app_events (
 CREATE INDEX IF NOT EXISTS idx_app_events_timestamp ON app_events (timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_app_events_category  ON app_events (category);
 CREATE INDEX IF NOT EXISTS idx_app_events_level     ON app_events (level);
-CREATE TABLE IF NOT EXISTS utility_bills (
-    id                    SERIAL PRIMARY KEY,
-    account_id            INTEGER        NOT NULL REFERENCES utility_accounts(id),
-    billing_period_start  DATE           NOT NULL,
-    billing_period_end    DATE           NOT NULL,
-    usage_kwh             NUMERIC(10,3),
-    amount                NUMERIC(10,2)  NOT NULL,
-    due_date              DATE,
-    status                VARCHAR(50)    NOT NULL DEFAULT 'ISSUED',
-    source                VARCHAR(100)   NOT NULL DEFAULT 'CoServ API',
-    source_provider       VARCHAR(50)    NOT NULL DEFAULT 'coserv',
-    ingestion_batch_id    UUID           NOT NULL,
-    processing_version    VARCHAR(20)    NOT NULL DEFAULT '1.0',
-    created_at            TIMESTAMP      NOT NULL DEFAULT NOW()
-);
-
-CREATE INDEX idx_utility_bills_account  ON utility_bills (account_id);
-CREATE INDEX idx_utility_bills_period   ON utility_bills (billing_period_start, billing_period_end);
-CREATE INDEX idx_utility_bills_batch    ON utility_bills (ingestion_batch_id);
+-- (utility_bills was dropped in Oct 2026: a generic bill table nothing wrote to.
+-- Bills live in coserv_bills and water_bills, which itemize what each provider bills.)
 
 -- ============================================================
 -- CoServ seed data — provider record
@@ -372,7 +341,7 @@ INSERT INTO utility_providers (name, type, portal_url, is_active)
 VALUES ('CoServ', 'ELECTRIC', 'https://myaccount.coserv.com', TRUE)
 ON CONFLICT DO NOTHING;
 
--- Water bill storage. Itemized (unlike utility_bills' single `amount`) because the
+-- Water bill storage. Itemized (not a single `amount`) because the
 -- City of Lewisville bill breaks out Water/Sewer/Refuse/Tax/Stormwater separately and
 -- the app needs to show that breakdown, not just a total.
 CREATE TABLE IF NOT EXISTS water_bills (

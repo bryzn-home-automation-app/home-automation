@@ -12,7 +12,8 @@ import java.util.UUID;
  * deleted. Timestamps are UTC.
  */
 @Entity
-@Table(name = "camera_battery_readings")
+@Table(name = "camera_battery_readings",
+        indexes = @Index(name = "idx_camera_battery_readings_device_time", columnList = "device_id, recorded_at"))
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

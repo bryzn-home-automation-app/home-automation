@@ -23,6 +23,8 @@ public class UsageStorageMigration implements ApplicationRunner {
     private void ensureDedicatedUsageStorage() {
         createDedicatedTables();
         createFutureModuleTables();
+        dropRetiredTables();
+        createReadingIndexes();
 
         String relationType = relationType("energy_usage");
         if ("table".equals(relationType)) {
@@ -146,22 +148,6 @@ public class UsageStorageMigration implements ApplicationRunner {
     }
 
     private void createFutureModuleTables() {
-        jdbcTemplate.execute("""
-            CREATE TABLE IF NOT EXISTS water_usage (
-                id                  SERIAL PRIMARY KEY,
-                timestamp           TIMESTAMP      NOT NULL,
-                usage_gallons       NUMERIC(12,3)  NOT NULL,
-                cost                NUMERIC(10,2),
-                source              VARCHAR(100)   NOT NULL,
-                source_provider     VARCHAR(50)    NOT NULL,
-                ingestion_batch_id  UUID           NOT NULL,
-                processing_version  VARCHAR(20)    NOT NULL DEFAULT '1.0',
-                created_at          TIMESTAMP      NOT NULL DEFAULT NOW()
-            )
-            """);
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_water_usage_timestamp ON water_usage (timestamp)");
-        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_water_usage_batch ON water_usage (ingestion_batch_id)");
-
         jdbcTemplate.execute("""
             CREATE TABLE IF NOT EXISTS weather_observations (
                 id                    SERIAL PRIMARY KEY,
@@ -321,6 +307,26 @@ public class UsageStorageMigration implements ApplicationRunner {
         // but never wrote the robot's own native schedule, so nothing it created ever
         // showed up in the iRobot app. Drop it now that real native schedules work.
         jdbcTemplate.execute("DROP TABLE IF EXISTS roomba_schedules");
+    }
+
+    /**
+     * Tables nothing reads or writes any more (Oct 2026 cleanup, both empty when dropped):
+     * water_usage (water arrives as water_bills) and utility_bills (a generic bill table
+     * that coserv_bills and water_bills replaced). IF EXISTS, so a fresh database is fine.
+     */
+    private void dropRetiredTables() {
+        jdbcTemplate.execute("DROP TABLE IF EXISTS water_usage");
+        jdbcTemplate.execute("DROP TABLE IF EXISTS utility_bills");
+    }
+
+    /**
+     * Every history chart and alert asks for one device over a time range. Hibernate
+     * created these tables without the index schema.sql documents, so each of those
+     * queries scanned the whole table.
+     */
+    private void createReadingIndexes() {
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_thermostat_readings_device_time ON thermostat_readings (device_id, recorded_at)");
+        jdbcTemplate.execute("CREATE INDEX IF NOT EXISTS idx_camera_battery_readings_device_time ON camera_battery_readings (device_id, recorded_at)");
     }
 
     private void migrateLegacyRows(String tableName) {
