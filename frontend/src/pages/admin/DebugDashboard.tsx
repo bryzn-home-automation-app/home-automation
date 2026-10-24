@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
@@ -179,7 +180,68 @@ const addDays = (d: Date, n: number) => {
 /** CoServ only keeps ~2 weeks of interval data. */
 const MAX_RANGE_DAYS = 14;
 
+const DEBUG_TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'sync', label: 'Sync' },
+  { key: 'events', label: 'Events' },
+  { key: 'forecast', label: 'Forecast' },
+  { key: 'tools', label: 'Tools' },
+] as const;
+type DebugTab = (typeof DEBUG_TABS)[number]['key'];
+
+function debugTab(value: string | null): DebugTab {
+  return DEBUG_TABS.find((t) => t.key === value)?.key ?? 'overview';
+}
+
+/**
+ * The page's sections, grouped: Overview (health, freshness, config), Sync (success
+ * rates, coverage, manual runs, recent runs), Events (the diagnostic log), Forecast,
+ * Tools (sleep test, query console). Errors in the last 24 h show on the Events tab.
+ */
+function DebugTabs({ tab, onChange, errors }: { tab: DebugTab; onChange: (t: DebugTab) => void; errors: number }) {
+  return (
+    <div className="-mx-1 overflow-x-auto px-1">
+      <div role="tablist" aria-label="Debug sections" className="flex w-max gap-1 rounded-xl bg-appinset p-1">
+        {DEBUG_TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            aria-selected={tab === t.key}
+            onClick={() => onChange(t.key)}
+            className={`inline-flex h-9 items-center gap-1.5 whitespace-nowrap rounded-lg px-4 text-sm font-semibold transition-colors ${
+              tab === t.key ? 'bg-appsurface-raised text-apptext shadow-sm' : 'text-apptext-muted hover:text-apptext'
+            }`}
+          >
+            {t.label}
+            {t.key === 'events' && errors > 0 && (
+              <span
+                className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-appdanger px-1.5 text-3xs font-bold text-appdanger-fg"
+                aria-label={`${errors} error${errors === 1 ? '' : 's'} in the last 24 hours`}
+              >
+                {errors > 99 ? '99+' : errors}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function DebugDashboard() {
+  const [params, setParams] = useSearchParams();
+  const tab = debugTab(params.get('tab'));
+  const setTab = (t: DebugTab) =>
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (t === 'overview') next.delete('tab');
+        else next.set('tab', t);
+        return next;
+      },
+      { replace: true },
+    );
   const [category, setCategory] = useState<string>('all');
   const [level, setLevel] = useState<string>('all');
   const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
@@ -345,540 +407,561 @@ export default function DebugDashboard() {
         </div>
       </section>
 
-      {/* System Health */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Database</p>
-          {healthLoading ? (
-            <p className="mt-2 text-sm text-apptext-muted">...</p>
-          ) : (
-            <>
-              <p className={`mt-2 text-lg font-semibold ${health?.database?.status === 'UP' ? 'text-emerald-300' : 'text-rose-300'}`}>
-                {health?.database?.status ?? '?'}
-              </p>
-              <p className="text-xs text-apptext-dim truncate">
-                {'url' in (health?.database ?? {}) ? (health?.database as any).url?.replace(/[?&]password=[^&]*/, '') : ''}
-              </p>
-            </>
-          )}
-        </div>
-        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Uptime</p>
-          {healthLoading ? (
-            <p className="mt-2 text-sm text-apptext-muted">...</p>
-          ) : (
-            <p className="mt-2 text-lg font-semibold text-apptext">
-              {health?.jvm?.uptimeMinutes != null
-                ? health.jvm.uptimeMinutes >= 1440
-                  ? `${Math.floor(health.jvm.uptimeMinutes / 1440)}d ${health.jvm.uptimeMinutes % 1440}m`
-                  : `${Math.floor(health.jvm.uptimeMinutes / 60)}h ${health.jvm.uptimeMinutes % 60}m`
-                : '...'}
-            </p>
-          )}
-        </div>
-        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Heap Memory</p>
-          {healthLoading ? (
-            <p className="mt-2 text-sm text-apptext-muted">...</p>
-          ) : (
-            <p className="mt-2 text-lg font-semibold text-apptext">
-              {health?.jvm?.heapUsedMB ?? '...'}<span className="text-sm text-apptext-muted"> / {health?.jvm?.heapMaxMB ?? '...'} MB</span>
-            </p>
-          )}
-        </div>
-        <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Threads</p>
-          {healthLoading ? (
-            <p className="mt-2 text-sm text-apptext-muted">...</p>
-          ) : (
-            <p className="mt-2 text-lg font-semibold text-apptext">{health?.threads ?? '...'}</p>
-          )}
-        </div>
-        {health?.pool && (
-          <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">DB Pool</p>
-            <p className={`mt-2 text-lg font-semibold ${health.pool.awaitingConnection > 0 ? 'text-rose-300' : 'text-apptext'}`}>
-              {health.pool.active}<span className="text-sm text-apptext-muted"> / {health.pool.max} active</span>
-            </p>
-            <p className="text-xs text-apptext-dim">
-              {health.pool.idle} idle
-              {health.pool.awaitingConnection > 0 && <span className="text-rose-300"> · {health.pool.awaitingConnection} waiting</span>}
-            </p>
-          </div>
-        )}
-      </section>
+      <DebugTabs tab={tab} onChange={setTab} errors={summary?.errors24h ?? 0} />
 
-      {/* Last sync check box */}
-      {health?.lastSyncCheck && (
-        <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3">
-          <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
-          <p className="mt-1 text-sm text-apptext-soft">
-            {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
-              month: 'short', day: 'numeric',
-              hour: 'numeric', minute: '2-digit',
-            })}
-          </p>
-          <p className="mt-1 text-xs text-apptext-dim truncate">{health.lastSyncCheck.message}</p>
-        </div>
-      )}
-
-      {/* Event summary badges */}
-      {summary && (
-        <section className="grid grid-cols-3 gap-3">
-          <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
-            <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
-          </div>
-          <div className="rounded-2xl border border-rose-300/40 bg-rose-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
-            <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
-          </div>
-          <div className="rounded-2xl border border-amber-300/40 bg-amber-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
-            <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
-            <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
-          </div>
-        </section>
-      )}
-
-      {/* Data freshness — per-granularity staleness */}
-      {freshness && (
-        <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-4">
-          {([['Daily', freshness.daily], ['Hourly', freshness.hourly]] as const).map(([label, f]) => {
-            const b = freshnessBadge(f.ageHours);
-            return (
-              <div key={label} className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
-                <div className="flex items-center justify-between">
-                  <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">{label} data freshness</p>
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${b.cls}`}>
-                    <span className={`h-2 w-2 rounded-full ${b.dot}`} /> {b.label}
-                  </span>
-                </div>
+      {tab === 'overview' && (
+        <>
+          {/* System Health */}
+          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+            <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Database</p>
+              {healthLoading ? (
+                <p className="mt-2 text-sm text-apptext-muted">...</p>
+              ) : (
+                <>
+                  <p className={`mt-2 text-lg font-semibold ${health?.database?.status === 'UP' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                    {health?.database?.status ?? '?'}
+                  </p>
+                  <p className="text-xs text-apptext-dim truncate">
+                    {'url' in (health?.database ?? {}) ? (health?.database as any).url?.replace(/[?&]password=[^&]*/, '') : ''}
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Uptime</p>
+              {healthLoading ? (
+                <p className="mt-2 text-sm text-apptext-muted">...</p>
+              ) : (
                 <p className="mt-2 text-lg font-semibold text-apptext">
-                  {f.dataThroughDate ?? '—'}
-                  {f.ageHours != null && <span className="text-sm font-normal text-apptext-muted"> · {f.ageHours}h ago</span>}
+                  {health?.jvm?.uptimeMinutes != null
+                    ? health.jvm.uptimeMinutes >= 1440
+                      ? `${Math.floor(health.jvm.uptimeMinutes / 1440)}d ${health.jvm.uptimeMinutes % 1440}m`
+                      : `${Math.floor(health.jvm.uptimeMinutes / 60)}h ${health.jvm.uptimeMinutes % 60}m`
+                    : '...'}
                 </p>
-                <div className="mt-1 grid grid-cols-2 gap-x-3 text-xs text-apptext-dim">
-                  <span>Last success: {fmtTs(f.lastSuccess)}</span>
-                  <span>Last attempt: {fmtTs(f.lastAttempt)}</span>
-                </div>
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      {/* Config sanity checks */}
-      {configCheck && configCheck.checks.length > 0 && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-3">
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Configuration</p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Config sanity checks</h3>
-          </div>
-          <div className="space-y-1.5">
-            {configCheck.checks.map((c) => (
-              <div key={c.check} className="flex items-center justify-between gap-3 rounded-xl border border-appborder-light bg-appinset px-3 py-2">
-                <span className="flex items-center gap-2 text-sm text-apptext-soft">
-                  <span className={`h-2 w-2 shrink-0 rounded-full ${c.status === 'OK' ? 'bg-emerald-300' : 'bg-amber-300'}`} />
-                  {c.check}
-                </span>
-                <span className={`text-right text-xs ${c.status === 'OK' ? 'text-apptext-dim' : 'text-amber-300'}`}>{c.detail}</span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Sync success-rate rollup */}
-      {syncHistory && syncHistory.bySource.length > 0 && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-3">
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync reliability</p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Last {syncHistory.days} days by scheduler</h3>
-          </div>
-          <div className="space-y-2">
-            {syncHistory.bySource.map((s) => (
-              <div key={s.source} className="rounded-2xl border border-appborder-light bg-appinset p-3">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-apptext">{s.source}</span>
-                  <span className={`text-sm font-semibold ${(s.successRate ?? 0) >= 90 ? 'text-emerald-300' : (s.successRate ?? 0) >= 70 ? 'text-amber-300' : 'text-rose-300'}`}>
-                    {s.successRate != null ? `${s.successRate}%` : '—'} OK
-                  </span>
-                </div>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-apptext-dim">
-                  <span>{s.total} runs</span>
-                  <span className="text-emerald-300/80">{s.ok} ok</span>
-                  <span className="text-amber-300/80">{s.warn} warn</span>
-                  <span className="text-rose-300/80">{s.error} error</span>
-                  <span className="ml-auto">last {fmtTs(s.lastRun)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 14-day coverage matrix */}
-      {coverage && coverage.coverage.length > 0 && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-3 flex items-end justify-between gap-3">
-            <div>
-              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Data coverage</p>
-              <h3 className="mt-2 text-xl font-semibold text-apptext">Last {coverage.days} days</h3>
+              )}
             </div>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-apptext-dim">
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300" /> complete</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-300" /> partial</span>
-              <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-300/70" /> missing</span>
+            <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Heap Memory</p>
+              {healthLoading ? (
+                <p className="mt-2 text-sm text-apptext-muted">...</p>
+              ) : (
+                <p className="mt-2 text-lg font-semibold text-apptext">
+                  {health?.jvm?.heapUsedMB ?? '...'}<span className="text-sm text-apptext-muted"> / {health?.jvm?.heapMaxMB ?? '...'} MB</span>
+                </p>
+              )}
             </div>
-          </div>
-          <div className="overflow-x-auto">
-            <div className="flex gap-1.5 pb-1">
-              {coverage.coverage.map((d) => {
-                const cell = d.hourlyComplete ? 'border-emerald-300/40 bg-emerald-300/15'
-                  : d.hourlyNonZero > 0 ? 'border-amber-300/40 bg-amber-300/15'
-                  : 'border-rose-300/30 bg-rose-300/10';
-                const [, mm, dd] = d.date.split('-');
+            <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Threads</p>
+              {healthLoading ? (
+                <p className="mt-2 text-sm text-apptext-muted">...</p>
+              ) : (
+                <p className="mt-2 text-lg font-semibold text-apptext">{health?.threads ?? '...'}</p>
+              )}
+            </div>
+            {health?.pool && (
+              <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">DB Pool</p>
+                <p className={`mt-2 text-lg font-semibold ${health.pool.awaitingConnection > 0 ? 'text-rose-300' : 'text-apptext'}`}>
+                  {health.pool.active}<span className="text-sm text-apptext-muted"> / {health.pool.max} active</span>
+                </p>
+                <p className="text-xs text-apptext-dim">
+                  {health.pool.idle} idle
+                  {health.pool.awaitingConnection > 0 && <span className="text-rose-300"> · {health.pool.awaitingConnection} waiting</span>}
+                </p>
+              </div>
+            )}
+          </section>
+
+          {/* Last sync check box */}
+          {health?.lastSyncCheck && (
+            <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3">
+              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
+              <p className="mt-1 text-sm text-apptext-soft">
+                {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
+                  month: 'short', day: 'numeric',
+                  hour: 'numeric', minute: '2-digit',
+                })}
+              </p>
+              <p className="mt-1 text-xs text-apptext-dim truncate">{health.lastSyncCheck.message}</p>
+            </div>
+          )}
+
+          {/* Event summary badges */}
+          {summary && (
+            <section className="grid grid-cols-3 gap-3">
+              <div className="rounded-2xl border border-appborder bg-appsurface-raised p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">24h Events</p>
+                <p className="mt-1 text-2xl font-semibold text-apptext">{summary.total24h}</p>
+              </div>
+              <div className="rounded-2xl border border-rose-300/40 bg-rose-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Errors</p>
+                <p className="mt-1 text-2xl font-semibold text-rose-300">{summary.errors24h}</p>
+              </div>
+              <div className="rounded-2xl border border-amber-300/40 bg-amber-300/20 p-4 text-center shadow-[0_4px_16px_var(--appshadow)]">
+                <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Warnings</p>
+                <p className="mt-1 text-2xl font-semibold text-amber-300">{summary.warns24h}</p>
+              </div>
+            </section>
+          )}
+
+          {/* Data freshness — per-granularity staleness */}
+          {freshness && (
+            <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:gap-4">
+              {([['Daily', freshness.daily], ['Hourly', freshness.hourly]] as const).map(([label, f]) => {
+                const b = freshnessBadge(f.ageHours);
                 return (
-                  <div key={d.date} title={`${d.date}\nHourly: ${d.hourlyNonZero}/${coverage.expectedHourly} non-zero\nDaily row: ${d.dailyPresent ? 'yes' : 'no'}\nWeather: ${d.weatherPresent ? 'yes' : 'no'}`}
-                       className={`flex min-w-[52px] flex-1 flex-col items-center gap-1 rounded-xl border p-2 ${cell}`}>
-                    <span className="text-3xs tabular-nums text-apptext-muted">{mm}/{dd}</span>
-                    <span className="text-xs font-semibold tabular-nums text-apptext">{d.hourlyNonZero}<span className="text-3xs font-normal text-apptext-dim">/{coverage.expectedHourly}</span></span>
-                    <div className="flex gap-1">
-                      <span title="daily row" className={`h-1.5 w-1.5 rounded-full ${d.dailyPresent ? 'bg-sky-300' : 'bg-appborder'}`} />
-                      <span title="weather" className={`h-1.5 w-1.5 rounded-full ${d.weatherPresent ? 'bg-cyan-300' : 'bg-appborder'}`} />
+                  <div key={label} className="rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_4px_16px_var(--appshadow)]">
+                    <div className="flex items-center justify-between">
+                      <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">{label} data freshness</p>
+                      <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${b.cls}`}>
+                        <span className={`h-2 w-2 rounded-full ${b.dot}`} /> {b.label}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-lg font-semibold text-apptext">
+                      {f.dataThroughDate ?? '—'}
+                      {f.ageHours != null && <span className="text-sm font-normal text-apptext-muted"> · {f.ageHours}h ago</span>}
+                    </p>
+                    <div className="mt-1 grid grid-cols-2 gap-x-3 text-xs text-apptext-dim">
+                      <span>Last success: {fmtTs(f.lastSuccess)}</span>
+                      <span>Last attempt: {fmtTs(f.lastAttempt)}</span>
                     </div>
                   </div>
                 );
               })}
-            </div>
-          </div>
-          <p className="mt-2 text-2xs text-apptext-dim">
-            Top number = non-zero hourly readings (of {coverage.expectedHourly}); a day is complete at ≥{coverage.completeThreshold}.
-            Dots: <span className="text-sky-300">daily row</span> · <span className="text-cyan-300">weather</span>.
-          </p>
-        </section>
-      )}
-
-      <SleepTestCard />
-
-      {/* Manual Sync Triggers */}
-      <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4">
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">Run Sync Jobs</h3>
-        </div>
-
-        {/* Date range selector */}
-        <div className="mb-4 rounded-2xl border border-appborder bg-appinset p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-2xs font-medium uppercase tracking-[0.14em] text-apptext-dim">Range</span>
-            <button
-              type="button"
-              onClick={() => setPreset('yesterday')}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                preset === 'yesterday'
-                  ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                  : 'border-appborder text-apptext-muted hover:bg-appinset-strong'
-              }`}
-            >
-              Yesterday
-            </button>
-            <button
-              type="button"
-              onClick={() => setPreset('range')}
-              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                preset === 'range'
-                  ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                  : 'border-appborder text-apptext-muted hover:bg-appinset-strong'
-              }`}
-            >
-              Custom range
-            </button>
-          </div>
-
-          {preset === 'range' && (
-            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-3xs font-medium uppercase tracking-[0.14em] text-apptext-dim">
-                  Start date
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  min={earliestIso}
-                  max={todayIso}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full rounded-xl border border-appborder bg-appsurface px-3 py-2 text-sm text-apptext-soft outline-none focus:border-appaccent-border [color-scheme:dark]"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-3xs font-medium uppercase tracking-[0.14em] text-apptext-dim">
-                  End date
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  min={earliestIso}
-                  max={todayIso}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full rounded-xl border border-appborder bg-appsurface px-3 py-2 text-sm text-apptext-soft outline-none focus:border-appaccent-border [color-scheme:dark]"
-                />
-              </div>
-            </div>
+            </section>
           )}
 
-          {rangeError && (
-            <p className="mt-2 text-xs text-rose-300">{rangeError}</p>
+          {/* Config sanity checks */}
+          {configCheck && configCheck.checks.length > 0 && (
+            <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <div className="mb-3">
+                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Configuration</p>
+                <h3 className="mt-2 text-xl font-semibold text-apptext">Config sanity checks</h3>
+              </div>
+              <div className="space-y-1.5">
+                {configCheck.checks.map((c) => (
+                  <div key={c.check} className="flex items-center justify-between gap-3 rounded-xl border border-appborder-light bg-appinset px-3 py-2">
+                    <span className="flex items-center gap-2 text-sm text-apptext-soft">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${c.status === 'OK' ? 'bg-emerald-300' : 'bg-amber-300'}`} />
+                      {c.check}
+                    </span>
+                    <span className={`text-right text-xs ${c.status === 'OK' ? 'text-apptext-dim' : 'text-amber-300'}`}>{c.detail}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <SyncButton
-            label="Daily Sync"
-            endpoint="/admin/sync/daily"
-            body={syncBody}
-            disabled={preset === 'range' && !!rangeError}
-          />
-          <SyncButton
-            label="Hourly Sync"
-            endpoint="/admin/sync/hourly"
-            body={syncBody}
-            disabled={preset === 'range' && !!rangeError}
-          />
-          <SyncButton label="🔔 Generate Alerts" endpoint="/admin/sync/alerts" />
-          <SyncButton label="📈 Retrain Forecast" endpoint="/admin/sync/forecast" />
-        </div>
-        <p className="mt-2 text-3xs text-apptext-dim">
-          Syncs run in the background — watch the Diagnostic Log for results.
-        </p>
-      </section>
-
-      {/* Event Feed */}
-      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-          <div>
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Event Feed</p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Diagnostic Log</h3>
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              className="rounded-full border border-appborder bg-appinset px-3 py-1.5 text-xs text-apptext-soft outline-none"
-            >
-              {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
-            </select>
-            <select
-              value={level}
-              onChange={(e) => setLevel(e.target.value)}
-              className="rounded-full border border-appborder bg-appinset px-3 py-1.5 text-xs text-apptext-soft outline-none"
-            >
-              {LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
-            </select>
-          </div>
-        </div>
-
-        {eventsLoading ? (
-          <div className="space-y-2 animate-pulse">
-            {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-2xl bg-appinset" />)}
-          </div>
-        ) : !events?.length ? (
-          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-            No events yet. Run a sync or restart to populate.
-          </div>
-        ) : (
-          <VirtualizedList
-            items={events}
-            height={Math.min(520, events.length * EVENT_ROW_HEIGHT)}
-            itemHeight={EVENT_ROW_HEIGHT}
-            overscan={6}
-            className="pr-1"
-            renderItem={(e) => (
-              <div
-                key={e.id}
-                role="button"
-                tabIndex={0}
-                onClick={() => setSelectedEvent(e)}
-                onKeyDown={(ev) => {
-                  if (ev.key === 'Enter' || ev.key === ' ') {
-                    ev.preventDefault();
-                    setSelectedEvent(e);
-                  }
-                }}
-                style={{ height: EVENT_ROW_HEIGHT, boxSizing: 'border-box', overflow: 'hidden' }}
-                className="group cursor-pointer border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-appaccent/40"
-              >
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-2xs tabular-nums text-apptext-muted whitespace-nowrap">
-                    {new Date(e.timestamp).toLocaleString('en-US', {
-                      month: 'short', day: 'numeric',
-                      hour: 'numeric', minute: '2-digit', second: '2-digit',
-                    })}
-                  </span>
-                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${levelBadge(e.level)}`}>
-                    {e.level}
-                  </span>
-                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${categoryBadge(e.category)}`}>
-                    {e.category}
-                  </span>
-                  <span className="text-3xs text-apptext-dim">{e.source}</span>
-                  <span className="ml-auto text-3xs text-apptext-dim opacity-0 transition-opacity group-hover:opacity-100">
-                    View details →
-                  </span>
-                </div>
-                <p className="mt-1 line-clamp-2 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
-                {e.details && (
-                  <p className="mt-0.5 text-3xs leading-snug text-apptext-dim truncate" title={e.details}>
-                    {e.details}
-                  </p>
-                )}
-              </div>
-            )}
-          />
-        )}
-      </section>
-
-      {/* Recent Syncs */}
-      {syncEvents.length > 0 && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-4">
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync History</p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent Sync Runs</h3>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {syncEvents.slice(0, 6).map((e) => (
-              <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
-                    {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
-                  </span>
-                  <span className="text-xs text-apptext-dim">
-                    {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
-                <p className="mt-1 text-3xs text-apptext-dim">{e.source}</p>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      {/* Forecast Events */}
-      {forecastEvents.length > 0 && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-4">
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Events Received</h3>
-            <p className="mt-1 text-xs text-apptext-dim">
-              Every ingestion event the forecast system has reacted to — including no-ops where a sync
-              tick fired but no new actual reading had landed yet.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {forecastEvents.slice(0, 6).map((e) => (
-              <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
-                    {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
-                  </span>
-                  <span className="text-xs text-apptext-dim">
-                    {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
-                <p className="mt-1 text-3xs text-apptext-dim">{e.source}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        </>
       )}
 
-      {/* Forecast Diagnostics — accuracy & drift (doc §12) */}
-      {diagnostics && (
-        <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-          <div className="mb-4 flex items-start justify-between gap-3">
-            <div>
-              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
-              <h3 className="mt-2 text-xl font-semibold text-apptext">Accuracy &amp; Drift</h3>
-              <p className="mt-1 text-xs text-apptext-dim">
-                Why recent forecasts missed, and whether the misses look like one weird day or a model
-                that&apos;s becoming systematically wrong.
+      {tab === 'sync' && (
+        <>
+          {/* Sync success-rate rollup */}
+          {syncHistory && syncHistory.bySource.length > 0 && (
+            <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <div className="mb-3">
+                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync reliability</p>
+                <h3 className="mt-2 text-xl font-semibold text-apptext">Last {syncHistory.days} days by scheduler</h3>
+              </div>
+              <div className="space-y-2">
+                {syncHistory.bySource.map((s) => (
+                  <div key={s.source} className="rounded-2xl border border-appborder-light bg-appinset p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-apptext">{s.source}</span>
+                      <span className={`text-sm font-semibold ${(s.successRate ?? 0) >= 90 ? 'text-emerald-300' : (s.successRate ?? 0) >= 70 ? 'text-amber-300' : 'text-rose-300'}`}>
+                        {s.successRate != null ? `${s.successRate}%` : '—'} OK
+                      </span>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-apptext-dim">
+                      <span>{s.total} runs</span>
+                      <span className="text-emerald-300/80">{s.ok} ok</span>
+                      <span className="text-amber-300/80">{s.warn} warn</span>
+                      <span className="text-rose-300/80">{s.error} error</span>
+                      <span className="ml-auto">last {fmtTs(s.lastRun)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 14-day coverage matrix */}
+          {coverage && coverage.coverage.length > 0 && (
+            <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <div className="mb-3 flex items-end justify-between gap-3">
+                <div>
+                  <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Data coverage</p>
+                  <h3 className="mt-2 text-xl font-semibold text-apptext">Last {coverage.days} days</h3>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xs text-apptext-dim">
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-300" /> complete</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-300" /> partial</span>
+                  <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-rose-300/70" /> missing</span>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <div className="flex gap-1.5 pb-1">
+                  {coverage.coverage.map((d) => {
+                    const cell = d.hourlyComplete ? 'border-emerald-300/40 bg-emerald-300/15'
+                      : d.hourlyNonZero > 0 ? 'border-amber-300/40 bg-amber-300/15'
+                      : 'border-rose-300/30 bg-rose-300/10';
+                    const [, mm, dd] = d.date.split('-');
+                    return (
+                      <div key={d.date} title={`${d.date}\nHourly: ${d.hourlyNonZero}/${coverage.expectedHourly} non-zero\nDaily row: ${d.dailyPresent ? 'yes' : 'no'}\nWeather: ${d.weatherPresent ? 'yes' : 'no'}`}
+                           className={`flex min-w-[52px] flex-1 flex-col items-center gap-1 rounded-xl border p-2 ${cell}`}>
+                        <span className="text-3xs tabular-nums text-apptext-muted">{mm}/{dd}</span>
+                        <span className="text-xs font-semibold tabular-nums text-apptext">{d.hourlyNonZero}<span className="text-3xs font-normal text-apptext-dim">/{coverage.expectedHourly}</span></span>
+                        <div className="flex gap-1">
+                          <span title="daily row" className={`h-1.5 w-1.5 rounded-full ${d.dailyPresent ? 'bg-sky-300' : 'bg-appborder'}`} />
+                          <span title="weather" className={`h-1.5 w-1.5 rounded-full ${d.weatherPresent ? 'bg-cyan-300' : 'bg-appborder'}`} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              <p className="mt-2 text-2xs text-apptext-dim">
+                Top number = non-zero hourly readings (of {coverage.expectedHourly}); a day is complete at ≥{coverage.completeThreshold}.
+                Dots: <span className="text-sky-300">daily row</span> · <span className="text-cyan-300">weather</span>.
               </p>
-            </div>
-            <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${driftStateBadge(diagnostics.drift.state)}`}>
-              {diagnostics.drift.state.replace(/_/g, ' ')}
-            </span>
-          </div>
-
-          {/* Drift metrics */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              { label: 'Historical MAE', value: fmtKwh1(diagnostics.drift.historicalMae) },
-              { label: 'Recent MAE', value: fmtKwh1(diagnostics.drift.recentMae) },
-              { label: 'MAE Ratio', value: diagnostics.drift.maeRatio != null ? `${diagnostics.drift.maeRatio.toFixed(2)}×` : '—' },
-              { label: 'Recent Bias', value: fmtSigned1(diagnostics.drift.recentBias) },
-            ].map((m) => (
-              <div key={m.label} className="rounded-2xl border border-appborder bg-appinset p-3">
-                <p className="text-3xs uppercase tracking-wide text-apptext-muted">{m.label}</p>
-                <p className="mt-1 text-base font-semibold tabular-nums text-apptext">{m.value}</p>
-              </div>
-            ))}
-          </div>
-          <p className="mt-2 text-2xs text-apptext-dim">
-            {diagnostics.drift.sampleCount} graded day{diagnostics.drift.sampleCount === 1 ? '' : 's'} in the drift window
-            {diagnostics.drift.streakLength > 0 && diagnostics.drift.streakSign !== 0 && (
-              <> · {diagnostics.drift.streakLength}-day streak of usage running {diagnostics.drift.streakSign > 0 ? 'above' : 'below'} forecast</>
-            )}
-          </p>
-
-          {/* Per-day diagnostics table */}
-          {diagnostics.daily.length > 0 ? (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[520px] text-sm">
-                <thead>
-                  <tr className="text-left text-2xs uppercase tracking-wide text-apptext-muted">
-                    <th className="pb-2 pr-3 font-medium">Date</th>
-                    <th className="pb-2 pr-3 text-right font-medium">Actual</th>
-                    <th className="pb-2 pr-3 text-right font-medium">Predicted</th>
-                    <th className="pb-2 pr-3 text-right font-medium">Residual</th>
-                    <th className="pb-2 pr-3 text-right font-medium">Score</th>
-                    <th className="pb-2 font-medium">Class</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {diagnostics.daily.map((d) => (
-                    <tr key={d.date} className="border-t border-appborder">
-                      <td className="py-2 pr-3 whitespace-nowrap text-apptext-soft">
-                        {new Date(`${d.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-apptext">{d.actual.toFixed(1)}</td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">{d.predicted.toFixed(1)}</td>
-                      <td className={`py-2 pr-3 text-right tabular-nums ${d.residual > 0 ? 'text-amber-300' : d.residual < 0 ? 'text-sky-300' : 'text-apptext-soft'}`}>
-                        {d.residual > 0 ? '+' : ''}{Math.round(d.residual)}
-                      </td>
-                      <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">
-                        {d.anomalyScore != null ? d.anomalyScore.toFixed(2) : '—'}
-                      </td>
-                      <td className="py-2">
-                        <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${anomalyClassBadge(d.anomalyClassification)}`}>
-                          {d.anomalyClassification}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-apptext-dim">
-              No graded forecast days in the last {diagnostics.trailingDays} days yet.
-            </p>
+            </section>
           )}
-        </section>
+
+          {/* Manual Sync Triggers */}
+          <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+            <div className="mb-4">
+              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Manual Triggers</p>
+              <h3 className="mt-2 text-xl font-semibold text-apptext">Run Sync Jobs</h3>
+            </div>
+
+            {/* Date range selector */}
+            <div className="mb-4 rounded-2xl border border-appborder bg-appinset p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-2xs font-medium uppercase tracking-[0.14em] text-apptext-dim">Range</span>
+                <button
+                  type="button"
+                  onClick={() => setPreset('yesterday')}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    preset === 'yesterday'
+                      ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
+                      : 'border-appborder text-apptext-muted hover:bg-appinset-strong'
+                  }`}
+                >
+                  Yesterday
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPreset('range')}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                    preset === 'range'
+                      ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
+                      : 'border-appborder text-apptext-muted hover:bg-appinset-strong'
+                  }`}
+                >
+                  Custom range
+                </button>
+              </div>
+
+              {preset === 'range' && (
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-3xs font-medium uppercase tracking-[0.14em] text-apptext-dim">
+                      Start date
+                    </label>
+                    <input
+                      type="date"
+                      value={startDate}
+                      min={earliestIso}
+                      max={todayIso}
+                      onChange={(e) => setStartDate(e.target.value)}
+                      className="w-full rounded-xl border border-appborder bg-appsurface px-3 py-2 text-sm text-apptext-soft outline-none focus:border-appaccent-border [color-scheme:dark]"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-3xs font-medium uppercase tracking-[0.14em] text-apptext-dim">
+                      End date
+                    </label>
+                    <input
+                      type="date"
+                      value={endDate}
+                      min={earliestIso}
+                      max={todayIso}
+                      onChange={(e) => setEndDate(e.target.value)}
+                      className="w-full rounded-xl border border-appborder bg-appsurface px-3 py-2 text-sm text-apptext-soft outline-none focus:border-appaccent-border [color-scheme:dark]"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {rangeError && (
+                <p className="mt-2 text-xs text-rose-300">{rangeError}</p>
+              )}
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <SyncButton
+                label="Daily Sync"
+                endpoint="/admin/sync/daily"
+                body={syncBody}
+                disabled={preset === 'range' && !!rangeError}
+              />
+              <SyncButton
+                label="Hourly Sync"
+                endpoint="/admin/sync/hourly"
+                body={syncBody}
+                disabled={preset === 'range' && !!rangeError}
+              />
+              <SyncButton label="🔔 Generate Alerts" endpoint="/admin/sync/alerts" />
+              <SyncButton label="📈 Retrain Forecast" endpoint="/admin/sync/forecast" />
+            </div>
+            <p className="mt-2 text-3xs text-apptext-dim">
+              Syncs run in the background — watch the Diagnostic Log for results.
+            </p>
+          </section>
+
+          {/* Recent Syncs */}
+          {syncEvents.length > 0 && (
+            <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <div className="mb-4">
+                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Sync History</p>
+                <h3 className="mt-2 text-xl font-semibold text-apptext">Recent Sync Runs</h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {syncEvents.slice(0, 6).map((e) => (
+                  <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
+                        {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
+                      </span>
+                      <span className="text-xs text-apptext-dim">
+                        {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
+                    <p className="mt-1 text-3xs text-apptext-dim">{e.source}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
-      {/* DB Explorer */}
-      <DbExplorer />
+      {tab === 'events' && (
+        <>
+          {/* Event Feed */}
+          <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+            <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
+              <div>
+                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Event Feed</p>
+                <h3 className="mt-2 text-xl font-semibold text-apptext">Diagnostic Log</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="rounded-full border border-appborder bg-appinset px-3 py-1.5 text-xs text-apptext-soft outline-none"
+                >
+                  {CATEGORIES.map((c) => <option key={c.key} value={c.key}>{c.label}</option>)}
+                </select>
+                <select
+                  value={level}
+                  onChange={(e) => setLevel(e.target.value)}
+                  className="rounded-full border border-appborder bg-appinset px-3 py-1.5 text-xs text-apptext-soft outline-none"
+                >
+                  {LEVELS.map((l) => <option key={l.key} value={l.key}>{l.label}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {eventsLoading ? (
+              <div className="space-y-2 animate-pulse">
+                {[1, 2, 3, 4, 5].map((i) => <div key={i} className="h-12 rounded-2xl bg-appinset" />)}
+              </div>
+            ) : !events?.length ? (
+              <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
+                No events yet. Run a sync or restart to populate.
+              </div>
+            ) : (
+              <VirtualizedList
+                items={events}
+                height={Math.min(520, events.length * EVENT_ROW_HEIGHT)}
+                itemHeight={EVENT_ROW_HEIGHT}
+                overscan={6}
+                className="pr-1"
+                renderItem={(e) => (
+                  <div
+                    key={e.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedEvent(e)}
+                    onKeyDown={(ev) => {
+                      if (ev.key === 'Enter' || ev.key === ' ') {
+                        ev.preventDefault();
+                        setSelectedEvent(e);
+                      }
+                    }}
+                    style={{ height: EVENT_ROW_HEIGHT, boxSizing: 'border-box', overflow: 'hidden' }}
+                    className="group cursor-pointer border-b border-appborder-light py-2.5 transition-colors hover:bg-appinset focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-appaccent/40"
+                  >
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-2xs tabular-nums text-apptext-muted whitespace-nowrap">
+                        {new Date(e.timestamp).toLocaleString('en-US', {
+                          month: 'short', day: 'numeric',
+                          hour: 'numeric', minute: '2-digit', second: '2-digit',
+                        })}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${levelBadge(e.level)}`}>
+                        {e.level}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${categoryBadge(e.category)}`}>
+                        {e.category}
+                      </span>
+                      <span className="text-3xs text-apptext-dim">{e.source}</span>
+                      <span className="ml-auto text-3xs text-apptext-dim opacity-0 transition-opacity group-hover:opacity-100">
+                        View details →
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs leading-snug text-apptext-soft break-words">{e.message}</p>
+                    {e.details && (
+                      <p className="mt-0.5 text-3xs leading-snug text-apptext-dim truncate" title={e.details}>
+                        {e.details}
+                      </p>
+                    )}
+                  </div>
+                )}
+              />
+            )}
+          </section>
+        </>
+      )}
+
+      {tab === 'forecast' && (
+        <>
+          {/* Forecast Events */}
+          {forecastEvents.length > 0 && (
+            <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <div className="mb-4">
+                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+                <h3 className="mt-2 text-xl font-semibold text-apptext">Events Received</h3>
+                <p className="mt-1 text-xs text-apptext-dim">
+                  Every ingestion event the forecast system has reacted to — including no-ops where a sync
+                  tick fired but no new actual reading had landed yet.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {forecastEvents.slice(0, 6).map((e) => (
+                  <div key={e.id} className="rounded-2xl border border-appborder bg-appinset p-4">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${e.level === 'ERROR' ? 'bg-rose-300/10 border-rose-300/20 text-rose-300' : e.level === 'WARN' ? 'bg-amber-300/10 border-amber-300/20 text-amber-300' : 'bg-emerald-300/10 border-emerald-300/20 text-emerald-300'}`}>
+                        {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
+                      </span>
+                      <span className="text-xs text-apptext-dim">
+                        {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>
+                    <p className="mt-1 text-3xs text-apptext-dim">{e.source}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Forecast Diagnostics — accuracy & drift (doc §12) */}
+          {diagnostics && (
+            <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
+                  <h3 className="mt-2 text-xl font-semibold text-apptext">Accuracy &amp; Drift</h3>
+                  <p className="mt-1 text-xs text-apptext-dim">
+                    Why recent forecasts missed, and whether the misses look like one weird day or a model
+                    that&apos;s becoming systematically wrong.
+                  </p>
+                </div>
+                <span className={`shrink-0 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${driftStateBadge(diagnostics.drift.state)}`}>
+                  {diagnostics.drift.state.replace(/_/g, ' ')}
+                </span>
+              </div>
+
+              {/* Drift metrics */}
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {[
+                  { label: 'Historical MAE', value: fmtKwh1(diagnostics.drift.historicalMae) },
+                  { label: 'Recent MAE', value: fmtKwh1(diagnostics.drift.recentMae) },
+                  { label: 'MAE Ratio', value: diagnostics.drift.maeRatio != null ? `${diagnostics.drift.maeRatio.toFixed(2)}×` : '—' },
+                  { label: 'Recent Bias', value: fmtSigned1(diagnostics.drift.recentBias) },
+                ].map((m) => (
+                  <div key={m.label} className="rounded-2xl border border-appborder bg-appinset p-3">
+                    <p className="text-3xs uppercase tracking-wide text-apptext-muted">{m.label}</p>
+                    <p className="mt-1 text-base font-semibold tabular-nums text-apptext">{m.value}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-2 text-2xs text-apptext-dim">
+                {diagnostics.drift.sampleCount} graded day{diagnostics.drift.sampleCount === 1 ? '' : 's'} in the drift window
+                {diagnostics.drift.streakLength > 0 && diagnostics.drift.streakSign !== 0 && (
+                  <> · {diagnostics.drift.streakLength}-day streak of usage running {diagnostics.drift.streakSign > 0 ? 'above' : 'below'} forecast</>
+                )}
+              </p>
+
+              {/* Per-day diagnostics table */}
+              {diagnostics.daily.length > 0 ? (
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
+                    <thead>
+                      <tr className="text-left text-2xs uppercase tracking-wide text-apptext-muted">
+                        <th className="pb-2 pr-3 font-medium">Date</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Actual</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Predicted</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Residual</th>
+                        <th className="pb-2 pr-3 text-right font-medium">Score</th>
+                        <th className="pb-2 font-medium">Class</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {diagnostics.daily.map((d) => (
+                        <tr key={d.date} className="border-t border-appborder">
+                          <td className="py-2 pr-3 whitespace-nowrap text-apptext-soft">
+                            {new Date(`${d.date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums text-apptext">{d.actual.toFixed(1)}</td>
+                          <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">{d.predicted.toFixed(1)}</td>
+                          <td className={`py-2 pr-3 text-right tabular-nums ${d.residual > 0 ? 'text-amber-300' : d.residual < 0 ? 'text-sky-300' : 'text-apptext-soft'}`}>
+                            {d.residual > 0 ? '+' : ''}{Math.round(d.residual)}
+                          </td>
+                          <td className="py-2 pr-3 text-right tabular-nums text-apptext-soft">
+                            {d.anomalyScore != null ? d.anomalyScore.toFixed(2) : '—'}
+                          </td>
+                          <td className="py-2">
+                            <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase ${anomalyClassBadge(d.anomalyClassification)}`}>
+                              {d.anomalyClassification}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-apptext-dim">
+                  No graded forecast days in the last {diagnostics.trailingDays} days yet.
+                </p>
+              )}
+            </section>
+          )}
+        </>
+      )}
+
+      {tab === 'tools' && (
+        <>
+          <SleepTestCard />
+          <DbExplorer />
+        </>
+      )}
 
       {/* Event detail modal */}
       {selectedEvent && (
