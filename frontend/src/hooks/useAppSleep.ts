@@ -35,6 +35,8 @@ export interface AppSleep {
   asleep: boolean;
   /** Seconds until sleep while the countdown shows, else null. */
   secondsLeft: number | null;
+  /** How long the countdown runs, in seconds. */
+  warningSeconds: number;
   /** The one-time 30-second test timer is on. */
   testing: boolean;
   wake: () => void;
@@ -110,5 +112,5 @@ export function useAppSleep(enabled: boolean): AppSleep {
     };
   }, [enabled, wake, after, warning]);
 
-  return { asleep, secondsLeft, testing, wake };
+  return { asleep, secondsLeft, warningSeconds: Math.round(warning / 1000), testing, wake };
 }

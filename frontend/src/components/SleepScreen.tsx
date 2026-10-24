@@ -37,23 +37,94 @@ export function SleepScreen({ onWake, testing = false }: { onWake: () => void; t
   );
 }
 
-/** The last minute before sleep: a quiet countdown above the phone nav. Any movement cancels it. */
-export function SleepWarning({ secondsLeft, onStay }: { secondsLeft: number; onStay: () => void }) {
+const RING_R = 42;
+const RING_C = 2 * Math.PI * RING_R;
+/** How long the warning lingers, fading, after it's dismissed. */
+const FADE_MS = 300;
+
+/**
+ * The last stretch before sleep: a card in the middle of a blurred page, with a ring
+ * that drains as the seconds run out. Any movement cancels it (useAppSleep). It stays
+ * mounted for a moment while it fades out, still catching taps, so the tap that
+ * dismissed it can't fall through to a button on the page behind.
+ */
+export function SleepWarning({
+  secondsLeft,
+  totalSeconds,
+  onStay,
+}: {
+  /** null when there's no countdown. */
+  secondsLeft: number | null;
+  totalSeconds: number;
+  onStay: () => void;
+}) {
+  const open = secondsLeft !== null;
+  const [mounted, setMounted] = useState(open);
+  const [shown, setShown] = useState(false);
+  const [lastSeconds, setLastSeconds] = useState(secondsLeft ?? totalSeconds);
+  if (secondsLeft !== null && secondsLeft !== lastSeconds) setLastSeconds(secondsLeft);
+
+  useEffect(() => {
+    if (open) {
+      setMounted(true);
+      const frame = requestAnimationFrame(() => setShown(true));
+      return () => cancelAnimationFrame(frame);
+    }
+    setShown(false);
+    const t = window.setTimeout(() => setMounted(false), FADE_MS);
+    return () => window.clearTimeout(t);
+  }, [open]);
+
+  if (!mounted) return null;
+  const left = Math.max(0, lastSeconds);
+  const fraction = totalSeconds > 0 ? left / totalSeconds : 0;
+
   return (
     <div
-      role="status"
-      aria-live="polite"
-      className="fixed inset-x-0 bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-40 flex justify-center px-4 lg:bottom-6"
+      className={`fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-md transition-opacity duration-300 motion-reduce:transition-none ${
+        shown ? 'opacity-100' : 'opacity-0'
+      }`}
+      onClick={onStay}
     >
-      <div className="flex max-w-md items-center gap-3 rounded-2xl border border-appborder bg-appsurface-raised px-4 py-3 shadow-[0_10px_28px_var(--appshadow)]">
-        <p className="text-xs text-apptext">
-          Still there? Going to sleep in <span className="font-semibold tabular-nums">{secondsLeft} s</span>; cameras will
-          pause.
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="sleep-warning-title"
+        aria-describedby="sleep-warning-body"
+        className={`w-full max-w-sm rounded-[28px] border border-appborder bg-appsurface-raised p-6 text-center shadow-[0_24px_60px_rgba(0,0,0,0.35)] transition-transform duration-300 motion-reduce:transition-none ${
+          shown ? 'scale-100' : 'scale-95'
+        }`}
+      >
+        <div className="relative mx-auto h-24 w-24">
+          <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90" aria-hidden="true">
+            <circle cx="50" cy="50" r={RING_R} fill="none" strokeWidth="6" className="stroke-appinset" />
+            <circle
+              cx="50"
+              cy="50"
+              r={RING_R}
+              fill="none"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={RING_C}
+              strokeDashoffset={RING_C * (1 - fraction)}
+              className="stroke-appaccent transition-[stroke-dashoffset] duration-1000 ease-linear motion-reduce:transition-none"
+            />
+          </svg>
+          <span className="absolute inset-0 flex items-center justify-center text-2xl font-semibold tabular-nums text-apptext">
+            {left}
+          </span>
+        </div>
+        <h2 id="sleep-warning-title" className="mt-4 text-lg font-semibold text-apptext">
+          Still there?
+        </h2>
+        <p id="sleep-warning-body" className="mt-1 text-sm text-apptext-muted" aria-live="polite">
+          The app goes to sleep in {left} second{left === 1 ? '' : 's'} and the cameras pause. Move the mouse or tap to
+          keep going.
         </p>
         <button
           type="button"
           onClick={onStay}
-          className={`h-9 shrink-0 rounded-lg border border-appaccent-border bg-appaccent-soft px-3 text-xs font-semibold text-apptext ${FOCUS_RING}`}
+          className={`mt-5 h-11 w-full rounded-xl bg-appaccent text-sm font-semibold text-appaccent-fg transition-opacity hover:opacity-90 ${FOCUS_RING}`}
         >
           I'm here
         </button>

@@ -8,7 +8,7 @@ import {
   startSleepTest,
   useAppSleep,
 } from '../hooks/useAppSleep';
-import { SleepScreen } from '../components/SleepScreen';
+import { SleepScreen, SleepWarning } from '../components/SleepScreen';
 
 vi.mock('../api/activity', () => ({
   recordTab: vi.fn().mockResolvedValue(undefined),
@@ -141,5 +141,30 @@ describe('SleepScreen', () => {
     expect(screen.getByRole('dialog', { name: 'App is asleep' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Tap to wake' }));
     expect(onWake).toHaveBeenCalled();
+  });
+});
+
+describe('SleepWarning', () => {
+  it('shows the seconds left in a centered dialog, and lingers while fading so a tap cannot fall through', () => {
+    vi.useFakeTimers();
+    const onStay = vi.fn();
+    const { rerender } = render(<SleepWarning secondsLeft={42} totalSeconds={60} onStay={onStay} />);
+    expect(screen.getByRole('alertdialog', { name: 'Still there?' })).toBeInTheDocument();
+    expect(screen.getByText(/goes to sleep in 42 seconds/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: "I'm here" }));
+    expect(onStay).toHaveBeenCalled();
+
+    rerender(<SleepWarning secondsLeft={null} totalSeconds={60} onStay={onStay} />);
+    expect(screen.getByRole('alertdialog')).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    vi.useRealTimers();
+  });
+
+  it('renders nothing when there is no countdown', () => {
+    render(<SleepWarning secondsLeft={null} totalSeconds={60} onStay={() => {}} />);
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
   });
 });
