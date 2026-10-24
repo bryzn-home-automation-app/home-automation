@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 /** True while the tab is in the foreground (false when hidden, minimized, or the phone is locked). */
 export function usePageVisible(): boolean {
@@ -9,25 +9,6 @@ export function usePageVisible(): boolean {
     return () => document.removeEventListener('visibilitychange', update);
   }, []);
   return visible;
-}
-
-/**
- * True while at least `threshold` of the element is in the viewport. Without
- * IntersectionObserver (old browsers, jsdom) it reports on-screen, so the page
- * degrades to "visible tab" rules rather than never streaming.
- */
-export function useOnScreen(ref: RefObject<Element | null>, threshold = 0.25): boolean {
-  const [onScreen, setOnScreen] = useState(true);
-  useEffect(() => {
-    const node = ref.current;
-    if (!node || typeof IntersectionObserver === 'undefined') return;
-    const observer = new IntersectionObserver((entries) => setOnScreen(entries.some((e) => e.isIntersecting)), {
-      threshold,
-    });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [ref, threshold]);
-  return onScreen;
 }
 
 const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll'] as const;

@@ -54,7 +54,9 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("improved", "Pages load about twice as fast, especially on phones."),
                             change("improved", "Colors that were hard to read in light or dark mode are fixed."),
                             change("improved", "Bills now open only for signed-in members, and disabled accounts lose access right away."),
-                            change("fixed", "A day's electric total that first arrives as zero now corrects itself."))
+                            change("improved", "Every camera goes live as soon as you open the Cameras tab, the outdoor ones too (no tap needed)."),
+                            change("fixed", "A day's electric total that first arrives as zero now corrects itself."),
+                            change("fixed", "Recordings no longer stop loading after the HomeBase connection goes quiet."))
             ),
             define("1.4.0", "stable", LocalDate.of(2026, 9, 28),
                     "Bills, a clearer forecast and robot upkeep",

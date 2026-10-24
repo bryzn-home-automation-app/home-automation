@@ -156,18 +156,17 @@ describe('battery helpers', () => {
 });
 
 describe('live-view policy', () => {
-  const base = { requested: false, pageVisible: true, onScreen: true, idle: false, failed: false };
+  const base = { requested: false, pageVisible: true, idle: false, failed: false };
 
-  it('wired cameras stream on their own; battery cameras only when tapped', () => {
+  it('every camera, battery ones included, goes live on its own', () => {
     expect(autoLive(indoor)).toBe(true);
-    expect(autoLive(driveway)).toBe(false);
+    expect(autoLive(driveway)).toBe(true);
     expect(shouldStream({ ...base, camera: indoor })).toBe(true);
-    expect(shouldStream({ ...base, camera: driveway })).toBe(false);
-    expect(shouldStream({ ...base, camera: driveway, requested: true })).toBe(true);
+    expect(shouldStream({ ...base, camera: driveway })).toBe(true);
   });
 
   it('never streams when nobody is looking', () => {
-    for (const off of [{ pageVisible: false }, { onScreen: false }, { idle: true }, { failed: true }]) {
+    for (const off of [{ pageVisible: false }, { idle: true }, { failed: true }]) {
       expect(shouldStream({ ...base, requested: true, camera: indoor, ...off })).toBe(false);
     }
     expect(shouldStream({ ...base, camera: { ...indoor, available: false } })).toBe(false);
@@ -231,21 +230,18 @@ describe('CameraTile', () => {
     vi.useRealTimers();
   });
 
-  it('shows battery + solar state and waits for a tap on a battery camera', async () => {
+  it('shows battery + solar state and starts a battery camera live without a tap', async () => {
     renderTile(driveway);
     expect(screen.getByText(/64%/)).toBeInTheDocument();
     expect(screen.getByText(/Solar charging/)).toBeInTheDocument();
     expect(await screen.findByAltText('Latest snapshot from Driveway')).toBeInTheDocument();
-    expect(camerasApi.startCameraLive).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Watch Driveway live' }));
+    expect(screen.getByText('Waking camera…')).toBeInTheDocument();
     await waitFor(() => expect(players.started).toEqual(['/camera-stream/t.s/ws']));
   });
 
   it('stops a battery stream at the budget and asks "Still watching?"', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    renderTile(driveway);
-    fireEvent.click(screen.getByRole('button', { name: 'Watch Driveway live' }));
+    const { update } = renderTile(driveway);
     await waitFor(() => expect(players.started).toHaveLength(1));
 
     await act(async () => {
@@ -256,6 +252,16 @@ describe('CameraTile', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep watching' }));
     await waitFor(() => expect(players.started).toHaveLength(2));
+
+    // Paused at the budget, then a later visit: it starts live again, not on the prompt.
+    await act(async () => {
+      vi.advanceTimersByTime(BATTERY_LIVE_BUDGET_MS + 10);
+    });
+    expect(screen.getByText(/Still watching\?/)).toBeInTheDocument();
+    update({ pageVisible: false });
+    update({ pageVisible: true });
+    await waitFor(() => expect(players.started).toHaveLength(3));
+    expect(screen.queryByText(/Still watching\?/)).not.toBeInTheDocument();
   });
 
   it('a wired camera streams by itself and stops when the tab is hidden', async () => {
@@ -286,8 +292,8 @@ describe('CameraTile', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Position 2' }));
     await waitFor(() => expect(camerasApi.goToCameraPreset).toHaveBeenCalledWith('cam-1', 2));
     expect(await screen.findByText(/Moving to Position 2/)).toBeInTheDocument();
-    // Battery camera not streaming → offer to watch it move.
-    expect(screen.getByRole('button', { name: 'Watch live' })).toBeInTheDocument();
+    // Already live on its own, so there's nothing to offer.
+    expect(screen.queryByRole('button', { name: 'Watch live' })).not.toBeInTheDocument();
   });
 
   it('pan/tilt arrows appear only while live', async () => {

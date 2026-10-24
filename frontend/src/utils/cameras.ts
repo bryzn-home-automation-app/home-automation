@@ -71,17 +71,21 @@ export function chargeLabel(camera: Pick<Camera, 'chargingStatus'>, state: Charg
   return 'Holding steady';
 }
 
-/** Whether the tile starts live video by itself (wired cameras only). */
-export function autoLive(camera: Pick<Camera, 'powerSource' | 'liveAvailable' | 'available'>): boolean {
-  return camera.liveAvailable && camera.available && camera.powerSource !== 'battery';
+/**
+ * Whether the tile starts live video by itself: every camera does, battery ones
+ * included. Members sign in for a minute to check on the house, so the picture
+ * should already be live when they get there, not waiting on a tap. A battery
+ * camera still stops at BATTERY_LIVE_BUDGET_MS and asks before going on.
+ */
+export function autoLive(camera: Pick<Camera, 'liveAvailable' | 'available'>): boolean {
+  return camera.liveAvailable && camera.available;
 }
 
 export interface LiveInputs {
-  camera: Pick<Camera, 'powerSource' | 'liveAvailable' | 'available'>;
-  /** The viewer tapped play (battery cameras need this). */
+  camera: Pick<Camera, 'liveAvailable' | 'available'>;
+  /** The viewer tapped play / resume. */
   requested: boolean;
   pageVisible: boolean;
-  onScreen: boolean;
   /** Nobody has touched the page for IDLE_STOP_MS. */
   idle: boolean;
   /** Live failed and hasn't been retried — don't loop on a broken stream. */
@@ -89,13 +93,14 @@ export interface LiveInputs {
 }
 
 /**
- * The single rule for "should this tile be streaming right now": only while
- * someone is plausibly looking at it. Everything else (snapshot, prompts) is
- * presentation.
+ * The single rule for "should this tile be streaming right now": whenever the
+ * Cameras tab is open and someone is plausibly there. Tiles below the fold
+ * stream too, so scrolling down finds them already live. Everything else
+ * (snapshot, prompts) is presentation.
  */
 export function shouldStream(i: LiveInputs): boolean {
   if (!i.camera.liveAvailable || !i.camera.available || i.failed) return false;
-  if (!i.pageVisible || !i.onScreen || i.idle) return false;
+  if (!i.pageVisible || i.idle) return false;
   return i.requested || autoLive(i.camera);
 }
 

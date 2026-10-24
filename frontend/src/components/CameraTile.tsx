@@ -3,7 +3,6 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { fetchCameraSnapshot, goToCameraPreset, nudgeCamera, reportLiveDiagnostics, startCameraLive, type PanTiltDirection } from '../api/cameras';
 import { errorMessage } from '../api/climate';
 import { HlsPlayer, MsePlayer, liveSupported, preferHls, type LivePlayer } from '../utils/msePlayer';
-import { useOnScreen } from '../hooks/useViewerPresence';
 import {
   BATTERY_LIVE_BUDGET_MS,
   ago,
@@ -137,8 +136,6 @@ interface CameraTileProps {
 }
 
 function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTileProps) {
-  const tileRef = useRef<HTMLDivElement | null>(null);
-  const onScreen = useOnScreen(tileRef);
   const battery = camera.powerSource === 'battery';
   const [requested, setRequested] = useState(false);
   const [budgetHit, setBudgetHit] = useState(false);
@@ -151,13 +148,14 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
 
   const streaming =
     supported &&
-    shouldStream({ camera, requested, pageVisible, onScreen, idle, failed: liveError != null || budgetHit });
+    shouldStream({ camera, requested, pageVisible, idle, failed: liveError != null || budgetHit });
 
-  // Leaving (tab hidden, scrolled away, idle) cancels a battery camera's tap —
-  // coming back shouldn't silently wake it again.
+  // Leaving the tab ends the visit: coming back starts live again rather than
+  // on the "Still watching?" prompt a battery camera left behind.
   useEffect(() => {
-    if (!pageVisible || !onScreen || idle) setRequested(false);
-  }, [pageVisible, onScreen, idle]);
+    if (!pageVisible || idle) setRequested(false);
+    if (!pageVisible) setBudgetHit(false);
+  }, [pageVisible, idle]);
 
   useEffect(() => {
     if (!streaming) setStatus(null);
@@ -245,7 +243,6 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
 
   return (
     <div
-      ref={tileRef}
       className={`overflow-hidden rounded-[24px] border bg-appsurface-raised shadow-[0_10px_28px_var(--appshadow)] transition-colors ${
         recent ? 'border-rose-400/70 ring-2 ring-rose-400/40' : 'border-appborder'
       }`}

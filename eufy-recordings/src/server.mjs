@@ -46,6 +46,13 @@ class HttpError extends Error {
   }
 }
 
+/** The station didn't answer at all — as opposed to answering with an error. */
+class StationSilent extends HttpError {
+  constructor(message) {
+    super(504, message);
+  }
+}
+
 // ── eufy client ──
 
 /** The bridge's session file, read-only: hydrate from it, never write it. */
@@ -123,8 +130,44 @@ async function stationSession(st) {
   const s = c.getP2pSessions().get(st.sn);
   if (!s) throw new HttpError(502, `no P2P session to ${st.sn}`);
   for (let i = 0; i < 40 && !s.isConnected; i++) await sleep(250);
-  if (!s.isConnected) throw new HttpError(502, `HomeBase ${st.sn} didn't connect`);
+  if (!s.isConnected) throw new StationSilent(`HomeBase ${st.sn} didn't connect`);
   return s;
+}
+
+const strikes = new Map(); // station sn → silences in a row
+
+/**
+ * A station can go quiet on a session that still reports connected: after ~3 hours on
+ * Oct 21 2026 every list query timed out for three days, and only a restart fixed it.
+ * Close the session so the next request opens a fresh one; a second silence in a row
+ * re-hydrates the whole client instead, in case the bridge has refreshed the session.
+ */
+async function recover(st, why) {
+  const n = (strikes.get(st.sn) ?? 0) + 1;
+  strikes.set(st.sn, n);
+  if (n > 1) {
+    log(`${st.sn}: ${why} again — re-hydrating the eufy client`);
+    strikes.delete(st.sn);
+    return dropClient();
+  }
+  log(`${st.sn}: ${why} — reopening its P2P session`);
+  const c = await clientPromise?.catch(() => null);
+  await Promise.resolve(c?.getP2pSessions().get(st.sn)?.close()).catch(() => {});
+}
+
+/** Run `fn` against the station; when it goes silent, recover once and try again. */
+async function withRecovery(st, fn) {
+  try {
+    const r = await fn();
+    strikes.delete(st.sn);
+    return r;
+  } catch (e) {
+    if (!(e instanceof StationSilent)) throw e;
+    await recover(st, e.message);
+    const r = await fn();
+    strikes.delete(st.sn);
+    return r;
+  }
 }
 
 // One request at a time per station and kind: database replies aren't tied to their
@@ -158,55 +201,67 @@ function freshFor(dayIndex) {
   return dayIndex === 0 ? 30_000 : dayIndex === 1 ? 5 * 60_000 : 30 * 60_000;
 }
 
-async function queryDay(st, accountId, day) {
-  return exclusive(`${st.sn}|db`, async () => {
-    const s = await stationSession(st);
-    let text = "";
-    const onChunk = ({ text: t }) => (text += t);
-    const sent = Date.now();
-    s.on("dbChunk", onChunk);
-    try {
-      s.queryDatabase("history_record_info", { accountId, innerCmd: DB_QUERY_BY_DATE, channel: 255, query: dayQuery(day) });
-      for (const until = Date.now() + 15_000; Date.now() < until; ) {
-        await sleep(150);
-        const doc = firstJsonObject(text);
-        // A late reply to an earlier, abandoned query would carry an older transaction.
-        if (doc && (doc.cmd !== DB_QUERY_BY_DATE || Number(doc.transaction) < sent)) {
-          text = "";
-          continue;
-        }
-        if (!doc) continue;
-        if (doc.mIntRet) throw new HttpError(502, `HomeBase refused the list for ${day} (${doc.msg})`);
-        return parseRecordings(doc, st.sn);
-      }
-      throw new HttpError(504, `HomeBase didn't answer for ${day}`);
-    } finally {
-      s.off("dbChunk", onChunk);
-    }
-  });
+function queryDay(st, accountId, day) {
+  return exclusive(`${st.sn}|db`, () => withRecovery(st, () => askDay(st, accountId, day)));
 }
 
+async function askDay(st, accountId, day) {
+  const s = await stationSession(st);
+  let text = "";
+  const onChunk = ({ text: t }) => (text += t);
+  const sent = Date.now();
+  s.on("dbChunk", onChunk);
+  try {
+    s.queryDatabase("history_record_info", { accountId, innerCmd: DB_QUERY_BY_DATE, channel: 255, query: dayQuery(day) });
+    for (const until = Date.now() + 15_000; Date.now() < until; ) {
+      await sleep(150);
+      const doc = firstJsonObject(text);
+      // A late reply to an earlier, abandoned query would carry an older transaction.
+      if (doc && (doc.cmd !== DB_QUERY_BY_DATE || Number(doc.transaction) < sent)) {
+        text = "";
+        continue;
+      }
+      if (!doc) continue;
+      if (doc.mIntRet) throw new HttpError(502, `HomeBase refused the list for ${day} (${doc.msg})`);
+      return parseRecordings(doc, st.sn);
+    }
+    throw new StationSilent(`HomeBase didn't answer for ${day}`);
+  } finally {
+    s.off("dbChunk", onChunk);
+  }
+}
+
+/**
+ * Recordings over the last `days`. A station that fails one day isn't asked for the rest
+ * this round (each miss costs a timeout, and the backend gives up long before seven) —
+ * its days answer from cache where there is one. Only fails when nothing is left to show.
+ */
 async function listDays(days) {
   const { accountId, stations } = await inventory();
   const all = [];
+  let failure = null;
   for (const st of stations) {
     const list = lastDays(days);
+    let reachable = true;
     for (let i = 0; i < list.length; i++) {
       const key = `${st.sn}|${list[i]}`;
       let entry = dayCache.get(key);
-      if (!entry || Date.now() - entry.at > freshFor(i)) {
+      if (reachable && (!entry || Date.now() - entry.at > freshFor(i))) {
         try {
           entry = { at: Date.now(), recs: await queryDay(st, accountId, list[i]) };
           dayCache.set(key, entry);
         } catch (e) {
-          if (!entry) throw e;
-          log(`list ${key}: ${e.message} — keeping the earlier answer`);
+          reachable = false;
+          failure = e;
+          log(`list ${key}: ${e.message} — ${entry ? "keeping the earlier answer" : "skipped"}`);
         }
       }
+      if (!entry) continue;
       for (const r of entry.recs) byId.set(r.id, r);
       all.push(...entry.recs);
     }
   }
+  if (failure && !all.length) throw failure;
   return all.sort((a, b) => Date.parse(b.start) - Date.parse(a.start));
 }
 
@@ -244,40 +299,42 @@ async function download(rec) {
   const { accountId, stations } = await inventory();
   const st = stations.find((s) => s.sn === rec.stationSn);
   if (!st) throw new HttpError(404, "its HomeBase is gone");
-  return exclusive(`${st.sn}|download`, async () => {
-    const s = await stationSession(st);
-    const col = new RecordingCollector({ channel: rec.channel, frames: rec.frames });
-    const started = Date.now();
-    await new Promise((resolve, reject) => {
-      let settled = false;
-      const end = (err) => {
-        if (settled) return;
-        settled = true;
-        clearInterval(tick);
-        // Let trailing audio frames land rather than leak into the next transfer.
-        setTimeout(() => {
-          s.off("data", onData);
-          err ? reject(err) : resolve();
-        }, err ? 0 : 750);
-      };
-      const onData = (f) => col.push(f) && end();
-      const tick = setInterval(() => {
-        const now = Date.now();
-        if (!col.lastAt && now - started > 20_000) end(new HttpError(504, "HomeBase sent nothing"));
-        else if (col.lastAt && now - col.lastAt > 5_000) end(); // short a few frames: keep what came
-        else if (now - started > 180_000) end(col.video.length ? undefined : new HttpError(504, "download timed out"));
-      }, 250);
-      s.on("data", onData);
-      try {
-        s.sendStringPairCommand(CMD_DOWNLOAD_VIDEO, rec.path, accountId, rec.channel);
-      } catch (e) {
-        end(new HttpError(502, e.message));
-      }
-    });
-    const r = col.result();
-    log(`recording ${rec.id}: ${r.frames}/${rec.frames} frames, ${r.size}, ${Math.round(r.video.length / 1024)} KB in ${Date.now() - started} ms`);
-    return r;
+  return exclusive(`${st.sn}|download`, () => withRecovery(st, () => pull(st, rec, accountId)));
+}
+
+async function pull(st, rec, accountId) {
+  const s = await stationSession(st);
+  const col = new RecordingCollector({ channel: rec.channel, frames: rec.frames });
+  const started = Date.now();
+  await new Promise((resolve, reject) => {
+    let settled = false;
+    const end = (err) => {
+      if (settled) return;
+      settled = true;
+      clearInterval(tick);
+      // Let trailing audio frames land rather than leak into the next transfer.
+      setTimeout(() => {
+        s.off("data", onData);
+        err ? reject(err) : resolve();
+      }, err ? 0 : 750);
+    };
+    const onData = (f) => col.push(f) && end();
+    const tick = setInterval(() => {
+      const now = Date.now();
+      if (!col.lastAt && now - started > 20_000) end(new StationSilent("HomeBase sent nothing"));
+      else if (col.lastAt && now - col.lastAt > 5_000) end(); // short a few frames: keep what came
+      else if (now - started > 180_000) end(col.video.length ? undefined : new HttpError(504, "download timed out"));
+    }, 250);
+    s.on("data", onData);
+    try {
+      s.sendStringPairCommand(CMD_DOWNLOAD_VIDEO, rec.path, accountId, rec.channel);
+    } catch (e) {
+      end(new HttpError(502, e.message));
+    }
   });
+  const r = col.result();
+  log(`recording ${rec.id}: ${r.frames}/${rec.frames} frames, ${r.size}, ${Math.round(r.video.length / 1024)} KB in ${Date.now() - started} ms`);
+  return r;
 }
 
 async function videoFile(rec) {
