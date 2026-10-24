@@ -14,6 +14,8 @@ import { PageHeader } from './components/PageHeader';
 import { HeaderPixelScene } from './components/PixelScene';
 import ReleaseNotesModal from './components/ReleaseNotesModal';
 import { useAppPresence } from './hooks/useAppPresence';
+import { useAppSleep } from './hooks/useAppSleep';
+import { SleepScreen, SleepWarning } from './components/SleepScreen';
 
 /**
  * Live date/time for the sidebar. Isolated so its per-minute tick re-renders
@@ -124,8 +126,12 @@ export default memo(function App() {
       .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ??
     PAGE_HEADERS['/'];
 
+  // Left open and untouched for 10 minutes, the app sleeps: the page unmounts (live
+  // video stops), and so do the camera warm-up, active minutes and shell polling.
+  const { asleep, secondsLeft, wake } = useAppSleep(!!user);
+
   // Members: record tab visits/active minutes, and keep the cameras warm while they're here.
-  useAppPresence(pathname, !!user && user.role !== 'GUEST');
+  useAppPresence(pathname, !!user && user.role !== 'GUEST', asleep);
 
   // Default document title; per-page pages should override with their own useDocumentTitle call.
   useDocumentTitle(pageHeader.title);
@@ -146,6 +152,7 @@ export default memo(function App() {
     staleTime: 120_000,
     refetchInterval: healthInterval,
     refetchIntervalInBackground: false,
+    enabled: !asleep,
   });
 
   const unread = useQuery({
@@ -154,7 +161,7 @@ export default memo(function App() {
     staleTime: 120_000,
     refetchInterval: unreadInterval,
     refetchIntervalInBackground: false,
-    enabled: !!user,
+    enabled: !!user && !asleep,
   });
 
   const backendUp = health.data?.status === 'UP';
@@ -454,7 +461,7 @@ export default memo(function App() {
             </header>
 
             <main className="mt-4 lg:mt-5">
-              <Outlet />
+              {!asleep && <Outlet />}
             </main>
 
             <footer className="mt-10 border-t border-appborder px-1 pt-5 text-center text-xs text-apptext-dim">
@@ -507,6 +514,9 @@ export default memo(function App() {
           ))}
         </div>
       </nav>
+
+      {asleep && <SleepScreen onWake={wake} />}
+      {!asleep && secondsLeft !== null && <SleepWarning secondsLeft={secondsLeft} onStay={wake} />}
 
       {/* One-time "What's New" popup shown after a new version ships. */}
       <ReleaseNotesModal />

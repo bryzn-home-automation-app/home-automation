@@ -1,4 +1,5 @@
 import type { Camera, CameraBatteryReading } from '../types';
+import { SLEEP_AFTER_MS } from '../hooks/useAppSleep';
 
 // Presentation + live-view policy for the Cameras tab. Kept free of React so it
 // can be unit-tested directly (see src/test/cameras.test.tsx).
@@ -11,8 +12,11 @@ import type { Camera, CameraBatteryReading } from '../types';
  */
 export const BATTERY_LIVE_BUDGET_MS = 5 * 60_000;
 
-/** No pointer/key/scroll/touch for this long → every live view stops. */
-export const IDLE_STOP_MS = 5 * 60_000;
+/**
+ * No pointer/key/scroll/touch for this long → every live view stops. The same as the
+ * app's sleep (useAppSleep), which normally takes over at that moment anyway.
+ */
+export const IDLE_STOP_MS = SLEEP_AFTER_MS;
 
 /** Motion/person events newer than this get the highlight ring on the tile. */
 export const RECENT_EVENT_MS = 2 * 60_000;

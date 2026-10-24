@@ -1,8 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { primeCameras, recordTab } from '../api/activity';
-import { IDLE_STOP_MS } from '../utils/cameras';
 import { tabKey } from '../utils/tabs';
-import { useIdle, usePageVisible } from './useViewerPresence';
+import { usePageVisible } from './useViewerPresence';
 
 /** How often an active page reports in: one active minute, and another camera warm-up. */
 export const HEARTBEAT_MS = 60_000;
@@ -14,16 +13,16 @@ export const HEARTBEAT_MS = 60_000;
  *   active minute on the current tab and keeps the cameras' live streams running, so
  *   the Cameras tab opens already live rather than waiting for a battery camera to wake.
  *
- * The first warm-up goes out as soon as the page becomes active (sign-in, or coming
- * back to the app). The server lets the streams go ~90 s after the last one.
+ * The first warm-up goes out as soon as the page becomes active (sign-in, waking, or
+ * coming back to the app). The server lets the streams go ~90 s after the last one, so
+ * an app that's hidden or asleep (useAppSleep) frees the cameras within two minutes.
  */
-export function useAppPresence(pathname: string, member: boolean) {
+export function useAppPresence(pathname: string, member: boolean, asleep = false) {
   const visible = usePageVisible();
-  const { idle } = useIdle(IDLE_STOP_MS);
   const tab = tabKey(pathname);
   const tabRef = useRef(tab);
   tabRef.current = tab;
-  const active = member && visible && !idle;
+  const active = member && visible && !asleep;
 
   useEffect(() => {
     if (member && tab) void recordTab(tab, 'view');
