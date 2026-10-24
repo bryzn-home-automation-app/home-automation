@@ -6,7 +6,7 @@ const TAB = /^[a-z][a-z0-9-]{0,24}(\/[a-z][a-z0-9-]{0,12})?$/;
 const LABELS: Record<string, string> = {
   home: 'Home',
   utility: 'Utility',
-  climate: 'Climate',
+  climate: 'AC/Heat Ecobee',
   cameras: 'Cameras',
   roomba: 'Roomba',
   wifi: 'WiFi',

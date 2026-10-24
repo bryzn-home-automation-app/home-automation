@@ -115,4 +115,22 @@ describe('TabUsage page', () => {
     expect(screen.getByText(/Last active just now/)).toBeInTheDocument();
     expect(activityApi.fetchTabUsage).toHaveBeenCalledWith(30);
   });
+
+  it('refreshes on its own about once a minute', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(activityApi.fetchTabUsage).mockReset().mockResolvedValue({ days: 30, household: [], members: [] });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <TabUsage />
+      </QueryClientProvider>,
+    );
+    expect(await screen.findByText(/No member activity/)).toBeInTheDocument();
+    expect(activityApi.fetchTabUsage).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      vi.advanceTimersByTime(HEARTBEAT_MS + 6_000);
+    });
+    expect(activityApi.fetchTabUsage).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
 });

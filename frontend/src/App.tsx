@@ -103,7 +103,7 @@ export default memo(function App() {
   const PAGE_HEADERS: Record<string, { eyebrow: string; title: string; subtitle?: string }> = {
     '/': { eyebrow: 'Operations Console', title: 'Home Dashboard', subtitle: `Welcome ${welcomeName}!` },
     '/utility': { eyebrow: 'Utilities', title: 'Utility' },
-    '/climate': { eyebrow: 'Thermostats', title: 'Climate' },
+    '/climate': { eyebrow: 'Thermostats', title: 'AC/Heat Ecobee' },
     '/cameras': { eyebrow: 'Security', title: 'Cameras' },
     '/roomba': { eyebrow: 'Robot Vacuum', title: 'Roomba' },
     '/wifi': { eyebrow: 'Guest Access', title: 'Guest Wi‑Fi' },
@@ -165,7 +165,7 @@ export default memo(function App() {
   const mainTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
     { path: '/utility', label: 'Utility', icon: '⚡', end: false },
-    { path: '/climate', label: 'Climate', icon: '🌡️', end: false },
+    { path: '/climate', label: 'AC/Heat Ecobee', icon: '🌡️', end: false },
     { path: '/cameras', label: 'Cameras', icon: '📷', end: false, guestHidden: true },
     { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
     { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
@@ -349,15 +349,17 @@ export default memo(function App() {
     </>
   );
 
-  // ── Bottom nav tabs (mobile only) — 4 primary destinations + a "More"
+  // ── Bottom nav tabs (mobile only) — the primary destinations + a "Menu"
   //    button (rendered separately) that opens the full menu, so every
-  //    section is reachable from the bottom bar. ──
+  //    section is reachable from the bottom bar. Alerts live in the menu (the
+  //    bell by Settings); the Menu button carries their unread badge. ──
   const bottomTabs = [
     { path: '/', label: 'Home', icon: '🏠', end: true },
     { path: '/utility', label: 'Utility', icon: '⚡', end: false },
+    { path: '/climate', label: 'AC/Heat Ecobee', icon: '🌡️', end: false },
+    { path: '/cameras', label: 'Cameras', icon: '📷', end: false, guestHidden: true },
     { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
-    { path: '/notifications', label: 'Alerts', icon: '🔔', end: false },
-  ];
+  ].filter((t) => !t.guestHidden || (user && user.role !== 'GUEST'));
 
   return (
     <div className="min-h-[100dvh]">
@@ -464,20 +466,27 @@ export default memo(function App() {
 
       {/* ── Mobile bottom nav ── */}
       <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-appborder bg-appsurface lg:hidden pb-safe">
-        <div className="mx-auto flex max-w-lg items-center justify-around px-2 py-1.5">
+        <div className="mx-auto flex max-w-lg items-start justify-around gap-0.5 px-1 py-1.5">
           {/* Menu — leftmost, so the trigger sits on the same side as the
               left-anchored sidebar it opens. Hamburger (☰) reads as "menu". */}
           <button
             ref={hamburgerButtonRef}
             type="button"
             onClick={() => setMobileMenuOpen(true)}
-            aria-label="Open menu"
+            aria-label={`Open menu${unreadCount > 0 ? ` (${unreadCount} unread alerts)` : ''}`}
             aria-expanded={mobileMenuOpen}
             aria-controls="mobile-sidebar"
-            className="flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-2xs font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
+            className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-2xs font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
           >
-            <span className="flex h-[1.5rem] items-center text-lg leading-none">☰</span>
-            <span className="leading-none">Menu</span>
+            <span className="relative flex h-[1.5rem] items-center text-lg leading-none">
+              ☰
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-appdanger-fg">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </span>
+            <span className="text-center leading-tight">Menu</span>
           </button>
           {bottomTabs.map((tab) => (
             <NavLink
@@ -485,22 +494,15 @@ export default memo(function App() {
               to={tab.path}
               end={tab.end}
               className={({ isActive }) =>
-                `flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-2xs font-medium transition-colors ${
+                `flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-2xs font-medium transition-colors ${
                   isActive
                     ? 'text-appaccent-text'
                     : 'text-apptext-muted hover:text-apptext-soft'
                 }`
               }
             >
-              <span className="relative text-lg">
-                {tab.icon}
-                {tab.path === '/notifications' && unreadCount > 0 && (
-                  <span className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-appdanger-fg">
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </span>
-              <span className="leading-none">{tab.label}</span>
+              <span className="text-lg">{tab.icon}</span>
+              <span className="text-center leading-tight">{tab.label}</span>
             </NavLink>
           ))}
         </div>

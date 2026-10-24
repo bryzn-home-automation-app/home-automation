@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { fetchTabUsage } from '../../api/activity';
 import { errorMessage } from '../../api/climate';
 import { FOCUS_RING } from '../../components/ThermostatControls';
+import { useJitteredInterval } from '../../hooks/useJitteredInterval';
+import { HEARTBEAT_MS } from '../../hooks/useAppPresence';
 import { ago } from '../../utils/cameras';
 import { minutesLabel, tabLabel } from '../../utils/tabs';
 import type { TabTotal } from '../../types';
@@ -53,7 +55,17 @@ function Card({ children }: { children: React.ReactNode }) {
 
 export default function TabUsage() {
   const [days, setDays] = useState<Range>(30);
-  const query = useQuery({ queryKey: ['admin-tab-usage', days], queryFn: () => fetchTabUsage(days), staleTime: 60_000 });
+  // Activity lands once a minute (the heartbeat), so refresh on the same beat while
+  // the page is in view.
+  const refreshInterval = useJitteredInterval(HEARTBEAT_MS);
+  const query = useQuery({
+    queryKey: ['admin-tab-usage', days],
+    queryFn: () => fetchTabUsage(days),
+    staleTime: 30_000,
+    refetchInterval: refreshInterval,
+    refetchIntervalInBackground: false,
+    placeholderData: keepPreviousData,
+  });
   const data = query.data;
 
   return (
