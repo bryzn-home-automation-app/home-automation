@@ -71,6 +71,31 @@ describe('Login page', () => {
     });
   });
 
+  it('uses autofilled values that never fired a change event (iOS Safari)', async () => {
+    (authApi.login as any).mockResolvedValue({
+      token: 'jwt', userId: 1, username: 'test', displayName: 'Test', role: 'ADMIN',
+    });
+
+    await renderLogin();
+
+    (screen.getByLabelText('Username') as HTMLInputElement).value = 'admin';
+    (screen.getByLabelText('Password') as HTMLInputElement).value = 'pass';
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    await waitFor(() => {
+      expect(authApi.login).toHaveBeenCalledWith({ username: 'admin', password: 'pass' });
+    });
+  });
+
+  it('asks for both fields instead of sending an empty login', async () => {
+    await renderLogin();
+
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('Enter your username and password.')).toBeInTheDocument();
+    expect(authApi.login).not.toHaveBeenCalled();
+  });
+
   it('should show error on failed login', async () => {
     (authApi.login as any).mockRejectedValue({
       response: { data: { error: 'Invalid credentials' } },

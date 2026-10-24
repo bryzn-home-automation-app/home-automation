@@ -11,13 +11,22 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Read the fields themselves: iOS Safari autofill (Face ID passwords) fills
+    // them without firing change events, so React state can still be empty.
+    const fields = new FormData(e.currentTarget);
+    const user = String(fields.get('username') ?? username).trim();
+    const pass = String(fields.get('password') ?? password);
+    if (!user || !pass) {
+      setError('Enter your username and password.');
+      return;
+    }
     setError('');
     setLoading(true);
 
     try {
-      const resp = await apiLogin({ username: username.trim(), password });
+      const resp = await apiLogin({ username: user, password: pass });
       login(resp.token, resp);
       navigate('/', { replace: true });
     } catch (err: any) {
@@ -54,6 +63,7 @@ export default function Login() {
               </label>
               <input
                 id="username"
+                name="username"
                 type="text"
                 value={username}
                 onChange={(e) => { setUsername(e.target.value); if (error) setError(''); }}
@@ -73,6 +83,7 @@ export default function Login() {
               </label>
               <input
                 id="password"
+                name="password"
                 type="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
