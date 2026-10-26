@@ -306,8 +306,10 @@ function ForecastChart() {
     return sorted;
   }, [forecast]);
 
-  const predictedColor = series.usage;
   const actualColor = DATA_SERIES[theme].positive;
+  // Actual is always green, so the Default (green) palette draws Predicted in
+  // blue rather than a second green.
+  const predictedColor = palette === 'default' ? DATA_SERIES[theme].gasLine : series.usage;
   const errorColor = DATA_SERIES[theme].caution;
   // Confidence band: a tint of the theme's CONTRASTING color (series.temp —
   // e.g. yellow/amber against a purple usage line), not a tint of the

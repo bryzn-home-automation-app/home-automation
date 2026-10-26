@@ -55,9 +55,9 @@ export default function ThemePicker() {
         {mode === 'auto' ? nextChangeText(theme, nextThemeChange) : mode === 'system' ? 'Following your device setting.' : ''}
       </p>
 
-      {/* Palette swatches for the current mode */}
+      {/* Palette swatches (one palette for both modes; shown in the current mode) */}
       <p className="mb-3 text-xs text-apptext-muted">
-        Palette for {isDark ? 'dark' : 'light'} mode — your light and dark palette choices are remembered separately.
+        Applies in both light and dark mode.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {PALETTES.map((p) => {

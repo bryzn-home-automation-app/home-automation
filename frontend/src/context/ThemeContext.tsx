@@ -153,9 +153,9 @@ interface ThemeContextValue {
   toggleTheme: () => void;
   isLight: boolean;
   isDark: boolean;
-  /** The active palette id for the current mode. */
+  /** The active palette id. */
   palette: string;
-  /** Set the palette for the current mode (light/dark palettes are remembered independently). */
+  /** Set the palette (shared by light and dark mode). */
   setPalette: (id: string) => void;
 }
 
@@ -207,11 +207,19 @@ export function resolveTheme(mode: ThemeMode, loc: { lat: number; lon: number } 
   return systemTheme();
 }
 
-function readStoredPalette(mode: Theme): string {
+const PALETTE_KEY = 'palette';
+
+/**
+ * One palette for both modes. Older builds stored one per mode, so a palette
+ * picked in dark mode left light mode (e.g. daytime under Auto) on Default;
+ * adopt whichever of those was actually chosen.
+ */
+function readStoredPalette(): string {
   if (typeof window === 'undefined') return DEFAULT_PALETTE;
   try {
-    const stored = localStorage.getItem(`palette-${mode}`);
-    if (stored && PALETTE_IDS.includes(stored)) return stored;
+    const candidates = [PALETTE_KEY, 'palette-dark', 'palette-light'].map((k) => localStorage.getItem(k));
+    const chosen = candidates.find((id) => id && id !== DEFAULT_PALETTE && PALETTE_IDS.includes(id));
+    if (chosen) return chosen;
   } catch { /* localStorage blocked */ }
   return DEFAULT_PALETTE;
 }
@@ -221,10 +229,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [sunLocation, setSunLocationState] = useState(readSunLocation);
   const [theme, setTheme] = useState<Theme>(() => resolveTheme(readStoredMode(), readSunLocation()));
   const [nextThemeChange, setNextThemeChange] = useState<Date | null>(null);
-  const [lightPalette, setLightPalette] = useState(() => readStoredPalette('light'));
-  const [darkPalette, setDarkPalette] = useState(() => readStoredPalette('dark'));
-
-  const palette = theme === 'light' ? lightPalette : darkPalette;
+  const [palette, setPaletteState] = useState(readStoredPalette);
 
   // Suppress transitions during a theme/palette swap so the whole page repaints
   // once instead of animating every card's `transition-colors` for 300ms at
@@ -320,16 +325,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setPalette = useCallback((id: string) => {
     if (!PALETTE_IDS.includes(id)) return;
-    setTheme((currentTheme) => {
-      if (currentTheme === 'light') {
-        setLightPalette(id);
-        try { localStorage.setItem('palette-light', id); } catch { /* quota exceeded */ }
-      } else {
-        setDarkPalette(id);
-        try { localStorage.setItem('palette-dark', id); } catch { /* quota exceeded */ }
-      }
-      return currentTheme;
-    });
+    setPaletteState(id);
+    try {
+      localStorage.setItem(PALETTE_KEY, id);
+      localStorage.removeItem('palette-light');
+      localStorage.removeItem('palette-dark');
+    } catch { /* quota exceeded */ }
   }, []);
 
   // Stable context value — otherwise a fresh object every render forces all
