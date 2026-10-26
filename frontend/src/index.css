@@ -469,6 +469,8 @@
 /* ── Base ── */
 html {
   font-family: 'Manrope', sans-serif;
+  /* The app's own pull-to-refresh (PullToRefresh) replaces the browser's. */
+  overscroll-behavior-y: contain;
 }
 
 body {

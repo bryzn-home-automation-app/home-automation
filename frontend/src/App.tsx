@@ -16,6 +16,7 @@ import ReleaseNotesModal from './components/ReleaseNotesModal';
 import { useAppPresence } from './hooks/useAppPresence';
 import { useAppSleep } from './hooks/useAppSleep';
 import { SleepScreen, SleepWarning } from './components/SleepScreen';
+import PullToRefresh from './components/PullToRefresh';
 
 /**
  * Live date/time for the sidebar. Isolated so its per-minute tick re-renders
@@ -465,6 +466,7 @@ export default memo(function App() {
             <main className="mt-4 lg:mt-5">
               {!asleep && <Outlet />}
             </main>
+            {!asleep && <PullToRefresh />}
 
             <footer className="mt-10 border-t border-appborder px-1 pt-5 text-center text-xs text-apptext-dim">
               Home Automation Platform · Phase 1 · CoServ Integration

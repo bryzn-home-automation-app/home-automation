@@ -59,6 +59,8 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("new", "Usage (Admin): see which tabs house members use the most, updated every minute."),
                             change("new", "Who's Home (Admin): see who's home from the phones on the home Wi-Fi. Name each device, pick its type and its owner."),
                             change("new", "Profile → This device: link the phone you're holding to your account in two taps, so Who's Home knows it's yours."),
+                            change("new", "Indoor camera alerts while everyone's away: someone seen inside, or a few minutes of noise (the noise alert needs the camera's Sound detection on)."),
+                            change("new", "On your phone, pull down at the top of any page to refresh it."),
                             change("new", "Sleep screen: left open and untouched for 10 minutes, the app sleeps and the cameras pause (a minute's warning first; tap to wake)."),
                             change("improved", "Phone menu bar: AC/Heat Ecobee (the thermostats) and Cameras are one tap away; Alerts moved into Menu, which shows the unread count."),
                             change("improved", "The electric forecast misses by about a third less: it learns from the weather that actually happened, and from weekends."),
