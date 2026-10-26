@@ -16,6 +16,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 /** Who's home is admin-only, for reading and for labeling. */
@@ -63,5 +64,25 @@ class PresenceControllerTest {
         mvc.perform(patch("/api/admin/presence/devices/9").contentType(MediaType.APPLICATION_JSON).content(body)
                         .requestAttr("role", "ADMIN"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("members link their own device; guests can't")
+    void link() throws Exception {
+        when(service.startLink(4L)).thenReturn(new PresenceService.LinkStart("tok", "http://192.168.4.228:8099/identify?t=tok", null));
+        mvc.perform(post("/api/presence/link").requestAttr("role", "USER").requestAttr("userId", 4L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.url").value("http://192.168.4.228:8099/identify?t=tok"));
+        mvc.perform(post("/api/presence/link").requestAttr("role", "GUEST").requestAttr("userId", 9L))
+                .andExpect(status().isForbidden());
+
+        when(service.checkLink(4L, "tok", "UA")).thenReturn(new PresenceService.LinkStatus("LINKED", "Brandon's iPhone", "MOBILE", "aa:bb:cc:dd:ee:ff"));
+        mvc.perform(get("/api/presence/link/tok").header("User-Agent", "UA").requestAttr("role", "USER").requestAttr("userId", 4L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("LINKED"));
+
+        when(service.startLink(1L)).thenThrow(new IllegalStateException("Who's home isn't running on the NUC right now"));
+        mvc.perform(post("/api/presence/link").requestAttr("role", "ADMIN").requestAttr("userId", 1L))
+                .andExpect(status().isServiceUnavailable());
     }
 }

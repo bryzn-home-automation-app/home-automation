@@ -17,12 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -49,7 +51,8 @@ public class PresenceService {
     private static final Pattern MAC = Pattern.compile("^[0-9a-f]{2}(:[0-9a-f]{2}){5}$");
     private static final Pattern IPV4 = Pattern.compile("^\\d{1,3}(\\.\\d{1,3}){3}$");
 
-    public record Scan(Instant scannedAt, String subnet, List<Seen> devices) {}
+    /** {@code host}: the NUC's own LAN address, where the "Link this device" listener answers. */
+    public record Scan(Instant scannedAt, String subnet, String host, List<Seen> devices) {}
 
     public record Seen(String mac, String ip, Boolean pinged) {}
 
@@ -61,6 +64,26 @@ public class PresenceService {
     private final Clock clock;
     private volatile Instant lastScanAt;
     private volatile int lastScanCount;
+    private volatile String hostIp;
+
+    /** "Link this device": the listener's port on the NUC (scripts/presence-identify.ps1). */
+    static final int IDENTIFY_PORT = 8099;
+    /** How long a link waits for the device to open the listener's URL. */
+    static final Duration IDENTIFY_TTL = Duration.ofMinutes(3);
+    private static final Pattern TOKEN = Pattern.compile("^[A-Za-z0-9_-]{22,64}$");
+    private final SecureRandom random = new SecureRandom();
+    private final Map<String, PendingLink> pendingLinks = new ConcurrentHashMap<>();
+
+    private record PendingLink(Long userId, Instant expiresAt) {}
+
+    /** A started link: open {@code url} on the device, on the home Wi-Fi. */
+    public record LinkStart(String token, String url, Instant expiresAt) {}
+
+    /** {@code status}: PENDING (not opened yet), EXPIRED, or LINKED with the device. */
+    public record LinkStatus(String status, String name, String type, String mac) {}
+
+    /** What the listener wrote: the device that opened the link. */
+    record Identified(String ip, String mac, Instant at) {}
 
     @Autowired
     public PresenceService(NetworkDeviceRepository devices, UserRepository users, ObjectMapper mapper,
@@ -106,26 +129,116 @@ public class PresenceService {
             if (seen.size() >= MAX_DEVICES) break;
             String mac = s.mac() == null ? "" : s.mac().trim().toLowerCase();
             if (!MAC.matcher(mac).matches()) continue;
-            seen.put(mac, s.ip() != null && IPV4.matcher(s.ip()).matches() ? s.ip() : null);
+            seen.put(mac, validIp(s.ip()));
         }
         Map<String, NetworkDevice> known = devices.findByMacIn(seen.keySet()).stream()
                 .collect(Collectors.toMap(NetworkDevice::getMac, Function.identity()));
         List<NetworkDevice> changed = new ArrayList<>();
         seen.forEach((mac, ip) -> {
             NetworkDevice d = known.get(mac);
-            if (d == null) {
-                d = NetworkDevice.builder().mac(mac).firstSeen(seenAt).lastSeen(seenAt).presentSince(seenAt).build();
-            } else {
-                if (!seenAt.isAfter(d.getLastSeen())) return; // an older scan than one already applied
-                if (d.getLastSeen().isBefore(seenAt.minus(awayAfter))) d.setPresentSince(seenAt);
-                d.setLastSeen(seenAt);
-            }
-            if (ip != null) d.setIp(ip);
-            changed.add(d);
+            if (d != null && !seenAt.isAfter(d.getLastSeen())) return; // an older scan than one already applied
+            changed.add(sighting(d, mac, ip, seenAt));
         });
         devices.saveAll(changed);
         lastScanAt = at;
         lastScanCount = seen.size();
+        String host = validIp(scan.host());
+        if (host != null) hostIp = host;
+    }
+
+    /** {@code mac} was on the network at {@code seenAt}: a new device, or a new stretch after being away. */
+    private NetworkDevice sighting(NetworkDevice d, String mac, String ip, LocalDateTime seenAt) {
+        if (d == null) {
+            d = NetworkDevice.builder().mac(mac).firstSeen(seenAt).lastSeen(seenAt).presentSince(seenAt).build();
+        } else if (seenAt.isAfter(d.getLastSeen())) {
+            if (d.getLastSeen().isBefore(seenAt.minus(awayAfter))) d.setPresentSince(seenAt);
+            d.setLastSeen(seenAt);
+        }
+        if (ip != null) d.setIp(ip);
+        return d;
+    }
+
+    // ── "Link this device" ──
+
+    /**
+     * Start linking the device a member is using. They open the returned URL on it while
+     * on the home Wi-Fi; the NUC's listener sees its LAN address (Docker hides it from
+     * the backend) and records its MAC; {@link #checkLink} then makes it theirs.
+     */
+    public LinkStart startLink(Long userId) {
+        Instant now = clock.instant();
+        String host = hostIp;
+        if (host == null || lastScanAt == null || lastScanAt.isBefore(now.minus(SCANNER_STALE))) {
+            throw new IllegalStateException("Who's home isn't running on the NUC right now");
+        }
+        pendingLinks.values().removeIf(p -> p.expiresAt().isBefore(now));
+        byte[] bytes = new byte[24];
+        random.nextBytes(bytes);
+        String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
+        Instant expires = now.plus(IDENTIFY_TTL);
+        pendingLinks.put(token, new PendingLink(userId, expires));
+        return new LinkStart(token, "http://" + host + ":" + IDENTIFY_PORT + "/identify?t=" + token, expires);
+    }
+
+    /**
+     * Finish a link once the device has opened its URL: the device becomes the member's,
+     * and gets a type and a name from {@code userAgent} (the browser on that device) if
+     * it has none. Only the member who started the link can finish it.
+     */
+    @Transactional
+    public LinkStatus checkLink(Long userId, String token, String userAgent) {
+        PendingLink pending = token == null || !TOKEN.matcher(token).matches() ? null : pendingLinks.get(token);
+        if (pending == null || !pending.userId().equals(userId)) throw new NoSuchElementException("No such link");
+        if (pending.expiresAt().isBefore(clock.instant())) {
+            pendingLinks.remove(token);
+            return new LinkStatus("EXPIRED", null, null, null);
+        }
+        Path file = scanFile.resolveSibling("identify").resolve(token + ".json");
+        Identified found;
+        try {
+            found = mapper.readValue(Files.readAllBytes(file), Identified.class);
+        } catch (NoSuchFileException e) {
+            return new LinkStatus("PENDING", null, null, null);
+        } catch (Exception e) {
+            log.warn("Unreadable device link {}: {}", file.getFileName(), e.getMessage());
+            return new LinkStatus("PENDING", null, null, null);
+        }
+        String mac = found.mac() == null ? "" : found.mac().trim().toLowerCase();
+        if (!MAC.matcher(mac).matches()) throw new IllegalArgumentException("The NUC couldn't read this device's address");
+
+        LocalDateTime seenAt = LocalDateTime.ofInstant(found.at() == null ? clock.instant() : found.at(), ZoneOffset.UTC);
+        NetworkDevice known = devices.findByMacIn(List.of(mac)).stream().findFirst().orElse(null);
+        NetworkDevice d = sighting(known, mac, validIp(found.ip()), seenAt);
+        Guess guess = guessFromUserAgent(userAgent);
+        if (d.getDeviceType() == null) d.setDeviceType(guess.type());
+        if (d.getLabel() == null) {
+            d.setLabel(users.findById(userId).map(u -> displayName(u) + "'s " + guess.kind()).orElse(null));
+        }
+        d.setOwnerUserId(userId);
+        devices.save(d);
+        pendingLinks.remove(token);
+        return new LinkStatus("LINKED", d.getLabel(), d.getDeviceType().name(), d.getMac());
+    }
+
+    record Guess(NetworkDevice.DeviceType type, String kind) {}
+
+    /** A device type, and a word for it, from the browser's User-Agent. iPadOS reports a Mac, so it reads as a computer. */
+    static Guess guessFromUserAgent(String ua) {
+        String u = ua == null ? "" : ua;
+        if (u.contains("iPhone")) return new Guess(NetworkDevice.DeviceType.MOBILE, "iPhone");
+        if (u.contains("iPad")) return new Guess(NetworkDevice.DeviceType.TABLET, "iPad");
+        if (u.contains("Android")) {
+            return u.contains("Mobile") ? new Guess(NetworkDevice.DeviceType.MOBILE, "phone")
+                    : new Guess(NetworkDevice.DeviceType.TABLET, "tablet");
+        }
+        if (u.contains("Windows") || u.contains("Macintosh") || u.contains("CrOS") || u.contains("Linux")) {
+            return new Guess(NetworkDevice.DeviceType.COMPUTER, "computer");
+        }
+        return new Guess(NetworkDevice.DeviceType.OTHER, "device");
+    }
+
+    private static String validIp(String ip) {
+        return ip != null && IPV4.matcher(ip).matches() ? ip : null;
     }
 
     public PresenceResponse view() {

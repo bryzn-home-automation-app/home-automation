@@ -242,7 +242,8 @@ export default function WhosHome() {
         <Card>
           <p className="text-sm text-apptext">Nobody's set up yet.</p>
           <p className="mt-1 text-xs text-apptext-muted">
-            Find each phone below, set its type to Mobile and pick its owner. Phones usually show “Private address”. To spot yours, turn its
+            Easiest: each member opens Profile → This device on their phone and taps Link this device. Or find each
+            phone below, set its type to Mobile and pick its owner. Phones usually show “Private address”. To spot yours, turn its
             Wi-Fi off for a few minutes: the one that goes from “On Wi-Fi now” to “Last seen” is it.
           </p>
         </Card>

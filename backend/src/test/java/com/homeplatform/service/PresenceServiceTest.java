@@ -67,6 +67,7 @@ class PresenceServiceTest {
                 User.builder().id(GUEST).username("visitor").displayName("Visitor").role(User.Role.GUEST).status(User.AccountStatus.ACTIVE).build());
         when(users.findAll()).thenReturn(all);
         when(users.findByStatus(User.AccountStatus.ACTIVE)).thenReturn(all);
+        when(users.findById(any())).thenAnswer(inv -> all.stream().filter(u -> u.getId().equals(inv.getArgument(0))).findFirst());
         service = new PresenceService(repo, users, new ObjectMapper().findAndRegisterModules(), dir.resolve("scan.json"),
                 Duration.ofMinutes(15), clock);
     }
@@ -80,7 +81,7 @@ class PresenceServiceTest {
     /** Scan at {@code minutes} after T0 seeing {@code macs}; the clock moves there too. */
     private void scanAt(int minutes, String... macs) {
         clock.now = T0.plus(Duration.ofMinutes(minutes));
-        service.ingest(new Scan(clock.now, "192.168.4.0/24",
+        service.ingest(new Scan(clock.now, "192.168.4.0/24", "192.168.4.228",
                 Arrays.stream(macs).map(m -> new Seen(m, "192.168.4." + (10 + Arrays.asList(macs).indexOf(m)), false)).toList()));
     }
 
@@ -175,7 +176,7 @@ class PresenceServiceTest {
         scanAt(0, "not-a-mac", "FF:FF:FF:FF:FF", PHONE.toUpperCase());
         assertThat(table).containsOnlyKeys(PHONE);
 
-        service.ingest(new Scan(clock.now.plus(Duration.ofHours(1)), null, List.of(new Seen(TV, "192.168.4.9", true))));
+        service.ingest(new Scan(clock.now.plus(Duration.ofHours(1)), null, null, List.of(new Seen(TV, "192.168.4.9", true))));
         assertThat(table).doesNotContainKey(TV);
     }
 
@@ -209,5 +210,90 @@ class PresenceServiceTest {
         assertThat(table.get(TV).getDeviceType()).isNull();
         assertThatThrownBy(() -> service.label(id, "x".repeat(61), null, null)).isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> service.label(99L, "x", null, null)).isInstanceOf(NoSuchElementException.class);
+    }
+
+    private static final String IPHONE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6.1 Mobile/15E148 Safari/604.1";
+
+    /** What scripts/presence-identify.ps1 writes when the device opens the link. */
+    private void deviceOpens(String token, String mac, String ip) throws Exception {
+        Files.createDirectories(dir.resolve("identify"));
+        Files.writeString(dir.resolve("identify").resolve(token + ".json"),
+                "{\"ip\":\"" + ip + "\",\"mac\":\"" + mac + "\",\"at\":\"" + clock.now + "\"}");
+    }
+
+    @Test
+    @DisplayName("linking: the device that opens the link becomes the member's, typed and named from its browser")
+    void linksThisDevice() throws Exception {
+        scanAt(0, PHONE);
+        PresenceService.LinkStart start = service.startLink(BRYAN);
+        assertThat(start.url()).isEqualTo("http://192.168.4.228:8099/identify?t=" + start.token());
+
+        assertThat(service.checkLink(BRYAN, start.token(), IPHONE_UA).status()).isEqualTo("PENDING");
+
+        clock.now = clock.now.plusSeconds(20);
+        deviceOpens(start.token(), PHONE.toUpperCase(), "192.168.4.34");
+        PresenceService.LinkStatus done = service.checkLink(BRYAN, start.token(), IPHONE_UA);
+        assertThat(done.status()).isEqualTo("LINKED");
+        assertThat(done.name()).isEqualTo("Bryan's iPhone");
+        assertThat(done.type()).isEqualTo("MOBILE");
+        NetworkDevice d = table.get(PHONE);
+        assertThat(d.getOwnerUserId()).isEqualTo(BRYAN);
+        assertThat(d.getIp()).isEqualTo("192.168.4.34");
+        assertThat(d.getLastSeen()).isEqualTo(LocalDateTime.ofInstant(clock.now, ZoneOffset.UTC));
+
+        // Used up.
+        assertThatThrownBy(() -> service.checkLink(BRYAN, start.token(), IPHONE_UA)).isInstanceOf(NoSuchElementException.class);
+    }
+
+    @Test
+    @DisplayName("linking keeps a name and type an admin already set, and adds a device the scan hasn't seen")
+    void linkKeepsLabels() throws Exception {
+        scanAt(0, TV);
+        service.label(table.get(TV).getId(), "Office PC", "COMPUTER", null);
+        PresenceService.LinkStart start = service.startLink(KIM);
+        deviceOpens(start.token(), TV, "192.168.4.73");
+        service.checkLink(KIM, start.token(), "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+        assertThat(table.get(TV).getLabel()).isEqualTo("Office PC");
+        assertThat(table.get(TV).getOwnerUserId()).isEqualTo(KIM);
+
+        PresenceService.LinkStart second = service.startLink(KIM);
+        deviceOpens(second.token(), WATCH, "192.168.4.27");
+        assertThat(service.checkLink(KIM, second.token(), "Mozilla/5.0 (Linux; Android 15; Pixel 9) Mobile").name())
+                .isEqualTo("Kimstabun's phone");
+        assertThat(table.get(WATCH).getFirstSeen()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("only the member who started a link can finish it, and it expires")
+    void linkOwnership() throws Exception {
+        scanAt(0, PHONE);
+        PresenceService.LinkStart start = service.startLink(BRYAN);
+        deviceOpens(start.token(), PHONE, "192.168.4.34");
+        assertThatThrownBy(() -> service.checkLink(KIM, start.token(), IPHONE_UA)).isInstanceOf(NoSuchElementException.class);
+        assertThatThrownBy(() -> service.checkLink(BRYAN, "../../etc/passwd", IPHONE_UA)).isInstanceOf(NoSuchElementException.class);
+
+        clock.now = clock.now.plus(Duration.ofMinutes(4));
+        assertThat(service.checkLink(BRYAN, start.token(), IPHONE_UA).status()).isEqualTo("EXPIRED");
+        assertThat(table.get(PHONE).getOwnerUserId()).isNull();
+    }
+
+    @Test
+    @DisplayName("a link can't start while the scanner isn't reporting")
+    void linkNeedsScanner() {
+        assertThatThrownBy(() -> service.startLink(BRYAN)).isInstanceOf(IllegalStateException.class);
+        scanAt(0, PHONE);
+        clock.now = clock.now.plus(Duration.ofMinutes(10));
+        assertThatThrownBy(() -> service.startLink(BRYAN)).isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
+    @DisplayName("device type from the browser")
+    void userAgents() {
+        assertThat(PresenceService.guessFromUserAgent(IPHONE_UA).type()).isEqualTo(NetworkDevice.DeviceType.MOBILE);
+        assertThat(PresenceService.guessFromUserAgent("Mozilla/5.0 (Linux; Android 14; SM-X710)").type())
+                .isEqualTo(NetworkDevice.DeviceType.TABLET);
+        assertThat(PresenceService.guessFromUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)").type())
+                .isEqualTo(NetworkDevice.DeviceType.COMPUTER);
+        assertThat(PresenceService.guessFromUserAgent(null).type()).isEqualTo(NetworkDevice.DeviceType.OTHER);
     }
 }

@@ -8,7 +8,7 @@
 # cached entry otherwise reads as present for a few seconds after a device has left.
 #
 # Output: presence/scan.json in the repo, bind-mounted into the backend at /presence.
-#   { "scannedAt": "<UTC ISO>", "subnet": "192.168.4.0/24", "devices": [ { "mac", "ip", "pinged" } ] }
+#   { "scannedAt": "<UTC ISO>", "subnet": "192.168.4.0/24", "host": "<NUC LAN IP>", "devices": [ { "mac", "ip", "pinged" } ] }
 
 $ErrorActionPreference = 'Stop'
 
@@ -64,6 +64,7 @@ $devices = Get-NetNeighbor -InterfaceIndex $ifIndex -AddressFamily IPv4 -ErrorAc
 $scan = [ordered]@{
     scannedAt = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
     subnet    = "$base.0/24"
+    host      = $self   # the NUC's LAN address, for the "Link this device" listener's URL
     devices   = @($devices)
 }
 

@@ -17,3 +17,26 @@ export async function fetchPresence(): Promise<Presence> {
 export async function labelDevice(id: number, name: string, type: DeviceType | null, ownerUserId: number | null): Promise<void> {
   await api.patch(`/admin/presence/devices/${id}`, { name, type, ownerUserId });
 }
+
+export interface LinkStart {
+  token: string;
+  /** Open on the device itself, on the home Wi-Fi: the NUC's listener sees it there. */
+  url: string;
+  expiresAt: string;
+}
+
+export interface LinkStatus {
+  status: 'PENDING' | 'LINKED' | 'EXPIRED';
+  name: string | null;
+  type: DeviceType | null;
+  mac: string | null;
+}
+
+/** Members: start linking the device they're using to themselves. */
+export async function startDeviceLink(): Promise<LinkStart> {
+  return (await api.post<LinkStart>('/presence/link')).data;
+}
+
+export async function checkDeviceLink(token: string): Promise<LinkStatus> {
+  return (await api.get<LinkStatus>(`/presence/link/${encodeURIComponent(token)}`)).data;
+}
