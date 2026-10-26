@@ -61,7 +61,11 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("improved", "Phone menu bar: AC/Heat Ecobee (the thermostats) and Cameras are one tap away; Alerts moved into Menu, which shows the unread count."),
                             change("improved", "The electric forecast misses by about a third less: it learns from the weather that actually happened, and from weekends."),
                             change("fixed", "A day's electric total that first arrives as zero now corrects itself."),
-                            change("fixed", "Recordings no longer stop loading after the HomeBase connection goes quiet."))
+                            change("fixed", "Recordings no longer stop loading after the HomeBase connection goes quiet."),
+                            change("fixed", "Signing in on iPhone with a saved password works again."),
+                            change("fixed", "Your color palette stays put in light and dark mode, and after signing back in."),
+                            change("fixed", "On the Default palette, Predicted and Actual on the forecast chart are no longer both green."),
+                            change("fixed", "Phone alerts reach iPhones (Apple was turning them away)."))
             ),
             define("1.4.0", "stable", LocalDate.of(2026, 9, 28),
                     "Bills, a clearer forecast and robot upkeep",

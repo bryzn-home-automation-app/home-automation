@@ -41,7 +41,7 @@ class PushServiceTest {
         keys = mock(PushVapidKeyRepository.class);
         http = mock(HttpClient.class);
         service = new PushService(subs, keys, new ObjectMapper(), http,
-                Clock.fixed(Instant.parse("2026-10-20T23:00:00Z"), ZoneId.of("America/Chicago")), "https://homeos.local");
+                Clock.fixed(Instant.parse("2026-10-20T23:00:00Z"), ZoneId.of("America/Chicago")), "https://nuc.tailf10ac4.ts.net");
         when(keys.findById(1)).thenReturn(Optional.empty());
         when(keys.save(any())).thenAnswer(i -> {
             PushVapidKey k = i.getArgument(0);
@@ -113,7 +113,7 @@ class PushServiceTest {
     @DisplayName("the VAPID key pair is generated once and reused")
     void vapidKeyStable() {
         String k1 = service.publicKey();
-        String k2 = new PushService(subs, keys, new ObjectMapper(), http, Clock.systemUTC(), "https://homeos.local").publicKey();
+        String k2 = new PushService(subs, keys, new ObjectMapper(), http, Clock.systemUTC(), "https://nuc.tailf10ac4.ts.net").publicKey();
         assertEquals(k1, k2);
         verify(keys, times(1)).save(any());
     }

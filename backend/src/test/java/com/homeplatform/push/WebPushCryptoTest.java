@@ -90,7 +90,7 @@ class WebPushCryptoTest {
     void vapid() throws Exception {
         KeyPair kp = newKeyPair();
         long now = 1_792_520_000L;
-        String header = vapidAuthorization("https://web.push.apple.com/QGuQyavXutnMH8hFvd7/abc", "https://homeos.local",
+        String header = vapidAuthorization("https://web.push.apple.com/QGuQyavXutnMH8hFvd7/abc", "https://nuc.tailf10ac4.ts.net",
                 (ECPublicKey) kp.getPublic(), kp.getPrivate(), now);
 
         assertTrue(header.startsWith("vapid t="));
@@ -102,7 +102,7 @@ class WebPushCryptoTest {
         String claims = new String(unb64(parts[1]), StandardCharsets.UTF_8);
         assertTrue(claims.contains("\"aud\":\"https://web.push.apple.com\""), claims);
         assertTrue(claims.contains("\"exp\":" + (now + 12 * 3600)));
-        assertTrue(claims.contains("\"sub\":\"https://homeos.local\""));
+        assertTrue(claims.contains("\"sub\":\"https://nuc.tailf10ac4.ts.net\""));
         byte[] sig = unb64(parts[2]);
         assertEquals(64, sig.length, "raw R||S, not DER");
         Signature v = Signature.getInstance("SHA256withECDSAinP1363Format");

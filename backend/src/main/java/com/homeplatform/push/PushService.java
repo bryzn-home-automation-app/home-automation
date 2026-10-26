@@ -59,6 +59,11 @@ public class PushService {
     private final ObjectMapper mapper;
     private final HttpClient http;
     private final Clock clock;
+    /**
+     * VAPID "sub" contact (a mailto: or https: URL). Apple answers 403 BadJwtToken
+     * when it isn't a real public domain, e.g. https://homeos.local, so the default
+     * is the app's Tailscale HTTPS address.
+     */
     private final String subject;
     private final ExecutorService sender = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "web-push");
@@ -69,7 +74,7 @@ public class PushService {
 
     @Autowired
     public PushService(PushSubscriptionRepository subs, PushVapidKeyRepository keys, ObjectMapper mapper,
-                       @Value("${app.push.subject:https://homeos.local}") String subject) {
+                       @Value("${app.push.subject:https://nuc.tailf10ac4.ts.net}") String subject) {
         this(subs, keys, mapper, HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build(),
                 Clock.systemDefaultZone(), subject);
     }
