@@ -133,6 +133,15 @@ export const DATA_SERIES: Record<'light' | 'dark', {
   },
 };
 
+/**
+ * The Predicted line next to Actual (always `DATA_SERIES.positive` green): the
+ * palette's usage color, except on the green Default palette, where it's blue
+ * so the two lines aren't both green.
+ */
+export function predictedColor(palette: string, theme: 'light' | 'dark'): string {
+  return palette === 'default' ? DATA_SERIES[theme].gasLine : (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme].usage;
+}
+
 /** Convert a `#rrggbb` hex color to an `rgba(...)` string at the given alpha. */
 export function hexToRgba(hex: string, alpha: number): string {
   const n = parseInt(hex.slice(1), 16);

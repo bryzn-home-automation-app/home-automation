@@ -13,7 +13,7 @@ import {
 import { fetchForecast, fetchForecastSnapshots } from '../api/forecast';
 import { pickPredicted } from '../utils/forecastSeries';
 import { localTodayIso } from '../utils/localDate';
-import { useTheme, CHART_SERIES, DATA_SERIES } from '../context/ThemeContext';
+import { useTheme, DATA_SERIES, predictedColor as predictedSeriesColor } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 
 /**
@@ -85,7 +85,6 @@ function TrendOutlookChart({
   emptyText = 'No electric usage data yet — readings sync automatically each evening.',
 }: TrendOutlookChartProps) {
   const { theme, palette } = useTheme();
-  const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
   const forecastInterval = useJitteredInterval(600_000);
   const today = localTodayIso();
 
@@ -165,7 +164,7 @@ function TrendOutlookChart({
     return rows;
   }, [actuals, startDate, snapshots, forecast, today]);
 
-  const predictedColor = series.usage;
+  const predictedColor = predictedSeriesColor(palette, theme);
   const actualColor = DATA_SERIES[theme].positive;
 
   if (loading) {
