@@ -5,7 +5,7 @@ import { errorMessage } from '../../api/climate';
 import { FOCUS_RING } from '../../components/ThermostatControls';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { ago } from '../../utils/cameras';
-import type { PresenceDevice, PresencePerson } from '../../types';
+import type { DeviceType, Presence, PresenceDevice, PresencePerson } from '../../types';
 
 const INPUT = `h-10 w-full rounded-xl border border-appborder bg-appinset px-3 text-sm text-apptext placeholder:text-apptext-dim ${FOCUS_RING}`;
 const BUTTON = `h-9 rounded-lg px-3 text-xs font-semibold transition-colors disabled:opacity-50 ${FOCUS_RING}`;
@@ -39,7 +39,7 @@ function Status({ home, children }: { home: boolean | null; children?: React.Rea
   );
 }
 
-function PersonCard({ p }: { p: PresencePerson }) {
+function PersonCard({ p, online }: { p: PresencePerson; online: boolean }) {
   return (
     <Card>
       <h3 className="truncate text-base font-semibold text-apptext">{p.name}</h3>
@@ -48,6 +48,8 @@ function PersonCard({ p }: { p: PresencePerson }) {
           <Status home>Home{p.since ? ` since ${clock(p.since)}` : ''}</Status>
         ) : p.home === false ? (
           <Status home={false}>Away{p.lastSeen ? ` · last seen ${ago(p.lastSeen)}` : ''}</Status>
+        ) : online ? (
+          <Status home={null}>Unknown — no mobile or watch</Status>
         ) : (
           <Status home={null}>Unknown — scanner offline</Status>
         )}
@@ -59,13 +61,34 @@ function PersonCard({ p }: { p: PresencePerson }) {
   );
 }
 
-function DeviceRow({ d, people }: { d: PresenceDevice; people: string[] }) {
+const DEVICE_TYPES: Array<{ value: DeviceType; label: string }> = [
+  { value: 'MOBILE', label: 'Mobile' },
+  { value: 'COMPUTER', label: 'Computer' },
+  { value: 'TABLET', label: 'Tablet' },
+  { value: 'WATCH', label: 'Watch' },
+  { value: 'TV', label: 'TV' },
+  { value: 'SMART_HOME', label: 'Smart home' },
+  { value: 'OTHER', label: 'Other' },
+];
+const typeLabel = (t: DeviceType | null) => DEVICE_TYPES.find((x) => x.value === t)?.label ?? null;
+
+type Member = Presence['members'][number];
+
+function DeviceRow({ d, members }: { d: PresenceDevice; members: Member[] }) {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [label, setLabel] = useState(d.label ?? '');
-  const [person, setPerson] = useState(d.person ?? '');
+  // A phone-style private address is most likely a phone, so start there.
+  const initialType = d.type ?? (d.privateAddress ? 'MOBILE' : '');
+  const [name, setName] = useState(d.name ?? '');
+  const [type, setType] = useState<DeviceType | ''>(initialType);
+  const [owner, setOwner] = useState(d.ownerUserId != null ? String(d.ownerUserId) : '');
+  const reset = () => {
+    setName(d.name ?? '');
+    setType(initialType);
+    setOwner(d.ownerUserId != null ? String(d.ownerUserId) : '');
+  };
   const save = useMutation({
-    mutationFn: () => labelDevice(d.id, label, person),
+    mutationFn: () => labelDevice(d.id, name, type || null, owner ? Number(owner) : null),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin-presence'] });
       setEditing(false);
@@ -74,20 +97,23 @@ function DeviceRow({ d, people }: { d: PresenceDevice; people: string[] }) {
 
   const seen =
     d.home === true ? `On Wi-Fi now · since ${clock(d.presentSince)}` : `Last seen ${ago(d.lastSeen) || clock(d.lastSeen)}`;
+  const details = [typeLabel(d.type), d.owner].filter(Boolean).join(' · ');
+  const labeled = d.name || d.type || d.ownerUserId != null;
+  const countsTowardHome = type === 'MOBILE' || type === 'WATCH';
 
   return (
     <li className="border-t border-appborder py-3 first:border-t-0 first:pt-0 last:pb-0">
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-apptext">
-            {d.label || <span className="font-medium text-apptext-muted">Unnamed device</span>}
-            {d.person && <span className="ml-2 text-xs font-medium text-apptext-muted">· {d.person}</span>}
+            {d.name || <span className="font-medium text-apptext-muted">Unnamed device</span>}
+            {details && <span className="ml-2 text-xs font-medium text-apptext-muted">· {details}</span>}
           </p>
           <p className="mt-0.5 font-mono text-2xs text-apptext-muted">
             {d.mac}
             {d.ip ? ` · ${d.ip}` : ''}
           </p>
-          {d.privateAddress && !d.label && (
+          {d.privateAddress && !labeled && (
             <p className="mt-0.5 text-2xs text-apptext-info">Private address — likely a phone, tablet or watch</p>
           )}
         </div>
@@ -99,45 +125,57 @@ function DeviceRow({ d, people }: { d: PresenceDevice; people: string[] }) {
               onClick={() => setEditing(true)}
               className={`${BUTTON} border border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong`}
             >
-              {d.label || d.person ? 'Edit' : 'Label'}
+              {labeled ? 'Edit' : 'Label'}
             </button>
           )}
         </div>
       </div>
       {editing && (
         <form
-          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_auto] sm:items-end"
+          className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,9rem)_minmax(0,10rem)_auto] sm:items-end"
           onSubmit={(e) => {
             e.preventDefault();
             save.mutate();
           }}
         >
           <label className="text-2xs font-medium text-apptext-muted">
-            Device
-            <input className={`${INPUT} mt-1`} value={label} maxLength={60} placeholder="Bryan's iPhone"
-              onChange={(e) => setLabel(e.target.value)} autoFocus />
+            Name
+            <input className={`${INPUT} mt-1`} value={name} maxLength={60} placeholder="Bryan's iPhone"
+              onChange={(e) => setName(e.target.value)} autoFocus />
           </label>
           <label className="text-2xs font-medium text-apptext-muted">
-            Whose (counts them as home)
-            <input className={`${INPUT} mt-1`} value={person} maxLength={40} placeholder="Bryan" list="presence-people"
-              onChange={(e) => setPerson(e.target.value)} />
+            Type
+            <select className={`${INPUT} mt-1`} value={type} onChange={(e) => setType(e.target.value as DeviceType | '')}>
+              <option value="">Not set</option>
+              {DEVICE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            </select>
+          </label>
+          <label className="text-2xs font-medium text-apptext-muted">
+            Owner
+            <select className={`${INPUT} mt-1`} value={owner} onChange={(e) => setOwner(e.target.value)}>
+              <option value="">Nobody</option>
+              {members.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
           </label>
           <div className="flex gap-2">
             <button type="submit" disabled={save.isPending}
               className={`${BUTTON} h-10 border border-appaccent-border bg-appaccent-soft text-appaccent-text`}>
               {save.isPending ? 'Saving…' : 'Save'}
             </button>
-            <button type="button" onClick={() => { setEditing(false); setLabel(d.label ?? ''); setPerson(d.person ?? ''); }}
+            <button type="button" onClick={() => { setEditing(false); reset(); }}
               className={`${BUTTON} h-10 border border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong`}>
               Cancel
             </button>
           </div>
-          {save.isError && (
-            <p role="alert" className="text-xs text-apptext-danger sm:col-span-3">{errorMessage(save.error, 'Couldn’t save')}</p>
+          {owner && !countsTowardHome && (
+            <p className="text-2xs text-apptext-muted sm:col-span-4">
+              Only mobiles and watches count toward their owner being home; a {typeLabel(type || null)?.toLowerCase() ?? 'device with no type'} stays
+              home when they leave.
+            </p>
           )}
-          <datalist id="presence-people">
-            {people.map((p) => <option key={p} value={p} />)}
-          </datalist>
+          {save.isError && (
+            <p role="alert" className="text-xs text-apptext-danger sm:col-span-4">{errorMessage(save.error, 'Couldn’t save')}</p>
+          )}
         </form>
       )}
     </li>
@@ -172,17 +210,18 @@ export default function WhosHome() {
   }
 
   const { scanner } = data;
-  const named = data.devices.filter((d) => d.label || d.person);
-  const others = data.devices.filter((d) => !d.label && !d.person);
+  const isLabeled = (d: PresenceDevice) => d.name || d.type || d.ownerUserId != null;
+  const named = data.devices.filter(isLabeled);
+  const others = data.devices.filter((d) => !isLabeled(d));
   const othersShown = showAll ? others : others.filter((d) => d.home !== false);
-  const people = data.people.map((p) => p.name);
 
   return (
     <div className="flex flex-col gap-4 lg:gap-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-xs text-apptext-muted">
-          The NUC checks which devices are on the home Wi-Fi every minute. Label each person's phone below; they show as
-          home while it's been seen in the last {data.awayAfterMinutes} minutes (sleeping phones skip some checks).
+          The NUC checks which devices are on the home Wi-Fi every minute. Label each member's phone below; they show as
+          home while their mobile or watch has been seen in the last {data.awayAfterMinutes} minutes (sleeping phones skip
+          some checks).
         </p>
         {scanner.lastScanAt == null ? (
           <Status home={null}>Scanner not set up</Status>
@@ -197,13 +236,13 @@ export default function WhosHome() {
 
       {data.people.length > 0 ? (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 lg:gap-4">
-          {data.people.map((p) => <PersonCard key={p.name} p={p} />)}
+          {data.people.map((p) => <PersonCard key={p.userId} p={p} online={scanner.online} />)}
         </div>
       ) : (
         <Card>
           <p className="text-sm text-apptext">Nobody's set up yet.</p>
           <p className="mt-1 text-xs text-apptext-muted">
-            Find each phone below and fill in whose it is. Phones usually show “Private address”. To spot yours, turn its
+            Find each phone below, set its type to Mobile and pick its owner. Phones usually show “Private address”. To spot yours, turn its
             Wi-Fi off for a few minutes: the one that goes from “On Wi-Fi now” to “Last seen” is it.
           </p>
         </Card>
@@ -212,7 +251,7 @@ export default function WhosHome() {
       {named.length > 0 && (
         <Card>
           <h3 className="mb-3 text-sm font-semibold text-apptext">Labeled devices</h3>
-          <ul>{named.map((d) => <DeviceRow key={d.id} d={d} people={people} />)}</ul>
+          <ul>{named.map((d) => <DeviceRow key={d.id} d={d} members={data.members} />)}</ul>
         </Card>
       )}
 
@@ -228,7 +267,7 @@ export default function WhosHome() {
           </label>
         </div>
         {othersShown.length ? (
-          <ul>{othersShown.map((d) => <DeviceRow key={d.id} d={d} people={people} />)}</ul>
+          <ul>{othersShown.map((d) => <DeviceRow key={d.id} d={d} members={data.members} />)}</ul>
         ) : (
           <p className="text-xs text-apptext-muted">No other devices{showAll ? '' : ' on Wi-Fi right now'}.</p>
         )}

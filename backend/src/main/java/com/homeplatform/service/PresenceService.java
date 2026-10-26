@@ -3,7 +3,9 @@ package com.homeplatform.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.homeplatform.dto.PresenceResponse;
 import com.homeplatform.model.NetworkDevice;
+import com.homeplatform.model.User;
 import com.homeplatform.repository.NetworkDeviceRepository;
+import com.homeplatform.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,7 +33,8 @@ import java.util.stream.Collectors;
  * here at /presence. Each new scan updates {@code network_devices}.
  *
  * <p>A sleeping phone misses some scans, so a device counts as away only after
- * {@code awayAfterMinutes} without being seen.
+ * {@code awayAfterMinutes} without being seen. A member is home while one of their
+ * phones or watches is; computers, TVs and the like don't count, since they stay home.
  */
 @Service
 public class PresenceService {
@@ -51,6 +54,7 @@ public class PresenceService {
     public record Seen(String mac, String ip, Boolean pinged) {}
 
     private final NetworkDeviceRepository devices;
+    private final UserRepository users;
     private final ObjectMapper mapper;
     private final Path scanFile;
     private final Duration awayAfter;
@@ -59,14 +63,16 @@ public class PresenceService {
     private volatile int lastScanCount;
 
     @Autowired
-    public PresenceService(NetworkDeviceRepository devices, ObjectMapper mapper,
+    public PresenceService(NetworkDeviceRepository devices, UserRepository users, ObjectMapper mapper,
                            @Value("${app.presence.scan-file:/presence/scan.json}") String scanFile,
                            @Value("${app.presence.away-after-minutes:15}") int awayAfterMinutes) {
-        this(devices, mapper, Path.of(scanFile), Duration.ofMinutes(awayAfterMinutes), Clock.systemUTC());
+        this(devices, users, mapper, Path.of(scanFile), Duration.ofMinutes(awayAfterMinutes), Clock.systemUTC());
     }
 
-    PresenceService(NetworkDeviceRepository devices, ObjectMapper mapper, Path scanFile, Duration awayAfter, Clock clock) {
+    PresenceService(NetworkDeviceRepository devices, UserRepository users, ObjectMapper mapper, Path scanFile,
+                    Duration awayAfter, Clock clock) {
         this.devices = devices;
+        this.users = users;
         this.mapper = mapper;
         this.scanFile = scanFile;
         this.awayAfter = awayAfter;
@@ -127,41 +133,91 @@ public class PresenceService {
         boolean online = lastScanAt != null && lastScanAt.isAfter(now.minus(SCANNER_STALE));
         Instant cutoff = now.minus(awayAfter);
 
-        List<PresenceResponse.Device> rows = devices.findAll().stream()
+        List<User> memberUsers = members();
+        Map<Long, String> names = new HashMap<>();
+        for (User u : users.findAll()) names.put(u.getId(), displayName(u));
+
+        List<NetworkDevice> all = devices.findAll();
+        List<PresenceResponse.Device> rows = all.stream()
                 .map(d -> {
                     Instant last = d.getLastSeen().toInstant(ZoneOffset.UTC);
-                    return new PresenceResponse.Device(d.getId(), d.getMac(), d.getIp(), d.getLabel(), d.getPerson(),
+                    return new PresenceResponse.Device(d.getId(), d.getMac(), d.getIp(), d.getLabel(),
+                            d.getDeviceType() == null ? null : d.getDeviceType().name(),
+                            d.getOwnerUserId(), d.getOwnerUserId() == null ? null : names.get(d.getOwnerUserId()),
                             isPrivateAddress(d.getMac()), online ? !last.isBefore(cutoff) : null,
                             d.getFirstSeen().toInstant(ZoneOffset.UTC), last, d.getPresentSince().toInstant(ZoneOffset.UTC));
                 })
                 // Labeled first, then whatever's on the network now, newest sighting first.
-                .sorted(Comparator.comparing((PresenceResponse.Device d) -> d.label() == null && d.person() == null)
+                .sorted(Comparator.comparing((PresenceResponse.Device d) -> !isLabeled(d))
                         .thenComparing(d -> !Boolean.TRUE.equals(d.home()))
                         .thenComparing(PresenceResponse.Device::lastSeen, Comparator.reverseOrder()))
                 .toList();
 
-        Map<String, List<PresenceResponse.Device>> byPerson = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        // One card per member who owns a device, in member order.
+        Map<Long, List<PresenceResponse.Device>> byOwner = new LinkedHashMap<>();
         for (PresenceResponse.Device d : rows) {
-            if (d.person() != null) byPerson.computeIfAbsent(d.person(), k -> new ArrayList<>()).add(d);
+            if (d.ownerUserId() != null) byOwner.computeIfAbsent(d.ownerUserId(), k -> new ArrayList<>()).add(d);
         }
-        List<PresenceResponse.Person> people = byPerson.values().stream().map(ds -> {
-            List<PresenceResponse.Device> here = ds.stream().filter(d -> Boolean.TRUE.equals(d.home())).toList();
-            Instant lastSeen = ds.stream().map(PresenceResponse.Device::lastSeen).max(Comparator.naturalOrder()).orElse(null);
-            Instant since = here.stream().map(PresenceResponse.Device::presentSince).min(Comparator.naturalOrder()).orElse(null);
-            return new PresenceResponse.Person(ds.get(0).person(), online ? !here.isEmpty() : null, since, lastSeen, ds.size());
-        }).toList();
+        List<PresenceResponse.Person> people = byOwner.entrySet().stream()
+                .sorted(Comparator.comparing(e -> e.getKey()))
+                .map(e -> {
+                    List<PresenceResponse.Device> ds = e.getValue();
+                    List<PresenceResponse.Device> counted = ds.stream().filter(PresenceService::counts).toList();
+                    List<PresenceResponse.Device> here = counted.stream().filter(d -> Boolean.TRUE.equals(d.home())).toList();
+                    Instant lastSeen = counted.stream().map(PresenceResponse.Device::lastSeen).max(Comparator.naturalOrder()).orElse(null);
+                    Instant since = here.stream().map(PresenceResponse.Device::presentSince).min(Comparator.naturalOrder()).orElse(null);
+                    // No phone or watch: nothing says where they are.
+                    Boolean home = !online || counted.isEmpty() ? null : !here.isEmpty();
+                    return new PresenceResponse.Person(e.getKey(), names.getOrDefault(e.getKey(), "Member " + e.getKey()),
+                            home, since, lastSeen, ds.size());
+                })
+                .toList();
 
         return new PresenceResponse(new PresenceResponse.Scanner(lastScanAt, online, lastScanCount),
-                (int) awayAfter.toMinutes(), people, rows);
+                (int) awayAfter.toMinutes(), people, rows,
+                memberUsers.stream().map(u -> new PresenceResponse.Member(u.getId(), displayName(u))).toList());
     }
 
-    /** Name a device and say whose it is. Blank clears either. */
+    /** Name a device, set its type and its owner (a member's id, or null). Blank clears the name. */
     @Transactional
-    public void label(Long id, String label, String person) {
+    public void label(Long id, String name, String type, Long ownerUserId) {
         NetworkDevice d = devices.findById(id).orElseThrow(() -> new NoSuchElementException("No such device"));
-        d.setLabel(clean(label, 60, "label"));
-        d.setPerson(clean(person, 40, "person"));
+        d.setLabel(clean(name, 60, "name"));
+        d.setDeviceType(parseType(type));
+        if (ownerUserId != null && members().stream().noneMatch(u -> u.getId().equals(ownerUserId))) {
+            throw new IllegalArgumentException("The owner must be an active member");
+        }
+        d.setOwnerUserId(ownerUserId);
         devices.save(d);
+    }
+
+    /** Who a device can belong to: active admins and members, not guests. */
+    private List<User> members() {
+        return users.findByStatus(User.AccountStatus.ACTIVE).stream()
+                .filter(u -> u.getRole() != User.Role.GUEST)
+                .sorted(Comparator.comparing(User::getId))
+                .toList();
+    }
+
+    private static String displayName(User u) {
+        return u.getDisplayName() == null || u.getDisplayName().isBlank() ? u.getUsername() : u.getDisplayName();
+    }
+
+    private static boolean isLabeled(PresenceResponse.Device d) {
+        return d.name() != null || d.type() != null || d.ownerUserId() != null;
+    }
+
+    private static boolean counts(PresenceResponse.Device d) {
+        return d.type() != null && NetworkDevice.DeviceType.valueOf(d.type()).countsTowardPresence();
+    }
+
+    private static NetworkDevice.DeviceType parseType(String type) {
+        if (type == null || type.isBlank()) return null;
+        try {
+            return NetworkDevice.DeviceType.valueOf(type.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("Unknown device type: " + type);
+        }
     }
 
     /** Nightly at 3:50 AM CT: forget visitors' devices nobody labeled. */

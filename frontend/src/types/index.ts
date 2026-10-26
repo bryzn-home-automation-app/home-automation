@@ -643,12 +643,18 @@ export interface TabUsage {
 }
 
 /** Admin → Who's home: devices on the home Wi-Fi (GET /api/admin/presence). Times are ISO UTC. */
+export type DeviceType = 'MOBILE' | 'COMPUTER' | 'TABLET' | 'WATCH' | 'TV' | 'SMART_HOME' | 'OTHER';
+
 export interface PresenceDevice {
   id: number;
   mac: string;
   ip: string | null;
-  label: string | null;
-  person: string | null;
+  name: string | null;
+  /** Only MOBILE and WATCH count toward their owner being home. */
+  type: DeviceType | null;
+  ownerUserId: number | null;
+  /** The owner's display name. */
+  owner: string | null;
   /** A phone-style randomized MAC: most likely a phone, tablet or watch. */
   privateAddress: boolean;
   /** Seen within awayAfterMinutes; null while the scanner is offline. */
@@ -659,7 +665,9 @@ export interface PresenceDevice {
 }
 
 export interface PresencePerson {
+  userId: number;
   name: string;
+  /** null while the scanner is offline, or when none of their devices is a phone or watch. */
   home: boolean | null;
   since: string | null;
   lastSeen: string | null;
@@ -671,4 +679,6 @@ export interface Presence {
   awayAfterMinutes: number;
   people: PresencePerson[];
   devices: PresenceDevice[];
+  /** Who a device can belong to (active members, not guests). */
+  members: Array<{ id: number; name: string }>;
 }

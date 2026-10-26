@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 import java.util.NoSuchElementException;
 
-/** Who's home (Admin): devices on the home Wi-Fi, labeled by person. Admins only. */
+/** Who's home (Admin): devices on the home Wi-Fi, each named, typed and owned by a member. Admins only. */
 @RestController
 @RequestMapping("/api/admin/presence")
 public class PresenceController {
@@ -20,7 +20,7 @@ public class PresenceController {
         this.presence = presence;
     }
 
-    public record LabelRequest(String label, String person) {}
+    public record LabelRequest(String name, String type, Long ownerUserId) {}
 
     @GetMapping
     public PresenceResponse view(HttpServletRequest request) {
@@ -28,11 +28,11 @@ public class PresenceController {
         return presence.view();
     }
 
-    /** {@code {"label": "Bryan's iPhone", "person": "Bryan"}}; blank clears a field. */
+    /** {@code {"name": "Bryan's iPhone", "type": "MOBILE", "ownerUserId": 1}}; blank/null clears a field. */
     @PatchMapping("/devices/{id}")
     public ResponseEntity<Void> label(@PathVariable Long id, @RequestBody LabelRequest body, HttpServletRequest request) {
         requireAdmin(request);
-        presence.label(id, body.label(), body.person());
+        presence.label(id, body.name(), body.type(), body.ownerUserId());
         return ResponseEntity.noContent().build();
     }
 

@@ -10,7 +10,8 @@ import java.time.LocalDateTime;
 
 /**
  * A device the NUC has seen on the home Wi-Fi (scripts/presence-scan.ps1), keyed by MAC.
- * An admin labels it and says whose it is; that person counts as home while it's seen.
+ * An admin names it, picks its type and its owner (a member); a phone or watch counts
+ * its owner as home while it's seen.
  * Times are UTC.
  */
 @Entity
@@ -20,6 +21,15 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 @Builder
 public class NetworkDevice {
+
+    public enum DeviceType {
+        MOBILE, COMPUTER, TABLET, WATCH, TV, SMART_HOME, OTHER;
+
+        /** Goes where its owner goes. A computer or TV left on at home would say they're always home. */
+        public boolean countsTowardPresence() {
+            return this == MOBILE || this == WATCH;
+        }
+    }
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,9 +47,13 @@ public class NetworkDevice {
     @Column(length = 60)
     private String label;
 
-    /** Whose it is: "Bryan". Blank = it doesn't count toward anyone being home. */
-    @Column(length = 40)
-    private String person;
+    @Enumerated(EnumType.STRING)
+    @Column(name = "device_type", length = 20)
+    private DeviceType deviceType;
+
+    /** The member it belongs to (users.id). */
+    @Column(name = "owner_user_id")
+    private Long ownerUserId;
 
     @Column(name = "first_seen", nullable = false)
     private LocalDateTime firstSeen;

@@ -34,11 +34,13 @@ class PresenceControllerTest {
     @DisplayName("only admins see who's home")
     void view() throws Exception {
         when(service.view()).thenReturn(new PresenceResponse(new PresenceResponse.Scanner(null, false, 0), 15,
-                List.of(new PresenceResponse.Person("Bryan", true, null, null, 1)), List.of()));
+                List.of(new PresenceResponse.Person(1L, "Bryan", true, null, null, 1)), List.of(),
+                List.of(new PresenceResponse.Member(1L, "Bryan"))));
         mvc.perform(get("/api/admin/presence").requestAttr("role", "ADMIN"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.people[0].name").value("Bryan"))
-                .andExpect(jsonPath("$.awayAfterMinutes").value(15));
+                .andExpect(jsonPath("$.awayAfterMinutes").value(15))
+                .andExpect(jsonPath("$.members[0].name").value("Bryan"));
         mvc.perform(get("/api/admin/presence").requestAttr("role", "USER")).andExpect(status().isForbidden());
         mvc.perform(get("/api/admin/presence").requestAttr("role", "GUEST")).andExpect(status().isForbidden());
     }
@@ -46,18 +48,18 @@ class PresenceControllerTest {
     @Test
     @DisplayName("admins label a device; others can't, and an unknown device is a 404")
     void label() throws Exception {
-        String body = "{\"label\":\"Bryan's iPhone\",\"person\":\"Bryan\"}";
+        String body = "{\"name\":\"Bryan's iPhone\",\"type\":\"MOBILE\",\"ownerUserId\":1}";
         mvc.perform(patch("/api/admin/presence/devices/3").contentType(MediaType.APPLICATION_JSON).content(body)
                         .requestAttr("role", "ADMIN"))
                 .andExpect(status().isNoContent());
-        verify(service).label(3L, "Bryan's iPhone", "Bryan");
+        verify(service).label(3L, "Bryan's iPhone", "MOBILE", 1L);
 
         mvc.perform(patch("/api/admin/presence/devices/3").contentType(MediaType.APPLICATION_JSON).content(body)
                         .requestAttr("role", "USER"))
                 .andExpect(status().isForbidden());
-        verify(service, times(1)).label(any(), any(), any());
+        verify(service, times(1)).label(any(), any(), any(), any());
 
-        doThrow(new NoSuchElementException("No such device")).when(service).label(eq(9L), any(), any());
+        doThrow(new NoSuchElementException("No such device")).when(service).label(eq(9L), any(), any(), any());
         mvc.perform(patch("/api/admin/presence/devices/9").contentType(MediaType.APPLICATION_JSON).content(body)
                         .requestAttr("role", "ADMIN"))
                 .andExpect(status().isNotFound());

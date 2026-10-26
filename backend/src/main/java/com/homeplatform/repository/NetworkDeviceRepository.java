@@ -17,6 +17,6 @@ public interface NetworkDeviceRepository extends JpaRepository<NetworkDevice, Lo
     /** Visitors' devices nobody labeled, gone since {@code before}. */
     @Modifying
     @Transactional
-    @Query("DELETE FROM NetworkDevice d WHERE d.label IS NULL AND d.person IS NULL AND d.lastSeen < :before")
+    @Query("DELETE FROM NetworkDevice d WHERE d.label IS NULL AND d.ownerUserId IS NULL AND d.deviceType IS NULL AND d.lastSeen < :before")
     int deleteUnlabeledSeenBefore(LocalDateTime before);
 }
