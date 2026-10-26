@@ -78,7 +78,8 @@ class CameraAlertServiceTest {
         when(notifications.wanting(anyList(), any())).thenAnswer(i -> i.getArgument(0));
         weather = mock(WeatherService.class);
         service = new CameraAlertService(deviceRepo, statusRepo, readingRepo, notificationRepo, notifications, users,
-                weather, 32.78, -96.80, Clock.fixed(NOW, ZoneId.of("America/Chicago")));
+                weather, mock(com.homeplatform.service.PresenceService.class), 32.78, -96.80,
+                Clock.fixed(NOW, ZoneId.of("America/Chicago")));
 
         frontStatus = battery(1L, 80.0);
         backyardStatus = battery(2L, 80.0);

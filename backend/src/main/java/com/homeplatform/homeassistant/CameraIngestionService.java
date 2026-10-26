@@ -40,6 +40,8 @@ public class CameraIngestionService {
 
     /** Linked HA entity → smart_devices.id; rebuilt after every link pass. */
     private volatile Map<String, Long> index;
+    /** Last detection event state (its timestamp) per entity, so a re-delivered event isn't counted twice. */
+    private final Map<String, String> lastDetection = new java.util.concurrent.ConcurrentHashMap<>();
 
     public CameraIngestionService(CameraStatusRepository statusRepo,
                                   CameraBatteryReadingRepository readingRepo,
@@ -62,6 +64,7 @@ public class CameraIngestionService {
         st.setChargingEntityId(link.chargingEntityId());
         st.setMotionEntityId(link.motionEntityId());
         st.setPersonEntityId(link.personEntityId());
+        st.setDetectionEntityId(link.detectionEntityId());
         CameraLinker.Controls c = link.controls() == null ? CameraLinker.Controls.NONE : link.controls();
         st.setControls(c.equals(CameraLinker.Controls.NONE) ? null : json(c));
         if (c.presetSelect() != null) st.setPresetSlots(json(CameraLinker.presetSlots(states.get(c.presetSelect()))));
@@ -85,6 +88,7 @@ public class CameraIngestionService {
             put(m, st.getChargingEntityId(), st.getDeviceId());
             put(m, st.getMotionEntityId(), st.getDeviceId());
             put(m, st.getPersonEntityId(), st.getDeviceId());
+            put(m, st.getDetectionEntityId(), st.getDeviceId());
             put(m, presetSelectOf(st), st.getDeviceId());
         }
         index = Map.copyOf(m);
@@ -111,6 +115,15 @@ public class CameraIngestionService {
         if (device.isEmpty() || found.isEmpty()) return;
         CameraStatus st = found.get();
         String id = s.entityId();
+        if (id.equals(st.getDetectionEntityId())) {
+            // A discrete push; nothing in camera_status changes. Its state is the event's
+            // timestamp, so a repeat delivery of the same state is the same event.
+            String type = s.attributes().path("event_type").asText("");
+            if (s.isAvailable() && !s.state().equals(lastDetection.put(id, s.state()))) {
+                alerts.detectionEvent(device.get(), st, type);
+            }
+            return;
+        }
         boolean batteryChanged = false;
         LocalDateTime personBefore = st.getLastPersonAt();
         if (id.equals(device.get().getProviderEntityId())) {

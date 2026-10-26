@@ -36,12 +36,22 @@ public final class CameraLinker {
     /** go2rtc stream names we'll hand to nginx — alphanumeric serials only. */
     private static final Pattern STREAM_NAME = Pattern.compile("^[A-Za-z0-9_-]{1,64}$");
 
+    /**
+     * {@code detectionEntityId}: eufy-sdk's {@code event.<camera>_detection}, whose
+     * {@code event_type} attribute names each push (person, sound, crying, …).
+     */
     public record Link(String cameraEntityId, String streamName, String batteryEntityId,
-                       String chargingEntityId, String motionEntityId, String personEntityId, Controls controls) {
+                       String chargingEntityId, String motionEntityId, String personEntityId, Controls controls,
+                       String detectionEntityId) {
 
         public Link(String cameraEntityId, String streamName, String batteryEntityId,
                     String chargingEntityId, String motionEntityId, String personEntityId) {
-            this(cameraEntityId, streamName, batteryEntityId, chargingEntityId, motionEntityId, personEntityId, Controls.NONE);
+            this(cameraEntityId, streamName, batteryEntityId, chargingEntityId, motionEntityId, personEntityId, Controls.NONE, null);
+        }
+
+        public Link(String cameraEntityId, String streamName, String batteryEntityId,
+                    String chargingEntityId, String motionEntityId, String personEntityId, Controls controls) {
+            this(cameraEntityId, streamName, batteryEntityId, chargingEntityId, motionEntityId, personEntityId, controls, null);
         }
     }
 
@@ -95,7 +105,8 @@ public final class CameraLinker {
                     charging(siblings),
                     first(siblings, s -> "binary_sensor".equals(s.domain()) && deviceClass(s, "motion")),
                     first(siblings, s -> "binary_sensor".equals(s.domain()) && s.entityId().contains("person")),
-                    controls(siblings)));
+                    controls(siblings),
+                    first(siblings, s -> "event".equals(s.domain()) && s.entityId().endsWith("_detection"))));
         }
         return out;
     }

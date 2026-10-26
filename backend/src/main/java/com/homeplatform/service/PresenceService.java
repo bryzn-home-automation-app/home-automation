@@ -291,6 +291,17 @@ public class PresenceService {
                 memberUsers.stream().map(u -> new PresenceResponse.Member(u.getId(), displayName(u))).toList());
     }
 
+    /**
+     * Everyone the house can track is away: the scanner is reporting, at least one
+     * member has a phone or watch linked, and every such member is away. Members with no
+     * phone or watch can't be known and aren't counted. False whenever it isn't sure.
+     */
+    public boolean everyoneAway() {
+        PresenceResponse v = view();
+        List<PresenceResponse.Person> tracked = v.people().stream().filter(p -> p.home() != null).toList();
+        return v.scanner().online() && !tracked.isEmpty() && tracked.stream().noneMatch(PresenceResponse.Person::home);
+    }
+
     /** Name a device, set its type and its owner (a member's id, or null). Blank clears the name. */
     @Transactional
     public void label(Long id, String name, String type, Long ownerUserId) {

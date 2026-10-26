@@ -14,11 +14,13 @@ import com.homeplatform.repository.NotificationRepository;
 import com.homeplatform.repository.SmartDeviceRepository;
 import com.homeplatform.repository.UserRepository;
 import com.homeplatform.service.NotificationService;
+import com.homeplatform.service.PresenceService;
 import com.homeplatform.service.WeatherService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -28,7 +30,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -47,11 +51,18 @@ import java.util.concurrent.ConcurrentHashMap;
  *       every camera is offline it's one "cameras disconnected" alert instead, since that
  *       usually means the eufy bridge was signed out. Once per day.</li>
  *   <li><b>Person detected</b> (INFO) — outdoor (battery) cameras only, real time, at most
- *       one per camera per {@link #PERSON_COOLDOWN}. The indoor camera sees the household
- *       all day, so it's left to the eufy app.</li>
+ *       one per camera per {@link #PERSON_COOLDOWN}.</li>
+ *   <li><b>Person inside while away</b> (CRITICAL) — the indoor (wired) camera sees a person
+ *       while {@link PresenceService#everyoneAway()}. It waits {@link #INDOOR_CONFIRM} and
+ *       checks again first: arriving home, the camera can see you before your phone is
+ *       back on the Wi-Fi. At most one per camera per {@link #INDOOR_COOLDOWN}.</li>
+ *   <li><b>Noise while away</b> (WARNING) — the indoor camera's sound (or crying) pushes,
+ *       chained no more than {@link #NOISE_GAP} apart, last {@link #NOISE_SUSTAINED} or
+ *       more while everyone's away. Needs the camera's own sound detection switched on.
+ *       At most one per camera per {@link #INDOOR_COOLDOWN}.</li>
  * </ul>
- * {@link #evaluate()} runs from the 15-minute HA snapshot; {@link #personDetected} from
- * live ingestion. Dedupe is by title against the notifications table, so restarts don't
+ * {@link #evaluate()} runs from the 15-minute HA snapshot; {@link #personDetected} and
+ * {@link #detectionEvent} from live ingestion. Dedupe is by title against the notifications table, so restarts don't
  * re-alert.
  */
 @Service
@@ -65,6 +76,12 @@ public class CameraAlertService {
     static final Duration NOT_CHARGING_WINDOW = Duration.ofHours(48);
     static final Duration OFFLINE_AFTER = Duration.ofMinutes(30);
     static final Duration PERSON_COOLDOWN = Duration.ofMinutes(15);
+    static final Duration INDOOR_CONFIRM = Duration.ofMinutes(3);
+    static final Duration INDOOR_COOLDOWN = Duration.ofMinutes(30);
+    /** Sound pushes further apart than this start a new stretch. */
+    static final Duration NOISE_GAP = Duration.ofMinutes(2);
+    static final Duration NOISE_SUSTAINED = Duration.ofMinutes(2);
+    static final int NOISE_MIN_EVENTS = 3;
     /** Clear, mainly clear, partly cloudy (WMO codes 0–2). */
     static final int SUNNY_MAX_WEATHER_CODE = 2;
     private static final DateTimeFormatter CLOCK_TIME = DateTimeFormatter.ofPattern("h:mm a");
@@ -76,11 +93,18 @@ public class CameraAlertService {
     private final NotificationService notifications;
     private final UserRepository users;
     private final WeatherService weather;
+    private final PresenceService presence;
     private final double latitude;
     private final double longitude;
     private final Clock clock;
     /** "Were the two days before {key} both sunny?" — one weather lookup per day. */
     private final Map<LocalDate, Boolean> sunnyCache = new ConcurrentHashMap<>();
+    /** Indoor camera → when it saw a person while everyone was away, waiting for {@link #INDOOR_CONFIRM}. */
+    private final Map<Long, Pending> pendingIndoor = new ConcurrentHashMap<>();
+    /** Indoor camera → the current stretch of sound pushes (local times). */
+    private final Map<Long, Deque<LocalDateTime>> noise = new ConcurrentHashMap<>();
+
+    private record Pending(SmartDevice device, LocalDateTime seenAt) {}
 
     @Autowired
     public CameraAlertService(SmartDeviceRepository deviceRepo,
@@ -90,16 +114,17 @@ public class CameraAlertService {
                               NotificationService notifications,
                               UserRepository users,
                               WeatherService weather,
+                              PresenceService presence,
                               @Value("${app.property-latitude:0}") double latitude,
                               @Value("${app.property-longitude:0}") double longitude) {
-        this(deviceRepo, statusRepo, readingRepo, notificationRepo, notifications, users, weather,
+        this(deviceRepo, statusRepo, readingRepo, notificationRepo, notifications, users, weather, presence,
                 latitude, longitude, Clock.system(ZoneId.of("America/Chicago")));
     }
 
     CameraAlertService(SmartDeviceRepository deviceRepo, CameraStatusRepository statusRepo,
                        CameraBatteryReadingRepository readingRepo, NotificationRepository notificationRepo,
                        NotificationService notifications, UserRepository users, WeatherService weather,
-                       double latitude, double longitude, Clock clock) {
+                       PresenceService presence, double latitude, double longitude, Clock clock) {
         this.deviceRepo = deviceRepo;
         this.statusRepo = statusRepo;
         this.readingRepo = readingRepo;
@@ -107,6 +132,7 @@ public class CameraAlertService {
         this.notifications = notifications;
         this.users = users;
         this.weather = weather;
+        this.presence = presence;
         this.latitude = latitude;
         this.longitude = longitude;
         this.clock = clock;
@@ -138,7 +164,11 @@ public class CameraAlertService {
     /** A new person detection on {@code device}. Never throws. */
     public void personDetected(SmartDevice device, CameraStatus st) {
         try {
-            if (!battery(st)) return; // outdoor (battery) cameras only — see class doc
+            if (!battery(st)) {
+                // Indoor: only while the house is empty, and only once that's confirmed.
+                if (presence.everyoneAway()) pendingIndoor.putIfAbsent(device.getId(), new Pending(device, now()));
+                return;
+            }
             String title = "Person detected — " + device.getName();
             LocalDateTime since = now().minus(PERSON_COOLDOWN);
             for (Long user : notifications.wanting(recipients(), AlertType.PERSON_DETECTED)) {
@@ -151,6 +181,55 @@ public class CameraAlertService {
             }
         } catch (Exception e) {
             log.warn("Person alert failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Send the indoor person alerts whose wait is over, if everyone is still away.
+     * Every 30 s. Never throws.
+     */
+    @Scheduled(initialDelay = 30_000, fixedDelay = 30_000)
+    public void confirmIndoorPersons() {
+        LocalDateTime now = now();
+        for (Pending p : List.copyOf(pendingIndoor.values())) {
+            if (now.isBefore(p.seenAt().plus(INDOOR_CONFIRM))) continue;
+            pendingIndoor.remove(p.device().getId());
+            try {
+                if (!presence.everyoneAway()) continue; // someone came home
+                String name = p.device().getName();
+                sendWithin(AlertType.INDOOR_PERSON, Severity.CRITICAL, "Person inside — " + name,
+                        "The " + name + " camera saw someone at " + p.seenAt().format(CLOCK_TIME)
+                                + " while everyone's phone is away. Open Cameras to look.", INDOOR_COOLDOWN);
+            } catch (Exception e) {
+                log.warn("Indoor person alert failed: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * A detection push from a camera's event entity ({@code eventType}: person, sound,
+     * crying, …). Sound and crying from the indoor camera feed the noise alert. Never throws.
+     */
+    public void detectionEvent(SmartDevice device, CameraStatus st, String eventType) {
+        try {
+            if (battery(st) || !("sound".equals(eventType) || "crying".equals(eventType))) return;
+            LocalDateTime now = now();
+            Deque<LocalDateTime> stretch = noise.computeIfAbsent(device.getId(), k -> new ArrayDeque<>());
+            synchronized (stretch) {
+                if (!stretch.isEmpty() && stretch.peekLast().isBefore(now.minus(NOISE_GAP))) stretch.clear();
+                stretch.addLast(now);
+                LocalDateTime start = stretch.peekFirst();
+                if (stretch.size() < NOISE_MIN_EVENTS || start.isAfter(now.minus(NOISE_SUSTAINED))) return;
+                if (!presence.everyoneAway()) return;
+                stretch.clear();
+                String name = device.getName();
+                long minutes = Math.max(2, Duration.between(start, now).toMinutes());
+                sendWithin(AlertType.INDOOR_NOISE, Severity.WARNING, "Noise inside — " + name,
+                        "The " + name + " camera has heard sound for about " + minutes + " minutes (since "
+                                + start.format(CLOCK_TIME) + ") while everyone's away.", INDOOR_COOLDOWN);
+            }
+        } catch (Exception e) {
+            log.warn("Indoor noise alert failed: {}", e.getMessage());
         }
     }
 
@@ -261,6 +340,16 @@ public class CameraAlertService {
             if (notificationRepo.existsByUserIdAndCategoryAndTitleAndCreatedAtAfter(user, Category.CAMERA, title, startOfDay)) {
                 continue;
             }
+            log.info("Camera alert: {} — {}", severity, title);
+            notifications.send(user, type, severity, title, message);
+        }
+    }
+
+    /** Send to every member who wants {@code type}, unless they got this title within {@code cooldown}. */
+    private void sendWithin(AlertType type, Severity severity, String title, String message, Duration cooldown) {
+        LocalDateTime since = now().minus(cooldown);
+        for (Long user : notifications.wanting(recipients(), type)) {
+            if (notificationRepo.existsByUserIdAndCategoryAndTitleAndCreatedAtAfter(user, Category.CAMERA, title, since)) continue;
             log.info("Camera alert: {} — {}", severity, title);
             notifications.send(user, type, severity, title, message);
         }

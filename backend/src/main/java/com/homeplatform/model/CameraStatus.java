@@ -47,6 +47,10 @@ public class CameraStatus {
     @Column(name = "person_entity_id")
     private String personEntityId;
 
+    /** eufy-sdk's detection event entity (person / sound / crying pushes), for the indoor alerts. */
+    @Column(name = "detection_entity_id")
+    private String detectionEntityId;
+
     /** JSON of CameraLinker.Controls (entity ids), null for cameras without movement. */
     @Column(name = "controls", columnDefinition = "text")
     private String controls;

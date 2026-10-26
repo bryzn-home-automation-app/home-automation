@@ -190,4 +190,23 @@ class CameraIngestionServiceTest {
         verify(statusRepo, never()).save(any());
         verify(readingRepo, never()).save(any());
     }
+
+    @Test
+    @DisplayName("a detection push reaches the alerts once with its event type; a re-delivery doesn't")
+    void detectionEvents() throws Exception {
+        var withEvents = new CameraLinker.Link("camera.driveway", "T8417X", null, null, null, null,
+                CameraLinker.Controls.NONE, "event.driveway_detection");
+        Map<String, HaEntityState> states = new HashMap<>(Map.of("camera.driveway", state("camera.driveway", "idle", null)));
+        service.link(camera, withEvents, states, SNAPSHOT, UUID.randomUUID());
+        service.reindex();
+        assertEquals("event.driveway_detection", stored.getDetectionEntityId());
+        assertTrue(service.handles("event.driveway_detection"));
+
+        HaEntityState sound = HaEntityState.fromJson(new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"entity_id":"event.driveway_detection","state":"2026-10-26T06:00:05.000+00:00",
+                 "attributes":{"event_type":"sound"}}"""));
+        service.onStateChanged(sound, UUID.randomUUID());
+        service.onStateChanged(sound, UUID.randomUUID());
+        verify(alerts, times(1)).detectionEvent(camera, stored, "sound");
+    }
 }

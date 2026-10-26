@@ -10,6 +10,8 @@ import com.homeplatform.model.Notification.Category;
  */
 public enum AlertType {
     PERSON_DETECTED(Category.CAMERA, "Person outside", "Someone seen by an outdoor camera", true, true),
+    INDOOR_PERSON(Category.CAMERA, "Person inside while away", "The indoor camera sees someone while everyone's phone is away", true, true),
+    INDOOR_NOISE(Category.CAMERA, "Noise while away", "A few minutes of sound at the indoor camera while everyone's away", true, true),
     CAMERA_BATTERY(Category.CAMERA, "Camera battery low", "An outdoor camera at 30% or less and not charging", true, true),
     CAMERA_NOT_CHARGING(Category.CAMERA, "Camera not charging", "No solar charge after two sunny days", true, true),
     CAMERA_OFFLINE(Category.CAMERA, "Camera offline", "A camera unreachable for 30 minutes", true, true),

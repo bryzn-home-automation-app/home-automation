@@ -698,6 +698,9 @@ CREATE TABLE IF NOT EXISTS camera_status (
     charging_entity_id  VARCHAR(255),
     motion_entity_id    VARCHAR(255),
     person_entity_id    VARCHAR(255),
+    -- event.<camera>_detection: each push's event_type (sound, crying, …) drives the
+    -- indoor noise alert.
+    detection_entity_id VARCHAR(255),
     -- Pan/tilt controls (JSON of entity ids) and stored preset positions (JSON list).
     controls            TEXT,
     preset_slots        TEXT,

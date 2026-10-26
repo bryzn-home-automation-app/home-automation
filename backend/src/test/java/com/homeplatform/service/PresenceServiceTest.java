@@ -296,4 +296,24 @@ class PresenceServiceTest {
                 .isEqualTo(NetworkDevice.DeviceType.COMPUTER);
         assertThat(PresenceService.guessFromUserAgent(null).type()).isEqualTo(NetworkDevice.DeviceType.OTHER);
     }
+
+    @Test
+    @DisplayName("everyone away: every member with a phone or watch is away, and at least one is tracked")
+    void everyoneAway() {
+        scanAt(0, PHONE, WATCH, TV);
+        assertThat(service.everyoneAway()).isFalse();              // nobody tracked yet
+        service.label(table.get(PHONE).getId(), null, "MOBILE", BRYAN);
+        service.label(table.get(WATCH).getId(), null, "WATCH", KIM);
+        service.label(table.get(TV).getId(), null, "COMPUTER", KIM);
+        assertThat(service.everyoneAway()).isFalse();              // both home
+
+        scanAt(10, WATCH, TV);
+        scanAt(20, TV);                                            // Bryan's phone gone 20 min, Kim's watch 10
+        assertThat(service.everyoneAway()).isFalse();
+        scanAt(30, TV);                                            // both gone 15+; the computer doesn't count
+        assertThat(service.everyoneAway()).isTrue();
+
+        clock.now = clock.now.plus(Duration.ofMinutes(6));          // scanner stops: not sure, so not away
+        assertThat(service.everyoneAway()).isFalse();
+    }
 }
