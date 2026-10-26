@@ -46,3 +46,6 @@ green-button-downloads/
 # Build
 frontend/build/
 *.tsbuildinfo
+
+# Who's home scan output (scripts/presence-scan.ps1), read by the backend
+presence/

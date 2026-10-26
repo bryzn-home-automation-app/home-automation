@@ -57,6 +57,7 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("improved", "Every camera goes live as soon as you open the Cameras tab, the outdoor ones too (no tap needed)."),
                             change("improved", "The cameras warm up while you're using any part of the app, so the Cameras tab opens already live."),
                             change("new", "Usage (Admin): see which tabs house members use the most, updated every minute."),
+                            change("new", "Who's Home (Admin): see who's home from the phones on the home Wi-Fi. Label each phone with whose it is."),
                             change("new", "Sleep screen: left open and untouched for 10 minutes, the app sleeps and the cameras pause (a minute's warning first; tap to wake)."),
                             change("improved", "Phone menu bar: AC/Heat Ecobee (the thermostats) and Cameras are one tap away; Alerts moved into Menu, which shows the unread count."),
                             change("improved", "The electric forecast misses by about a third less: it learns from the weather that actually happened, and from weekends."),

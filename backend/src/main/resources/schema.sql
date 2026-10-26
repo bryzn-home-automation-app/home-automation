@@ -776,3 +776,18 @@ CREATE TABLE IF NOT EXISTS tab_activity (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tab_activity_at ON tab_activity (at);
+
+-- Who's home (Admin → Who's home). scripts/presence-scan.ps1 lists the devices on the
+-- home Wi-Fi every minute; PresenceService upserts them here by MAC. An admin labels a
+-- device and names its person; a person is home while one of their devices was seen in
+-- the last 15 minutes. Unlabeled devices are forgotten after 30 days away. UTC.
+CREATE TABLE IF NOT EXISTS network_devices (
+    id            BIGSERIAL PRIMARY KEY,
+    mac           VARCHAR(17) NOT NULL UNIQUE,
+    ip            VARCHAR(15),
+    label         VARCHAR(60),
+    person        VARCHAR(40),
+    first_seen    TIMESTAMP   NOT NULL,
+    last_seen     TIMESTAMP   NOT NULL,
+    present_since TIMESTAMP   NOT NULL
+);

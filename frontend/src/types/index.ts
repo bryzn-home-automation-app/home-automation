@@ -641,3 +641,34 @@ export interface TabUsage {
   household: TabTotal[];
   members: MemberTabUsage[];
 }
+
+/** Admin → Who's home: devices on the home Wi-Fi (GET /api/admin/presence). Times are ISO UTC. */
+export interface PresenceDevice {
+  id: number;
+  mac: string;
+  ip: string | null;
+  label: string | null;
+  person: string | null;
+  /** A phone-style randomized MAC: most likely a phone, tablet or watch. */
+  privateAddress: boolean;
+  /** Seen within awayAfterMinutes; null while the scanner is offline. */
+  home: boolean | null;
+  firstSeen: string;
+  lastSeen: string;
+  presentSince: string;
+}
+
+export interface PresencePerson {
+  name: string;
+  home: boolean | null;
+  since: string | null;
+  lastSeen: string | null;
+  devices: number;
+}
+
+export interface Presence {
+  scanner: { lastScanAt: string | null; online: boolean; devicesInLastScan: number };
+  awayAfterMinutes: number;
+  people: PresencePerson[];
+  devices: PresenceDevice[];
+}

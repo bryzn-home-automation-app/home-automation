@@ -100,6 +100,9 @@ services:
       - uploads_data:/app/uploads
       - ./scripts:/scripts:ro
       - ./.git-commit:/app/.git-commit:ro
+      # Who's home: scripts/presence-scan.ps1 (a SYSTEM task on the NUC host) writes
+      # scan.json here every minute. Containers can't see LAN MACs themselves.
+      - ./presence:/presence:ro
 
   roomba-poller:
     build:

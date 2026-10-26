@@ -118,6 +118,7 @@ export default memo(function App() {
     '/admin/debug': { eyebrow: 'Admin', title: 'Debug' },
     '/admin/logs': { eyebrow: 'Admin', title: 'Audit Logs' },
     '/admin/usage': { eyebrow: 'Admin', title: 'Usage', subtitle: 'Which tabs house members use the most.' },
+    '/admin/presence': { eyebrow: 'Admin', title: "Who's Home", subtitle: 'From the phones on the home Wi-Fi.' },
   };
   const pageHeader =
     PAGE_HEADERS[pathname] ??
@@ -188,6 +189,7 @@ export default memo(function App() {
     { path: '/admin/debug', label: 'Debug', icon: '🔧', end: false },
     { path: '/admin/logs', label: 'Logs', icon: '📋', end: false },
     { path: '/admin/usage', label: 'Usage', icon: '📊', end: false },
+    { path: '/admin/presence', label: "Who's Home", icon: '🏡', end: false },
   ];
 
   // ── Sidebar content (shared between desktop and mobile overlay) ──

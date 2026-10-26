@@ -19,6 +19,7 @@ const LABELS: Record<string, string> = {
   'admin/debug': 'Debug',
   'admin/logs': 'Audit Logs',
   'admin/usage': 'Usage',
+  'admin/presence': "Who's Home",
 };
 
 /** "/" → "home", "/cameras" → "cameras", "/admin/debug" → "admin/debug"; null for anything odd. */
