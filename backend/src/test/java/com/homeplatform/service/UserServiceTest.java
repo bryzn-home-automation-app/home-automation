@@ -384,4 +384,53 @@ class UserServiceTest {
             assertTrue(active.isEmpty());
         }
     }
+
+    @Nested
+    @DisplayName("Home SSO sign-in")
+    class SsoLogin {
+
+        @Test
+        @DisplayName("signs in the member whose email the provider vouched for, ignoring case")
+        void signsInByEmail() {
+            int before = userRepo.findByEmail("admin@test.local").orElseThrow().getLoginCount();
+            var resp = userService.ssoLogin("Admin@Test.Local", "127.0.0.1", "test");
+            assertEquals("admin", resp.username());
+            assertEquals("ADMIN", resp.role());
+            assertTrue(jwtUtil.isTokenValid(resp.token()));
+            assertEquals(before + 1, userRepo.findByEmail("admin@test.local").orElseThrow().getLoginCount());
+        }
+
+        @Test
+        @DisplayName("refuses an email with no account, and never creates one")
+        void refusesUnknownEmail() {
+            long count = userRepo.count();
+            assertThrows(IllegalArgumentException.class, () ->
+                userService.ssoLogin("stranger@example.com", "127.0.0.1", "test"));
+            assertEquals(count, userRepo.count());
+        }
+
+        @Test
+        @DisplayName("still applies pending and disabled checks")
+        void appliesStatusChecks() {
+            var r = userService.register(new RegisterRequest("sso-pend@test.com", "ssopend", "password", "P"));
+            assertThrows(IllegalStateException.class, () ->
+                userService.ssoLogin("sso-pend@test.com", "127.0.0.1", "test"));
+
+            userService.approveUser(r.id(), "USER", 1L);
+            userService.disableUser(r.id());
+            assertThrows(IllegalStateException.class, () ->
+                userService.ssoLogin("sso-pend@test.com", "127.0.0.1", "test"));
+        }
+
+        @Test
+        @DisplayName("refuses guest accounts, which stay outside SSO")
+        void refusesGuests() {
+            var g = userService.guestLogin(new GuestLoginRequest("Visitor", null, null, "192.168.1.9", "iPhone"));
+            User guest = userRepo.findById(g.userId()).orElseThrow();
+            guest.setEmail("visitor@example.com");
+            userRepo.save(guest);
+            assertThrows(IllegalArgumentException.class, () ->
+                userService.ssoLogin("visitor@example.com", "127.0.0.1", "test"));
+        }
+    }
 }

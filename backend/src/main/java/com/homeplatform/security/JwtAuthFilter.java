@@ -22,6 +22,11 @@ public class JwtAuthFilter implements Filter {
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/guest-login",
+            // Home SSO: the steps before there is a token (OidcController)
+            "/api/auth/oidc/config",
+            "/api/auth/oidc/start",
+            "/api/auth/oidc/callback",
+            "/api/auth/oidc/exchange",
             "/api/health"
     );
 

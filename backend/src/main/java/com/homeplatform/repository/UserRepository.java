@@ -17,6 +17,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmail(String email);
 
+    Optional<User> findByEmailIgnoreCase(String email);
+
     Optional<User> findByDisplayName(String displayName);
 
     /** Display names aren't unique (a member and a guest can share one) — pick the oldest guest. */

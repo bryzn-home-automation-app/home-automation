@@ -11,15 +11,17 @@ vi.mock('../api/auth', async () => {
     fetchMe: vi.fn().mockRejectedValue(new Error('no session')),
     heartbeat: vi.fn().mockResolvedValue(undefined),
     login: vi.fn(),
+    oidcConfig: vi.fn().mockResolvedValue({ enabled: true }),
+    oidcExchange: vi.fn(),
   };
 });
 
 // Dynamic import to go through Vite
-async function renderLogin() {
+async function renderLogin(path = '/login') {
   const { default: Login } = await import('../pages/Login');
   return render(
     <AuthProvider>
-      <MemoryRouter initialEntries={['/login']}>
+      <MemoryRouter initialEntries={[path]}>
         <Login />
       </MemoryRouter>
     </AuthProvider>
@@ -109,6 +111,45 @@ describe('Login page', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
+    });
+  });
+
+  describe('Sign in with Home (SSO)', () => {
+    it('swaps the one-time code for a session on return from SSO', async () => {
+      (authApi.oidcExchange as any).mockResolvedValue({
+        token: 'sso-jwt', userId: 2, username: 'kim', displayName: 'Kim', role: 'USER',
+      });
+
+      await renderLogin('/login?sso=1');
+
+      expect(screen.getByRole('status')).toHaveTextContent('Signing you in');
+      await waitFor(() => expect(localStorage.getItem('auth_token')).toBe('sso-jwt'));
+      expect(authApi.oidcExchange).toHaveBeenCalledTimes(1);
+      expect(authApi.oidcExchange).toHaveBeenCalledWith();
+    });
+
+    it("shows the server's reason when the code is refused, then the form", async () => {
+      (authApi.oidcExchange as any).mockRejectedValue({
+        response: { data: { error: 'No home account uses that email. Ask the admin to add you.' } },
+      });
+
+      await renderLogin('/login?sso=1');
+
+      expect(await screen.findByText(/No home account uses that email/)).toBeInTheDocument();
+      expect(screen.getByLabelText('Username')).toBeInTheDocument();
+      expect(localStorage.getItem('auth_token')).toBeNull();
+    });
+
+    it('explains an sso_error from the redirect', async () => {
+      await renderLogin('/login?sso_error=expired');
+      expect(screen.getByText(/took too long or was started elsewhere/)).toBeInTheDocument();
+    });
+
+    it('is not offered on the plain-http LAN address', async () => {
+      await renderLogin();
+      await waitFor(() => expect(screen.getByLabelText('Username')).toBeInTheDocument());
+      expect(authApi.oidcConfig).not.toHaveBeenCalled();
+      expect(screen.queryByText('Sign in with Home')).not.toBeInTheDocument();
     });
   });
 });

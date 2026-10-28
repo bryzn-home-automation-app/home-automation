@@ -101,6 +101,21 @@ export async function fetchGuestInviteCode(): Promise<string> {
   return data.code;
 }
 
+/** Whether "Sign in with Home" (home SSO) is turned on for this server. */
+export async function oidcConfig(): Promise<{ enabled: boolean }> {
+  const { data } = await api.get('/auth/oidc/config');
+  return data;
+}
+
+/**
+ * Back from home SSO (/login?sso=1): swaps the one-time code, which the server put in an HttpOnly
+ * cookie for this browser, for the usual login response.
+ */
+export async function oidcExchange(): Promise<LoginResponse> {
+  const { data } = await api.post('/auth/oidc/exchange');
+  return data;
+}
+
 export async function fetchMe(): Promise<LoginResponse> {
   const { data } = await api.get('/auth/me');
   return data;

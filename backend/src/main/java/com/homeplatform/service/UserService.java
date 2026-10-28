@@ -108,6 +108,33 @@ public class UserService {
             throw new IllegalArgumentException("Invalid credentials");
         }
 
+        requireActive(user);
+
+        // Transparently upgrade legacy SHA-256 hashes to bcrypt on successful login.
+        if (isLegacyHash(user.getPasswordHash())) {
+            user.setPasswordHash(passwordEncoder.encode(req.password()));
+        }
+
+        rateLimiter.clear("login:" + ipAddress);
+        return completeLogin(user, ipAddress, userAgent);
+    }
+
+    /**
+     * Sign-in through home SSO (Authelia): the identity provider has already checked who this is,
+     * and vouched for the email. It must belong to an existing member account; SSO never creates
+     * one, and guests (invite-code accounts) stay outside SSO. The usual status checks still apply.
+     */
+    public LoginResponse ssoLogin(String email, String ipAddress, String userAgent) {
+        User user = userRepo.findByEmailIgnoreCase(email).orElse(null);
+        if (user == null || user.getRole() == Role.GUEST) {
+            log.warn("SSO sign-in refused: no member account for {}", email);
+            throw new IllegalArgumentException("No home account uses that email. Ask the admin to add you.");
+        }
+        requireActive(user);
+        return completeLogin(user, ipAddress, userAgent);
+    }
+
+    private void requireActive(User user) {
         if (user.getStatus() == AccountStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("Account is pending approval. Please wait for an admin to approve your account.");
         }
@@ -117,18 +144,13 @@ public class UserService {
         if (user.getStatus() == AccountStatus.EXPIRED) {
             throw new IllegalStateException("Guest account has expired.");
         }
+    }
 
-        // Update login stats
+    /** Everything after the person is known and allowed in: stats, token, alerts, guest session. */
+    private LoginResponse completeLogin(User user, String ipAddress, String userAgent) {
         user.setLastLoginAt(LocalDateTime.now());
         user.setLoginCount(user.getLoginCount() + 1);
-
-        // Transparently upgrade legacy SHA-256 hashes to bcrypt on successful login.
-        if (isLegacyHash(user.getPasswordHash())) {
-            user.setPasswordHash(passwordEncoder.encode(req.password()));
-        }
         userRepo.save(user);
-
-        rateLimiter.clear("login:" + ipAddress);
 
         String token = jwtUtil.generateToken(user.getId(), user.getUsername(), user.getRole().name());
 

@@ -75,6 +75,12 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       ADMIN_DISPLAY_NAME: ${ADMIN_DISPLAY_NAME:-}
       GUEST_INVITE_CODE: ${GUEST_INVITE_CODE:-}
+      # Home SSO ("Sign in with Home"). OIDC_ENABLED=false is the rollback switch.
+      OIDC_ENABLED: ${OIDC_ENABLED:-false}
+      OIDC_ISSUER: ${OIDC_ISSUER:-https://nuc.tailf10ac4.ts.net:9443}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-homeplatform}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://nuc.tailf10ac4.ts.net/api/auth/oidc/callback}
       SPRINGDOC_API_DOCS_ENABLED: ${SPRINGDOC_API_DOCS_ENABLED:-false}
       SPRINGDOC_SWAGGER_UI_ENABLED: ${SPRINGDOC_SWAGGER_UI_ENABLED:-false}
       # Home Assistant — blank/false keeps the integration off (stack still boots).
@@ -90,6 +96,10 @@ services:
     # API can't be hit directly, bypassing the same-origin reverse proxy.
     expose:
       - "8080"
+    # Containers can't resolve the NUC's own MagicDNS name, but reach its tailnet IP fine; the
+    # backend calls the SSO issuer (https://nuc.tailf10ac4.ts.net:9443) for tokens and keys.
+    extra_hosts:
+      - "nuc.tailf10ac4.ts.net:100.78.186.68"
     depends_on:
       postgres:
         condition: service_healthy
