@@ -5,6 +5,7 @@ import com.homeplatform.service.LoginRateLimiter;
 import com.homeplatform.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,17 +16,25 @@ import java.util.Map;
 @RequestMapping("/api/auth")
 public class AuthController {
 
+    /** Family accounts sign in through home SSO only; password sign-in and self-registration are retired. */
+    static final Map<String, String> PASSWORD_LOGIN_OFF =
+            Map.of("error", "Password sign-in has been replaced by Sign in with Home.");
+
     private final UserService userService;
     private final LoginRateLimiter rateLimiter;
+    private final boolean passwordLoginEnabled;
 
-    public AuthController(UserService userService, LoginRateLimiter rateLimiter) {
+    public AuthController(UserService userService, LoginRateLimiter rateLimiter,
+                          @Value("${app.auth.password-login-enabled:true}") boolean passwordLoginEnabled) {
         this.userService = userService;
         this.rateLimiter = rateLimiter;
+        this.passwordLoginEnabled = passwordLoginEnabled;
     }
 
     /** Self-registration — enters PENDING_APPROVAL, cannot log in until approved. */
     @PostMapping("/register")
     public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest req) {
+        if (!passwordLoginEnabled) return ResponseEntity.status(403).body(PASSWORD_LOGIN_OFF);
         try {
             return ResponseEntity.ok(userService.register(req));
         } catch (IllegalArgumentException e) {
@@ -38,6 +47,7 @@ public class AuthController {
     public ResponseEntity<?> login(
             @Valid @RequestBody LoginRequest req,
             HttpServletRequest httpReq) {
+        if (!passwordLoginEnabled) return ResponseEntity.status(403).body(PASSWORD_LOGIN_OFF);
         try {
             String ip = getClientIp(httpReq);
             String ua = httpReq.getHeader("User-Agent");

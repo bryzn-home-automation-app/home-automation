@@ -6,6 +6,7 @@ import com.homeplatform.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
@@ -33,17 +34,20 @@ public class OidcController {
     private final OidcService oidc;
     private final OidcLoginStore store;
     private final UserService userService;
+    private final boolean passwordLoginEnabled;
 
-    public OidcController(OidcService oidc, OidcLoginStore store, UserService userService) {
+    public OidcController(OidcService oidc, OidcLoginStore store, UserService userService,
+                          @Value("${app.auth.password-login-enabled:true}") boolean passwordLoginEnabled) {
         this.oidc = oidc;
         this.store = store;
         this.userService = userService;
+        this.passwordLoginEnabled = passwordLoginEnabled;
     }
 
-    /** Whether the login page should offer "Sign in with Home". */
+    /** What the login page offers: "Sign in with Home", and the password form only if it's still on. */
     @GetMapping("/config")
     public Map<String, Boolean> config() {
-        return Map.of("enabled", oidc.isEnabled());
+        return Map.of("enabled", oidc.isEnabled(), "passwordLogin", passwordLoginEnabled);
     }
 
     @GetMapping("/start")

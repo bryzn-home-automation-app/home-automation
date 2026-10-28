@@ -101,8 +101,11 @@ export async function fetchGuestInviteCode(): Promise<string> {
   return data.code;
 }
 
-/** Whether "Sign in with Home" (home SSO) is turned on for this server. */
-export async function oidcConfig(): Promise<{ enabled: boolean }> {
+/**
+ * What the login page offers: "Sign in with Home" (home SSO), and whether the retired password
+ * form is switched back on (an emergency switch on the server).
+ */
+export async function oidcConfig(): Promise<{ enabled: boolean; passwordLogin: boolean }> {
   const { data } = await api.get('/auth/oidc/config');
   return data;
 }

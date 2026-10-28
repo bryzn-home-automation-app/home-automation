@@ -29,7 +29,7 @@ class OidcControllerTest {
         oidc = mock(OidcService.class);
         store = new OidcLoginStore();
         users = mock(UserService.class);
-        controller = new OidcController(oidc, store, users);
+        controller = new OidcController(oidc, store, users, false);
         when(oidc.isEnabled()).thenReturn(true);
     }
 
@@ -47,6 +47,12 @@ class OidcControllerTest {
         String cookie = r.getHeaders().getFirst(HttpHeaders.SET_COOKIE);
         assertTrue(cookie.startsWith("oidc_tx="));
         assertTrue(cookie.contains("HttpOnly") && cookie.contains("Secure") && cookie.contains("Path=/api/auth/oidc"));
+    }
+
+    @Test
+    @DisplayName("config tells the login page what to offer")
+    void config() {
+        assertEquals(java.util.Map.of("enabled", true, "passwordLogin", false), controller.config());
     }
 
     @Test

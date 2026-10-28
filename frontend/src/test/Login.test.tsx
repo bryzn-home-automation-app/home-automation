@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import * as authApi from '../api/auth';
@@ -11,7 +11,8 @@ vi.mock('../api/auth', async () => {
     fetchMe: vi.fn().mockRejectedValue(new Error('no session')),
     heartbeat: vi.fn().mockResolvedValue(undefined),
     login: vi.fn(),
-    oidcConfig: vi.fn().mockResolvedValue({ enabled: true }),
+    // Password form switched back on (the server's emergency switch), so the form tests below run.
+    oidcConfig: vi.fn().mockResolvedValue({ enabled: true, passwordLogin: true }),
     oidcExchange: vi.fn(),
   };
 });
@@ -19,13 +20,16 @@ vi.mock('../api/auth', async () => {
 // Dynamic import to go through Vite
 async function renderLogin(path = '/login') {
   const { default: Login } = await import('../pages/Login');
-  return render(
+  const result = render(
     <AuthProvider>
       <MemoryRouter initialEntries={[path]}>
         <Login />
       </MemoryRouter>
     </AuthProvider>
   );
+  // Let the page learn what to offer (oidcConfig) before the test looks.
+  await act(async () => { await Promise.resolve(); });
+  return result;
 }
 
 describe('Login page', () => {
@@ -147,9 +151,18 @@ describe('Login page', () => {
 
     it('is not offered on the plain-http LAN address', async () => {
       await renderLogin();
-      await waitFor(() => expect(screen.getByLabelText('Username')).toBeInTheDocument());
-      expect(authApi.oidcConfig).not.toHaveBeenCalled();
+      expect(screen.getByLabelText('Username')).toBeInTheDocument();
       expect(screen.queryByText('Sign in with Home')).not.toBeInTheDocument();
+    });
+
+    it('with password sign-in retired, offers no form, no sign-up, and points http visitors to the secure address', async () => {
+      (authApi.oidcConfig as any).mockResolvedValueOnce({ enabled: true, passwordLogin: false });
+      await renderLogin();
+
+      expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create one')).not.toBeInTheDocument();
+      expect(screen.getByText('nuc.tailf10ac4.ts.net')).toHaveAttribute('href', 'https://nuc.tailf10ac4.ts.net/login');
+      expect(screen.getByText(/sign in as a guest/i)).toHaveAttribute('href', '/guest');
     });
   });
 });

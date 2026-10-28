@@ -45,8 +45,13 @@ app:
   guest:
     # Guest check-in requires this shared code. Blank = guest login disabled.
     invite-code: ${GUEST_INVITE_CODE:}
+  auth:
+    # Family accounts sign in through home SSO only (Bryan, 2026-10-28). Password sign-in and
+    # self-registration stay switchable for local dev and for emergencies (Authelia down);
+    # docker-compose turns them off.
+    password-login-enabled: ${PASSWORD_LOGIN_ENABLED:true}
   # Home SSO ("Sign in with Home", Authelia in ../home-sso). Off unless OIDC_ENABLED=true and
-  # issuer + secret are set; password sign-in works either way.
+  # issuer + secret are set.
   oidc:
     enabled: ${OIDC_ENABLED:false}
     issuer: ${OIDC_ISSUER:}
