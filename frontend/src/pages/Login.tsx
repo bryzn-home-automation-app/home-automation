@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, SIGNED_OUT_KEY } from '../context/AuthContext';
 import { login as apiLogin, oidcConfig, oidcExchange, startHomeSso } from '../api/auth';
 import { SECURE_APP_URL } from '../components/PushSettings';
 
@@ -15,6 +15,15 @@ const SSO_ERRORS: Record<string, string> = {
 
 const AUTO_SSO_KEY = 'sso_auto_started_at';
 const AUTO_SSO_COOLDOWN_MS = 2 * 60 * 1000;
+
+/** True if this device signed out on purpose and hasn't signed in since. */
+function signedOutOnPurpose(): boolean {
+  try {
+    return localStorage.getItem(SIGNED_OUT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
 
 /** True at most once per two minutes per tab; false if storage is unavailable (no loop risk). */
 function claimAutoSso(): boolean {
@@ -43,6 +52,7 @@ export default function Login() {
   const [options, setOptions] = useState<{ sso: boolean; password: boolean } | null>(null);
   const [finishingSso, setFinishingSso] = useState(ssoReturn);
   const exchanged = useRef(false);
+  const [signedOut] = useState(signedOutOnPurpose);
   // Home SSO needs the HTTPS (Tailscale) address: its cookies are Secure.
   const isHttps = window.location.protocol === 'https:';
 
@@ -55,13 +65,14 @@ export default function Login() {
   }, [isHttps]);
 
   // "Sign in with Home" is the only way in, so go straight there: someone already signed in to home
-  // SSO lands in the app without a tap. Not after an SSO error, and not twice within two minutes,
-  // so pressing Back on the sign-in page shows this page instead of bouncing forward again.
+  // SSO lands in the app without a tap. Not after Sign out (that would sign straight back in), not
+  // after an SSO error, and not twice within two minutes, so pressing Back on the sign-in page
+  // shows this page instead of bouncing forward again.
   useEffect(() => {
-    if (!options?.sso || options.password || ssoReturn || ssoError || !claimAutoSso()) return;
+    if (!options?.sso || options.password || ssoReturn || ssoError || signedOut || !claimAutoSso()) return;
     setFinishingSso(true);
     startHomeSso();
-  }, [options, ssoReturn, ssoError]);
+  }, [options, ssoReturn, ssoError, signedOut]);
 
   // Back from home SSO: swap the one-time code (an HttpOnly cookie) for a session. The ref keeps
   // React's dev double-effect from spending the code twice.
@@ -134,6 +145,12 @@ export default function Login() {
             <div className="mb-5 rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
               {error}
             </div>
+          )}
+
+          {signedOut && options?.sso && !error && (
+            <p className="mb-5 text-center text-sm text-apptext-soft" role="status">
+              You&rsquo;re signed out.
+            </p>
           )}
 
           {options?.sso && (

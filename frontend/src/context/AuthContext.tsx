@@ -37,6 +37,11 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 const TOKEN_KEY = 'auth_token';
+/**
+ * Set by Sign out, cleared by the next sign-in. While set, the login page waits for a tap instead
+ * of starting home SSO by itself, which would sign straight back in through the live SSO session.
+ */
+export const SIGNED_OUT_KEY = 'signed_out';
 
 function readStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
@@ -106,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Set localStorage FIRST so the interceptor picks it up
     try {
       localStorage.setItem(TOKEN_KEY, newToken);
+      localStorage.removeItem(SIGNED_OUT_KEY);
     } catch { /* quota exceeded */ }
     // Then set state — ProtectedRoute will see these immediately
     setToken(newToken);
@@ -119,6 +125,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     try {
       localStorage.removeItem(TOKEN_KEY);
+      localStorage.setItem(SIGNED_OUT_KEY, '1');
     } catch { /* */ }
   }, []);
 

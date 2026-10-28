@@ -33,6 +33,7 @@ async function renderLogin(path = '/login') {
 describe('Login page: straight to Sign in with Home', () => {
   beforeEach(() => {
     sessionStorage.clear();
+    localStorage.clear();
     vi.clearAllMocks();
   });
 
@@ -65,5 +66,13 @@ describe('Login page: straight to Sign in with Home', () => {
     (authApi.oidcConfig as any).mockResolvedValueOnce({ enabled: true, passwordLogin: true });
     await renderLogin();
     expect(authApi.startHomeSso).not.toHaveBeenCalled();
+  });
+
+  it("after Sign out, waits for a tap instead of signing straight back in", async () => {
+    localStorage.setItem('signed_out', '1');
+    await renderLogin();
+    expect(authApi.startHomeSso).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent("You’re signed out.");
+    expect(screen.getByText('Sign in with Home')).toBeInTheDocument();
   });
 });

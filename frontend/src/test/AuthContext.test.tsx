@@ -69,6 +69,20 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('auth_token')).toBeNull();
   });
 
+  it('marks a deliberate sign-out until the next sign-in', async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => {
+      result.current.logout();
+    });
+    expect(localStorage.getItem('signed_out')).toBe('1');
+
+    await act(async () => {
+      result.current.login(mockUser.token, mockUser);
+    });
+    expect(localStorage.getItem('signed_out')).toBeNull();
+  });
+
   it('should detect USER role correctly', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 
