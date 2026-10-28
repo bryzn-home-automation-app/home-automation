@@ -110,6 +110,11 @@ export async function oidcConfig(): Promise<{ enabled: boolean; passwordLogin: b
   return data;
 }
 
+/** Full-page navigation to home SSO: the server redirects on to the home sign-in page. */
+export function startHomeSso(): void {
+  window.location.assign('/api/auth/oidc/start');
+}
+
 /**
  * Back from home SSO (/login?sso=1): swaps the one-time code, which the server put in an HttpOnly
  * cookie for this browser, for the usual login response.

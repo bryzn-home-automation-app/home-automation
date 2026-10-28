@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { login as apiLogin, oidcConfig, oidcExchange } from '../api/auth';
+import { login as apiLogin, oidcConfig, oidcExchange, startHomeSso } from '../api/auth';
 import { SECURE_APP_URL } from '../components/PushSettings';
 
 /** Why home SSO sent the browser back without signing in (OidcController's sso_error codes). */
@@ -12,6 +12,21 @@ const SSO_ERRORS: Record<string, string> = {
   denied: 'Sign-in was cancelled.',
   failed: 'Home sign-in didn’t go through. Please try again.',
 };
+
+const AUTO_SSO_KEY = 'sso_auto_started_at';
+const AUTO_SSO_COOLDOWN_MS = 2 * 60 * 1000;
+
+/** True at most once per two minutes per tab; false if storage is unavailable (no loop risk). */
+function claimAutoSso(): boolean {
+  try {
+    const last = Number(sessionStorage.getItem(AUTO_SSO_KEY) ?? 0);
+    if (Date.now() - last < AUTO_SSO_COOLDOWN_MS) return false;
+    sessionStorage.setItem(AUTO_SSO_KEY, String(Date.now()));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default function Login() {
   const navigate = useNavigate();
@@ -38,6 +53,15 @@ export default function Login() {
       .then((c) => setOptions({ sso: c.enabled && isHttps, password: c.passwordLogin }))
       .catch(() => setOptions({ sso: isHttps, password: false }));
   }, [isHttps]);
+
+  // "Sign in with Home" is the only way in, so go straight there: someone already signed in to home
+  // SSO lands in the app without a tap. Not after an SSO error, and not twice within two minutes,
+  // so pressing Back on the sign-in page shows this page instead of bouncing forward again.
+  useEffect(() => {
+    if (!options?.sso || options.password || ssoReturn || ssoError || !claimAutoSso()) return;
+    setFinishingSso(true);
+    startHomeSso();
+  }, [options, ssoReturn, ssoError]);
 
   // Back from home SSO: swap the one-time code (an HttpOnly cookie) for a session. The ref keeps
   // React's dev double-effect from spending the code twice.
