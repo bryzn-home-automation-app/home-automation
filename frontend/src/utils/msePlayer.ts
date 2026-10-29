@@ -23,6 +23,14 @@ const KEEP_SECONDS = 10;
  * never shows a frame.
  */
 const CATCH_UP_SECONDS = 6;
+/**
+ * A playing HLS picture that hasn't moved for this long is treated as ended. When a
+ * camera's feed hiccups, iPhone's player waits and stops polling; go2rtc drops an HLS
+ * viewer that hasn't polled for ~5 s, so every later request is a 404 and the tile
+ * freezes on its last frame without ever firing an error. Ending it lets the tile
+ * reconnect with a fresh session.
+ */
+export const HLS_STALL_MS = 6_000;
 
 type MediaSourceCtor = typeof MediaSource;
 
@@ -129,6 +137,10 @@ export class HlsPlayer implements LivePlayer {
   private stopped = false;
   private playing = false;
   private playError: string | null = null;
+  private stallTimer: ReturnType<typeof setInterval> | null = null;
+  private lastTime = -1;
+  private lastMoved = 0;
+  private stalls = 0;
 
   constructor(
     private readonly video: HTMLVideoElement,
@@ -148,10 +160,13 @@ export class HlsPlayer implements LivePlayer {
       this.playError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
       v.addEventListener('canplay', () => void v.play().catch(() => {}), { once: true });
     });
+    this.stallTimer = setInterval(this.checkStall, 1_000);
   }
 
   stop(): void {
     this.stopped = true;
+    if (this.stallTimer) clearInterval(this.stallTimer);
+    this.stallTimer = null;
     const v = this.video;
     v.removeEventListener('playing', this.onPlaying);
     v.removeEventListener('error', this.onError);
@@ -172,13 +187,31 @@ export class HlsPlayer implements LivePlayer {
       videoSize: `${v.videoWidth}x${v.videoHeight}`,
       error: v.error ? `code ${v.error.code}${v.error.message ? `: ${v.error.message}` : ''}` : null,
       playError: this.playError,
+      stalls: this.stalls,
     };
   }
 
   private onPlaying = () => {
     if (this.playing || this.stopped) return;
     this.playing = true;
+    this.lastMoved = Date.now();
     this.handlers.onPlaying?.();
+  };
+
+  /** Once playing, end the stream if the picture stops moving (see HLS_STALL_MS). */
+  private checkStall = () => {
+    if (this.stopped || !this.playing) return;
+    const t = this.video.currentTime;
+    if (t !== this.lastTime) {
+      this.lastTime = t;
+      this.lastMoved = Date.now();
+      return;
+    }
+    if (Date.now() - this.lastMoved < HLS_STALL_MS) return;
+    this.stalls++;
+    if (this.stallTimer) clearInterval(this.stallTimer);
+    this.stallTimer = null;
+    this.handlers.onEnded?.();
   };
 
   private onError = () => {

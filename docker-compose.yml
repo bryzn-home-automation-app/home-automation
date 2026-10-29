@@ -196,6 +196,18 @@ services:
       - "1984"
       - "8554"
     restart: unless-stopped
+    # go2rtc (live view's video server) can crash on its own while the bridge keeps
+    # running without it; on 10/29 every live view then got a 502 until a manual
+    # restart. After 3 missed checks in a row (~1 min) this stops the bridge (SIGTERM →
+    # clean exit) and restart: unless-stopped brings it back with a fresh go2rtc. The
+    # count lives in /dev/shm, a fresh tmpfs on every start. The backend's
+    # CameraVideoWatchdog logs the outage to the Debug Dashboard.
+    healthcheck:
+      test: ["CMD-SHELL", "if wget -q -T 5 -O /dev/null http://127.0.0.1:1984/api; then rm -f /dev/shm/go2rtc-fails; else n=$$(( $$(cat /dev/shm/go2rtc-fails 2>/dev/null || echo 0) + 1 )); echo $$n > /dev/shm/go2rtc-fails; if [ $$n -ge 3 ]; then echo \"[healthcheck] go2rtc not answering on :1984 after $$n checks, restarting the bridge\" > /proc/1/fd/2; kill 1; fi; exit 1; fi"]
+      interval: 20s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
 
   # Sits between go2rtc and the bridge's /stream feed and drops the outdoor
   # cameras' small warm-up frames, so live view starts at full size instead of

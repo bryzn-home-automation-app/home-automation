@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MsePlayer } from '../utils/msePlayer';
+import { HLS_STALL_MS, HlsPlayer, MsePlayer } from '../utils/msePlayer';
 
 // Fakes just big enough to drive MsePlayer: a SourceBuffer that finishes each
 // operation on the next tick (firing updateend) and can be told to throw.
@@ -130,5 +130,66 @@ describe('player choice', () => {
     vi.stubGlobal('MediaSource', class {});
     expect(preferHls()).toBe(false);
     vi.unstubAllGlobals();
+  });
+});
+
+describe('HlsPlayer', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  /** A video element that plays when told and whose clock the test moves. */
+  function fakeVideo() {
+    const v = Object.assign(new EventTarget(), {
+      currentTime: 0,
+      muted: false,
+      playsInline: false,
+      paused: false,
+      readyState: 4,
+      networkState: 2,
+      videoWidth: 1920,
+      videoHeight: 1080,
+      error: null,
+      src: '',
+      setAttribute() {},
+      removeAttribute() {},
+      load() {},
+      pause() {},
+      play: () => Promise.resolve(),
+    });
+    return v as unknown as HTMLVideoElement & { currentTime: number };
+  }
+
+  it('ends a stream whose picture stops moving, so the tile reconnects', () => {
+    const video = fakeVideo();
+    const onEnded = vi.fn();
+    const player = new HlsPlayer(video, { onEnded });
+    player.start('/camera-stream/t/stream.m3u8');
+    video.dispatchEvent(new Event('playing'));
+
+    // Moving along: never ends.
+    for (let i = 0; i < 10; i++) {
+      video.currentTime += 1;
+      vi.advanceTimersByTime(1_000);
+    }
+    expect(onEnded).not.toHaveBeenCalled();
+
+    // Frozen (go2rtc dropped the session): ends once, after HLS_STALL_MS.
+    vi.advanceTimersByTime(HLS_STALL_MS - 1_000);
+    expect(onEnded).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(2_000);
+    expect(onEnded).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(20_000);
+    expect(onEnded).toHaveBeenCalledTimes(1);
+    player.stop();
+  });
+
+  it("doesn't count the wait before the first frame as a stall", () => {
+    const video = fakeVideo();
+    const onEnded = vi.fn();
+    const player = new HlsPlayer(video, { onEnded });
+    player.start('/camera-stream/t/stream.m3u8');
+    vi.advanceTimersByTime(30_000);
+    expect(onEnded).not.toHaveBeenCalled();
+    player.stop();
   });
 });

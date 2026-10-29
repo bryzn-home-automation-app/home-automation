@@ -111,6 +111,7 @@ const CATEGORIES = [
   { key: 'db', label: 'DB' },
   { key: 'api', label: 'API' },
   { key: 'weather', label: 'Weather' },
+  { key: 'camera', label: 'Cameras' },
 ] as const;
 
 const LEVELS = [
@@ -137,6 +138,7 @@ const categoryBadge = (cat: string) => {
     api: 'bg-sky-300/10 border-sky-300/20 text-sky-300',
     weather: 'bg-cyan-300/10 border-cyan-300/20 text-cyan-300',
     auth: 'bg-pink-300/10 border-pink-300/20 text-pink-300',
+    camera: 'bg-orange-300/10 border-orange-300/20 text-orange-300',
   };
   return colors[cat] ?? 'bg-appinset border-appborder text-apptext-muted';
 };
