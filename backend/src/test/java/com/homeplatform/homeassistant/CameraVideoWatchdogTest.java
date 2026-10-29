@@ -64,7 +64,8 @@ class CameraVideoWatchdogTest {
 
         tick(true);
         assertThat(watchdog.down()).isFalse();
-        verify(events).info("camera", "CameraVideoWatchdog", "Live video is back — go2rtc answering again after 2 min down");
+        verify(events).info("camera", "CameraVideoWatchdog", "Live video is back — go2rtc answering again after "
+                + CameraVideoWatchdog.describe(CameraVideoWatchdog.INTERVAL.multipliedBy(4)) + " down");
         tick(true);
         verifyNoMoreInteractions(events);
     }

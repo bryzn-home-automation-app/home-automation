@@ -25,7 +25,8 @@ import java.time.Instant;
 @Component
 public class CameraVideoWatchdog {
 
-    static final Duration INTERVAL = Duration.ofSeconds(30);
+    /** Often enough to see an outage before the bridge's healthcheck restart (~50 s) ends it. */
+    static final Duration INTERVAL = Duration.ofSeconds(10);
     /** Consecutive failed checks before video counts as down (one slow answer isn't an outage). */
     static final int FAILURES_BEFORE_DOWN = 2;
 
@@ -54,7 +55,7 @@ public class CameraVideoWatchdog {
         this.events = events;
     }
 
-    @Scheduled(fixedDelay = 30_000, initialDelay = 60_000)
+    @Scheduled(fixedDelay = 10_000, initialDelay = 30_000)
     void check() {
         if (go2rtcUrl.isBlank()) return;
         record(probe());
