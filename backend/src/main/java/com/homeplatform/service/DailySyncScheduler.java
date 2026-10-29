@@ -47,6 +47,14 @@ public class DailySyncScheduler {
     private static final int LOOKBACK_DAYS = 14;
 
     /**
+     * A day whose full set of hourly readings sums this far from its stored daily total
+     * is re-fetched. The daily total is first written as soon as it's non-zero, which can
+     * be before CoServ has posted a late 3-hour block (10/27: 13.25 kWh stored, 18.00
+     * once the rest landed). Complete days otherwise agree to within ~0.1 kWh.
+     */
+    static final double STALE_DAILY_KWH = 0.5;
+
+    /**
      * Number of consecutive ticks that must find the whole lookback window populated
      * before the scheduler stands down for the day. A small count (not 1) guards
      * against a transient DB read making a still-missing day look finished.
@@ -227,21 +235,32 @@ public class DailySyncScheduler {
 
     /**
      * Find the earliest day in the last {@code windowDays} days (through
-     * {@code yesterday}) that has no non-zero daily reading. Empty when every
-     * day is already populated. Backfills gaps left by server downtime, bounded
-     * by CoServ's ~2-week retention window.
+     * {@code yesterday}) that has no non-zero daily reading, or whose daily
+     * reading is {@link #isStale stale} against its complete hourly readings.
+     * Empty when every day is already populated. Backfills gaps left by server
+     * downtime, bounded by CoServ's ~2-week retention window.
      */
     Optional<LocalDate> findEarliestMissingDay(LocalDate yesterday, int windowDays) {
         LocalDate first = yesterday.minusDays(windowDays - 1);
         Set<LocalDate> populated = new HashSet<>();
         try (var conn = dataSource.getConnection();
              var stmt = conn.prepareStatement(
-                     "SELECT DISTINCT timestamp::date FROM electric_usage " +
-                     "WHERE usage_kwh > 0 AND timestamp::date >= ?::date AND timestamp::date <= ?::date")) {
+                     "SELECT d.day, d.kwh, COALESCE(h.total, 0), COALESCE(h.nonzero, 0), COALESCE(h.kwh, 0) " +
+                     "FROM (SELECT timestamp::date AS day, MAX(usage_kwh) AS kwh FROM electric_usage " +
+                     "      WHERE usage_kwh > 0 AND timestamp::date >= ?::date AND timestamp::date <= ?::date GROUP BY 1) d " +
+                     "LEFT JOIN (SELECT timestamp::date AS day, COUNT(*) AS total, COUNT(*) FILTER (WHERE usage_kwh > 0) AS nonzero, " +
+                     "                  SUM(usage_kwh) AS kwh FROM hourly_electric_usage " +
+                     "           WHERE source_provider = 'coserv' AND timestamp::date >= ?::date AND timestamp::date <= ?::date GROUP BY 1) h " +
+                     "ON h.day = d.day")) {
             stmt.setString(1, first.toString());
             stmt.setString(2, yesterday.toString());
+            stmt.setString(3, first.toString());
+            stmt.setString(4, yesterday.toString());
             try (var rs = stmt.executeQuery()) {
-                while (rs.next()) populated.add(rs.getDate(1).toLocalDate());
+                while (rs.next()) {
+                    LocalDate day = rs.getDate(1).toLocalDate();
+                    if (!isStale(day, rs.getDouble(2), rs.getInt(3), rs.getInt(4), rs.getDouble(5))) populated.add(day);
+                }
             }
         } catch (Exception e) {
             log.warn("DailySyncScheduler backfill scan failed: {}", e.getMessage());
@@ -253,5 +272,11 @@ public class DailySyncScheduler {
             if (!populated.contains(d)) missing = d;
         }
         return Optional.ofNullable(missing);
+    }
+
+    /** True when the day's hourly readings are complete and their total disagrees with the stored daily reading. */
+    static boolean isStale(LocalDate day, double dailyKwh, int hourlyRows, int hourlyNonZero, double hourlyKwh) {
+        return HourlySyncScheduler.isComplete(day, hourlyRows, hourlyNonZero)
+                && Math.abs(hourlyKwh - dailyKwh) > STALE_DAILY_KWH;
     }
 }

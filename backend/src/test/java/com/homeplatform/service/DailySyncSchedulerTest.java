@@ -108,4 +108,14 @@ class DailySyncSchedulerTest {
         assertEquals(scansBeforeStandDown + 1, scheduler.scanCalls,
                 "should re-scan exactly once more, then stand down");
     }
+
+    @Test
+    @DisplayName("a daily total stored before a late block landed is re-fetched")
+    void staleDailyTotalIsRefetched() {
+        LocalDate day = LocalDate.of(2026, 10, 27);
+        // 10/27: 13.25 kWh stored from 21 hours; all 24 hours later summed to 18.00.
+        assertTrue(DailySyncScheduler.isStale(day, 13.25, 24, 24, 18.00));
+        assertFalse(DailySyncScheduler.isStale(day, 31.76, 24, 24, 31.87), "rounding drift isn't stale");
+        assertFalse(DailySyncScheduler.isStale(day, 13.25, 21, 21, 13.25), "wait for the hourly day to finish first");
+    }
 }

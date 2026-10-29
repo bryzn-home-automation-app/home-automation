@@ -51,10 +51,12 @@ CoServ SmartHub (NISC Angular Material portal)
   drops or retypes anything, so keep `schema.sql` in sync and treat it as the source
   of truth for column types.
 - **Two in-process Spring schedulers** retry until CoServ finishes posting the day's
-  data: `DailySyncScheduler` (every 30 min, 6:30 AM–11:30 PM CT, skips once yesterday
-  has a non-zero `electric_usage` reading) and `HourlySyncScheduler` (every 30 min,
-  6:15 AM–11:45 PM CT, skips once yesterday has 24 rows in `hourly_electric_usage`).
-  A partial result (e.g. 5/24 hourly rows) is expected mid-day, not a failure.
+  data: `DailySyncScheduler` (every 30 min, 7:00 AM–11:30 PM CT, skips once yesterday
+  has a non-zero `electric_usage` reading that agrees with its complete hourly total)
+  and `HourlySyncScheduler` (every 30 min, 7:15 AM–11:45 PM CT, skips once yesterday
+  has every hour in `hourly_electric_usage` and 20+ of them non-zero). Both scan the
+  last 14 days. A partial result (e.g. 5/24 hourly rows) is expected mid-day, not a
+  failure; CoServ often posts a 3-hour block an hour or so after the rest of the day.
 - **`AlertEngine`** scans usage after each sync for daily report / usage spike (30%
   threshold) / peak hour (≥5 kWh) / monthly bill estimate notifications, with dedup.
 - **`AppEventService`** logs startup/sync/weather/migration events to `app_events`,

@@ -115,4 +115,23 @@ class HourlySyncSchedulerTest {
         assertEquals(scansBeforeStandDown + 1, scheduler.scanCalls,
                 "should re-scan exactly once more, then stand down");
     }
+
+    @Test
+    @DisplayName("a day is complete only with every hour present and 20+ real readings")
+    void completenessNeedsAllHoursAndRealReadings() {
+        LocalDate day = LocalDate.of(2026, 10, 27);
+        assertTrue(HourlySyncScheduler.isComplete(day, 24, 24));
+        assertTrue(HourlySyncScheduler.isComplete(day, 24, 20), "a few genuine 0.00 hours are fine");
+        assertFalse(HourlySyncScheduler.isComplete(day, 21, 21), "a late 3-hour block is still to come");
+        assertFalse(HourlySyncScheduler.isComplete(day, 24, 5), "0.00 placeholders aren't readings yet");
+    }
+
+    @Test
+    @DisplayName("the spring-forward day has 23 hours; fall-back and ordinary days have 24")
+    void expectedHoursFollowDaylightSaving() {
+        assertEquals(23, HourlySyncScheduler.expectedHours(LocalDate.of(2027, 3, 14)));
+        assertEquals(24, HourlySyncScheduler.expectedHours(LocalDate.of(2026, 11, 1)));
+        assertEquals(24, HourlySyncScheduler.expectedHours(LocalDate.of(2026, 10, 27)));
+        assertTrue(HourlySyncScheduler.isComplete(LocalDate.of(2027, 3, 14), 23, 23));
+    }
 }

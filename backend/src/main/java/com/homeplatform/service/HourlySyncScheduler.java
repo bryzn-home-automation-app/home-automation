@@ -8,6 +8,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -33,12 +34,14 @@ import java.util.Optional;
  * "yesterday" appears). This keeps a finished date from being re-checked and
  * re-logged every 30 minutes for the rest of the day.
  *
- * <p>"Complete" is judged on <em>non-zero</em> readings, not raw row count:
- * CoServ posts hourly values progressively, so early in the day most hours
- * come back as 0.00 kWh. Counting rows alone made a 24-row-but-mostly-zero
- * day look finished. We only stop retrying once enough hours carry a real
- * reading, and we log the day's total kWh so the Debug Dashboard shows the
- * actual reading rather than a bare "24/24".
+ * <p>"Complete" means every hour of the day is there <em>and</em> enough of them
+ * carry a real reading (see {@link #isComplete}). CoServ posts hourly values
+ * progressively, so early in the day most hours come back as 0.00 kWh: counting
+ * rows alone made a 24-row-but-mostly-zero day look finished. And CoServ often
+ * posts a 3-hour block of a day after the rest (e.g. 10/27: 21 hours at 09:45 CT,
+ * the last 3 by 10:30), so counting non-zero readings alone stopped at 21/24 and
+ * never came back for the rest. We log the day's total kWh so the Debug Dashboard
+ * shows the actual reading rather than a bare "24/24".
  */
 @Service
 public class HourlySyncScheduler {
@@ -50,7 +53,7 @@ public class HourlySyncScheduler {
     /** A single meter+provider should never produce more than this many hourly rows per day. */
     private static final int EXPECTED_ROWS_PER_DAY = 24;
 
-    /** A day counts as fully synced once at least this many hours have a real (non-zero) reading. */
+    /** A day counts as fully synced only once at least this many of its hours have a real (non-zero) reading. */
     private static final int COMPLETE_NONZERO_THRESHOLD = 20;
 
     /** CoServ only retains ~2 weeks of interval data — backfill lookback is bounded by this window. */
@@ -158,7 +161,7 @@ public class HourlySyncScheduler {
 
             if (exitCode == 0) {
                 if (start.equals(yesterday)) {
-                    emitSyncResult(yesterday.toString(), after, details);
+                    emitSyncResult(yesterday, after, details);
                 } else {
                     emitBackfillResult(start, yesterday, details);
                 }
@@ -257,24 +260,24 @@ public class HourlySyncScheduler {
 
     /**
      * Find the earliest day in the last {@code windowDays} days (through
-     * {@code yesterday}) that is not complete — fewer than
-     * {@link #COMPLETE_NONZERO_THRESHOLD} non-zero hours, or absent entirely.
+     * {@code yesterday}) that is not {@link #isComplete complete} — hours still
+     * missing, too few non-zero readings, or absent entirely.
      * Empty when every day is complete. Backfills gaps left by server downtime,
      * bounded by CoServ's ~2-week retention window.
      */
     Optional<LocalDate> findEarliestIncompleteDay(LocalDate yesterday, int windowDays) {
         LocalDate first = yesterday.minusDays(windowDays - 1);
-        Map<LocalDate, Integer> nonZeroByDay = new HashMap<>();
+        Map<LocalDate, int[]> rowsByDay = new HashMap<>();
         try (var conn = dataSource.getConnection();
              var stmt = conn.prepareStatement(
-                     "SELECT timestamp::date AS day, COUNT(*) FILTER (WHERE usage_kwh > 0) AS nonzero " +
+                     "SELECT timestamp::date AS day, COUNT(*) AS total, COUNT(*) FILTER (WHERE usage_kwh > 0) AS nonzero " +
                      "FROM hourly_electric_usage " +
                      "WHERE source_provider = 'coserv' AND timestamp::date >= ?::date AND timestamp::date <= ?::date " +
                      "GROUP BY timestamp::date")) {
             stmt.setString(1, first.toString());
             stmt.setString(2, yesterday.toString());
             try (var rs = stmt.executeQuery()) {
-                while (rs.next()) nonZeroByDay.put(rs.getDate(1).toLocalDate(), rs.getInt(2));
+                while (rs.next()) rowsByDay.put(rs.getDate(1).toLocalDate(), new int[]{rs.getInt(2), rs.getInt(3)});
             }
         } catch (Exception e) {
             log.warn("HourlySyncScheduler backfill scan failed: {}", e.getMessage());
@@ -283,9 +286,26 @@ public class HourlySyncScheduler {
 
         LocalDate missing = null;
         for (LocalDate d = yesterday; !d.isBefore(first); d = d.minusDays(1)) {
-            if (nonZeroByDay.getOrDefault(d, 0) < COMPLETE_NONZERO_THRESHOLD) missing = d;
+            int[] rows = rowsByDay.getOrDefault(d, new int[]{0, 0});
+            if (!isComplete(d, rows[0], rows[1])) missing = d;
         }
         return Optional.ofNullable(missing);
+    }
+
+    /**
+     * A day is complete once every hour on its local clock has a row and at least
+     * {@link #COMPLETE_NONZERO_THRESHOLD} of them are non-zero. Both halves matter:
+     * all 24 rows can still be 0.00 placeholders, and 20+ real readings can still
+     * be short a late 3-hour block.
+     */
+    static boolean isComplete(LocalDate day, int rows, int nonZero) {
+        return rows >= expectedHours(day) && nonZero >= COMPLETE_NONZERO_THRESHOLD;
+    }
+
+    /** Hours on the Chicago clock that day: 23 on the spring-forward Sunday, else 24 (fall-back's repeated hour shares a row). */
+    static int expectedHours(LocalDate day) {
+        long hours = Duration.between(day.atStartOfDay(CHICAGO), day.plusDays(1).atStartOfDay(CHICAGO)).toHours();
+        return (int) Math.min(hours, EXPECTED_ROWS_PER_DAY);
     }
 
     /** Read a day's row count, non-zero reading count, and total kWh in one query. */
@@ -316,17 +336,23 @@ public class HourlySyncScheduler {
      * that the scheduler retries on its own, so it is logged at INFO — a partial
      * result is not a failure and shouldn't read as a warning in the event feed.
      */
-    private void emitSyncResult(String date, DaySnapshot day, String details) {
+    private void emitSyncResult(LocalDate date, DaySnapshot day, String details) {
         int zeros = day.total() - day.nonZero();
+        int expected = expectedHours(date);
 
         if (day.total() > EXPECTED_ROWS_PER_DAY) {
             appEventService.log("sync", "WARN", "HourlySyncScheduler",
                     "Hourly sync " + date + ": " + day.total() + " rows — expected at most "
                             + EXPECTED_ROWS_PER_DAY + " ⚠ (data integrity)", details);
+        } else if (isComplete(date, day.total(), day.nonZero())) {
+            appEventService.log("sync", "INFO", "HourlySyncScheduler",
+                    "Hourly sync " + date + ": " + day.nonZero() + "/" + expected + " non-zero · "
+                            + fmtKwh(day.totalKwh()) + " kWh ✓", details);
         } else if (day.nonZero() >= COMPLETE_NONZERO_THRESHOLD) {
             appEventService.log("sync", "INFO", "HourlySyncScheduler",
-                    "Hourly sync " + date + ": " + day.nonZero() + "/24 non-zero · "
-                            + fmtKwh(day.totalKwh()) + " kWh ✓", details);
+                    "Hourly sync " + date + ": " + day.total() + "/" + expected + " hours posted · "
+                            + fmtKwh(day.totalKwh()) + " kWh — " + (expected - day.total())
+                            + " not posted yet, will retry", details);
         } else if (zeros > 0) {
             appEventService.log("sync", "INFO", "HourlySyncScheduler",
                     "Hourly sync " + date + ": " + day.nonZero() + "/24 non-zero so far ("

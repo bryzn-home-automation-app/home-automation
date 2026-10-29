@@ -27,11 +27,15 @@ public class ForecastService {
     // Hourly rows needed before a day's total is used for training, as the carry-over
     // (or a legacy model's AR(1) lag) input, and before it is final enough to grade a
     // stored prediction against (the same 20-hour "complete day" threshold the usage
-    // UI applies). CoServ sometimes skips a 3-hour block; requiring all 24 hours was
+    // UI applies). CoServ sometimes posts a 3-hour block late; requiring all 24 hours was
     // tried in Oct 2026 and replayed worse (same-day MAE 5.0 -> 5.3 kWh), as did
     // scaling those days up to 24 hours, so they're used as they are.
     private static final int LAG_MIN_HOURLY_ROWS = 18;
     private static final int FINAL_DAY_MIN_HOURLY_ROWS = 20;
+    // A graded day is re-graded while it's still inside CoServ's ~2-week window: a day
+    // graded at 21/24 hours is corrected once the late 3-hour block lands (10/27 was
+    // graded 13.25 kWh; the full day was 18.00).
+    static final int REGRADE_DAYS = 14;
     // How far back generateForecasts looks for the last complete day whose miss
     // carries forward. rho^7 is ~1% at rho 0.5, so older misses add nothing.
     static final int CARRY_LOOKBACK_DAYS = 7;
@@ -1329,9 +1333,9 @@ public class ForecastService {
         List<ForecastSnapshot> pending = snapshotRepo.findByActualKwhIsNullAndTargetDateBefore(LocalDate.now());
         int filled = 0;
         for (ForecastSnapshot snap : pending) {
-            // Grade only once the day is final: actual_kwh is written once and
-            // never revisited, so freezing a still-syncing day at e.g. 18/24
-            // hours would permanently record a phantom miss in accuracy/MAE/band.
+            // Grade only once the day is final: freezing a still-syncing day at
+            // e.g. 18/24 hours would record a phantom miss in accuracy/MAE/band.
+            // (regradeRecentActuals corrects a day graded before a late block landed.)
             Double actual = queryDailyKwh(snap.getTargetDate().toString(), FINAL_DAY_MIN_HOURLY_ROWS);
             if (actual != null) {
                 snap.setActualKwh(BigDecimal.valueOf(actual));
@@ -1343,7 +1347,30 @@ public class ForecastService {
         if (filled > 0) {
             log.info("ForecastService: backfilled {} actual readings", filled);
         }
+        int regraded = regradeRecentActuals();
+        if (regraded > 0) {
+            log.info("ForecastService: re-graded {} actual readings after late hours landed", regraded);
+        }
+        filled += regraded;
         return filled;
+    }
+
+    /** Re-grade recent days whose total has changed since they were graded (late hours posted). */
+    int regradeRecentActuals() {
+        LocalDate today = LocalDate.now();
+        Map<LocalDate, Double> totals = new HashMap<>();
+        int regraded = 0;
+        for (ForecastSnapshot snap : snapshotRepo.findByTargetDateBetweenOrderByTargetDateAsc(today.minusDays(REGRADE_DAYS), today.minusDays(1))) {
+            if (snap.getActualKwh() == null) continue;
+            Double actual = totals.computeIfAbsent(snap.getTargetDate(),
+                    d -> queryDailyKwh(d.toString(), FINAL_DAY_MIN_HOURLY_ROWS));
+            if (actual == null || Math.abs(actual - snap.getActualKwh().doubleValue()) < 0.005) continue;
+            snap.setActualKwh(BigDecimal.valueOf(actual));
+            snap.setActualCost(BigDecimal.valueOf(actual * kwhRate));
+            snapshotRepo.save(snap);
+            regraded++;
+        }
+        return regraded;
     }
 
     // ── Phase 2: Hourly profiles ────────────────────────────
