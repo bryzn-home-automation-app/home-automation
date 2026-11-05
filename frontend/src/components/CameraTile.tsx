@@ -67,6 +67,33 @@ function useSnapshotUrl(camera: Camera) {
   return { url, query };
 }
 
+type FullscreenVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+
+/**
+ * Full screen for the tile's picture, so the pan/tilt pad and Stop come along.
+ * iPhone Safari can only take a bare <video> full screen, so it falls back to that.
+ */
+export function useFullscreen(ref: React.RefObject<HTMLElement | null>) {
+  const [active, setActive] = useState(false);
+  useEffect(() => {
+    const sync = () => setActive(document.fullscreenElement != null && document.fullscreenElement === ref.current);
+    document.addEventListener('fullscreenchange', sync);
+    return () => document.removeEventListener('fullscreenchange', sync);
+  }, [ref]);
+  const toggle = () => {
+    const el = ref.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      void document.exitFullscreen?.().catch(() => {});
+    } else if (typeof el.requestFullscreen === 'function' && document.fullscreenEnabled !== false) {
+      void el.requestFullscreen().catch(() => {});
+    } else {
+      (el.querySelector('video') as FullscreenVideo | null)?.webkitEnterFullscreen?.();
+    }
+  };
+  return { active, toggle };
+}
+
 type LiveStatus = 'connecting' | 'playing';
 
 /** Mounted only while the tile should stream; unmounting stops the camera. */
@@ -177,6 +204,8 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
   }, [streaming, battery, session]);
 
   const { url: snapshotUrl, query: snapshotQuery } = useSnapshotUrl(camera);
+  const pictureRef = useRef<HTMLDivElement | null>(null);
+  const fullscreen = useFullscreen(pictureRef);
 
   const start = () => {
     onWake();
@@ -246,7 +275,10 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
         recent ? 'border-rose-400/70 ring-2 ring-rose-400/40' : 'border-appborder'
       }`}
     >
-      <div className="relative aspect-video bg-black">
+      <div
+        ref={pictureRef}
+        className="relative aspect-video bg-black [&:fullscreen_img]:object-contain [&:fullscreen_video]:object-contain"
+      >
         {snapshotUrl && showSnapshot && (
           <img src={snapshotUrl} alt={`Latest snapshot from ${camera.name}`} className="absolute inset-0 h-full w-full object-cover" />
         )}
@@ -277,6 +309,23 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
         </div>
         {overlay && <div className="absolute inset-0 flex items-center justify-center bg-black/35 p-4">{overlay}</div>}
         {live && camera.canPanTilt && <PanTiltPad cameraId={camera.id} name={camera.name} />}
+        {live && (
+          <button
+            type="button"
+            onClick={fullscreen.toggle}
+            aria-label={fullscreen.active ? `Exit full screen for ${camera.name}` : `Full screen ${camera.name}`}
+            title={fullscreen.active ? 'Exit full screen' : 'Full screen'}
+            className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75 ${FOCUS_RING}`}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+              {fullscreen.active ? (
+                <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
+              ) : (
+                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
+              )}
+            </svg>
+          </button>
+        )}
         {live && battery && (
           <button
             type="button"
