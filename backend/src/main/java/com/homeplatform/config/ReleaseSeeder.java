@@ -37,6 +37,25 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.7.0", "stable", LocalDate.of(2026, 11, 5),
+                    "Accurate Roomba history, full-screen cameras, fixes",
+                    "Roomba runs now match the iRobot app, cameras go full screen, and a round of reliability and security fixes.",
+                    List.of(
+                            change("new", "Roomba runs show the rooms cleaned, the settings, recharge stops and how often the bin was emptied."),
+                            change("new", "Tap ⤢ on a live camera to watch it full screen."),
+                            change("new", "An alert when a Roomba clean doesn't finish (stuck), with what stopped it."),
+                            change("improved", "Roomba history comes from iRobot's own records: real cleaning time and area, and runs that happened while the server was off."),
+                            change("improved", "The Roomba tab says when it's docked mid-clean to recharge instead of calling the run finished."),
+                            change("improved", "The Roomba's live position no longer drops out every hour during a clean."),
+                            change("improved", "The daily usage report waits until CoServ has posted the whole day."),
+                            change("improved", "The monthly estimate covers all of last month, not the first day or two of this one."),
+                            change("improved", "Admins get an alert when the water-bill Gmail sign-in expires."),
+                            change("improved", "After an update the app reloads itself instead of showing a blank page; a broken page no longer takes down the whole app."),
+                            change("fixed", "Pages that need sign-in can no longer be reached without it."),
+                            change("fixed", "Maintenance dates no longer show one day early, and editing a record no longer duplicates its photos."),
+                            change("fixed", "A thermostat change made just before leaving the page is still sent."),
+                            change("fixed", "\"Last updated\" times show correctly on iPhone and on the Debug page."),
+                            change("fixed", "Signing out clears what the last person was looking at; a hiccup while the server restarts no longer signs you out."))),
             define("1.6.0", "stable", LocalDate.of(2026, 10, 26),
                     "Who's Home, phone alerts and recordings",
                     "See who's home, get alerts on your phone, play back camera clips, and pull down to refresh.",
