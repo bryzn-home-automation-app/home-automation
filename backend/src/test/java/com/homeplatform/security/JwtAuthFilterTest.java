@@ -41,6 +41,7 @@ class JwtAuthFilterTest {
 
     private MockHttpServletResponse call(String token, FilterChain chain, MockHttpServletRequest req) throws Exception {
         req.setRequestURI("/api/home/cameras");
+        req.setServletPath("/api/home/cameras"); // DispatcherServlet is mapped to "/"
         req.addHeader("Authorization", "Bearer " + token);
         MockHttpServletResponse resp = new MockHttpServletResponse();
         filter.doFilter(req, resp, chain);
@@ -90,5 +91,33 @@ class JwtAuthFilterTest {
         cache.evict(5L);
         cache.get(5L);
         verify(users, times(2)).findById(5L);
+    }
+
+    @Test
+    @DisplayName("an encoded or path-parameter spelling of /api/ still needs a token")
+    void encodedApiPathStillChecked() throws Exception {
+        // What Tomcat hands the filter for GET /%61pi/config and /api;x/config: the raw
+        // URI as sent, and the decoded, parameter-free servlet path Spring routes on.
+        for (String raw : new String[]{"/%61pi/config", "/api;x/config", "/%2561pi/../api/config"}) {
+            var req = new MockHttpServletRequest("GET", raw);
+            req.setServletPath("/api/config");
+            FilterChain chain = mock(FilterChain.class);
+            var resp = new MockHttpServletResponse();
+            filter.doFilter(req, resp, chain);
+            assertEquals(401, resp.getStatus(), raw);
+            verify(chain, never()).doFilter(any(), any());
+        }
+    }
+
+    @Test
+    @DisplayName("public endpoints and static assets pass without a token")
+    void publicPathsPass() throws Exception {
+        for (String path : new String[]{"/api/health", "/api/auth/login", "/index.html", "/assets/app.js"}) {
+            var req = new MockHttpServletRequest("GET", path);
+            req.setServletPath(path);
+            FilterChain chain = mock(FilterChain.class);
+            filter.doFilter(req, new MockHttpServletResponse(), chain);
+            verify(chain).doFilter(any(), any());
+        }
     }
 }

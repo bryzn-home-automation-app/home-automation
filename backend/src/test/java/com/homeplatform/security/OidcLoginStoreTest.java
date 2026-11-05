@@ -67,14 +67,19 @@ class OidcLoginStoreTest {
     }
 
     @Test
-    @DisplayName("refuses new entries when full, until old ones expire")
-    void capped() {
-        for (int i = 0; i < OidcLoginStore.MAX_ENTRIES; i++) {
+    @DisplayName("when full, the oldest pending sign-in makes room — a flood can't lock everyone out")
+    void cappedEvictsOldest() {
+        String first = store.putTransaction(new OidcLoginStore.Transaction("first", "n", "v"));
+        now.set(now.get().plusSeconds(1));
+        String second = store.putTransaction(new OidcLoginStore.Transaction("second", "n", "v"));
+        now.set(now.get().plusSeconds(1));
+        for (int i = 2; i < OidcLoginStore.MAX_ENTRIES; i++) {
             store.putTransaction(new OidcLoginStore.Transaction("s", "n", "v"));
         }
-        assertThrows(IllegalStateException.class,
-                () -> store.putTransaction(new OidcLoginStore.Transaction("s", "n", "v")));
-        now.set(now.get().plus(OidcLoginStore.TX_TTL).plus(Duration.ofSeconds(1)));
-        assertNotNull(store.putTransaction(new OidcLoginStore.Transaction("s", "n", "v")));
+        String latest = store.putTransaction(new OidcLoginStore.Transaction("latest", "n", "v"));
+        assertNotNull(latest, "a new sign-in still starts");
+        assertNull(store.takeTransaction(first), "the oldest made room");
+        assertEquals("second", store.takeTransaction(second).state());
+        assertEquals("latest", store.takeTransaction(latest).state());
     }
 }

@@ -48,9 +48,15 @@ public class OidcLoginStore {
         this.clock = clock;
     }
 
-    /** Stores a transaction and returns its id (the cookie value). Throws when the store is full. */
+    /**
+     * Stores a transaction and returns its id (the cookie value). /start is public, so
+     * when the store is full the oldest pending sign-in makes room rather than every
+     * new one being refused — refusing let ~500 anonymous requests per 10 minutes lock
+     * the family out of signing in (SSO is the only sign-in). A real sign-in is back
+     * within seconds, so a flood has to outpace that to disturb one.
+     */
     public String putTransaction(Transaction tx) {
-        return put(transactions, tx, TX_TTL);
+        return put(transactions, tx, TX_TTL, true);
     }
 
     /** Removes and returns the transaction, or null if unknown or expired. */
@@ -60,7 +66,7 @@ public class OidcLoginStore {
 
     /** Stores the verified email and returns the one-time handoff code (the cookie value). */
     public String putHandoff(String email) {
-        return put(handoffs, email, HANDOFF_TTL);
+        return put(handoffs, email, HANDOFF_TTL, false);
     }
 
     /** Removes and returns the email for a handoff code, or null if unknown, used or expired. */
@@ -68,9 +74,14 @@ public class OidcLoginStore {
         return take(handoffs, code);
     }
 
-    private <T> String put(Map<String, Entry<T>> map, T value, Duration ttl) {
+    private <T> String put(Map<String, Entry<T>> map, T value, Duration ttl, boolean evictOldest) {
         Instant now = clock.instant();
         map.values().removeIf(e -> e.expiresAt().isBefore(now));
+        while (evictOldest && map.size() >= MAX_ENTRIES) {
+            map.entrySet().stream()
+                    .min(java.util.Comparator.comparing((Map.Entry<String, Entry<T>> e) -> e.getValue().expiresAt()))
+                    .ifPresent(oldest -> map.remove(oldest.getKey()));
+        }
         if (map.size() >= MAX_ENTRIES) {
             throw new IllegalStateException("too many sign-ins in progress");
         }

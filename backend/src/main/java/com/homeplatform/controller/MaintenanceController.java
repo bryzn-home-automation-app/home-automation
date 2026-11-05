@@ -80,16 +80,21 @@ public class MaintenanceController {
             @RequestParam("file") MultipartFile file,
             HttpServletRequest req) {
         Long uid = userId(req);
+        // Members only (guests never see Maintenance), and only photos: this folder is
+        // served from the app's own origin, so an uploaded .html or .svg would run
+        // script next to the sign-in token.
+        if (uid == null || "GUEST".equals(req.getAttribute("role"))) {
+            return ResponseEntity.status(403).body(Map.of("error", "Members only"));
+        }
         if (file.isEmpty() || file.getSize() > 10_000_000) {
             return ResponseEntity.badRequest().body(Map.of("error", "File too large or empty"));
         }
+        String ext = photoExtension(file.getOriginalFilename());
+        if (ext == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Only photos can be uploaded (JPEG, PNG, GIF, WebP, HEIC)"));
+        }
         try {
             Files.createDirectories(UPLOAD_DIR);
-            String ext = "";
-            String origName = file.getOriginalFilename();
-            if (origName != null && origName.contains(".")) {
-                ext = origName.substring(origName.lastIndexOf('.'));
-            }
             String filename = uid + "_" + UUID.randomUUID().toString().substring(0, 8) + ext;
             file.transferTo(UPLOAD_DIR.resolve(filename).toFile());
             String url = "/uploads/maintenance/" + filename;
@@ -97,5 +102,16 @@ public class MaintenanceController {
         } catch (IOException e) {
             return ResponseEntity.internalServerError().body(Map.of("error", "Upload failed"));
         }
+    }
+
+    private static final Set<String> PHOTO_EXT = Set.of(".png", ".jpg", ".jpeg", ".gif", ".webp", ".heic", ".heif");
+
+    /** The lower-cased extension when it's a photo type we serve, else null. */
+    static String photoExtension(String originalName) {
+        if (originalName == null) return null;
+        int dot = originalName.lastIndexOf('.');
+        if (dot < 0) return null;
+        String ext = originalName.substring(dot).toLowerCase(Locale.ROOT);
+        return PHOTO_EXT.contains(ext) ? ext : null;
     }
 }

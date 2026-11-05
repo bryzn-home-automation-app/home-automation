@@ -45,7 +45,10 @@ public class JwtAuthFilter implements Filter {
 
         HttpServletRequest httpReq = (HttpServletRequest) request;
         HttpServletResponse httpResp = (HttpServletResponse) response;
-        String path = httpReq.getRequestURI();
+        // The decoded, normalised path — the one Spring MVC routes on. The raw
+        // getRequestURI() let "/%61pi/config" and "/api;x/config" skip the "/api/"
+        // check below while still reaching /api/config's controller.
+        String path = requestPath(httpReq);
 
         // Allow OPTIONS preflight
         if ("OPTIONS".equalsIgnoreCase(httpReq.getMethod())) {
@@ -102,6 +105,13 @@ public class JwtAuthFilter implements Filter {
         httpReq.setAttribute("role", access.role().name());
 
         chain.doFilter(request, response);
+    }
+
+    static String requestPath(HttpServletRequest request) {
+        String servletPath = request.getServletPath();
+        String pathInfo = request.getPathInfo();
+        String path = (servletPath == null ? "" : servletPath) + (pathInfo == null ? "" : pathInfo);
+        return path.isEmpty() ? "/" : path;
     }
 
     private void sendUnauthorized(HttpServletResponse response, String message) throws IOException {
