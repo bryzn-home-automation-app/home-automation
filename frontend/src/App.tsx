@@ -7,6 +7,7 @@ import api from './api/client';
 import { fetchUnreadCount } from './api/notifications';
 import { useJitteredInterval } from './hooks/useJitteredInterval';
 import { useFocusTrap } from './hooks/useFocusTrap';
+import { useScrollLock } from './hooks/useScrollLock';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
 import Avatar from './components/profile/Avatar';
 import OnlineDot from './components/profile/OnlineDot';
@@ -148,6 +149,8 @@ export default memo(function App() {
   useFocusTrap(mobileMenuOpen, mobileSidebarRef, hamburgerButtonRef, () => {
     setMobileMenuOpen(false);
   });
+  // The page behind the open menu stays put: a swipe on the menu scrolls the menu.
+  useScrollLock(mobileMenuOpen);
 
   // Memoized once per query lifecycle so the RQ poll timer isn't reset on every
   // App re-render.
@@ -244,7 +247,9 @@ export default memo(function App() {
         </div>
       </div>
 
-      <nav className="mt-4 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto lg:mt-5">
+      {/* On the desktop rail only the tab list scrolls, between the pinned header and
+          profile. The phone menu scrolls as a whole instead, so a swipe anywhere on it works. */}
+      <nav className="mt-4 flex flex-col gap-1 lg:mt-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
         {visibleTabs.map((tab: any) => (
           <NavLink
             key={tab.path}
@@ -414,19 +419,22 @@ export default memo(function App() {
           {/* ── Mobile sidebar overlay ── */}
           {mobileMenuOpen && (
             <>
-              {/* Backdrop */}
+              {/* Backdrop — a swipe on it neither scrolls nor pull-to-refreshes the page. */}
               <div
-                className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+                data-no-pull
+                className="fixed inset-0 z-40 touch-none bg-black/60 lg:hidden"
                 onClick={closeMenu}
               />
-              {/* Slide-in panel */}
+              {/* Slide-in panel. Its padding clears the status bar and home indicator (the
+                  Home Screen app draws under both), and overscroll-contain keeps a swipe
+                  past either end from reaching the page. */}
               <aside
                 id="mobile-sidebar"
                 ref={mobileSidebarRef}
                 role="dialog"
                 aria-modal="true"
                 aria-label="Main navigation"
-                className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto rounded-r-2xl border-r border-appborder bg-appsurface p-4 shadow-2xl lg:hidden"
+                className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto overscroll-contain rounded-r-2xl border-r border-appborder bg-appsurface px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl lg:hidden"
               >
                 {sidebarContent}
               </aside>
