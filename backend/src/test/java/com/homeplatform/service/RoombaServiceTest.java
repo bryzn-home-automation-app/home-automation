@@ -240,6 +240,20 @@ class RoombaServiceTest {
         }
 
         @Test
+        @DisplayName("iRobot's @val placeholder becomes the robot's name")
+        void errorTextNamesTheRobot() {
+            RoombaRun run = RoombaRun.builder().id(3L).startedAt(LocalDateTime.of(2026, 10, 29, 14, 0))
+                    .status("STUCK").error(1010)
+                    .errorText("@val couldn't return to Dock. Move and place it on the Dock for charging.").build();
+            when(runRepo.findAllByOrderByStartedAtDesc(any(Pageable.class))).thenReturn(List.of(run));
+            when(statusRepo.findTopByOrderByUpdatedAtDesc())
+                    .thenReturn(Optional.of(RoombaStatus.builder().name("iRummy").build()));
+            assertEquals("iRummy couldn't return to Dock. Move and place it on the Dock for charging.",
+                    service.getRuns(5).get(0).errorText());
+            assertEquals("Roomba got trapped", RoombaService.withRobotName("@val got trapped", null));
+        }
+
+        @Test
         @DisplayName("history runs name their rooms from the current map and summarize the settings")
         void historyRunRoomsAndSettings() {
             RoombaRun run = RoombaRun.builder()

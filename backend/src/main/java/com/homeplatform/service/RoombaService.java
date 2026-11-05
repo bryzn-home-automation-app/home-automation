@@ -594,9 +594,10 @@ public class RoombaService {
     public List<RoombaRunResponse> getRuns(int limit) {
         int capped = Math.max(1, Math.min(limit, 500));
         Map<String, String> roomNames = roomNames();
+        String robotName = statusRepo.findTopByOrderByUpdatedAtDesc().map(RoombaStatus::getName).orElse(null);
         return runRepo.findAllByOrderByStartedAtDesc(PageRequest.of(0, capped))
                 .stream()
-                .map(r -> toRunResponse(r, roomNames))
+                .map(r -> toRunResponse(r, roomNames, robotName))
                 .toList();
     }
 
@@ -698,8 +699,9 @@ public class RoombaService {
                 && s.getUpdatedAt().isAfter(LocalDateTime.now(ZoneOffset.UTC).minusMinutes(ONLINE_WINDOW_MINUTES));
 
         List<String> reasons = new ArrayList<>();
+        String errorText = withRobotName(s.getErrorText(), s.getName());
         if (s.getError() != null && s.getError() != 0) {
-            reasons.add(s.getErrorText() != null ? s.getErrorText() : "Error " + s.getError());
+            reasons.add(errorText != null ? errorText : "Error " + s.getError());
         }
         if (s.getDockError() != null && s.getDockError() != 0) {
             reasons.add("Dock error " + s.getDockError());
@@ -717,7 +719,7 @@ public class RoombaService {
             reasons.add("Charging faults (" + s.getChargeErrors() + ")");
         }
         if (s.getFaultText() != null && !s.getFaultText().isBlank()) {
-            reasons.add(s.getFaultText());
+            reasons.add(withRobotName(s.getFaultText(), s.getName()));
         }
         // Maintenance counters that have run out (filter/brush hours, mop-pad missions,
         // dock-bag empties) are the "needs a hand" case the iRobot app nags about too.
@@ -736,7 +738,7 @@ public class RoombaService {
                 s.getPhase(),
                 s.getCycle(),
                 s.getError(),
-                s.getErrorText(),
+                errorText,
                 running,
                 s.getBinPresent(),
                 s.getTankPresent(),
@@ -772,7 +774,16 @@ public class RoombaService {
     private static final Map<Integer, String> SUCTION_LABELS = Map.of(
             1, "Low suction", 2, "Medium suction", 3, "High suction", 4, "Turbo");
 
-    RoombaRunResponse toRunResponse(RoombaRun r, Map<String, String> roomNames) {
+    /**
+     * iRobot's error titles name the robot with an "@val" placeholder ("@val couldn't
+     * return to Dock"); the poller stores them as they come.
+     */
+    static String withRobotName(String text, String robotName) {
+        if (text == null || !text.contains("@val")) return text;
+        return text.replace("@val", robotName != null && !robotName.isBlank() ? robotName : "Roomba");
+    }
+
+    RoombaRunResponse toRunResponse(RoombaRun r, Map<String, String> roomNames, String robotName) {
         List<String> rooms = new ArrayList<>();
         String settings = null;
         JsonNode regions = parseJson(r.getRegions());
@@ -799,7 +810,7 @@ public class RoombaService {
                 r.getMissionId(),
                 r.getMissionNumber(),
                 r.getError(),
-                r.getErrorText(),
+                withRobotName(r.getErrorText(), robotName),
                 r.getInitiator(),
                 r.getCycle(),
                 r.getSource(),
