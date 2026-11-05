@@ -60,8 +60,8 @@ function fmtTime(iso: string | null): string {
 function Row({ label, value, tone }: { label: string; value: string; tone?: 'warn' }) {
   return (
     <div className="flex items-baseline justify-between gap-4 border-b border-appborder-light py-2.5 last:border-0">
-      <span className="text-xs uppercase tracking-[0.12em] text-apptext-dim">{label}</span>
-      <span className={`text-sm font-medium ${tone === 'warn' ? 'text-amber-300' : 'text-apptext'}`}>
+      <span className="shrink-0 text-xs uppercase tracking-[0.12em] text-apptext-dim">{label}</span>
+      <span className={`text-right text-sm font-medium ${tone === 'warn' ? 'text-amber-300' : 'text-apptext'}`}>
         {value}
       </span>
     </div>
@@ -80,17 +80,22 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
 
   const st = statusStyle(run.status);
 
-  // Prefer the elapsed time between the timestamps; fall back to the stored
-  // duration, and never trust an absurd (>24h) stored value.
-  const startMs = Date.parse(run.startedAt);
-  const endMs = run.completedAt ? Date.parse(run.completedAt) : NaN;
+  // Unconfirmed (poll-based) rows: prefer the elapsed time between the timestamps,
+  // fall back to the stored duration, and never trust an absurd (>24h) value. The
+  // cloud's own figures are used as they are.
   let durationMin = run.durationMinutes;
-  if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
-    const computed = Math.round((endMs - startMs) / 60000);
-    if (durationMin == null || durationMin > 1440) durationMin = computed;
-  } else if (durationMin != null && durationMin > 1440) {
-    durationMin = null;
+  if (!run.verified) {
+    const startMs = Date.parse(run.startedAt);
+    const endMs = run.completedAt ? Date.parse(run.completedAt) : NaN;
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs) {
+      const computed = Math.round((endMs - startMs) / 60000);
+      if (durationMin == null || durationMin > 1440) durationMin = computed;
+    } else if (durationMin != null && durationMin > 1440) {
+      durationMin = null;
+    }
   }
+  const charged = run.chargeMinutes != null && run.chargeMinutes > 0 ? run.chargeMinutes : null;
+  const cleaningMin = durationMin != null ? Math.max(0, durationMin - (charged ?? 0)) : null;
 
   const hasError = run.error != null && run.error !== 0;
   const initiator = run.initiator ? INITIATOR_LABELS[run.initiator] ?? run.initiator : null;
@@ -122,19 +127,33 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
         <div className="mt-4">
           <Row label="Started" value={fmtTime(run.startedAt)} />
           <Row label="Ended" value={fmtTime(run.completedAt)} />
-          <Row label="Duration" value={fmtDuration(durationMin)} />
-          <Row label="Area cleaned" value={run.squareFeet != null ? `${run.squareFeet} sq ft` : '—'} />
+          {charged != null ? (
+            <>
+              <Row label="Cleaning time" value={fmtDuration(cleaningMin)} />
+              <Row label="Docked to recharge" value={fmtDuration(charged)} />
+            </>
+          ) : (
+            <Row label="Duration" value={fmtDuration(durationMin)} />
+          )}
+          <Row label="Area cleaned" value={run.squareFeet != null ? `${run.squareFeet.toLocaleString('en-US')} sq ft` : '—'} />
+          {run.verified && (
+            <Row label="Rooms" value={run.rooms.length ? run.rooms.join(', ') : 'Whole home'} />
+          )}
+          {run.settings && <Row label="Settings" value={run.settings} />}
+          {run.evacuations != null && run.evacuations > 0 && (
+            <Row label="Bin emptied" value={`${run.evacuations} time${run.evacuations === 1 ? '' : 's'}`} />
+          )}
           {initiator && <Row label="Started by" value={initiator} />}
           {run.missionNumber != null && <Row label="Mission #" value={String(run.missionNumber)} />}
-          {run.cycle && <Row label="Cycle" value={run.cycle} />}
+          {!run.verified && run.cycle && <Row label="Cycle" value={run.cycle} />}
           {hasError && (
             <Row label="Error" value={run.errorText || `Code ${run.error}`} tone="warn" />
           )}
           {run.missionId && <Row label="Mission ID" value={run.missionId} />}
-          {run.source && <Row label="Source" value={run.source} />}
+          <Row label="Record" value={run.verified ? 'iRobot history' : 'Live polling (not yet confirmed)'} />
         </div>
 
-        {run.missionNumber == null && run.initiator == null && (
+        {!run.verified && run.missionNumber == null && run.initiator == null && (
           <p className="mt-4 text-xs leading-5 text-apptext-dim">
             Extra per-run details (who started it, mission number, faults) are captured for runs
             recorded from now on.

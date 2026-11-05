@@ -132,6 +132,13 @@ CREATE TABLE IF NOT EXISTS roomba_runs (
     error_text          VARCHAR(255),
     initiator           VARCHAR(40),
     cycle               VARCHAR(40),
+    -- From the cloud mission history (poller sync_history), which overwrites the
+    -- poll-based row: source 'irobot-history', processing_version '2.0'.
+    charge_minutes      INTEGER,
+    pause_minutes       INTEGER,
+    evacuations         INTEGER,
+    done_code           VARCHAR(20),
+    regions             JSONB,
     source              VARCHAR(100)   NOT NULL,
     source_provider     VARCHAR(50)    NOT NULL,
     ingestion_batch_id  UUID,

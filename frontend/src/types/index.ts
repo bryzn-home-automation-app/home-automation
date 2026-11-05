@@ -250,6 +250,18 @@ export interface RoombaRun {
   initiator: string | null;
   cycle: string | null;
   source: string | null;
+  /**
+   * From the cloud's mission history (null until it has confirmed the run —
+   * `verified`). durationMinutes includes chargeMinutes spent docked to recharge.
+   */
+  chargeMinutes: number | null;
+  evacuations: number | null;
+  doneCode: string | null;
+  /** Rooms the run was sent to, by name (empty = whole home or not known). */
+  rooms: string[];
+  /** e.g. "Vacuum & mop · Turbo · 2 passes". */
+  settings: string | null;
+  verified: boolean;
 }
 
 /**

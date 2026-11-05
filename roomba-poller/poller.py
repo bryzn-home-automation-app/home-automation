@@ -11,6 +11,7 @@ Every POLL_INTERVAL_SECONDS it:
   * UPSERTs a single `roomba_status` row (UNIQUE robot_id)
   * detects mission completion and INSERTs one `roomba_runs` row per mission
   * refreshes `roomba_map` (UNIQUE robot_id) when the active map version changes
+  * syncs the cloud's mission history over `roomba_runs` (see sync_history)
 
 Robustness contract: fail-open. Any cloud/DB error is logged and swallowed; the
 loop never crash-loops. Connection loss triggers a reconnect on the next cycle.
@@ -32,7 +33,7 @@ import os
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import aiohttp
 import psycopg
@@ -163,6 +164,14 @@ def _classify(phase, error):
     return "COMPLETED"
 
 
+def _recharging(cms):
+    """Docked to recharge partway through a mission. The robot resumes the same
+    missionId once charged (a whole-house clean here takes ~2 recharge stops), so
+    this is NOT the end of the run even though "charge" is a terminal phase. At a
+    real mission end the cycle drops back to "none"."""
+    return cms.get("phase") == "charge" and (cms.get("cycle") or "none") != "none"
+
+
 def _map_version(rep):
     """Map version pointer carried in the live shadow (mid-mission only)."""
     p2maps = rep.get("p2maps") or []
@@ -187,6 +196,8 @@ class PollerState:
         self.last_parts_at = None     # monotonic ts of the last successful parts refresh (None = never → due now)
         self.parts_refresh_due = None # monotonic ts: re-read the part counters soon (set after a run completes)
         self.unsaved_runs = {}        # mission_id -> (run dict, status) whose DB write failed; retried each poll
+        self.history_due = 0.0        # monotonic ts: next mission-history sync (0 = now)
+        self.history_backfilled = False  # first sync of this process asks for the full history
 
 
 def _snapshot(cms):
@@ -609,7 +620,7 @@ def _record_run(state, conninfo, run, status):
             insert_run(conninfo, run, status)
             log.info(
                 "Recorded mission %s status=%s sqft=%s duration=%smin",
-                run.get("mission_id"), status, run.get("sqft"), run.get("runtime_minutes"),
+                run.get("mission_id"), status, run.get("sqft"), _elapsed_min(started),
             )
         state.completed_missions.add(run.get("mission_id"))
         return True
@@ -636,7 +647,7 @@ def detect_completion(state, rep, conninfo):
 
     if prev is not None:
         same_mission = (cur_mid == prev["mission_id"]) or (not cur_mid)
-        if same_mission and cur_phase in TERMINAL_PHASES:
+        if same_mission and cur_phase in TERMINAL_PHASES and not _recharging(cms):
             # Prefer current terminal cms values if still populated for this mission.
             completed = dict(prev)
             if cur_mid == prev["mission_id"] and cms.get("sqft") is not None:
@@ -666,6 +677,8 @@ def detect_completion(state, rep, conninfo):
         # The part counters (filter/brush hours, pad missions, dock-bag empties) advance
         # at mission end too — re-read them shortly after instead of waiting hours.
         state.parts_refresh_due = time.monotonic() + PARTS_REFRESH_AFTER_RUN
+        # And the cloud's own record of the run replaces this poll-based one.
+        state.history_due = time.monotonic() + HISTORY_AFTER_RUN
 
     # Refresh / set the active snapshot for the currently-running mission.
     if cur_running:
@@ -726,6 +739,185 @@ async def refresh_map(robot, conninfo, robot_id, state, shadow_version):
 
 
 # ---------------------------------------------------------------------------
+# Mission history (GET /v1/{blid}/missionhistory — the cloud's record behind the
+# iRobot app's History list; a REST read, nothing is sent to the robot)
+# ---------------------------------------------------------------------------
+# detect_completion() only sees the robot every few minutes, so on its own it
+# recorded a run at the first mid-mission recharge (half the area, a third of the
+# time), marked stuck runs "completed" when the error had cleared by the next poll,
+# and missed every run that ended while the poller or the NUC was down. The cloud
+# history has the robot's own totals and outcome, so it overwrites the poll-based
+# row for each mission and inserts the ones the poller never saw.
+HISTORY_REFRESH_SECONDS = 30 * 60
+HISTORY_RETRY_SECONDS = 300      # after a failed read (or columns not created yet)
+HISTORY_AFTER_RUN = 60           # the cloud closes the entry shortly after the robot docks
+HISTORY_BACKFILL_REPORTS = 30    # first sync per process (the cloud returns at most 30)
+HISTORY_RECENT_REPORTS = 10
+# The shadow's mssnStrtTm and the history's startTime for one mission can differ
+# by a second, so rows are matched on start time within this window (plus the
+# mission number when the row has one).
+HISTORY_MATCH_SECONDS = 300
+
+# Done codes, from the app's completion semantics (see DoneCode in roombapy_prime).
+DONE_COMPLETED = {"ok", "busy", "dndEnd", "returnHomeEnd", "timeboxEnd"}
+DONE_CANCELLED = {"cncl", "usrSlp", "plcDoc", "usrEnd", "usrSpt", "batcncl"}
+
+
+def _history_status(done):
+    if done in DONE_COMPLETED:
+        return "COMPLETED"
+    if done in DONE_CANCELLED:
+        return "CANCELLED"
+    if done == "stuck":
+        return "STUCK"
+    return "INCOMPLETE"
+
+
+def _history_regions(entry):
+    """Rooms (rid) / zones (zid) the mission was sent to, with each one's settings."""
+    out = []
+    for r in (entry.get("cmd") or {}).get("regions") or []:
+        if not isinstance(r, dict) or r.get("region_id") is None:
+            continue
+        p = r.get("params") or {}
+        out.append({
+            "id": str(r["region_id"]),
+            "type": r.get("type") or "rid",
+            "suction": p.get("suctionLevel"),
+            "twoPass": p.get("twoPass"),
+            "mode": p.get("operatingMode"),
+        })
+    return out
+
+
+def _history_row(entry):
+    """roomba_runs values for one finished history entry; None to skip it (still
+    running, or missing the fields a run needs)."""
+    started = _epoch_to_utc(entry.get("startTime"))
+    ended = _epoch_to_utc(entry.get("timestamp"))
+    done = entry.get("done") or entry.get("done_raw")
+    if started is None or ended is None or not done:
+        return None
+    status = _history_status(done)
+    # pauseId carries the error that stopped a stuck mission (1010 on the run the
+    # poller also saw as error 1010); on a clean finish it's 0.
+    error = 0
+    if status in ("STUCK", "INCOMPLETE"):
+        try:
+            error = int(entry.get("pauseId") or 0)
+        except (ValueError, TypeError):
+            error = 0
+    return {
+        "started_at": started,
+        "completed_at": ended,
+        "duration_minutes": entry.get("durationM"),
+        "charge_minutes": entry.get("chrgM"),
+        "pause_minutes": entry.get("pauseM"),
+        "square_feet": entry.get("sqft"),
+        "evacuations": entry.get("evacs"),
+        "status": status,
+        "done_code": str(done)[:20],
+        "mission_number": entry.get("nMssn"),
+        "error": error,
+        "error_text": _error_text(error),
+        "initiator": entry.get("initiator") or (entry.get("cmd") or {}).get("initiator"),
+        "regions": _history_regions(entry),
+    }
+
+
+def upsert_history_run(conninfo, row, batch_id):
+    """Write one history entry over the poller's row for that mission, or insert it.
+    Returns "inserted", "updated", or None when the stored row already matches."""
+    started = row["started_at"]
+    params = {
+        **row,
+        "regions": Json(row["regions"]),
+        "lo": started - timedelta(seconds=HISTORY_MATCH_SECONDS),
+        "hi": started + timedelta(seconds=HISTORY_MATCH_SECONDS),
+        "batch": batch_id,
+    }
+    same_number = (" AND (mission_number IS NULL OR mission_number = %(mission_number)s)"
+                   if row["mission_number"] is not None else "")
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        found = conn.execute(
+            "SELECT id, source, status, duration_minutes, square_feet FROM roomba_runs"
+            " WHERE source_provider = 'irobot' AND started_at BETWEEN %(lo)s AND %(hi)s"
+            + same_number + " ORDER BY id LIMIT 1",
+            params,
+        ).fetchone()
+        if found is None:
+            conn.execute(
+                """
+                INSERT INTO roomba_runs (
+                    started_at, completed_at, duration_minutes, charge_minutes, pause_minutes,
+                    square_feet, evacuations, status, done_code, mission_number, error,
+                    error_text, initiator, regions, source, source_provider,
+                    ingestion_batch_id, processing_version
+                ) VALUES (
+                    %(started_at)s, %(completed_at)s, %(duration_minutes)s, %(charge_minutes)s,
+                    %(pause_minutes)s, %(square_feet)s, %(evacuations)s, %(status)s,
+                    %(done_code)s, %(mission_number)s, %(error)s, %(error_text)s,
+                    %(initiator)s, %(regions)s, 'irobot-history', 'irobot', %(batch)s, '2.0'
+                )
+                """,
+                params,
+            )
+            return "inserted"
+        _id, source, status, duration, sqft = found
+        if (source == "irobot-history" and status == row["status"]
+                and duration == row["duration_minutes"] and sqft == row["square_feet"]):
+            return None
+        conn.execute(
+            """
+            UPDATE roomba_runs SET
+                completed_at = %(completed_at)s, duration_minutes = %(duration_minutes)s,
+                charge_minutes = %(charge_minutes)s, pause_minutes = %(pause_minutes)s,
+                square_feet = %(square_feet)s, evacuations = %(evacuations)s,
+                status = %(status)s, done_code = %(done_code)s,
+                mission_number = %(mission_number)s, error = %(error)s,
+                error_text = %(error_text)s, initiator = COALESCE(%(initiator)s, initiator),
+                regions = %(regions)s, source = 'irobot-history',
+                ingestion_batch_id = %(batch)s, processing_version = '2.0'
+            WHERE id = %(id)s
+            """,
+            {**params, "id": _id},
+        )
+        return "updated"
+
+
+async def sync_history(robot, conninfo, state):
+    """Pull the cloud's mission history into roomba_runs. Fail-open: a failed read
+    is retried after HISTORY_RETRY_SECONDS (e.g. before the backend has added the
+    new roomba_runs columns on first boot)."""
+    now = time.monotonic()
+    reports = HISTORY_RECENT_REPORTS if state.history_backfilled else HISTORY_BACKFILL_REPORTS
+    try:
+        raw = await robot.get_mission_history(robot.blid, max_reports=reports)
+        entries = raw if isinstance(raw, list) else []
+        # Never write the mission the robot is still on (e.g. docked mid-clean to
+        # recharge); its entry isn't final until it really ends.
+        active_start = (state.active or {}).get("started_at")
+        batch_id = str(uuid.uuid4())
+        inserted = updated = 0
+        for entry in entries:
+            row = _history_row(entry) if isinstance(entry, dict) else None
+            if row is None:
+                continue
+            if active_start is not None and abs((row["started_at"] - active_start).total_seconds()) <= HISTORY_MATCH_SECONDS:
+                continue
+            result = await asyncio.to_thread(upsert_history_run, conninfo, row, batch_id)
+            inserted += result == "inserted"
+            updated += result == "updated"
+        state.history_backfilled = True
+        state.history_due = now + HISTORY_REFRESH_SECONDS
+        if inserted or updated:
+            log.info("Mission history synced: %d new run(s), %d corrected", inserted, updated)
+    except Exception as e:  # noqa: BLE001 — fail-open
+        state.history_due = now + HISTORY_RETRY_SECONDS
+        log.warning("mission history sync failed: %s: %s", type(e).__name__, e)
+
+
+# ---------------------------------------------------------------------------
 # Cloud connection + main loop
 # ---------------------------------------------------------------------------
 async def connect_robot(session, email, password, country, blid, state):
@@ -733,9 +925,14 @@ async def connect_robot(session, email, password, country, blid, state):
     # the account's robot list, not on the PrimeRobot object), then hand the same
     # login result to the factory to avoid a second login round-trip.
     login_result = await login(session, email, password, country)
+    # auto_refresh: the cloud MQTT token lasts ~1 h. Without it the link died every
+    # hour ("Connect timed out" on the next reconnect), failing that cycle and
+    # cutting the live-position stream mid-clean; the library now logs in again
+    # 5 min before expiry and swaps the token under the running connection.
     robot = await PrimeFactory.create_prime_robot(
         session=session, username=email, password=password,
         country_code=country, blid=blid or None, login_result=login_result,
+        auto_refresh=True,
     )
     await robot.connect(timeout=15.0)
     try:
@@ -1293,6 +1490,10 @@ async def main():
                 if state.parts_refresh_due is not None and now >= state.parts_refresh_due:
                     state.parts_refresh_due = None
                     await refresh_parts(robot, conninfo, robot.blid, state, force=True)
+                # The cloud's mission history: on start (backfills runs missed while
+                # down), a minute after each run ends, and every half hour.
+                if now >= state.history_due:
+                    await sync_history(robot, conninfo, state)
                 # Keep the concurrent live-position task in sync with mission state.
                 live_task = await _manage_live_task(live_task, robot, conninfo, state)
             except asyncio.CancelledError:

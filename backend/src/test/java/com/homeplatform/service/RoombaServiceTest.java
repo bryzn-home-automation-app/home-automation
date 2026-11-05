@@ -235,6 +235,41 @@ class RoombaServiceTest {
             assertEquals(5L, out.get(0).id());
             assertEquals(111, out.get(0).squareFeet());
             assertNull(out.get(0).missionId());
+            assertFalse(out.get(0).verified());
+            assertTrue(out.get(0).rooms().isEmpty());
+        }
+
+        @Test
+        @DisplayName("history runs name their rooms from the current map and summarize the settings")
+        void historyRunRoomsAndSettings() {
+            RoombaRun run = RoombaRun.builder()
+                    .id(9L)
+                    .startedAt(LocalDateTime.of(2026, 11, 2, 15, 0, 18))
+                    .completedAt(LocalDateTime.of(2026, 11, 3, 1, 54, 17))
+                    .durationMinutes(653)
+                    .chargeMinutes(390)
+                    .evacuations(5)
+                    .squareFeet(1529)
+                    .status("COMPLETED")
+                    .doneCode("ok")
+                    .source("irobot-history")
+                    .regions("[{\"id\":\"10\",\"type\":\"rid\",\"suction\":4,\"twoPass\":true,\"mode\":6},"
+                            + "{\"id\":\"12\",\"type\":\"rid\",\"suction\":4,\"twoPass\":true,\"mode\":6},"
+                            + "{\"id\":\"99\",\"type\":\"rid\"},{\"id\":\"3\",\"type\":\"zid\"}]")
+                    .build();
+            when(runRepo.findAllByOrderByStartedAtDesc(any(Pageable.class))).thenReturn(List.of(run));
+            when(mapRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(RoombaMap.builder()
+                    .geojson("{\"rooms\":{\"features\":["
+                            + "{\"id\":\"10\",\"properties\":{\"name\":\"Living Room\"}},"
+                            + "{\"id\":12,\"properties\":{\"room_name\":\"Kitchen\"}}]}}")
+                    .build()));
+
+            RoombaRunResponse r = service.getRuns(10).get(0);
+            assertTrue(r.verified());
+            assertEquals(List.of("Living Room", "Kitchen", "Room 99", "Zone 3"), r.rooms());
+            assertEquals("Vacuum & mop · Turbo · 2 passes", r.settings());
+            assertEquals(390, r.chargeMinutes());
+            assertEquals(5, r.evacuations());
         }
     }
 

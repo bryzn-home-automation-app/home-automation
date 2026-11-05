@@ -182,12 +182,20 @@ class AlertEngineTest {
                 true, needsAttention, attentionReasons, Instant.now().toString());
     }
 
-    /** Build a completed run; only completedAt/error/area/duration/missionNumber matter. */
+    /** Build a completed, history-confirmed run; only completedAt/error/area/duration/missionNumber matter. */
     private RoombaRunResponse run(String completedAt, Integer error, Integer squareFeet,
                                   Integer durationMinutes, Integer missionNumber) {
+        return run(completedAt, error, squareFeet, durationMinutes, missionNumber, "COMPLETED", null, true);
+    }
+
+    private RoombaRunResponse run(String completedAt, Integer error, Integer squareFeet,
+                                  Integer durationMinutes, Integer missionNumber, String status,
+                                  Integer chargeMinutes, boolean verified) {
         return new RoombaRunResponse(
                 7L, Instant.now().toString(), completedAt, durationMinutes, squareFeet,
-                "COMPLETED", "m-1", missionNumber, error, null, "manual", "clean", "roomba");
+                status, "m-1", missionNumber, error, error != null && error != 0 ? "Left wheel stuck" : null,
+                "manual", "clean", verified ? "irobot-history" : "roombapy-prime",
+                chargeMinutes, null, null, List.of(), null, verified);
     }
 
     /** An AlertEngine wired to supply a fixed run + status, with dedup always fresh. */
@@ -217,6 +225,42 @@ class AlertEngineTest {
             engine.generateRoombaAlerts(1L);
             verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_DONE),
                     eq(Severity.SUCCESS), contains("Cleaning complete"), contains("250 sq ft"));
+        }
+
+        @Test
+        @DisplayName("cleaning time excludes recharge stops, which are mentioned separately")
+        void cleaningCompleteWithRecharge() {
+            var engine = roombaEngine(run(Instant.now().toString(), 0, 1529, 653, 43, "COMPLETED", 390, true), null);
+            engine.generateRoombaAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_DONE), eq(Severity.SUCCESS),
+                    eq("Cleaning complete — #43"),
+                    eq("Cleaned 1,529 sq ft in 4 hr 23 min, plus 6 hr 30 min docked to recharge."));
+        }
+
+        @Test
+        @DisplayName("a run the cloud history hasn't confirmed yet doesn't alert")
+        void unverifiedRunWaits() {
+            var engine = roombaEngine(run(Instant.now().toString(), 0, 849, 128, 43, "COMPLETED", null, false), null);
+            engine.generateRoombaAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("stuck run -> 'didn't finish' WARNING, not 'complete'")
+        void stuckRunDidNotFinish() {
+            var engine = roombaEngine(run(Instant.now().toString(), 2, 67, 97, 45, "STUCK", 0, true), null);
+            engine.generateRoombaAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING),
+                    eq("Cleaning didn't finish — #45"), contains("Stopped after 67 sq ft: Left wheel stuck."));
+            verify(notificationService, never()).send(anyLong(), eq(AlertType.ROOMBA_DONE), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("cancelled run -> no alert")
+        void cancelledRunNoAlert() {
+            var engine = roombaEngine(run(Instant.now().toString(), 0, 300, 40, 46, "CANCELLED", 0, true), null);
+            engine.generateRoombaAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
 
         @Test

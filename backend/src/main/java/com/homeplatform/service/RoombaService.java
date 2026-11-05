@@ -593,10 +593,30 @@ public class RoombaService {
 
     public List<RoombaRunResponse> getRuns(int limit) {
         int capped = Math.max(1, Math.min(limit, 500));
+        Map<String, String> roomNames = roomNames();
         return runRepo.findAllByOrderByStartedAtDesc(PageRequest.of(0, capped))
                 .stream()
-                .map(this::toRunResponse)
+                .map(r -> toRunResponse(r, roomNames))
                 .toList();
+    }
+
+    /** Room id → name from the current map. A run's regions use the same ids. */
+    private Map<String, String> roomNames() {
+        Map<String, String> names = new java.util.HashMap<>();
+        mapRepo.findTopByOrderByUpdatedAtDesc()
+                .map(m -> parseJson(m.getGeojson()))
+                .ifPresent(geo -> {
+                    for (JsonNode f : geo.path("rooms").path("features")) {
+                        if (!f.hasNonNull("id")) continue;
+                        JsonNode props = f.path("properties");
+                        String name = props.hasNonNull("name") ? props.get("name").asText()
+                                : props.hasNonNull("room_name") ? props.get("room_name").asText() : null;
+                        if (name != null && !name.isBlank()) {
+                            names.put(f.get("id").asText(), name.trim());
+                        }
+                    }
+                });
+        return names;
     }
 
     public Optional<RoombaMapResponse> getMap() {
@@ -744,7 +764,31 @@ public class RoombaService {
         );
     }
 
-    private RoombaRunResponse toRunResponse(RoombaRun r) {
+    /** Source the poller stamps on a run once the cloud's mission history has confirmed it. */
+    static final String HISTORY_SOURCE = "irobot-history";
+
+    private static final Map<Integer, String> MODE_LABELS = Map.of(
+            2, "Vacuum", 4, "Mop", 6, "Vacuum & mop");
+    private static final Map<Integer, String> SUCTION_LABELS = Map.of(
+            1, "Low suction", 2, "Medium suction", 3, "High suction", 4, "Turbo");
+
+    RoombaRunResponse toRunResponse(RoombaRun r, Map<String, String> roomNames) {
+        List<String> rooms = new ArrayList<>();
+        String settings = null;
+        JsonNode regions = parseJson(r.getRegions());
+        if (regions != null && regions.isArray()) {
+            for (JsonNode region : regions) {
+                String id = region.path("id").asText("");
+                if (id.isEmpty()) continue;
+                String name = "zid".equals(region.path("type").asText())
+                        ? "Zone " + id
+                        : roomNames.getOrDefault(id, "Room " + id);
+                if (!rooms.contains(name)) rooms.add(name);
+            }
+            if (!regions.isEmpty()) {
+                settings = settingsLabel(regions.get(0));
+            }
+        }
         return new RoombaRunResponse(
                 r.getId(),
                 iso(r.getStartedAt()),
@@ -758,8 +802,31 @@ public class RoombaService {
                 r.getErrorText(),
                 r.getInitiator(),
                 r.getCycle(),
-                r.getSource()
+                r.getSource(),
+                r.getChargeMinutes(),
+                r.getEvacuations(),
+                r.getDoneCode(),
+                rooms,
+                settings,
+                HISTORY_SOURCE.equals(r.getSource())
         );
+    }
+
+    /** "Vacuum & mop · Turbo · 2 passes" from one region's clean settings. */
+    private static String settingsLabel(JsonNode region) {
+        List<String> parts = new ArrayList<>();
+        if (region.path("mode").canConvertToInt()) {
+            String mode = MODE_LABELS.get(region.get("mode").asInt());
+            if (mode != null) parts.add(mode);
+        }
+        if (region.path("suction").canConvertToInt()) {
+            String suction = SUCTION_LABELS.get(region.get("suction").asInt());
+            if (suction != null) parts.add(suction);
+        }
+        if (region.path("twoPass").isBoolean()) {
+            parts.add(region.get("twoPass").asBoolean() ? "2 passes" : "1 pass");
+        }
+        return parts.isEmpty() ? null : String.join(" · ", parts);
     }
 
     private RoombaMapResponse toMapResponse(RoombaMap m) {
@@ -780,7 +847,7 @@ public class RoombaService {
         try {
             return mapper.readTree(raw);
         } catch (Exception e) {
-            log.warn("Failed to parse stored roomba_map geojson: {}", e.getMessage());
+            log.warn("Failed to parse stored roomba JSON: {}", e.getMessage());
             return null;
         }
     }

@@ -2,13 +2,17 @@ package com.homeplatform.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
 
 /**
- * One completed Roomba mission. Append-only: the poller INSERTs a row per
- * completed mission; rows are never updated or deleted.
+ * One completed Roomba mission. The poller INSERTs a row when it sees a mission
+ * end, then overwrites it with the cloud's mission history (source
+ * "irobot-history"), which has the robot's own totals, outcome and rooms; runs
+ * the poller missed are inserted from the history. Rows are never deleted.
  */
 @Entity
 @Table(name = "roomba_runs")
@@ -57,6 +61,25 @@ public class RoombaRun {
 
     @Column(length = 40)
     private String cycle;
+
+    /** Minutes docked to recharge mid-mission (history only; included in durationMinutes). */
+    @Column(name = "charge_minutes")
+    private Integer chargeMinutes;
+
+    @Column(name = "pause_minutes")
+    private Integer pauseMinutes;
+
+    /** Times the dock emptied the bin during the run. */
+    @Column(name = "evacuations")
+    private Integer evacuations;
+
+    /** The cloud's raw outcome code (ok, stuck, cncl, usrEnd …). */
+    @Column(name = "done_code", length = 20)
+    private String doneCode;
+
+    /** Rooms/zones the run was sent to: [{id, type, suction, twoPass, mode}]. */
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String regions;
 
     @Column(length = 100)
     private String source;

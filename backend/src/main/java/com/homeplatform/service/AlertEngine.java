@@ -215,26 +215,60 @@ public class AlertEngine {
 
     void maybeCleaningCompleteAlert(Long userId, RoombaRunResponse run) {
         if (run.completedAt() == null) return;           // still running / not finished
-        if (run.error() != null && run.error() != 0) return; // errored runs surface via the error alert
+        // Wait for the cloud's record of the run. The poller's own row can be cut
+        // short (a mid-clean recharge looked like the end) or call a stuck run
+        // complete; the history sync replaces it about a minute after the robot docks.
+        if (!run.verified()) return;
         if (!isRecent(run.completedAt())) return;        // don't resurface old history
 
         String tag = run.missionNumber() != null ? "#" + run.missionNumber() : "run " + run.id();
+        boolean haveArea = run.squareFeet() != null && run.squareFeet() > 0;
+
+        // ── Didn't finish (WARNING) — stuck or otherwise stopped short ──
+        if ("STUCK".equals(run.status()) || "INCOMPLETE".equals(run.status())) {
+            String title = "Cleaning didn't finish — " + tag;
+            if (!isNewRoomba(userId, title, false)) return;
+            String reason = run.errorText() != null && !run.errorText().isBlank() ? run.errorText() : "it got stuck";
+            String msg = (haveArea ? String.format("Stopped after %d sq ft: %s.", run.squareFeet(), reason)
+                                   : String.format("Stopped early: %s.", reason))
+                    + " It may need a hand before the next clean.";
+            createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title, msg);
+            return;
+        }
+        if (!"COMPLETED".equals(run.status())) return;   // cancelled — someone stopped it on purpose
+        if (run.error() != null && run.error() != 0) return; // errored runs surface via the error alert
+
         String title = "Cleaning complete — " + tag;
         if (!isNewRoomba(userId, title, false)) return;  // one-time event: dedup forever
 
-        boolean haveArea = run.squareFeet() != null && run.squareFeet() > 0;
-        boolean haveDur  = run.durationMinutes() != null && run.durationMinutes() > 0;
+        Integer cleaning = run.durationMinutes();
+        if (cleaning != null && run.chargeMinutes() != null) {
+            cleaning = Math.max(0, cleaning - run.chargeMinutes());
+        }
+        boolean haveDur = cleaning != null && cleaning > 0;
         String msg;
         if (haveArea && haveDur) {
-            msg = String.format("Cleaned %d sq ft in %d min.", run.squareFeet(), run.durationMinutes());
+            msg = String.format("Cleaned %,d sq ft in %s.", run.squareFeet(), minutesLabel(cleaning));
         } else if (haveArea) {
-            msg = String.format("Cleaned %d sq ft.", run.squareFeet());
+            msg = String.format("Cleaned %,d sq ft.", run.squareFeet());
         } else if (haveDur) {
-            msg = String.format("Ran for %d min.", run.durationMinutes());
+            msg = String.format("Ran for %s.", minutesLabel(cleaning));
         } else {
             msg = "The robot finished a cleaning mission.";
         }
+        if (run.chargeMinutes() != null && run.chargeMinutes() > 0) {
+            msg = msg.substring(0, msg.length() - 1)
+                    + String.format(", plus %s docked to recharge.", minutesLabel(run.chargeMinutes()));
+        }
         createRoomba(userId, AlertType.ROOMBA_DONE, Severity.SUCCESS, title, msg);
+    }
+
+    /** "45 min", "2 hr", "4 hr 23 min". */
+    static String minutesLabel(int minutes) {
+        if (minutes < 60) return minutes + " min";
+        int h = minutes / 60;
+        int m = minutes % 60;
+        return m == 0 ? h + " hr" : h + " hr " + m + " min";
     }
 
     void maybeRoombaStatusAlerts(Long userId, RoombaStatusResponse s) {

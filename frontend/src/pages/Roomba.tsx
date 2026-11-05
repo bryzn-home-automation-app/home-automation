@@ -16,6 +16,7 @@ import RoombaMaintenance from '../components/RoombaMaintenance';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useAuth } from '../context/AuthContext';
+import { cleaningMinutes, isRecharging, roomsSummary } from '../utils/roomba';
 import type { RoombaStatus, RoombaRun } from '../types';
 
 // ── Presentation helpers ──────────────────────────────────
@@ -24,6 +25,7 @@ import type { RoombaStatus, RoombaRun } from '../types';
 function phaseLabel(status: RoombaStatus | null | undefined): string {
   if (!status) return 'Unknown';
   if (status.error && status.error !== 0) return 'Needs attention';
+  if (isRecharging(status)) return 'Recharging mid-clean';
   switch (status.phase) {
     case 'run':
       return 'Cleaning';
@@ -344,9 +346,13 @@ export default memo(function Roomba() {
        device.firmware && `firmware ${device.firmware}`].filter(Boolean).join(' · ')
     : null;
 
+  const recharging = isRecharging(status);
   const dockChip = useMemo(() => {
     if (!status) return null;
     if (running) return { text: 'Cleaning', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
+    if (isRecharging(status)) {
+      return { text: 'Docked · resumes once charged', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
+    }
     if (status.dockText) {
       const attention = status.dockError != null && status.dockError !== 0;
       return {
@@ -417,7 +423,7 @@ export default memo(function Roomba() {
             </h2>
             <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
               {status
-                ? `${phaseLabel(status)}${running && status.sqft ? ` · ${status.sqft} sq ft cleaned so far` : ''}.`
+                ? `${phaseLabel(status)}${(running || recharging) && status.sqft ? ` · ${status.sqft} sq ft cleaned so far` : ''}.`
                 : 'Live status, cleaning history, and floor map for your robot vacuum.'}
             </p>
             {deviceLine && (
@@ -808,9 +814,10 @@ export default memo(function Roomba() {
                         minute: '2-digit',
                       });
                   const st = runStatusStyle(r.status);
-                  // Guard the list against any glitched stored duration (>24h).
-                  const listDuration =
-                    r.durationMinutes != null && r.durationMinutes > 1440 ? null : r.durationMinutes;
+                  // Cleaning time — recharge stops out (a full-house run is ~4 h of
+                  // cleaning across ~11 h); the detail popup has both.
+                  const listDuration = cleaningMinutes(r);
+                  const rooms = r.verified ? roomsSummary(r.rooms) : null;
                   return (
                     <button
                       key={r.id}
@@ -819,17 +826,19 @@ export default memo(function Roomba() {
                       aria-label={`View details for the run on ${dateLabel}`}
                       className="grid w-full grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-appborder-light pr-1 text-left transition-colors hover:bg-appinset"
                     >
-                      <div className="py-3">
+                      <div className="min-w-0 py-3">
                         <div className="text-apptext-soft">{dateLabel}</div>
-                        {timeLabel && (
-                          <div className="text-2xs text-apptext-dim">{timeLabel}</div>
+                        {(timeLabel || rooms) && (
+                          <div className="truncate text-2xs text-apptext-dim">
+                            {[timeLabel, rooms].filter(Boolean).join(' · ')}
+                          </div>
                         )}
                       </div>
                       <div className="py-3 text-right tabular-nums text-apptext">
                         {formatDuration(listDuration)}
                       </div>
                       <div className="hidden py-3 text-right tabular-nums text-apptext-muted md:block">
-                        {r.squareFeet != null ? r.squareFeet : '—'}
+                        {r.squareFeet != null ? r.squareFeet.toLocaleString('en-US') : '—'}
                       </div>
                       <div className="py-3 text-right">
                         <span className={`rounded-full px-2.5 py-1 text-xs ${st.className}`}>
