@@ -174,7 +174,7 @@ class AppEventServiceTest {
         @Test
         @DisplayName("deletes events older than N days")
         void deletesOldEvents() {
-            when(repo.deleteByTimestampBefore(any(LocalDateTime.class))).thenReturn(42L);
+            when(repo.deleteByTimestampBefore(any(LocalDateTime.class))).thenReturn(42);
 
             long deleted = appEventService.cleanup(30);
 

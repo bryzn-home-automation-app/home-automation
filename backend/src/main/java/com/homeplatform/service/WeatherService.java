@@ -75,7 +75,8 @@ public class WeatherService {
 
         boolean isRecent = !end.isBefore(LocalDate.now().minusDays(2));
         if (!isRecent) {
-            long expectedDays = start.until(end).getDays() + 1;
+            // Whole days in the range (Period.getDays() is only the days part, 0 for P1M).
+            long expectedDays = java.time.temporal.ChronoUnit.DAYS.between(start, end) + 1;
             if (!cached.isEmpty() && cached.size() >= expectedDays) {
                 log.debug("Weather cache hit for {} ({} → {}): {} records", stationCode, start, end, cached.size());
                 return buildResponseFromCache(lat, lon, cached);
@@ -96,7 +97,15 @@ public class WeatherService {
             // Persist to DB (idempotent — skips dates already stored, which `cached`
             // already lists, so no per-day lookups). Re-query for aggregation only
             // when something new was written.
-            List<WeatherObservation> saved = saveDailyObservations(lat, lon, start, end, raw, cached);
+            // A storage problem mustn't throw away a good API answer (the response is
+            // built from `raw`), so it's caught on its own.
+            List<WeatherObservation> saved;
+            try {
+                saved = saveDailyObservations(lat, lon, start, end, raw, cached);
+            } catch (Exception e) {
+                log.warn("Storing weather for {} ({} → {}) failed: {}", stationCode, start, end, e.getMessage());
+                saved = List.of();
+            }
             List<WeatherObservation> all = saved.isEmpty() ? cached
                     : repo.findByStationCodeAndObservationDateBetweenOrderByObservationDateAsc(stationCode, start, end);
             WeatherCurrent current = parseCurrent(raw);
@@ -185,8 +194,7 @@ public class WeatherService {
                 row.setSource(fresh.getSource());
             }
             row.setIngestionBatchId(batchId);
-            repo.save(row);
-            written++;
+            if (save(row) != null) written++;
         }
         if (written > 0) {
             log.info("Replaced or added observed weather for {} past day(s) at {} (batch {})", written, stationCode, batchId);
@@ -356,12 +364,29 @@ public class WeatherService {
                     .ingestionBatchId(batchId)
                     .processingVersion("1.0")
                     .build();
-            saved.add(repo.save(obs));
+            WeatherObservation row = save(obs);
+            if (row != null) saved.add(row);
         }
         if (!saved.isEmpty()) {
             log.info("Saved {} weather observations for {} (batch {})", saved.size(), stationCode, batchId);
         }
         return saved;
+    }
+
+    /**
+     * Insert or update one day. The Electric page asks for three forecast ranges at
+     * once, so two requests can both find a date missing and both insert it; the
+     * second loses on the (date, station, provider) key. The row is there either
+     * way, so that's not a failure — before, it threw away the whole fetch and fell
+     * back to the cache. Returns null when another request stored the day first.
+     */
+    private WeatherObservation save(WeatherObservation obs) {
+        try {
+            return repo.save(obs);
+        } catch (org.springframework.dao.DataIntegrityViolationException dup) {
+            log.debug("Weather for {} at {} was stored by another request", obs.getObservationDate(), obs.getStationCode());
+            return null;
+        }
     }
 
     // ── Response builders ───────────────────────────────────────
@@ -373,7 +398,7 @@ public class WeatherService {
                 toDouble(o.getHighTempF()),
                 toDouble(o.getAvgTempF()),
                 toDouble(o.getPrecipitationInches()),
-                0 // weather code not stored in DB
+                -1 // weather code not stored in DB — "unknown", not 0 (clear sky)
         )).toList();
         WeatherAggregation agg = computeAggregation(cached);
         return new WeatherResponse(lat, lon, null, days, List.of(), agg);

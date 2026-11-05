@@ -2,8 +2,10 @@ package com.homeplatform.repository;
 
 import com.homeplatform.model.AppEvent;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -28,5 +30,14 @@ public interface AppEventRepository extends JpaRepository<AppEvent, Long> {
                                                  @Param("category") String category,
                                                  @Param("level") String level);
 
-    long deleteByTimestampBefore(LocalDateTime cutoff);
+    /**
+     * One bulk DELETE, in its own transaction. A derived deleteBy… has no transaction
+     * of its own and removes row by row, so the nightly retention would have thrown
+     * "No EntityManager with actual transaction available" the first night it had
+     * anything to delete.
+     */
+    @Modifying
+    @Transactional
+    @Query("DELETE FROM AppEvent e WHERE e.timestamp < :cutoff")
+    int deleteByTimestampBefore(@Param("cutoff") LocalDateTime cutoff);
 }

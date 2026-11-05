@@ -110,7 +110,15 @@ public class HourlySyncScheduler {
 
         // Skip only when every day in the lookback window is already complete —
         // non-zero readings, not raw rows. Otherwise sync from the earliest gap.
-        Optional<LocalDate> earliest = findEarliestIncompleteDay(yesterday, LOOKBACK_DAYS);
+        Optional<LocalDate> earliest;
+        try {
+            earliest = findEarliestIncompleteDay(yesterday, LOOKBACK_DAYS);
+        } catch (IllegalStateException e) {
+            // Couldn't read the table (e.g. Postgres restarting). Two of these used to
+            // count as "complete" and stand the sync down until midnight.
+            log.warn("HourlySyncScheduler: {} — trying again next tick", e.getMessage());
+            return;
+        }
         if (earliest.isEmpty()) {
             // Back off after a few consecutive clean scans, so a finished date isn't
             // re-checked every 30 min for the rest of the day.
@@ -262,7 +270,7 @@ public class HourlySyncScheduler {
      * Find the earliest day in the last {@code windowDays} days (through
      * {@code yesterday}) that is not {@link #isComplete complete} — hours still
      * missing, too few non-zero readings, or absent entirely.
-     * Empty when every day is complete. Backfills gaps left by server downtime,
+     * Empty when every day is complete; throws IllegalStateException when the scan itself fails. Backfills gaps left by server downtime,
      * bounded by CoServ's ~2-week retention window.
      */
     Optional<LocalDate> findEarliestIncompleteDay(LocalDate yesterday, int windowDays) {
@@ -280,8 +288,8 @@ public class HourlySyncScheduler {
                 while (rs.next()) rowsByDay.put(rs.getDate(1).toLocalDate(), new int[]{rs.getInt(2), rs.getInt(3)});
             }
         } catch (Exception e) {
-            log.warn("HourlySyncScheduler backfill scan failed: {}", e.getMessage());
-            return Optional.empty();
+            // Not "nothing missing" — the caller must not count it toward standing down.
+            throw new IllegalStateException("backfill scan failed: " + e.getMessage(), e);
         }
 
         LocalDate missing = null;

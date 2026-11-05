@@ -105,7 +105,15 @@ public class DailySyncScheduler {
         log.info("DailySyncScheduler: checking for {}…", yesterday);
 
         // Skip only when every day in the lookback window is already populated.
-        Optional<LocalDate> earliest = findEarliestMissingDay(yesterday, LOOKBACK_DAYS);
+        Optional<LocalDate> earliest;
+        try {
+            earliest = findEarliestMissingDay(yesterday, LOOKBACK_DAYS);
+        } catch (IllegalStateException e) {
+            // Couldn't read the table (e.g. Postgres restarting). Two of these used to
+            // count as "complete" and stand the sync down until midnight.
+            log.warn("DailySyncScheduler: {} — trying again next tick", e.getMessage());
+            return;
+        }
         if (earliest.isEmpty()) {
             // Back off after a few consecutive clean scans, so a finished date isn't
             // re-checked every 30 min for the rest of the day.
@@ -237,7 +245,7 @@ public class DailySyncScheduler {
      * Find the earliest day in the last {@code windowDays} days (through
      * {@code yesterday}) that has no non-zero daily reading, or whose daily
      * reading is {@link #isStale stale} against its complete hourly readings.
-     * Empty when every day is already populated. Backfills gaps left by server
+     * Empty when every day is already populated; throws IllegalStateException when the scan itself fails. Backfills gaps left by server
      * downtime, bounded by CoServ's ~2-week retention window.
      */
     Optional<LocalDate> findEarliestMissingDay(LocalDate yesterday, int windowDays) {
@@ -263,8 +271,8 @@ public class DailySyncScheduler {
                 }
             }
         } catch (Exception e) {
-            log.warn("DailySyncScheduler backfill scan failed: {}", e.getMessage());
-            return Optional.empty();
+            // Not "nothing missing" — the caller must not count it toward standing down.
+            throw new IllegalStateException("backfill scan failed: " + e.getMessage(), e);
         }
 
         LocalDate missing = null;

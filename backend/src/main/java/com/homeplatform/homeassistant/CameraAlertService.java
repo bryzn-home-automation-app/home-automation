@@ -321,7 +321,9 @@ public class CameraAlertService {
                     .filter(d -> d.date().equals(today.minusDays(2).toString()) || d.date().equals(today.minusDays(1).toString()))
                     .toList();
             // Missing days = the lookup didn't really answer; ask again next tick.
-            if (days.size() != 2) return false;
+            // A code below 0 is "not known" (a cached day — the DB stores no weather code),
+            // which is no answer either.
+            if (days.size() != 2 || days.stream().anyMatch(d -> d.weatherCode() < 0)) return false;
             boolean sunny = days.stream().allMatch(d -> d.weatherCode() <= SUNNY_MAX_WEATHER_CODE);
             // Only a real answer is cached, and only today's — a failed lookup is retried
             // on the next 15-minute tick instead of silencing the alert for the day.

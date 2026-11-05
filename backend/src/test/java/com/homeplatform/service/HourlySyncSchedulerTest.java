@@ -25,6 +25,7 @@ class HourlySyncSchedulerTest {
     static class TestScheduler extends HourlySyncScheduler {
         LocalDate today = LocalDate.of(2026, 8, 22);  // "yesterday" = 08-21
         boolean everythingComplete = true;
+        boolean scanFails = false;
         int scanCalls = 0;
         int spawnCalls = 0;
 
@@ -40,6 +41,7 @@ class HourlySyncSchedulerTest {
         @Override
         Optional<LocalDate> findEarliestIncompleteDay(LocalDate yesterday, int windowDays) {
             scanCalls++;
+            if (scanFails) throw new IllegalStateException("backfill scan failed: connection refused");
             return everythingComplete ? Optional.empty() : Optional.of(yesterday);
         }
 
@@ -61,6 +63,22 @@ class HourlySyncSchedulerTest {
     @BeforeEach
     void setUp() {
         scheduler = new TestScheduler(mock(AppEventService.class), mock(AlertEngine.class), mock(ApplicationEventPublisher.class));
+    }
+
+    @Test
+    @DisplayName("a failed scan (DB down) neither syncs nor counts toward standing down")
+    void failedScanRetriesNextTick() {
+        scheduler.scanFails = true;
+        scheduler.checkAndSync();
+        scheduler.checkAndSync();
+        scheduler.checkAndSync();
+        assertEquals(3, scheduler.scanCalls, "keeps trying each tick");
+        assertEquals(0, scheduler.spawnCalls);
+
+        scheduler.scanFails = false;
+        scheduler.everythingComplete = false;
+        scheduler.checkAndSync();
+        assertEquals(1, scheduler.spawnCalls, "once the DB answers, the missing day still gets synced");
     }
 
     @Test
