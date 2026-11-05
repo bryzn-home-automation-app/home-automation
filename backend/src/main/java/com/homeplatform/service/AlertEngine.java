@@ -18,6 +18,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -35,6 +36,8 @@ public class AlertEngine {
 
     private static final Logger log = LoggerFactory.getLogger(AlertEngine.class);
     private static final ZoneId CHICAGO = ZoneId.of("America/Chicago");
+    /** A day CoServ never finishes posting still gets its report, with what's there, after this. */
+    private static final LocalTime PARTIAL_REPORT_AFTER = LocalTime.of(20, 0);
     private static final DateTimeFormatter US_DATE = DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
     /** Battery percentage at or below which a low-battery warning fires (when not charging). */
@@ -110,6 +113,17 @@ public class AlertEngine {
             log.debug("AlertEngine: no hourly data for {} — skipping alerts", yyyyMmDd);
             return;
         }
+        // The hourly sync writes all 24 rows on its first pass, zeros included, and
+        // CoServ often posts a late 3-hour block; a report sent then was frozen at the
+        // partial total (10/31 went out as 23.6 kWh of a final 35.0). Wait for the same
+        // "day is complete" rule the sync uses — or, failing that, until the evening.
+        boolean complete = HourlySyncScheduler.isComplete(
+                yesterday, yesterdayMetrics.readingCount, yesterdayMetrics.nonZeroCount);
+        if (!complete && nowCentral().isBefore(PARTIAL_REPORT_AFTER)) {
+            log.debug("AlertEngine: {} isn't complete yet ({} non-zero hours) — report waits",
+                    yyyyMmDd, yesterdayMetrics.nonZeroCount);
+            return;
+        }
 
         // ── Daily Usage Report (INFO) ──
         String dateLabel = yesterday.format(US_DATE);
@@ -144,21 +158,25 @@ public class AlertEngine {
             }
         }
 
-        // ── Monthly Bill Estimate (INFO) — only on the 1st day after a new month starts ──
+        // ── Monthly Bill Estimate (INFO) — last month's total, sent early in the new month ──
+        // (It used to sum the new month, which on the 1st–3rd is a day or two of data:
+        // November's said "29 kWh, $3.43".)
         LocalDate today = LocalDate.now(CHICAGO);
-        if (today.getDayOfMonth() <= 3) { // first 3 days of month
-            String billTitle = "Monthly bill estimate — " + today.getMonth().toString().charAt(0) + today.getMonth().toString().substring(1).toLowerCase();
+        if (today.getDayOfMonth() >= 2 && today.getDayOfMonth() <= 5) { // the 1st's data lands on the 2nd
+            LocalDate lastMonth = today.minusMonths(1).withDayOfMonth(1);
+            String monthName = lastMonth.getMonth().getDisplayName(java.time.format.TextStyle.FULL, java.util.Locale.US);
+            String billTitle = "Monthly bill estimate — " + monthName + " " + lastMonth.getYear();
             if (isNew(userId, billTitle)) {
-                double monthKwh = queryMonthToDate(meterId);
+                double monthKwh = queryMonthTotal(meterId, lastMonth);
                 if (monthKwh > 0) {
                     // Use the configured kWh rate (same source as ConfigController /
                     // the dashboards) so the alert's bill estimate matches what the UI
                     // shows — previously hardcoded 0.1171, which silently disagreed.
                     double rate = kwhRate;
                     String msg = String.format(
-                            "Month-to-date: %.0f kWh used. Estimated bill: $%.2f at $%.4f/kWh.",
-                            monthKwh, monthKwh * rate, rate);
-                    create(userId, AlertType.ENERGY_BILL, Severity.INFO, billTitle, msg, "bill:" + today.format(DateTimeFormatter.ofPattern("yyyy-MM")));
+                            "%s: %.0f kWh used. Estimated electric cost: $%.2f at $%.4f/kWh.",
+                            monthName, monthKwh, monthKwh * rate, rate);
+                    create(userId, AlertType.ENERGY_BILL, Severity.INFO, billTitle, msg, "bill:" + lastMonth.format(DateTimeFormatter.ofPattern("yyyy-MM")));
                 }
             }
         }
@@ -337,13 +355,15 @@ public class AlertEngine {
             Map<String, Object> row = jdbc.queryForMap("""
                 SELECT
                     COALESCE(SUM(usage_kwh), 0) AS total,
-                    COUNT(*)                        AS readings
+                    COUNT(*)                        AS readings,
+                    COUNT(*) FILTER (WHERE usage_kwh > 0) AS nonzero
                 FROM hourly_electric_usage
                 WHERE meter_id = ? AND timestamp::date = ?::date
                 """, meterId, date);
 
             double total = ((Number) row.get("total")).doubleValue();
             int readings = ((Number) row.get("readings")).intValue();
+            int nonZero = ((Number) row.get("nonzero")).intValue();
 
             // Peak hour
             Map<String, Object> peak = jdbc.queryForMap("""
@@ -359,9 +379,9 @@ public class AlertEngine {
             int maxHour = ((Number) peak.get("hr")).intValue();
             BigDecimal maxKwh = (BigDecimal) peak.get("usage_kwh");
 
-            return new DailyMetrics(total, readings, maxHour, maxKwh);
+            return new DailyMetrics(total, readings, nonZero, maxHour, maxKwh);
         } catch (Exception e) {
-            return new DailyMetrics(0, 0, 0, BigDecimal.ZERO);
+            return new DailyMetrics(0, 0, 0, 0, BigDecimal.ZERO);
         }
     }
 
@@ -385,14 +405,21 @@ public class AlertEngine {
         }
     }
 
-    double queryMonthToDate(Long meterId) {
+    /** Wall-clock time at home (a seam for tests). */
+    LocalTime nowCentral() {
+        return LocalTime.now(CHICAGO);
+    }
+
+    /** kWh for the calendar month starting at {@code monthStart}. */
+    double queryMonthTotal(Long meterId, LocalDate monthStart) {
         try {
             Number sum = jdbc.queryForObject("""
                 SELECT COALESCE(SUM(usage_kwh), 0)
                 FROM hourly_electric_usage
                 WHERE meter_id = ?
-                  AND timestamp >= date_trunc('month', CURRENT_DATE)
-                """, Double.class, meterId);
+                  AND timestamp >= ?::date
+                  AND timestamp <  ?::date
+                """, Double.class, meterId, monthStart.toString(), monthStart.plusMonths(1).toString());
             return sum != null ? sum.doubleValue() : 0;
         } catch (Exception e) {
             return 0;
@@ -404,8 +431,9 @@ public class AlertEngine {
     // ──────────────────────────────────────────
 
     /**
-     * Returns true if no notification with the given title prefix exists
-     * for this user today.
+     * Returns true if no notification with the given title prefix exists for this
+     * user. Every electric title names its day or month, so this dedups for good
+     * (it used to check today only, and the bill estimate went out on the 2nd and 3rd).
      */
     boolean isNew(Long userId, String titlePrefix) {
         try {
@@ -414,7 +442,6 @@ public class AlertEngine {
                 WHERE user_id = ?
                   AND category = 'ELECTRICAL'
                   AND title LIKE ? || '%'
-                  AND created_at::date = CURRENT_DATE
                 """, Long.class, userId, titlePrefix);
             return count == null || count == 0;
         } catch (Exception e) {
@@ -457,6 +484,7 @@ public class AlertEngine {
     record DailyMetrics(
             double totalKwh,
             int readingCount,
+            int nonZeroCount,
             int maxHour,
             BigDecimal maxHourKwh) {}
 }

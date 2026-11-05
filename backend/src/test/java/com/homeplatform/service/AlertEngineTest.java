@@ -62,7 +62,7 @@ class AlertEngineTest {
                 @Override
                 Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(0, 0, 0, BigDecimal.ZERO);
+                    return new DailyMetrics(0, 0, 0, 0, BigDecimal.ZERO);
                 }
             };
             engine.generateElectricAlerts(1L);
@@ -75,7 +75,7 @@ class AlertEngineTest {
             var engine = new AlertEngine(null, notificationService, null, null, null) {
                 @Override Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(35.0, 24, 15, BigDecimal.valueOf(3.5));
+                    return new DailyMetrics(35.0, 24, 24, 15, BigDecimal.valueOf(3.5));
                 }
                 double queryAvgLastNDays(Long mid, String date, int days) { return 30.0; }
                 boolean isNew(Long uid, String prefix) { return true; }
@@ -86,12 +86,36 @@ class AlertEngineTest {
         }
 
         @Test
+        @DisplayName("a day CoServ is still posting gets no report until it's complete (or evening)")
+        void partialDayWaits() {
+            for (int hour : new int[]{10, 21}) {
+                var notifications = mock(NotificationService.class);
+                var engine = new AlertEngine(null, notifications, null, null, null) {
+                    @Override Long findElectricMeter(Long uid) { return 1L; }
+                    DailyMetrics queryDay(Long mid, String date) {
+                        return new DailyMetrics(23.6, 20, 20, 15, BigDecimal.valueOf(3.5)); // 10/31: 20 of 24 hours in
+                    }
+                    double queryAvgLastNDays(Long mid, String date, int days) { return 25.0; }
+                    boolean isNew(Long uid, String prefix) { return true; }
+                    @Override java.time.LocalTime nowCentral() { return java.time.LocalTime.of(hour, 0); }
+                };
+                engine.generateElectricAlerts(1L);
+                if (hour < 20) {
+                    verify(notifications, never()).send(anyLong(), any(), any(), any(), anyString());
+                } else {
+                    verify(notifications).send(eq(1L), eq(AlertType.ENERGY_DAILY), eq(Severity.INFO),
+                            contains("Daily usage report"), anyString());
+                }
+            }
+        }
+
+        @Test
         @DisplayName("generates spike warning when usage > 30% above 7-day avg")
         void generatesSpikeWarning() {
             var engine = new AlertEngine(null, notificationService, null, null, null) {
                 @Override Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(50.0, 24, 14, BigDecimal.valueOf(4.0));
+                    return new DailyMetrics(50.0, 24, 24, 14, BigDecimal.valueOf(4.0));
                 }
                 double queryAvgLastNDays(Long mid, String date, int days) { return 30.0; }
                 boolean isNew(Long uid, String prefix) { return true; }
@@ -107,7 +131,7 @@ class AlertEngineTest {
             var engine = new AlertEngine(null, notificationService, null, null, null) {
                 @Override Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(35.0, 24, 14, BigDecimal.valueOf(3.0));
+                    return new DailyMetrics(35.0, 24, 24, 14, BigDecimal.valueOf(3.0));
                 }
                 double queryAvgLastNDays(Long mid, String date, int days) { return 30.0; }
                 boolean isNew(Long uid, String prefix) { return true; }
@@ -125,7 +149,7 @@ class AlertEngineTest {
             var engine = new AlertEngine(null, notificationService, null, null, null) {
                 @Override Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(40.0, 24, 17, BigDecimal.valueOf(5.2));
+                    return new DailyMetrics(40.0, 24, 24, 17, BigDecimal.valueOf(5.2));
                 }
                 double queryAvgLastNDays(Long mid, String date, int days) { return 30.0; }
                 boolean isNew(Long uid, String prefix) { return true; }
@@ -141,7 +165,7 @@ class AlertEngineTest {
             var engine = new AlertEngine(null, notificationService, null, null, null) {
                 @Override Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(40.0, 24, 17, BigDecimal.valueOf(4.9));
+                    return new DailyMetrics(40.0, 24, 24, 17, BigDecimal.valueOf(4.9));
                 }
                 double queryAvgLastNDays(Long mid, String date, int days) { return 30.0; }
                 boolean isNew(Long uid, String prefix) { return true; }
@@ -157,7 +181,7 @@ class AlertEngineTest {
             var engine = new AlertEngine(null, notificationService, null, null, null) {
                 @Override Long findElectricMeter(Long uid) { return 1L; }
                 DailyMetrics queryDay(Long mid, String date) {
-                    return new DailyMetrics(35.0, 24, 15, BigDecimal.valueOf(3.0));
+                    return new DailyMetrics(35.0, 24, 24, 15, BigDecimal.valueOf(3.0));
                 }
                 double queryAvgLastNDays(Long mid, String date, int days) { return 30.0; }
                 boolean isNew(Long uid, String prefix) { return false; }  // already exists
