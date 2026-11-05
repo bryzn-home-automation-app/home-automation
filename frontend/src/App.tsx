@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
@@ -17,6 +17,7 @@ import { useAppPresence } from './hooks/useAppPresence';
 import { useAppSleep } from './hooks/useAppSleep';
 import { SleepScreen, SleepWarning } from './components/SleepScreen';
 import PullToRefresh from './components/PullToRefresh';
+import ErrorBoundary from './components/ErrorBoundary';
 
 /**
  * Live date/time for the sidebar. Isolated so its per-minute tick re-renders
@@ -101,7 +102,12 @@ export default memo(function App() {
   // The shell header is shared across routes, so its title must follow the
   // active tab (otherwise every page reads "Home"). Exact match, else the
   // longest matching path prefix, else the home default.
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
+  // A new page starts at the top. Keyed on pathname only, so sub-tab (?view=) changes keep their
+  // scroll; anchor links (#hash) are left to the browser.
+  useLayoutEffect(() => {
+    if (!hash) window.scrollTo(0, 0);
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   const welcomeName = user?.displayName || user?.username || 'there';
   const PAGE_HEADERS: Record<string, { eyebrow: string; title: string; subtitle?: string }> = {
     '/': { eyebrow: 'Operations Console', title: 'Home Dashboard', subtitle: `Welcome ${welcomeName}!` },
@@ -464,7 +470,11 @@ export default memo(function App() {
             </header>
 
             <main className="mt-4 lg:mt-5">
-              {!asleep && <Outlet />}
+              {!asleep && (
+                <ErrorBoundary key={pathname}>
+                  <Outlet />
+                </ErrorBoundary>
+              )}
             </main>
             {!asleep && <PullToRefresh />}
 

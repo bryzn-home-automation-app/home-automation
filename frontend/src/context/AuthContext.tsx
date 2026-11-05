@@ -10,7 +10,8 @@ import {
 } from 'react';
 import type { LoginResponse } from '../api/auth';
 import { fetchMe, heartbeat as sendHeartbeat } from '../api/auth';
-import api from '../api/client';
+import api, { setUnauthorizedHandler } from '../api/client';
+import { queryClient } from '../queryClient';
 
 interface AuthContextValue {
   user: LoginResponse | null;
@@ -73,6 +74,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []); // run once — reads token from localStorage on every request
 
+  // A 401 from a data endpoint means the session ended. Drop it so ProtectedRoute redirects to
+  // /login (remembering where the user was). Not on /login or /guest*, and only while a token
+  // exists, so a burst of 401s acts once and can't loop. Sign-out's flag is not set, so home SSO
+  // can still sign back in on its own.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      const path = window.location.pathname;
+      if (path === '/login' || path.startsWith('/guest')) return;
+      if (!readStoredToken()) return;
+      try { localStorage.removeItem(TOKEN_KEY); } catch { /* */ }
+      queryClient.clear();
+      loggedInViaForm.current = false;
+      setToken(null);
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
   // On mount: validate stored token
   useEffect(() => {
     const stored = readStoredToken();
@@ -88,8 +107,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((u) => {
         setUser(u);
       })
-      .catch(() => {
-        // Token invalid — clear storage
+      .catch((err) => {
+        // Only a rejected token ends the session; a 502 mid-deploy or flaky network must not.
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status !== 401 && status !== 403) {
+          setUser(null);
+          return;
+        }
         try { localStorage.removeItem(TOKEN_KEY); } catch { /* */ }
         setToken(null);
         setUser(null);
@@ -108,6 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = useCallback((newToken: string, newUser: LoginResponse) => {
     loggedInViaForm.current = true;
+    queryClient.clear(); // never show the previous person's cached data
     // Set localStorage FIRST so the interceptor picks it up
     try {
       localStorage.setItem(TOKEN_KEY, newToken);
@@ -121,6 +146,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(() => {
     loggedInViaForm.current = false;
+    queryClient.clear();
     setToken(null);
     setUser(null);
     try {

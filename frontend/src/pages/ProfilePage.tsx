@@ -13,7 +13,6 @@ export default function ProfilePage() {
   const queryClient = useQueryClient();
   const { user, refreshUser } = useAuth();
   const [editing, setEditing] = useState(false);
-  const [saveError, setSaveError] = useState('');
 
   const profile = useQuery({
     queryKey: ['profile'],
@@ -41,7 +40,7 @@ export default function ProfilePage() {
   const p = profile.data;
 
   const handleSave = async (req: ProfileUpdateRequest) => {
-    setSaveError('');
+    // Errors propagate to UserEditModal, which shows them inside the dialog.
     const updated = await apiUpdateProfile(req);
     // Update the profile cache and the auth user context
     queryClient.setQueryData(['profile'], updated);
@@ -86,12 +85,6 @@ export default function ProfilePage() {
       <PushSettings />
       <AlertTypeSettings />
       <LinkDeviceCard />
-
-      {saveError && (
-        <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
-          {saveError}
-        </div>
-      )}
 
       {/* Edit modal */}
       {editing && (

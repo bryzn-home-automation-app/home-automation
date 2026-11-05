@@ -1,4 +1,4 @@
-import { useState, useRef, type FormEvent, type ChangeEvent } from 'react';
+import { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from 'react';
 import Avatar from './Avatar';
 import ColorPicker from './ColorPicker';
 import type { ProfileResponse, ProfileUpdateRequest } from '../../api/auth';
@@ -18,7 +18,14 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
   const [uploading, setUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [saveError, setSaveError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -39,6 +46,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
     e.preventDefault();
     if (!displayName.trim()) return;
     setSaving(true);
+    setSaveError('');
     try {
       await onSave({
         displayName: displayName.trim(),
@@ -47,8 +55,8 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
         avatarUrl: avatarUrl || undefined,
       });
       onClose();
-    } catch {
-      // error handled upstream
+    } catch (err: any) {
+      setSaveError(err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Could not save your profile.');
     } finally {
       setSaving(false);
     }
@@ -68,6 +76,7 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close"
             className="flex h-9 w-9 items-center justify-center rounded-full border border-appborder text-apptext-muted transition-colors hover:bg-appinset"
           >
             ✕
@@ -146,6 +155,10 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
             </label>
             <ColorPicker selected={accentColor} onChange={setAccentColor} />
           </div>
+
+          {saveError && (
+            <p role="alert" className="text-sm text-apptext-danger">{saveError}</p>
+          )}
 
           <div className="flex gap-3 pt-2">
             <button

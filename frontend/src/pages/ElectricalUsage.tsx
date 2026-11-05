@@ -19,6 +19,7 @@ import { useTheme, CHART_SERIES } from '../context/ThemeContext';
 import CoservBillingHistory from '../components/CoservBillingHistory';
 import { fetchCoservBills } from '../api/coservBills';
 import { localTodayIso } from '../utils/localDate';
+import { parseServerTs } from '../utils/serverTime';
 import {
   currentBillingCycle,
   daysBetween,
@@ -316,12 +317,12 @@ export default memo(function ElectricalUsage() {
                 <p className="text-3xs uppercase tracking-[0.16em] text-apptext-muted sm:text-2xs">Last Updated</p>
                 {config.data?.lastElectricReading && (
                   <p className="mt-1 text-xs text-apptext-dim">
-                    Data: {new Date(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    Data: {parseServerTs(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </p>
                 )}
                 {config.data?.lastSyncCheck && (
                   <p className="text-xs text-apptext-dim">
-                    Checked: {new Date(config.data.lastSyncCheck).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    Checked: {parseServerTs(config.data.lastSyncCheck).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                   </p>
                 )}
               </div>

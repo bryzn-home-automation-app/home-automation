@@ -12,6 +12,7 @@ import { fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
 import { useAuth } from '../context/AuthContext';
 import { fetchRoombaStatus, fetchRoombaRuns } from '../api/roomba';
+import { isRecharging } from '../utils/roomba';
 import { fetchWaterBills } from '../api/waterBills';
 import { fetchCurrentWeather } from '../api/weather';
 import { getWeatherEmoji, getWeatherCodeDescription } from '../utils/weather';
@@ -32,7 +33,7 @@ export default function HomeSummary() {
   // recent day with a near-complete set of readings — no per-render reduction
   // over ~2,880 raw hourly rows.
   const latestDaily = useMemo(() => {
-    const complete = (electricDaily.data ?? [])
+    const complete = (Array.isArray(electricDaily.data) ? electricDaily.data : [])
       .filter((d) => d.readingCount >= 18)
       .sort((a, b) => b.date.localeCompare(a.date));
     return complete.length > 0
@@ -88,7 +89,7 @@ export default function HomeSummary() {
     staleTime: 60_000,
   });
   const latestWaterBill = useMemo(() => {
-    const bills = waterBills.data ?? [];
+    const bills = Array.isArray(waterBills.data) ? waterBills.data : [];
     if (!bills.length) return null;
     return [...bills].sort(
       (a, b) => new Date(b.billingPeriodStart).getTime() - new Date(a.billingPeriodStart).getTime()
@@ -96,6 +97,7 @@ export default function HomeSummary() {
   }, [waterBills.data]);
 
   const m = maintenance.data;
+  const recentNotes = Array.isArray(recentNotifications.data) ? recentNotifications.data : [];
 
   // Condense the raw V4 phase into a glanceable headline word.
   const rb = roomba.data;
@@ -103,7 +105,9 @@ export default function HomeSummary() {
     ? '—'
     : rb.running
       ? 'Cleaning'
-      : rb.phase === 'charge'
+      : isRecharging(rb)
+        ? 'Recharging'
+        : rb.phase === 'charge'
         ? 'Charging'
         : rb.phase === 'evac'
           ? 'Emptying'
@@ -149,8 +153,10 @@ export default function HomeSummary() {
     ? (rb?.attentionReasons[0] ?? 'Needs attention')
     : rb?.running
       ? `Cleaning now${rb.sqft != null ? ` · ${rb.sqft} sq ft` : ''}`
-      : lastCleanLabel
-        ? `Last cleaned ${lastCleanLabel}${lastRun?.squareFeet != null ? ` · ${lastRun.squareFeet} sq ft` : ''}`
+      : isRecharging(rb)
+        ? `Recharging mid-clean${rb?.sqft != null ? ` · ${rb.sqft} sq ft so far` : ''}`
+        : lastCleanLabel
+        ? `${lastRun?.status === 'STUCK' ? 'Last run got stuck' : 'Last cleaned'} ${lastCleanLabel}${lastRun?.squareFeet != null ? ` · ${lastRun.squareFeet.toLocaleString('en-US')} sq ft` : ''}`
         : rb
           ? 'No runs recorded yet'
           : 'Waiting for the robot';
@@ -329,13 +335,13 @@ export default function HomeSummary() {
           <div className="space-y-2 animate-pulse">
             {[1, 2, 3].map((i) => <div key={i} className="h-12 rounded-2xl bg-appinset" />)}
           </div>
-        ) : (recentNotifications.data ?? []).length === 0 ? (
+        ) : recentNotes.length === 0 ? (
           <div className="flex h-40 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
             No notifications yet. Activity will appear here.
           </div>
         ) : (
           <div className="space-y-2">
-            {(recentNotifications.data ?? []).map((n: any) => (
+            {recentNotes.map((n: any) => (
               <Link
                 key={n.id}
                 to="/notifications"

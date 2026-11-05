@@ -1,7 +1,10 @@
 import React, { Suspense, lazy, type ComponentType } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './queryClient';
+import ErrorBoundary from './components/ErrorBoundary';
+import { installChunkErrorRecovery } from './utils/chunkError';
 import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute, AdminRoute, MemberRoute } from './components/Guard';
@@ -38,16 +41,6 @@ const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const DebugDashboard = lazy(() => import('./pages/admin/DebugDashboard'));
 const TabUsage = lazy(() => import('./pages/admin/TabUsage'));
 const WhosHome = lazy(() => import('./pages/admin/WhosHome'));
-
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 300_000,
-      retry: 1,
-      refetchOnWindowFocus: false,
-    },
-  },
-});
 
 /**
  * Lazily-loaded route wrapper. Renders a shape-matched `PageSkeleton` until
@@ -94,9 +87,12 @@ const WhosHomeRoute = lazyRoute(WhosHome, 'list');
 registerServiceWorker();
 // Home Screen apps resume old code after a deploy; reload when a newer build is out.
 watchForAppUpdates();
+// A stale hashed chunk 404s after a deploy; reload once instead of leaving a blank app.
+installChunkErrorRecovery();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
+    <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
@@ -157,5 +153,6 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

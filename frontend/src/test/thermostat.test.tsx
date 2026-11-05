@@ -218,6 +218,20 @@ describe('ThermostatCard', () => {
     expect(climate.setThermostatTemperature).toHaveBeenCalledWith('a1b2', { temperature: 74 });
   });
 
+  it('sends a queued setpoint immediately when the card unmounts', async () => {
+    vi.useFakeTimers();
+    const { unmount } = renderCard(upstairs);
+    fireEvent.click(screen.getByRole('button', { name: 'Raise Upstairs cool-to temperature' }));
+    expect(climate.setThermostatTemperature).not.toHaveBeenCalled();
+    unmount();
+    expect(climate.setThermostatTemperature).toHaveBeenCalledTimes(1);
+    expect(climate.setThermostatTemperature).toHaveBeenCalledWith('a1b2', { temperature: 73 });
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(climate.setThermostatTemperature).toHaveBeenCalledTimes(1); // the timer did not send it twice
+  });
+
   it('pushes cool-to up in Auto and sends both setpoints together', async () => {
     vi.useFakeTimers();
     renderCard({ ...auto, heatSetpoint: 72, coolSetpoint: 75 });

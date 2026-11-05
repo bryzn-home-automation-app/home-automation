@@ -1,4 +1,4 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
 /**
  * Focusable element selectors used to find the first/last tabbable items in a panel.
@@ -101,9 +101,16 @@ export function useFocusTrap(
     };
   }, [open, panelRef, onEscape]);
 
-  // On close: return focus to the trigger.
+  // On close: return focus to the trigger — but only if the panel was actually open, so a
+  // closed-on-mount panel doesn't steal focus on every page load.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (open) return;
+    if (open) {
+      wasOpen.current = true;
+      return;
+    }
+    if (!wasOpen.current) return;
+    wasOpen.current = false;
     const trigger = returnFocusRef?.current;
     if (trigger && typeof trigger.focus === 'function') {
       // Defer so layout has settled.

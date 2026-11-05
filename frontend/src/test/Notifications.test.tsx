@@ -89,7 +89,7 @@ describe('Notifications page — Roomba', () => {
     await waitFor(() => expect(screen.getByText('Daily usage report for 08/22/2026')).toBeInTheDocument());
 
     // Click the Roomba category filter pill.
-    fireEvent.click(screen.getByRole('button', { name: /Roomba/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^\S*\s*Roomba$/ }));
 
     // The query re-fires scoped to the ROOMBA category.
     await waitFor(() =>

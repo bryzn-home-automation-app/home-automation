@@ -52,12 +52,25 @@ export function useThermostatCommands(t: Thermostat) {
   const sendTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const refetchTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  // The draft waiting on the batching timer, and the thermostat it belongs to.
+  const queued = useRef<Draft | null>(null);
+  const thermostatId = useRef(t.id);
+  thermostatId.current = t.id;
+
   useEffect(
     () => () => {
       if (sendTimer.current) clearTimeout(sendTimer.current);
       refetchTimers.current.forEach(clearTimeout);
+      // Leaving the page inside the batching window must not drop the change: send it now.
+      const d = queued.current;
+      if (d) {
+        queued.current = null;
+        setThermostatTemperature(thermostatId.current, d.kind === 'single' ? { temperature: d.value } : { low: d.low, high: d.high })
+          .catch(() => {})
+          .finally(() => queryClient.invalidateQueries({ queryKey: ['thermostats'] }));
+      }
     },
-    [],
+    [queryClient],
   );
 
   const refetchSoon = useCallback(() => {
@@ -115,6 +128,8 @@ export function useThermostatCommands(t: Thermostat) {
     setNotice(null);
     setDraft(d);
     setDraftSentAt(null);
+    if (sendTimer.current) clearTimeout(sendTimer.current);
+    queued.current = null;
     temperature.mutate(d);
   }
 
@@ -125,7 +140,11 @@ export function useThermostatCommands(t: Thermostat) {
     setDraft(d);
     setDraftSentAt(null);
     if (sendTimer.current) clearTimeout(sendTimer.current);
-    sendTimer.current = setTimeout(() => temperature.mutate(d), SEND_DELAY_MS);
+    queued.current = d;
+    sendTimer.current = setTimeout(() => {
+      queued.current = null;
+      temperature.mutate(d);
+    }, SEND_DELAY_MS);
   };
 
   function changeMode(m: string) {

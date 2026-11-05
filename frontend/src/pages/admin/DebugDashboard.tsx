@@ -6,6 +6,7 @@ import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
 import VirtualizedList from '../../components/VirtualizedList';
 import { startSleepTest } from '../../hooks/useAppSleep';
+import { parseServerTs } from '../../utils/serverTime';
 
 const EVENT_ROW_HEIGHT = 104;
 
@@ -379,11 +380,10 @@ export default function DebugDashboard() {
     [events],
   );
 
-  // Format a naive server LocalDateTime (no zone) as local time, mirroring the
-  // existing lastSyncCheck convention (treat as UTC by appending Z).
+  // Format a naive server LocalDateTime (Central wall-clock, no zone) as-is: no 'Z'.
   const fmtTs = (ts: string | null | undefined) =>
     ts
-      ? new Date(ts + (ts.endsWith('Z') ? '' : 'Z')).toLocaleString('en-US', {
+      ? parseServerTs(ts).toLocaleString('en-US', {
           month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
         })
       : '—';
@@ -481,7 +481,7 @@ export default function DebugDashboard() {
             <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3">
               <p className="text-3xs uppercase tracking-[0.14em] text-apptext-muted">Last Sync Check</p>
               <p className="mt-1 text-sm text-apptext-soft">
-                {new Date(health.lastSyncCheck.timestamp + 'Z').toLocaleString('en-US', {
+                {parseServerTs(health.lastSyncCheck.timestamp).toLocaleString('en-US', {
                   month: 'short', day: 'numeric',
                   hour: 'numeric', minute: '2-digit',
                 })}
@@ -738,7 +738,7 @@ export default function DebugDashboard() {
                         {e.level === 'ERROR' ? 'Failed' : e.level === 'WARN' ? 'Warning' : 'OK'}
                       </span>
                       <span className="text-xs text-apptext-dim">
-                        {new Date(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                        {parseServerTs(e.timestamp).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-apptext-soft truncate">{e.message}</p>

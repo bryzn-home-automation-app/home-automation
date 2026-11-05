@@ -76,12 +76,27 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
 
   return (
     <div
-      className={`flex items-start gap-4 rounded-2xl border px-5 py-4 transition-colors cursor-pointer ${
+      className={`flex items-start gap-4 rounded-2xl border px-5 py-4 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-appaccent ${
+        n.isRead ? '' : 'cursor-pointer'
+      } ${
         n.isRead
           ? 'border-appborder-light bg-appinset opacity-60 hover:opacity-90'
           : 'border-appborder bg-appinset-strong hover:border-appborder-hover'
       }`}
       style={{ height: ROW_HEIGHT - 12, boxSizing: 'border-box' }}
+      // Unread rows act as buttons (tap/Enter/Space marks read); read rows have no action.
+      {...(n.isRead
+        ? {}
+        : {
+            role: 'button',
+            tabIndex: 0,
+            onKeyDown: (e: React.KeyboardEvent) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                readMut.mutate(n.id);
+              }
+            },
+          })}
       onClick={() => { if (!n.isRead) readMut.mutate(n.id); }}
     >
       {/* Severity dot */}

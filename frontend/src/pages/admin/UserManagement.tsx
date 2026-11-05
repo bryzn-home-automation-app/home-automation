@@ -59,12 +59,27 @@ export default function UserManagement() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'all' | 'pending'>('all');
   const [selectedRole, setSelectedRole] = useState<Record<number, string>>({});
+  const [actionError, setActionError] = useState<string | null>(null);
+  const fail = (what: string) => (err: unknown) => {
+    const e = err as { response?: { data?: { message?: string; error?: string } }; message?: string };
+    setActionError(`${what}: ${e?.response?.data?.message || e?.response?.data?.error || e?.message || 'request failed'}`);
+  };
+  // Drop the local dropdown override once a role change settles, so a rejected role snaps back to
+  // what the server has instead of lingering in the select.
+  const clearRoleOverride = (userId: number) =>
+    setSelectedRole((prev) => {
+      const { [userId]: _dropped, ...rest } = prev;
+      return rest;
+    });
 
   const allUsers = useQuery({ queryKey: ['all-users'], queryFn: fetchAllUsers });
   const pendingUsers = useQuery({ queryKey: ['admin-users-pending'], queryFn: fetchPendingUsers, enabled: isAdmin });
 
   const approveMut = useMutation({
     mutationFn: ({ userId, role }: { userId: number; role: string }) => approveUser(userId, role),
+    onMutate: () => setActionError(null),
+    onError: fail('Could not approve user'),
+    onSettled: (_d, _e, v) => clearRoleOverride(v.userId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-users-pending'] });
@@ -73,6 +88,8 @@ export default function UserManagement() {
 
   const denyMut = useMutation({
     mutationFn: (userId: number) => denyUser(userId),
+    onMutate: () => setActionError(null),
+    onError: fail('Could not deny user'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['all-users'] });
       queryClient.invalidateQueries({ queryKey: ['admin-users-pending'] });
@@ -81,16 +98,23 @@ export default function UserManagement() {
 
   const roleMut = useMutation({
     mutationFn: ({ userId, role }: { userId: number; role: string }) => updateUserRole(userId, role),
+    onMutate: () => setActionError(null),
+    onError: fail('Could not change role'),
+    onSettled: (_d, _e, v) => clearRoleOverride(v.userId),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['all-users'] }),
   });
 
   const disableMut = useMutation({
     mutationFn: (userId: number) => disableUser(userId),
+    onMutate: () => setActionError(null),
+    onError: fail('Could not disable user'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['all-users'] }),
   });
 
   const reactivateMut = useMutation({
     mutationFn: (userId: number) => reactivateUser(userId),
+    onMutate: () => setActionError(null),
+    onError: fail('Could not reactivate user'),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['all-users'] }),
   });
 
@@ -106,6 +130,11 @@ export default function UserManagement() {
 
   return (
     <div className="space-y-6 sm:space-y-7">
+      {actionError && (
+        <div role="alert" className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
+          {actionError}
+        </div>
+      )}
       {/* Header */}
       <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
@@ -375,7 +404,7 @@ function UserCard({
                     <option value="GUEST">Guest</option>
                   </select>
                   {user.status === 'ACTIVE' ? (
-                    <button type="button" onClick={() => onDisable(user.id)} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-apptext-danger transition-colors hover:bg-appdanger/20">
+                    <button type="button" onClick={() => { if (window.confirm(`Disable ${user.displayName || user.username}? They will be signed out and unable to log in.`)) onDisable(user.id); }} className="rounded-full border border-appdanger/30 bg-appdanger/10 px-3 py-1.5 text-2xs font-semibold text-apptext-danger transition-colors hover:bg-appdanger/20">
                       Disable
                     </button>
                   ) : (

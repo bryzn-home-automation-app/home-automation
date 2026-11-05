@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme, KPI_TONES, hexToRgba } from '../context/ThemeContext';
 import VirtualizedList from '../components/VirtualizedList';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { parseLocalDate } from '../utils/localDate';
 
 const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)'; // matches this file's own lg: breakpoint usage
 const MOBILE_ROW_HEIGHT = 104;
@@ -88,9 +89,34 @@ function formatCurrency(n: number | null): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
 }
 
+/** Photo/document columns hold a JSON array string; a malformed one reads as empty. */
+function errorMessage(err: unknown, fallback: string): string {
+  const e = err as { response?: { data?: { message?: string; error?: string } }; message?: string };
+  return e?.response?.data?.message || e?.response?.data?.error || e?.message || fallback;
+}
+
+function parseList(raw: string | null | undefined): string[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Closes a modal on Escape. */
+function useEscapeClose(onClose: () => void) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+}
+
 function formatDate(d: string | null): string {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return parseLocalDate(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 // ════════════════════════════════════════════════════════
@@ -135,7 +161,7 @@ function SummaryCards({ a }: { a: MaintenanceAnalytics | undefined }) {
 function Timeline({ records, onSelect }: { records: MaintenanceRecord[]; onSelect: (r: MaintenanceRecord) => void }) {
   const completed = records
     .filter((r) => r.status === 'COMPLETED' && r.completedDate)
-    .sort((a, b) => new Date(b.completedDate!).getTime() - new Date(a.completedDate!).getTime());
+    .sort((a, b) => parseLocalDate(b.completedDate!).getTime() - parseLocalDate(a.completedDate!).getTime());
 
   if (!completed.length) {
     return <div className="py-8 text-center text-sm text-apptext-muted">No completed maintenance yet.</div>;
@@ -298,12 +324,10 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
     mutationFn: (id: number) => deleteMaintenanceRecord(id),
   });
 
-  const photos = [
-    ...(r.photosBefore ? JSON.parse(r.photosBefore || '[]') as string[] : []),
-    ...(r.photosDuring ? JSON.parse(r.photosDuring || '[]') as string[] : []),
-    ...(r.photosAfter ? JSON.parse(r.photosAfter || '[]') as string[] : []),
-  ];
-  const docs = r.documents ? JSON.parse(r.documents || '[]') as string[] : [];
+  useEscapeClose(onClose);
+
+  const photos = [...parseList(r.photosBefore), ...parseList(r.photosDuring), ...parseList(r.photosAfter)];
+  const docs = parseList(r.documents);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[5vh] overflow-y-auto" onClick={onClose}>
@@ -318,7 +342,7 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
             <h2 className="text-xl font-semibold text-apptext">{r.title}</h2>
             <p className="mt-1 text-sm text-apptext-muted">{CAT_ICONS[r.category] || '🔨'} {r.category}{r.area ? ` · ${r.area}` : ''}</p>
           </div>
-          <button onClick={onClose} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-appborder text-apptext-muted hover:bg-appinset">✕</button>
+          <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-appborder text-apptext-muted hover:bg-appinset">✕</button>
         </div>
 
         {/* Description */}
@@ -484,23 +508,30 @@ function FormModal({ editing, onClose, onSuccess }: {
   const [receiptNumber, setReceiptNumber] = useState(editing?.receiptNumber || '');
   const [warrantyExpiration, setWarrantyExpiration] = useState(editing?.warrantyExpiration || '');
   const [notes, setNotes] = useState(editing?.notes || '');
-  const [photos, setPhotos] = useState<string[]>(() => {
-    const all: string[] = [];
-    if (editing?.photosBefore) all.push(...JSON.parse(editing.photosBefore));
-    if (editing?.photosDuring) all.push(...JSON.parse(editing.photosDuring));
-    if (editing?.photosAfter) all.push(...JSON.parse(editing.photosAfter));
-    return all;
-  });
+  // Each list stays in its own field so a save doesn't copy before/during photos into "after".
+  const [photosBefore, setPhotosBefore] = useState<string[]>(() => parseList(editing?.photosBefore));
+  const [photosDuring, setPhotosDuring] = useState<string[]>(() => parseList(editing?.photosDuring));
+  const [photosAfter, setPhotosAfter] = useState<string[]>(() => parseList(editing?.photosAfter));
+  const photos = [
+    ...photosBefore.map((url, i) => ({ url, remove: () => setPhotosBefore((p) => p.filter((_, j) => j !== i)) })),
+    ...photosDuring.map((url, i) => ({ url, remove: () => setPhotosDuring((p) => p.filter((_, j) => j !== i)) })),
+    ...photosAfter.map((url, i) => ({ url, remove: () => setPhotosAfter((p) => p.filter((_, j) => j !== i)) })),
+  ];
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  useEscapeClose(onClose);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [saveError, setSaveError] = useState<string | null>(null);
   const createMut = useMutation({
     mutationFn: createMaintenanceRecord,
     onSuccess: () => { onSuccess(); onClose(); },
+    onError: (err) => setSaveError(errorMessage(err, 'Could not save the record.')),
   });
   const updateMut = useMutation({
     mutationFn: ({ id, req }: { id: number; req: MaintenanceRequest }) => updateMaintenanceRecord(id, req),
     onSuccess: () => { onSuccess(); onClose(); },
+    onError: (err) => setSaveError(errorMessage(err, 'Could not save the record.')),
   });
   const saving = createMut.isPending || updateMut.isPending;
 
@@ -508,15 +539,22 @@ function FormModal({ editing, onClose, onSuccess }: {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setUploadError(null);
     try {
       const { url } = await uploadMaintenanceFile(file);
-      setPhotos((p) => [...p, url]);
-    } catch {} finally { setUploading(false); }
+      setPhotosAfter((p) => [...p, url]);
+    } catch (err) {
+      setUploadError(errorMessage(err, 'Photo upload failed.'));
+    } finally {
+      setUploading(false);
+      e.target.value = ''; // allow re-picking the same file after a failure
+    }
   };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!title.trim()) return;
+    setSaveError(null);
     const cat = customCat.trim() || category;
     const ar = customArea.trim() || area;
     const req: MaintenanceRequest = {
@@ -533,7 +571,10 @@ function FormModal({ editing, onClose, onSuccess }: {
       company: company.trim() || undefined,
       receiptNumber: receiptNumber.trim() || undefined,
       warrantyExpiration: warrantyExpiration || undefined,
-      photosAfter: photos.length > 0 ? JSON.stringify(photos) : undefined,
+      // Undefined fields are skipped by the backend, so an emptied list is only sent when it had photos.
+      photosBefore: photosBefore.length > 0 || editing?.photosBefore ? JSON.stringify(photosBefore) : undefined,
+      photosDuring: photosDuring.length > 0 || editing?.photosDuring ? JSON.stringify(photosDuring) : undefined,
+      photosAfter: photosAfter.length > 0 || editing?.photosAfter ? JSON.stringify(photosAfter) : undefined,
       notes: notes.trim() || undefined,
     };
     if (editing) {
@@ -548,7 +589,7 @@ function FormModal({ editing, onClose, onSuccess }: {
       <div className="my-4 w-full max-w-xl rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-apptext">{editing ? 'Edit Record' : 'Add Maintenance'}</h3>
-          <button onClick={onClose} className="flex h-9 w-9 items-center justify-center rounded-full border border-appborder text-apptext-muted hover:bg-appinset">✕</button>
+          <button onClick={onClose} aria-label="Close" className="flex h-9 w-9 items-center justify-center rounded-full border border-appborder text-apptext-muted hover:bg-appinset">✕</button>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -677,10 +718,10 @@ function FormModal({ editing, onClose, onSuccess }: {
           <div>
             <label className="mb-1.5 block text-2xs font-medium uppercase tracking-[0.14em] text-apptext-muted">Photos</label>
             <div className="flex flex-wrap gap-2 mb-2">
-              {photos.map((url, i) => (
-                <div key={i} className="relative h-20 w-20 shrink-0 rounded-xl border border-appborder overflow-hidden">
+              {photos.map(({ url, remove }, i) => (
+                <div key={`${url}-${i}`} className="relative h-20 w-20 shrink-0 rounded-xl border border-appborder overflow-hidden">
                   <img src={url} alt={`Upload ${i + 1}`} className="h-full w-full object-cover" />
-                  <button type="button" onClick={() => setPhotos((p) => p.filter((_, j) => j !== i))}
+                  <button type="button" onClick={remove} aria-label="Remove photo"
                     className="absolute top-0.5 right-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-3xs text-white">✕</button>
                 </div>
               ))}
@@ -690,6 +731,7 @@ function FormModal({ editing, onClose, onSuccess }: {
               </button>
             </div>
             <input ref={fileRef} type="file" accept="image/*" onChange={handleFile} className="hidden" />
+            {uploadError && <p role="alert" className="text-xs text-appdanger">{uploadError}</p>}
           </div>
 
           {/* Notes */}
@@ -699,6 +741,8 @@ function FormModal({ editing, onClose, onSuccess }: {
               placeholder="Details, observations, recommendations..."
               className="w-full rounded-xl border border-appborder bg-appinset px-4 py-3 text-sm text-apptext placeholder:text-apptext-dim focus:border-appaccent focus:outline-none resize-none" />
           </div>
+
+          {saveError && <p role="alert" className="text-sm text-appdanger">{saveError}</p>}
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose}
