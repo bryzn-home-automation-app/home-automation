@@ -12,10 +12,12 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,7 +31,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>a command for that device within {@link #COMMAND_WINDOW} whose kind explains the
  *       change ({@link Command#explains}) → the app user;</li>
  *   <li>else an HA context user (someone using HA's own UI) → "Home Assistant";</li>
- *   <li>else → "ecobee" (the thermostat screen, the ecobee app, or its schedule).</li>
+ *   <li>else → "ecobee" (the thermostat screen, the ecobee app, or its schedule —
+ *       {@link #byPerson} tells which when reading it back).</li>
  * </ol>
  * The window is generous because HA re-polls ecobee every 3 minutes and the hold's
  * echo (e.g. preset becoming "temp") can arrive on a later poll. Matching on the kind of
@@ -44,6 +47,23 @@ public class ThermostatChangeRecorder {
     static final Duration COMMAND_WINDOW = Duration.ofMinutes(5);
     static final String ECOBEE_NAME = "ecobee";
     static final String HOME_ASSISTANT_NAME = "Home Assistant";
+
+    /** ecobee presets only a person sets: a temperature hold, and Away until someone resumes. */
+    static final Set<String> PERSON_PRESETS = Set.of("temp", "away_indefinitely");
+
+    /**
+     * Whether a change credited to ecobee was someone at the thermostat or in the ecobee app,
+     * rather than ecobee acting on its own. A person changes the mode, sets a temperature
+     * (ecobee reports that as a "temp" hold) or holds Away indefinitely. Everything else ecobee
+     * does by itself: the schedule moving between comfort settings, a hold ending with it, eco+
+     * nudges, and Smart Home/Away. Smart Home/Away reports "home" or "away" while the schedule
+     * says otherwise; on this home's thermostats it does that most weekdays. A comfort-setting
+     * hold picked at the thermostat looks the same, so it counts as ecobee's too.
+     * Uses only what every row stores, so rows from before this split read the same way.
+     */
+    public static boolean byPerson(Collection<String> fields, String presetMode) {
+        return fields.contains("mode") || (presetMode != null && PERSON_PRESETS.contains(presetMode));
+    }
 
     /** The app user behind a command. */
     public record Actor(Long userId, String name) {}
@@ -124,6 +144,12 @@ public class ThermostatChangeRecorder {
         if (before == null || !before.available() || !after.available()) return Optional.empty();
         List<String> fields = changedFields(before, after);
         if (fields.isEmpty()) return Optional.empty();
+        Instant at = state != null && state.lastUpdated() != null ? state.lastUpdated() : clock.instant();
+        LocalDateTime changedAt = LocalDateTime.ofInstant(at, ZoneOffset.UTC);
+        // One HA state is one change. The refresh after an app command can see a state the
+        // WebSocket already recorded, and compare it against the status its request loaded
+        // before the command, which would record it a second time.
+        if (repo.existsByDeviceIdAndChangedAt(device.getId(), changedAt)) return Optional.empty();
 
         ThermostatChange.ActorType type;
         Long userId = null;
@@ -143,10 +169,9 @@ public class ThermostatChangeRecorder {
             name = ECOBEE_NAME;
         }
 
-        Instant at = state != null && state.lastUpdated() != null ? state.lastUpdated() : clock.instant();
         return Optional.of(repo.save(ThermostatChange.builder()
                 .deviceId(device.getId())
-                .changedAt(LocalDateTime.ofInstant(at, ZoneOffset.UTC))
+                .changedAt(changedAt)
                 .changedFields(String.join(",", fields))
                 .actorType(type)
                 .actorUserId(userId)

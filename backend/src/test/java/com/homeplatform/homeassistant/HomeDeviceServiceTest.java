@@ -246,5 +246,49 @@ class HomeDeviceServiceTest {
             assertEquals(List.of("setpoint", "preset"), change.fields());
             assertEquals("2026-10-20T05:00:00Z", change.at());
         }
+
+        private com.homeplatform.model.ThermostatChange change(long deviceId, int hour, String fields,
+                                                               com.homeplatform.model.ThermostatChange.ActorType actor,
+                                                               String name, String preset) {
+            return com.homeplatform.model.ThermostatChange.builder().deviceId(deviceId)
+                    .changedAt(java.time.LocalDateTime.of(2026, 11, 5, hour, 0))
+                    .changedFields(fields).actorType(actor).actorName(name).hvacMode("cool").presetMode(preset)
+                    .targetTemperature(72.0).coolSetpoint(72.0).build();
+        }
+
+        @Test
+        @DisplayName("ecobee's own changes read as the schedule; a temperature set at the thermostat stays ecobee")
+        void scheduleSplit() {
+            when(changeRepo.findTopByDeviceIdOrderByChangedAtDesc(5L)).thenReturn(Optional.of(
+                    change(5L, 22, "setpoint,preset", com.homeplatform.model.ThermostatChange.ActorType.ECOBEE, "ecobee", "sleep")));
+            var change = service.getThermostat(ID).lastChange();
+            assertEquals("schedule", change.actor());
+            assertEquals("ecobee schedule", change.by());
+        }
+
+        @Test
+        @DisplayName("activity: people's changes on every thermostat, newest first, without schedule moves or doubles")
+        void activity() {
+            var ecobee = com.homeplatform.model.ThermostatChange.ActorType.ECOBEE;
+            var app = com.homeplatform.model.ThermostatChange.ActorType.APP;
+            SmartDevice downstairs = SmartDevice.builder().id(6L).publicId(UUID.randomUUID())
+                    .kind(SmartDevice.Kind.THERMOSTAT).name("Downstairs").enabled(true).build();
+            when(deviceRepo.findAllByOrderByKindAscNameAsc()).thenReturn(List.of(thermostat, downstairs));
+            when(changeRepo.findByChangedAtAfterOrderByChangedAtDesc(any())).thenReturn(List.of(
+                    change(6L, 23, "setpoint,preset", ecobee, "ecobee", "temp"),   // someone at the thermostat
+                    change(5L, 22, "setpoint,preset", ecobee, "ecobee", "sleep"),  // the schedule
+                    change(5L, 21, "preset", ecobee, "ecobee", "home"),            // Smart Home
+                    change(5L, 20, "mode", ecobee, "ecobee", "home"),              // mode at the thermostat
+                    change(5L, 19, "setpoint", app, "Bryan", "temp"),
+                    change(5L, 19, "setpoint", app, "Bryan", "temp"),              // recorded twice
+                    change(9L, 18, "setpoint", app, "Bryan", "temp")));            // device since removed
+
+            var log = service.activity(30);
+
+            assertEquals(List.of("Downstairs", "Main Floor", "Main Floor"), log.stream().map(a -> a.thermostat()).toList());
+            assertEquals(List.of("ecobee", "ecobee", "app"), log.stream().map(a -> a.change().actor()).toList());
+            assertEquals(List.of("mode"), log.get(1).change().fields());
+            assertEquals(downstairs.getPublicId().toString(), log.get(0).thermostatId());
+        }
     }
 }

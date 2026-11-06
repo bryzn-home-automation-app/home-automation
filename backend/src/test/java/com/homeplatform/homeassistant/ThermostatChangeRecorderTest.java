@@ -166,6 +166,30 @@ class ThermostatChangeRecorderTest {
     }
 
     @Test
+    @DisplayName("the same HA state is recorded once, even when the post-command refresh compares it to stale status")
+    void sameStateOnce() throws Exception {
+        recorder.expect(device, bryan, SETPOINT);
+        assertNotNull(record(cool(72, "home"), cool(73, "temp"), null));
+        when(repo.existsByDeviceIdAndChangedAt(3L, java.time.LocalDateTime.of(2026, 10, 20, 5, 1))).thenReturn(true);
+        assertNull(record(cool(72, "home"), cool(73, "temp"), null));
+        verify(repo, times(1)).save(any());
+    }
+
+    @Test
+    @DisplayName("ecobee changes by a person: a mode change, a temperature hold, Away indefinitely — not the schedule or Smart Home/Away")
+    void byPerson() {
+        assertTrue(ThermostatChangeRecorder.byPerson(List.of("setpoint", "preset"), "temp"));
+        assertTrue(ThermostatChangeRecorder.byPerson(List.of("setpoint"), "temp"));
+        assertTrue(ThermostatChangeRecorder.byPerson(List.of("mode"), "home"));
+        assertTrue(ThermostatChangeRecorder.byPerson(List.of("preset", "setpoint"), "away_indefinitely"));
+        assertFalse(ThermostatChangeRecorder.byPerson(List.of("setpoint", "preset"), "sleep"));
+        assertFalse(ThermostatChangeRecorder.byPerson(List.of("preset"), "home"));
+        assertFalse(ThermostatChangeRecorder.byPerson(List.of("setpoint"), "away"));
+        assertFalse(ThermostatChangeRecorder.byPerson(List.of("preset"), "vacation"));
+        assertFalse(ThermostatChangeRecorder.byPerson(List.of("setpoint"), null));
+    }
+
+    @Test
     @DisplayName("mode and range changes are named")
     void fields() {
         var auto = new ThermostatChangeRecorder.ControlState(true, null, 68.0, 75.0, "heat_cool", "home");

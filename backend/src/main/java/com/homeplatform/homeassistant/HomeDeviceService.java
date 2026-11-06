@@ -19,7 +19,10 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -109,6 +112,29 @@ public class HomeDeviceService {
         int n = Math.max(1, Math.min(limit, 100));
         return changeRepo.findByDeviceIdOrderByChangedAtDesc(d.getId(), PageRequest.of(0, n))
                 .stream().map(HomeDeviceService::toChange).toList();
+    }
+
+    /**
+     * Changes people made to any thermostat in the last {@code days} (1–90), newest first:
+     * the activity log. ecobee's own changes (schedule, Smart Home/Away) are left out, and so
+     * is the second copy of a change recorded twice before the recorder guarded against it.
+     */
+    public List<ThermostatActivityResponse> activity(int days) {
+        int n = Math.max(1, Math.min(days, 90));
+        LocalDateTime since = utc(Instant.now().minus(Duration.ofDays(n)));
+        Map<Long, SmartDevice> devices = new HashMap<>();
+        for (SmartDevice d : deviceRepo.findAllByOrderByKindAscNameAsc()) devices.put(d.getId(), d);
+        Set<String> seen = new HashSet<>();
+        return changeRepo.findByChangedAtAfterOrderByChangedAtDesc(since).stream()
+                .filter(c -> c.getActorType() != ThermostatChange.ActorType.ECOBEE
+                        || ThermostatChangeRecorder.byPerson(fields(c), c.getPresetMode()))
+                .filter(c -> devices.containsKey(c.getDeviceId()))
+                .filter(c -> seen.add(c.getDeviceId() + "@" + c.getChangedAt()))
+                .map(c -> {
+                    SmartDevice d = devices.get(c.getDeviceId());
+                    return new ThermostatActivityResponse(d.getPublicId().toString(), d.getName(), toChange(c));
+                })
+                .toList();
     }
 
     // ── thermostat commands ──
@@ -298,12 +324,21 @@ public class HomeDeviceService {
                 iso(st.getUpdatedAt()), lastChange);
     }
 
+    /** ecobee rows split into a person at the thermostat ("ecobee") and ecobee itself ("schedule"). */
     private static ThermostatChangeResponse toChange(ThermostatChange c) {
+        List<String> fields = fields(c);
+        boolean schedule = c.getActorType() == ThermostatChange.ActorType.ECOBEE
+                && !ThermostatChangeRecorder.byPerson(fields, c.getPresetMode());
         return new ThermostatChangeResponse(iso(c.getChangedAt()),
-                c.getActorType().name().toLowerCase(), c.getActorName(), c.getActorUserId(),
-                Arrays.asList(c.getChangedFields().split(",")),
+                schedule ? "schedule" : c.getActorType().name().toLowerCase(),
+                schedule ? "ecobee schedule" : c.getActorName(), c.getActorUserId(),
+                fields,
                 c.getHvacMode(), c.getPresetMode(),
                 c.getTargetTemperature(), c.getHeatSetpoint(), c.getCoolSetpoint());
+    }
+
+    private static List<String> fields(ThermostatChange c) {
+        return Arrays.asList(c.getChangedFields().split(","));
     }
 
     private static ThermostatReadingResponse toReading(ThermostatReading r) {

@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.ThermostatResponse;
 import com.homeplatform.homeassistant.HomeAssistantException;
+import com.homeplatform.dto.ThermostatActivityResponse;
 import com.homeplatform.dto.ThermostatChangeResponse;
 import com.homeplatform.homeassistant.HomeDeviceService;
 import com.homeplatform.homeassistant.ThermostatChangeRecorder;
@@ -137,6 +138,21 @@ class HomeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].actor").value("ecobee"))
                 .andExpect(jsonPath("$[0].fields[0]").value("setpoint"));
+    }
+
+    @Test
+    @DisplayName("the activity log is for members, not guests, and isn't taken for a thermostat id")
+    void activity() throws Exception {
+        when(service.activity(7)).thenReturn(List.of(new ThermostatActivityResponse(ID, "Upstairs",
+                new ThermostatChangeResponse("2026-11-05T20:27:00Z", "ecobee", "ecobee", null,
+                        List.of("setpoint", "preset"), "cool", "temp", 72.0, null, 72.0))));
+        mvc.perform(get("/api/home/thermostats/activity").param("days", "7").requestAttr("role", "GUEST"))
+                .andExpect(status().isForbidden());
+        mvc.perform(get("/api/home/thermostats/activity").param("days", "7").requestAttr("role", "USER"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].thermostat").value("Upstairs"))
+                .andExpect(jsonPath("$[0].change.actor").value("ecobee"));
+        verify(service, never()).getThermostat("activity");
     }
 
     @Test

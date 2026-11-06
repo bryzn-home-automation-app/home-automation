@@ -1,6 +1,6 @@
 import axios from 'axios';
 import api from './client';
-import type { Thermostat, ThermostatReading } from '../types';
+import type { Thermostat, ThermostatActivity, ThermostatReading } from '../types';
 
 /** All enabled thermostats, by name. 503 when Home Assistant isn't connected. */
 export async function fetchThermostats(): Promise<Thermostat[]> {
@@ -15,6 +15,12 @@ export async function fetchThermostatHistory(id: string, hours: number): Promise
   const res = await api.get<ThermostatReading[]>(`/home/thermostats/${encodeURIComponent(id)}/history`, {
     params: { from: from.toISOString(), to: to.toISOString() },
   });
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/** Changes people made to any thermostat in the last `days`, newest first (not ecobee's schedule). */
+export async function fetchThermostatActivity(days: number): Promise<ThermostatActivity[]> {
+  const res = await api.get<ThermostatActivity[]>('/home/thermostats/activity', { params: { days } });
   return Array.isArray(res.data) ? res.data : [];
 }
 

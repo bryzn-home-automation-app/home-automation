@@ -1,4 +1,4 @@
-import type { Thermostat, ThermostatChange } from '../types';
+import type { Thermostat, ThermostatActivity, ThermostatChange } from '../types';
 
 // Presentation helpers for the Climate tab. Kept free of React so they can be
 // unit-tested directly (see src/test/thermostat.test.tsx).
@@ -223,15 +223,39 @@ export function formatWhen(iso: string, now = new Date()): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-/** "Set by you · 2:14 PM", "Set by Bryan · …", "Set at ecobee · …", "Set by Home Assistant · …". */
+/** "Set by you · 2:14 PM", "Set by Bryan · …", "Set at ecobee · …", "Set by schedule · …", "Set by Home Assistant · …". */
 export function attributionText(change: ThermostatChange, currentUserId: number | null | undefined, now = new Date()): string {
   const when = formatWhen(change.at, now);
   let who: string;
   if (change.actor === 'ecobee') who = 'Set at ecobee';
+  else if (change.actor === 'schedule') who = 'Set by schedule';
   else if (change.actor === 'home_assistant') who = 'Set by Home Assistant';
   else if (currentUserId != null && change.byUserId === currentUserId) who = 'Set by you';
   else who = `Set by ${change.by}`;
   return when ? `${who} · ${when}` : who;
+}
+
+/**
+ * One line for the activity log: "Downstairs set to 71° at the thermostat",
+ * "Upstairs switched to Heat, 68° by Bryan", "Upstairs switched to Away until resumed in Home Assistant".
+ */
+export function activityText(a: ThermostatActivity): string {
+  const c = a.change;
+  const range = c.hvacMode === 'heat_cool' || c.hvacMode === 'auto';
+  const temp = range
+    ? c.heatSetpoint != null && c.coolSetpoint != null ? `${formatTemp(c.heatSetpoint)}–${formatTemp(c.coolSetpoint)}°` : null
+    : c.targetTemperature != null ? `${formatTemp(c.targetTemperature)}°` : null;
+  const withTemp = (s: string) => (temp ? `${s}, ${temp}` : s);
+  let what: string;
+  if (c.fields.includes('mode')) what = c.hvacMode === 'off' ? 'turned off' : withTemp(`switched to ${modeLabel(c.hvacMode)}`);
+  else if (c.fields.includes('preset') && c.presetMode !== 'temp') what = withTemp(`switched to ${presetLabel(c.presetMode)}`);
+  else what = temp ? `set to ${temp}` : 'adjusted';
+  let who: string;
+  if (c.actor === 'ecobee') who = 'at the thermostat';
+  else if (c.actor === 'schedule') who = 'by the schedule';
+  else if (c.actor === 'home_assistant') who = 'in Home Assistant';
+  else who = `by ${c.by}`;
+  return `${a.thermostat} ${what} ${who}`;
 }
 
 /** How long after another person's change we ask before overriding it. */

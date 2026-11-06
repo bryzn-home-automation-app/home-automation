@@ -65,6 +65,14 @@ public class HomeController {
         return service.listThermostats();
     }
 
+    /** Changes people made to any thermostat lately (not ecobee's schedule), newest first. */
+    @GetMapping("/thermostats/activity")
+    public List<ThermostatActivityResponse> activity(@RequestParam(defaultValue = "30") int days,
+                                                     HttpServletRequest request) {
+        requireMember(request);
+        return service.activity(days);
+    }
+
     @GetMapping("/thermostats/{id}")
     public ThermostatResponse thermostat(@PathVariable String id, HttpServletRequest request) {
         requireAnyRole(request);

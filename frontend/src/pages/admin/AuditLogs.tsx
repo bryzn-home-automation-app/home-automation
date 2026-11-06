@@ -1,15 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchAllUsers, fetchGuestSessions } from '../../api/auth';
+import { fetchThermostatActivity } from '../../api/climate';
 import { useMemo } from 'react';
 import VirtualizedList from '../../components/VirtualizedList';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
+import { activityText } from '../../utils/thermostat';
 
 const LOG_ROW_HEIGHT = 52;
+/** Phones: badge and time on one line, the description under them. */
+const LOG_ROW_HEIGHT_NARROW = 76;
 const LOG_LIST_HEIGHT = 576; // matches the old max-h-[36rem]
+/** How far back thermostat changes go in the feed. */
+const THERMOSTAT_DAYS = 30;
 
 interface LogEntry {
   id: string;
   timestamp: string;
-  type: 'login' | 'register' | 'approved' | 'disabled' | 'role_change' | 'guest_connect' | 'guest_expire' | 'denied';
+  type: 'login' | 'register' | 'approved' | 'disabled' | 'role_change' | 'guest_connect' | 'guest_expire' | 'denied' | 'thermostat';
   description: string;
   actor: string;
 }
@@ -17,6 +24,11 @@ interface LogEntry {
 function useActivityLog() {
   const users = useQuery({ queryKey: ['admin-users'], queryFn: fetchAllUsers });
   const sessions = useQuery({ queryKey: ['admin-guest-sessions'], queryFn: fetchGuestSessions });
+  const thermostats = useQuery({
+    queryKey: ['thermostat-activity', THERMOSTAT_DAYS],
+    queryFn: () => fetchThermostatActivity(THERMOSTAT_DAYS),
+    refetchInterval: 60_000,
+  });
 
   const logs = useMemo(() => {
     const logs: LogEntry[] = [];
@@ -53,8 +65,18 @@ function useActivityLog() {
       });
     }
 
+    for (const a of (thermostats.data ?? [])) {
+      logs.push({
+        id: `thermostat-${a.thermostatId}-${a.change.at}`,
+        timestamp: a.change.at,
+        type: 'thermostat',
+        description: activityText(a),
+        actor: a.change.by,
+      });
+    }
+
     return logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  }, [users.data, sessions.data]);
+  }, [users.data, sessions.data, thermostats.data]);
 
   return { logs, loading: users.isLoading };
 }
@@ -68,6 +90,7 @@ const typeColors: Record<string, string> = {
   role_change: 'border-purple-300/20 bg-purple-300/10 text-purple-200',
   guest_connect: 'border-cyan-300/20 bg-cyan-300/10 text-cyan-200',
   guest_expire: 'border-appborder bg-appinset text-apptext-muted',
+  thermostat: 'border-orange-300/20 bg-orange-300/10 text-orange-200',
 };
 
 const typeLabels: Record<string, string> = {
@@ -79,10 +102,13 @@ const typeLabels: Record<string, string> = {
   role_change: 'Role Changed',
   guest_connect: 'Guest Joined',
   guest_expire: 'Guest Expired',
+  thermostat: 'Thermostat',
 };
 
 export default function AuditLogs() {
   const { logs, loading } = useActivityLog();
+  const narrow = useMediaQuery('(max-width: 639px)');
+  const rowHeight = narrow ? LOG_ROW_HEIGHT_NARROW : LOG_ROW_HEIGHT;
 
   return (
     <div className="space-y-6 sm:space-y-7">
@@ -96,7 +122,8 @@ export default function AuditLogs() {
               Activity &amp; Audit Logs
             </h2>
             <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
-              Track user logins, account events, guest activity, and administrative actions across the platform.
+              Track user logins, account events, guest activity, and administrative actions across the platform,
+              plus every time someone changes a thermostat: in this app, or by hand at the thermostat or in the ecobee app.
             </p>
           </div>
 
@@ -128,29 +155,40 @@ export default function AuditLogs() {
         ) : (
           <VirtualizedList
             items={logs}
-            height={Math.min(LOG_LIST_HEIGHT, logs.length * LOG_ROW_HEIGHT)}
-            itemHeight={LOG_ROW_HEIGHT}
+            height={Math.min(LOG_LIST_HEIGHT, logs.length * rowHeight)}
+            itemHeight={rowHeight}
             overscan={6}
             className="pr-1"
-            renderItem={(entry) => (
-              <div
-                key={entry.id}
-                style={{ height: LOG_ROW_HEIGHT - 8, boxSizing: 'border-box' }}
-                className="mb-2 flex items-center justify-between gap-4 overflow-hidden rounded-2xl border border-appborder-light bg-appinset px-4 py-3 transition-colors hover:border-appborder"
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
-                    {typeLabels[entry.type] ?? entry.type}
-                  </span>
-                  <span className="truncate text-sm text-apptext-soft">{entry.description}</span>
-                </div>
+            renderItem={(entry) => {
+              const badge = (
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] whitespace-nowrap ${typeColors[entry.type] ?? 'border-appborder bg-appinset text-apptext-muted'}`}>
+                  {typeLabels[entry.type] ?? entry.type}
+                </span>
+              );
+              const description = (
+                <span className="truncate text-sm text-apptext-soft" title={entry.description}>{entry.description}</span>
+              );
+              const time = (
                 <span className="shrink-0 text-xs text-apptext-muted tabular-nums whitespace-nowrap">
                   {new Date(entry.timestamp).toLocaleDateString('en-US', {
                     month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
                   })}
                 </span>
-              </div>
-            )}
+              );
+              const row = 'mb-2 flex overflow-hidden rounded-2xl border border-appborder-light bg-appinset px-4 transition-colors hover:border-appborder';
+              // A phone has no room for badge, text and time on one line, so the text gets its own.
+              return narrow ? (
+                <div key={entry.id} style={{ height: rowHeight - 8, boxSizing: 'border-box' }} className={`${row} flex-col justify-center gap-1.5 py-2`}>
+                  <div className="flex items-center justify-between gap-3">{badge}{time}</div>
+                  {description}
+                </div>
+              ) : (
+                <div key={entry.id} style={{ height: rowHeight - 8, boxSizing: 'border-box' }} className={`${row} items-center justify-between gap-4 py-3`}>
+                  <div className="flex min-w-0 items-center gap-3">{badge}{description}</div>
+                  {time}
+                </div>
+              );
+            }}
           />
         )}
       </section>

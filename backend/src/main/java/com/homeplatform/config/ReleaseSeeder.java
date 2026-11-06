@@ -37,6 +37,14 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.8.1", "stable", LocalDate.of(2026, 11, 6),
+                    "Thermostat changes in the log, recordings fix",
+                    "See who changed a thermostat and when, and get back out of a recording on a phone.",
+                    List.of(
+                            change("new", "The admin Logs page lists every thermostat change someone made: at the thermostat, in the ecobee app, or in this app."),
+                            change("improved", "A thermostat card says \"Set by schedule\" when ecobee's schedule changed it, instead of \"Set at ecobee\"."),
+                            change("fixed", "On a phone, a recording now has a close button you can reach, and the back gesture closes it instead of leaving Cameras."),
+                            change("fixed", "A change made in this app was recorded twice."))),
             define("1.8.0", "stable", LocalDate.of(2026, 11, 5),
                     "Weather alerts",
                     "Choose the weather you want a heads-up about, when to check, and what counts.",

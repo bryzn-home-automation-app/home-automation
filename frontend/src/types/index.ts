@@ -541,11 +541,12 @@ export interface Thermostat {
 /**
  * Who changed a thermostat and to what (values are the state after the change).
  * actor: `app` = a user of this app (`by` = display name, `byUserId` = their id),
- * `home_assistant`, or `ecobee` (the thermostat, the ecobee app, or its schedule).
+ * `home_assistant`, `ecobee` (someone at the thermostat or in the ecobee app), or
+ * `schedule` (ecobee on its own: its schedule, Smart Home/Away, a hold ending).
  */
 export interface ThermostatChange {
   at: string;
-  actor: 'app' | 'home_assistant' | 'ecobee';
+  actor: 'app' | 'home_assistant' | 'ecobee' | 'schedule';
   by: string;
   byUserId: number | null;
   fields: Array<'setpoint' | 'mode' | 'preset'>;
@@ -554,6 +555,13 @@ export interface ThermostatChange {
   targetTemperature: number | null;
   heatSetpoint: number | null;
   coolSetpoint: number | null;
+}
+
+/** GET /api/home/thermostats/activity — a change someone made, and to which thermostat. */
+export interface ThermostatActivity {
+  thermostatId: string;
+  thermostat: string;
+  change: ThermostatChange;
 }
 
 /** GET /api/home/thermostats/{id}/history — one stored reading. */

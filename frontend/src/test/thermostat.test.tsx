@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Thermostat, ThermostatChange, ThermostatReading } from '../types';
 import {
+  activityText,
   attributionText,
   clampSetpoint,
   currentSetpoint,
@@ -133,6 +134,24 @@ describe('thermostat helpers', () => {
     expect(attributionText(change({ at, actor: 'ecobee', by: 'ecobee', byUserId: null }), 42, now)).toBe(`Set at ecobee · ${time}`);
     expect(attributionText(change({ at, actor: 'home_assistant', by: 'Home Assistant', byUserId: null }), 42, now))
       .toBe(`Set by Home Assistant · ${time}`);
+    expect(attributionText(change({ at, actor: 'schedule', by: 'ecobee schedule', byUserId: null }), 42, now))
+      .toBe(`Set by schedule · ${time}`);
+  });
+
+  it('says who changed which thermostat to what, for the activity log', () => {
+    const log = (over: Partial<ThermostatChange>, thermostat = 'Downstairs') =>
+      activityText({ thermostatId: 't1', thermostat, change: change(over) });
+    expect(log({ actor: 'ecobee', by: 'ecobee', byUserId: null, fields: ['setpoint', 'preset'], targetTemperature: 71 }))
+      .toBe('Downstairs set to 71° at the thermostat');
+    expect(log({ fields: ['mode', 'setpoint'], hvacMode: 'heat', presetMode: 'home', targetTemperature: 68 }, 'Upstairs'))
+      .toBe('Upstairs switched to Heat, 68° by Bryan');
+    expect(log({ actor: 'ecobee', by: 'ecobee', fields: ['mode'], hvacMode: 'off', targetTemperature: null }))
+      .toBe('Downstairs turned off at the thermostat');
+    expect(log({
+      actor: 'home_assistant', by: 'Home Assistant', fields: ['preset', 'setpoint'], presetMode: 'away_indefinitely', targetTemperature: 78,
+    })).toBe('Downstairs switched to Away until resumed, 78° in Home Assistant');
+    expect(log({ fields: ['setpoint'], hvacMode: 'heat_cool', targetTemperature: null, heatSetpoint: 68, coolSetpoint: 75 }))
+      .toBe('Downstairs set to 68–75° by Bryan');
   });
 
   it('formats when: time today, Yesterday, weekday, then date', () => {
