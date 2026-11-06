@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchCameraRecordings, fetchRecordingThumbnail, fetchRecordingVideo } from '../api/cameras';
 import { errorMessage, errorStatus } from '../api/climate';
 import { FOCUS_RING } from './ThermostatControls';
+import { useBackToClose } from '../hooks/useBackToClose';
+import { useScrollLock } from '../hooks/useScrollLock';
 import {
   RECORDING_DAY_STEPS,
   canPlayHevc,
@@ -83,6 +85,8 @@ function Player({
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
+  useBackToClose(onClose);
+  useScrollLock(true);
 
   useEffect(() => {
     setUrl(null);
@@ -129,18 +133,21 @@ function Player({
     minute: '2-digit',
     second: '2-digit',
   });
-  const stepButton = (dir: 'newer' | 'older', enabled: boolean, label: string, glyph: string) => (
+  const stepButton = (dir: 'newer' | 'older', enabled: boolean, label: string, text: string) => (
     <button
       type="button"
       onClick={() => onStep(dir)}
       disabled={!enabled}
       aria-label={label}
-      className={`h-10 w-10 rounded-full text-lg text-apptext-soft transition-colors hover:bg-appinset disabled:opacity-30 ${FOCUS_RING}`}
+      className={`h-10 rounded-xl px-3 text-sm font-semibold text-apptext-soft transition-colors hover:bg-appinset disabled:opacity-30 ${FOCUS_RING}`}
     >
-      {glyph}
+      {text}
     </button>
   );
 
+  // On a phone the player fills the screen, so its bars clear the notch and the home
+  // indicator (the Home Screen app draws under the status bar). Older/newer sit in the
+  // bottom bar, away from the close button, so neither is mistaken for "back".
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4"
@@ -150,35 +157,22 @@ function Player({
       onClick={onClose}
     >
       <div
-        className="flex h-full w-full flex-col overflow-hidden border border-appborder bg-appsurface-raised sm:h-auto sm:max-w-5xl sm:rounded-[24px]"
+        className="flex h-full w-full flex-col overflow-hidden border-appborder bg-appsurface sm:h-auto sm:max-w-5xl sm:rounded-[24px] sm:border"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-2 border-b border-appborder px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b border-appborder px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-3">
           <div className="min-w-0">
             <h3 className="truncate text-base font-semibold text-apptext">{rec.cameraName}</h3>
             <p className="text-xs text-apptext-muted">{when}</p>
           </div>
-          <div className="flex items-center gap-1">
-            {stepButton('older', hasOlder, 'Older recording', '‹')}
-            {stepButton('newer', hasNewer, 'Newer recording', '›')}
-            {url && (
-              <a
-                href={url}
-                download={recordingFileName(rec)}
-                className={`rounded-lg px-2 py-1.5 text-xs font-medium text-appaccent-text transition-colors hover:bg-appinset ${FOCUS_RING}`}
-              >
-                Download
-              </a>
-            )}
-            <button
-              type="button"
-              onClick={onClose}
-              aria-label="Close"
-              className={`h-10 w-10 rounded-full text-xl text-apptext-soft transition-colors hover:bg-appinset ${FOCUS_RING}`}
-            >
-              ×
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className={`h-11 w-11 shrink-0 rounded-full text-2xl text-apptext-soft transition-colors hover:bg-appinset ${FOCUS_RING}`}
+          >
+            ×
+          </button>
         </div>
         <div className="flex flex-1 items-center justify-center bg-black sm:aspect-video sm:flex-none">
           {error ? (
@@ -207,6 +201,19 @@ function Player({
               Getting the recording from the HomeBase…
             </p>
           )}
+        </div>
+        <div className="flex items-center justify-between gap-2 border-t border-appborder px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:pb-2">
+          {stepButton('older', hasOlder, 'Older recording', '‹ Older')}
+          {url && (
+            <a
+              href={url}
+              download={recordingFileName(rec)}
+              className={`rounded-lg px-3 py-2 text-sm font-medium text-appaccent-text transition-colors hover:bg-appinset ${FOCUS_RING}`}
+            >
+              Download
+            </a>
+          )}
+          {stepButton('newer', hasNewer, 'Newer recording', 'Newer ›')}
         </div>
       </div>
     </div>,

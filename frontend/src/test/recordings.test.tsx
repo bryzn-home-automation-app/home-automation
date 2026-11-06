@@ -98,6 +98,25 @@ describe('<CameraRecordings>', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it("closes on the phone's back gesture, and the close button takes its history entry with it", async () => {
+    api.recordings = [rec('1', new Date().toISOString())];
+    renderView();
+
+    fireEvent.click(await screen.findByRole('button', { name: /Front · 0:20/ }));
+    await screen.findByRole('dialog');
+    await waitFor(() => expect(window.history.state?.overlay).toBeTruthy());
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(window.history.state?.overlay).toBeUndefined();
+
+    fireEvent.click(screen.getByRole('button', { name: /Front · 0:20/ }));
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => expect(window.history.state?.overlay).toBeTruthy());
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await waitFor(() => expect(window.history.state?.overlay).toBeUndefined());
+  });
+
   it('says when there are none, and reaches further back on request', async () => {
     renderView();
     expect(await screen.findByText('No recordings in the last 7 days.')).toBeInTheDocument();
