@@ -7,6 +7,7 @@ import UserEditModal from '../components/profile/UserEditModal';
 import ThemePicker from '../components/ThemePicker';
 import PushSettings from '../components/PushSettings';
 import AlertTypeSettings from '../components/AlertTypeSettings';
+import WeatherAlertSettings from '../components/WeatherAlertSettings';
 import LinkDeviceCard from '../components/LinkDeviceCard';
 
 export default function ProfilePage() {
@@ -84,6 +85,7 @@ export default function ProfilePage() {
       <ThemePicker />
       <PushSettings />
       <AlertTypeSettings />
+      <WeatherAlertSettings />
       <LinkDeviceCard />
 
       {/* Edit modal */}

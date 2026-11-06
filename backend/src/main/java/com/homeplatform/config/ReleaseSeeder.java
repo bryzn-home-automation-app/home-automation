@@ -37,6 +37,16 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.8.0", "stable", LocalDate.of(2026, 11, 5),
+                    "Weather alerts",
+                    "Choose the weather you want a heads-up about, when to check, and what counts.",
+                    List.of(
+                            change("new", "Weather alerts under Profile: rain, thunderstorms, freeze, extreme heat, high wind, and snow or ice."),
+                            change("new", "Each is checked at a time you pick, for the hours you pick. Rain at 8 PM through 8 AM tells you whether to pause the sprinklers."),
+                            change("new", "Set what counts: the chance of rain, how cold, how hot, or how windy."),
+                            change("new", "Official National Weather Service warnings for home (tornado, severe storm, flood and more) as soon as they're issued."),
+                            change("new", "\"Check the forecast now\" shows what an alert would say right now."),
+                            change("fixed", "The phone menu scrolls on its own instead of scrolling the page behind it."))),
             define("1.7.0", "stable", LocalDate.of(2026, 11, 5),
                     "Accurate Roomba history, full-screen cameras, fixes",
                     "Roomba runs now match the iRobot app, cameras go full screen, and a round of reliability and security fixes.",

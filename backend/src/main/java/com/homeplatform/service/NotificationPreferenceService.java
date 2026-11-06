@@ -2,6 +2,7 @@ package com.homeplatform.service;
 
 import com.homeplatform.dto.NotificationPreferenceResponse;
 import com.homeplatform.model.AlertType;
+import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.NotificationPreference;
 import com.homeplatform.repository.NotificationPreferenceRepository;
 import org.springframework.stereotype.Service;
@@ -34,9 +35,18 @@ public class NotificationPreferenceService {
                 .orElseGet(() -> new Effective(type.defaultInApp(), type.defaultInApp() && type.defaultPush()));
     }
 
-    /** {@code users} minus those who turned {@code type} off, in the same order. */
+    /**
+     * {@code users} who get {@code type}, in the same order: everyone but those who turned it
+     * off, or for a type that's off by default (weather), only those who turned it on.
+     */
     public List<Long> wanting(List<Long> users, AlertType type) {
         if (users.isEmpty()) return users;
+        if (!type.defaultInApp()) {
+            Set<Long> on = repo.findByAlertTypeAndInAppTrue(type).stream()
+                    .map(NotificationPreference::getUserId)
+                    .collect(Collectors.toSet());
+            return users.stream().filter(on::contains).toList();
+        }
         Set<Long> off = repo.findByAlertTypeAndInAppFalse(type).stream()
                 .map(NotificationPreference::getUserId)
                 .collect(Collectors.toSet());
@@ -69,10 +79,15 @@ public class NotificationPreferenceService {
         return list(userId).stream().filter(r -> r.type().equals(type.name())).findFirst().orElseThrow();
     }
 
-    /** Back to the defaults for every type. */
+    /**
+     * Back to the defaults for every type on the Alert types card. Weather alerts have their
+     * own card and settings, so they're left as they are.
+     */
     @Transactional
     public List<NotificationPreferenceResponse> reset(Long userId) {
-        repo.deleteAll(repo.findByUserId(userId));
+        repo.deleteAll(repo.findByUserId(userId).stream()
+                .filter(p -> p.getAlertType().category() != Category.WEATHER)
+                .toList());
         return list(userId);
     }
 }

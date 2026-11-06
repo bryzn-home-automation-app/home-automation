@@ -17,4 +17,7 @@ public interface NotificationPreferenceRepository extends JpaRepository<Notifica
 
     /** Everyone who turned this type off — one query for a whole recipient list. */
     List<NotificationPreference> findByAlertTypeAndInAppFalse(AlertType alertType);
+
+    /** Everyone who turned this type on — for types that are off by default. */
+    List<NotificationPreference> findByAlertTypeAndInAppTrue(AlertType alertType);
 }

@@ -468,7 +468,7 @@ CREATE INDEX IF NOT EXISTS idx_guest_sessions_expiry ON guest_sessions (expires_
 CREATE TABLE IF NOT EXISTS notifications (
     id            SERIAL PRIMARY KEY,
     user_id       INTEGER      NOT NULL REFERENCES users(id),
-    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI, CAMERA
+    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI, CAMERA, WEATHER
     severity      VARCHAR(20)  NOT NULL DEFAULT 'INFO',  -- CRITICAL, WARNING, INFO, SUCCESS
     title         VARCHAR(200) NOT NULL,
     message       VARCHAR(1000),
@@ -490,6 +490,33 @@ CREATE TABLE IF NOT EXISTS notification_preferences (
     push        BOOLEAN     NOT NULL,
     updated_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
     UNIQUE (user_id, alert_type)
+);
+
+-- Weather alerts (opt-in, on/off in notification_preferences): each member's daily
+-- check time, the hours it covers (until_time; the next day when not later than
+-- check_at) and limit. Only adjusted alerts have a row; the rest use the defaults in
+-- WeatherAlertRule.
+CREATE TABLE IF NOT EXISTS weather_alert_settings (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    alert_type  VARCHAR(40) NOT NULL,
+    check_at    TIME,
+    until_time  TIME,
+    threshold   INTEGER,
+    updated_at  TIMESTAMP   NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, alert_type)
+);
+
+-- Each weather check made, so it's made once: a daily forecast check keyed by its
+-- check time ("2026-11-05T20:00"), an NWS warning by its id. sent = it became an alert.
+CREATE TABLE IF NOT EXISTS weather_alert_log (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER      NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    alert_type  VARCHAR(40)  NOT NULL,
+    alert_key   VARCHAR(255) NOT NULL,
+    sent        BOOLEAN      NOT NULL,
+    created_at  TIMESTAMP    NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, alert_type, alert_key)
 );
 
 -- ============================================================

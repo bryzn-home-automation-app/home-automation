@@ -36,6 +36,8 @@ class NotificationPreferenceServiceTest {
                 .filter(r -> r.getUserId().equals(i.getArgument(0)) && r.getAlertType() == i.getArgument(1)).findFirst());
         when(repo.findByAlertTypeAndInAppFalse(any())).thenAnswer(i -> rows.stream()
                 .filter(r -> r.getAlertType() == i.getArgument(0) && !r.isInApp()).toList());
+        when(repo.findByAlertTypeAndInAppTrue(any())).thenAnswer(i -> rows.stream()
+                .filter(r -> r.getAlertType() == i.getArgument(0) && r.isInApp()).toList());
         when(repo.save(any())).thenAnswer(i -> {
             NotificationPreference p = i.getArgument(0);
             if (!rows.contains(p)) rows.add(p);
@@ -81,6 +83,22 @@ class NotificationPreferenceServiceTest {
         prefs.reset(1L);
         assertTrue(prefs.effective(1L, AlertType.PERSON_DETECTED).inApp());
         assertFalse(prefs.effective(1L, AlertType.ENERGY_DAILY).push());
+    }
+
+    @Test
+    @DisplayName("weather alerts are opt-in: only members who turned one on get it, and reset leaves them alone")
+    void weatherOptIn() {
+        assertFalse(prefs.effective(1L, AlertType.WEATHER_RAIN).inApp());
+        assertEquals(List.of(), prefs.wanting(List.of(1L, 2L), AlertType.WEATHER_RAIN));
+
+        prefs.update(2L, AlertType.WEATHER_RAIN, true, true);
+        assertEquals(List.of(2L), prefs.wanting(List.of(1L, 2L, 3L), AlertType.WEATHER_RAIN));
+        assertEquals(new NotificationPreferenceService.Effective(true, true), prefs.effective(2L, AlertType.WEATHER_RAIN));
+
+        prefs.update(2L, AlertType.PERSON_DETECTED, false, false);
+        prefs.reset(2L);
+        assertTrue(prefs.effective(2L, AlertType.PERSON_DETECTED).inApp(), "the Alert types card is back to its defaults");
+        assertTrue(prefs.effective(2L, AlertType.WEATHER_RAIN).inApp(), "weather alerts have their own card");
     }
 
     @Test

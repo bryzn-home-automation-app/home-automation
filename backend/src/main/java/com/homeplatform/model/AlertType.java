@@ -6,7 +6,8 @@ import com.homeplatform.model.Notification.Category;
  * Every kind of alert the app sends, which members can turn on or off (and choose
  * whether it reaches their phone) under Profile → Alert types. The defaults are what
  * happened before there were settings: everything in the Alerts list, and camera
- * alerts plus Roomba errors on the phone.
+ * alerts plus Roomba errors on the phone. Weather alerts came later and are opt-in
+ * (Profile → Weather alerts).
  */
 public enum AlertType {
     PERSON_DETECTED(Category.CAMERA, "Person outside", "Someone seen by an outdoor camera", true, true),
@@ -20,7 +21,16 @@ public enum AlertType {
     ROOMBA_DONE(Category.ROOMBA, "Cleaning complete", "A cleaning run finished", true, false),
     ENERGY_DAILY(Category.ELECTRICAL, "Daily usage report", "Yesterday's electricity use", true, false),
     ENERGY_SPIKE(Category.ELECTRICAL, "Usage spikes", "A day 30% above average, or an hour over 5 kWh", true, false),
-    ENERGY_BILL(Category.ELECTRICAL, "Monthly bill estimate", "Early each month", true, false);
+    ENERGY_BILL(Category.ELECTRICAL, "Monthly bill estimate", "Early each month", true, false),
+    // Weather alerts are off until a member turns them on, each with its own times and
+    // limit (WeatherAlertRule). Turning one on sends it to the phone too.
+    WEATHER_RAIN(Category.WEATHER, "Rain", "Rain likely in the hours you pick, e.g. overnight, so you can pause the sprinklers", false, true),
+    WEATHER_NWS(Category.WEATHER, "Weather warnings", "Official National Weather Service warnings for home, as soon as they're issued", false, true),
+    WEATHER_STORMS(Category.WEATHER, "Thunderstorms", "Thunderstorms in the forecast", false, true),
+    WEATHER_FREEZE(Category.WEATHER, "Freeze", "Temperatures at or below your limit: pipes, plants, sprinklers", false, true),
+    WEATHER_HEAT(Category.WEATHER, "Extreme heat", "A high at or above your limit", false, true),
+    WEATHER_WIND(Category.WEATHER, "High wind", "Gusts at or above your limit", false, true),
+    WEATHER_WINTER(Category.WEATHER, "Snow or ice", "Snow, sleet or freezing rain in the forecast", false, true);
 
     private final Category category;
     private final String label;

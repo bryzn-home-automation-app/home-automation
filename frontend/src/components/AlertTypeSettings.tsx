@@ -18,7 +18,7 @@ const GROUPS: { category: AlertTypePreference['category']; title: string }[] = [
   { category: 'ELECTRICAL', title: 'Electricity' },
 ];
 
-function Switch({
+export function Switch({
   on,
   disabled,
   label,
@@ -91,7 +91,8 @@ export default function AlertTypeSettings() {
 
   if (isGuest) return null;
 
-  const list = query.data ?? [];
+  // Weather alerts have their own card (WeatherAlertSettings) and aren't part of this reset.
+  const list = (query.data ?? []).filter((r) => GROUPS.some((g) => g.category === r.category));
   const changed = list.some((r) => r.inApp !== r.defaultInApp || r.push !== (r.defaultInApp && r.defaultPush));
 
   return (

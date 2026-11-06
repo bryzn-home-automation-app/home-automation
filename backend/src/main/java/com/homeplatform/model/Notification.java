@@ -48,7 +48,8 @@ public class Notification {
         WATER,
         ROOMBA,
         WIFI,
-        CAMERA
+        CAMERA,
+        WEATHER
     }
 
     public enum Severity {

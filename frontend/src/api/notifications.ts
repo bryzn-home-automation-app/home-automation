@@ -3,7 +3,7 @@ import api from './client';
 export interface Notification {
   id: number;
   userId: number;
-  category: 'ELECTRICAL' | 'GAS' | 'WATER' | 'ROOMBA' | 'CAMERA' | 'WIFI';
+  category: 'ELECTRICAL' | 'GAS' | 'WATER' | 'ROOMBA' | 'CAMERA' | 'WIFI' | 'WEATHER';
   severity: 'CRITICAL' | 'WARNING' | 'INFO' | 'SUCCESS';
   title: string;
   message: string;
