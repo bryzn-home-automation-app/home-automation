@@ -1,0 +1,45 @@
+package com.homeplatform.config;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.context.annotation.Profile;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Component;
+
+import java.util.List;
+
+/**
+ * Drops the CHECK constraints Hibernate wrote on {@code alert_type} columns. When it creates a
+ * table it lists the enum's values at that moment ({@code alert_type IN ('PERSON_DETECTED', ...)}),
+ * and {@code ddl-auto: update} never revises the list, so every alert type added later was
+ * refused: turning on a weather alert, or the indoor-camera alerts, failed with a constraint
+ * violation. The column is only ever written from {@code AlertType}, so the list guards nothing.
+ * Runs on every start; dropping a constraint that's already gone is a no-op.
+ */
+@Component
+@Profile("!test")
+public class AlertTypeConstraintMigration implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(AlertTypeConstraintMigration.class);
+
+    static final List<String> TABLES = List.of("notification_preferences", "weather_alert_settings", "weather_alert_log");
+
+    private final JdbcTemplate jdbc;
+
+    public AlertTypeConstraintMigration(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
+    }
+
+    @Override
+    public void run(ApplicationArguments args) {
+        for (String table : TABLES) {
+            try {
+                jdbc.execute("ALTER TABLE IF EXISTS " + table + " DROP CONSTRAINT IF EXISTS " + table + "_alert_type_check");
+            } catch (Exception e) {
+                log.warn("Couldn't drop the alert_type check on {}: {}", table, e.getMessage());
+            }
+        }
+    }
+}
