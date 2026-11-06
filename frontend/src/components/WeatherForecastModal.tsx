@@ -5,6 +5,7 @@ import {
 import type { WeatherHour, WeatherCurrent } from '../types';
 import { getWeatherEmojiForHour, getWeatherCodeDescription } from '../utils/weather';
 import { nextHours, hourOf, hourLabel, dayLabel } from './WeatherForecast';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 // The 24-hour forecast modal, split from WeatherForecast so recharts (~110 KB gz)
 // loads only when someone opens it, not with the Home page's forecast strip.
@@ -21,6 +22,7 @@ export default function ForecastModal({
   current: WeatherCurrent | null;
   onClose: () => void;
 }) {
+  useScrollLock(true);
   const hours = useMemo(() => nextHours(hourly, 24), [hourly]);
 
   const chartData = useMemo(
@@ -45,7 +47,7 @@ export default function ForecastModal({
     // dark overlay is effectively free. Also a single flex-column layout with
     // ONE inner scroll region (the list) instead of nested scroll containers.
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 modal-overlay"
       onClick={onClose}
       role="dialog"
       aria-modal="true"

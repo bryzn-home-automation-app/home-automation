@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { cleanRoombaRooms, fetchRoombaCommands, sendRoombaCommand } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const SUCTION: { value: string; label: string }[] = [
   { value: '', label: 'Robot default' },
@@ -41,6 +42,7 @@ interface Props {
  * use the same confirmed region-clean path (one region per room).
  */
 export default function CleanModal({ rooms, onClose }: Props) {
+  useScrollLock(true);
   const [scope, setScope] = useState<'all' | 'select'>('all');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [suction, setSuction] = useState('');
@@ -114,7 +116,7 @@ export default function CleanModal({ rooms, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Start a clean"

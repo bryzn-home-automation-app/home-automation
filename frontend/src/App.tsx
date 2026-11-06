@@ -396,8 +396,9 @@ export default memo(function App() {
       />
       {/* Bottom padding clears the fixed phone/tablet nav (hidden at lg), which
           grows by the iOS safe-area inset via its pb-safe. Only top padding is
-          responsive: a py-* here would override the bottom value from sm up. */}
-      <div className="w-full px-2 pt-2 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-5 lg:px-6 lg:pt-6 lg:pb-0 2xl:px-8">
+          responsive: a py-* here would override the bottom value from sm up.
+          The top keeps clear of the status bar the Home Screen app draws over. */}
+      <div className="w-full px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))] lg:px-6 lg:pt-[max(1.5rem,env(safe-area-inset-top))] lg:pb-0 2xl:px-8">
         <div
           className="absolute inset-x-0 top-0 -z-10 h-[32rem]"
           style={{

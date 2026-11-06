@@ -11,7 +11,8 @@ import { useAuth } from '../context/AuthContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import VirtualizedList from '../components/VirtualizedList';
 
-const ROW_HEIGHT = 128;
+/** Title line + two-line message + category line, with a few px to spare (rows clip). */
+const ROW_HEIGHT = 132;
 const LIST_HEIGHT = 640; // matches the old max-h-[40rem]
 
 const CATEGORIES = [
@@ -77,7 +78,7 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
 
   return (
     <div
-      className={`flex items-start gap-4 rounded-2xl border px-5 py-4 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-appaccent ${
+      className={`flex items-start gap-4 overflow-hidden rounded-2xl border px-5 py-3 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-appaccent ${
         n.isRead ? '' : 'cursor-pointer'
       } ${
         n.isRead
@@ -105,13 +106,13 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
 
       {/* Content */}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-apptext">{n.title}</span>
-          <span className={`rounded-full border px-2 py-0 text-3xs font-semibold uppercase tracking-[0.1em] ${severityColors[n.severity] ?? ''}`}>
-            {n.severity}
-          </span>
+        {/* One line, like the clamped message below: a phone used to wrap a long title
+            or the badge onto a second line, and the row spilled over the next one. The
+            severity sits on the bottom line so the title gets the full width. */}
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-sm font-semibold text-apptext" title={n.title}>{n.title}</span>
           {!n.isRead && (
-            <span className="inline-flex h-2 w-2 rounded-full bg-appaccent" />
+            <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-appaccent" />
           )}
         </div>
         {n.message && (
@@ -121,6 +122,9 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
           <p className="mt-1 line-clamp-2 text-sm text-apptext-soft leading-5">{n.message}</p>
         )}
         <div className="mt-2 flex items-center gap-3 text-xs text-apptext-dim">
+          <span className={`shrink-0 rounded-full border px-2 py-0 text-3xs font-semibold uppercase tracking-[0.1em] ${severityColors[n.severity] ?? ''}`}>
+            {n.severity}
+          </span>
           <span className="inline-flex items-center gap-1">
             {categoryIcons[n.category]} {categoryLabels[n.category]}
           </span>

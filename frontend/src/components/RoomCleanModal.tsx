@@ -3,6 +3,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { cleanRoombaRoom, fetchRoombaCommands } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 import type { RoomSelection } from './RoombaMap';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const SUCTION: { value: string; label: string }[] = [
   { value: '', label: 'Robot default' },
@@ -36,6 +37,7 @@ interface Props {
  * suction level + passes. After enqueueing it watches the command status.
  */
 export default function RoomCleanModal({ room, onClose }: Props) {
+  useScrollLock(true);
   const [suction, setSuction] = useState('');
   const [passes, setPasses] = useState('');
   const [mode, setMode] = useState('');
@@ -80,14 +82,14 @@ export default function RoomCleanModal({ room, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Clean room"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
+        className="modal-panel w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { RoombaRun } from '../types';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 interface Props {
   run: RoombaRun;
@@ -70,6 +71,7 @@ function Row({ label, value, tone }: { label: string; value: string; tone?: 'war
 
 /** Read-only detail view for a single cleaning run. */
 export default function RoomRunDetailModal({ run, onClose }: Props) {
+  useScrollLock(true);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
@@ -102,14 +104,14 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Cleaning run details"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
+        className="modal-panel w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">

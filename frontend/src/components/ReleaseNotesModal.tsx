@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { fetchReleases } from '../api/releases';
 import ReleaseChangeList from './ReleaseChangeList';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 const SEEN_KEY_PREFIX = 'homeos:seenReleaseVersion:';
 
@@ -27,6 +28,7 @@ export default function ReleaseNotesModal() {
   });
 
   const latest = releasesQuery.data?.[0];
+  useScrollLock(open && !!latest);
   const seenKey = user ? `${SEEN_KEY_PREFIX}${user.userId}` : null;
 
   // Decide once per mount (i.e. once per login/app load): open only if the newest
@@ -56,7 +58,7 @@ export default function ReleaseNotesModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="What's New"

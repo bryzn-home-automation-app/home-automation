@@ -5,6 +5,8 @@ import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { fetchBillPdf } from '../api/coservBills';
 import { errorMessage } from '../api/climate';
+import { useBackToClose } from '../hooks/useBackToClose';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 // Firefox for iOS (and some other mobile browsers) doesn't honor the HTML
 // `download` attribute and intercepts direct PDF navigation into a broken
@@ -78,6 +80,8 @@ export default function BillPdfModal({ pdfPath, onClose }: BillPdfModalProps) {
   }, [pdfPath]);
 
   const close = useCallback(() => onClose(), [onClose]);
+  useScrollLock(pdfPath != null);
+  useBackToClose(close, pdfPath != null);
 
   useEffect(() => {
     if (!pdfPath) return;
@@ -106,10 +110,11 @@ export default function BillPdfModal({ pdfPath, onClose }: BillPdfModalProps) {
       onClick={close}
     >
       <div
-        className="flex h-full w-full flex-col overflow-hidden border border-appborder bg-appsurface-raised shadow-[0_20px_60px_var(--appshadow)] sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-3xl sm:rounded-[24px]"
+        className="flex h-full w-full flex-col overflow-hidden border border-appborder bg-appsurface pb-[env(safe-area-inset-bottom)] shadow-[0_20px_60px_var(--appshadow)] sm:h-auto sm:max-h-[90vh] sm:w-full sm:max-w-3xl sm:rounded-[24px] sm:bg-appsurface-raised sm:pb-0"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-appborder p-4">
+        {/* Full screen on a phone: the header clears the notch, the viewer the home indicator. */}
+        <div className="flex items-center justify-between gap-3 border-b border-appborder px-4 pb-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-4">
           <h3 className="text-lg font-semibold tracking-[-0.02em] text-apptext">Bill</h3>
           <div className="flex items-center gap-2">
             <a

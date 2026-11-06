@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useFocusTrap } from '../../hooks/useFocusTrap';
+import { useScrollLock } from '../../hooks/useScrollLock';
 import VirtualizedList from '../../components/VirtualizedList';
 import { startSleepTest } from '../../hooks/useAppSleep';
 import { parseServerTs } from '../../utils/serverTime';
@@ -1177,10 +1178,11 @@ LIMIT 50`);
 function EventDetailModal({ event, onClose }: { event: AppEvent; onClose: () => void }) {
   const panelRef = useRef<HTMLDivElement>(null);
   useFocusTrap(true, panelRef, undefined, onClose);
+  useScrollLock(true);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 modal-overlay"
       onClick={onClose}
     >
       <div

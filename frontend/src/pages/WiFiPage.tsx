@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import QRCode from 'qrcode';
 import { useTheme } from '../context/ThemeContext';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 /** Escape SSID/password special chars per the WIFI: QR payload spec (\, ;, ,, "). */
 function escapeWifiField(value: string): string {
@@ -13,6 +14,7 @@ export default function WiFiPage() {
   const [qrLargeUrl, setQrLargeUrl] = useState<string>('');
   const [copySuccess, setCopySuccess] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
+  useScrollLock(qrModalOpen);
 
   // Read network credentials from build-time env so the real password never
   // lives in source control. Set VITE_WIFI_SSID / VITE_WIFI_PASSWORD (see .env.example).
@@ -163,7 +165,7 @@ export default function WiFiPage() {
       {/* QR Code Modal */}
       {qrModalOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 modal-overlay"
           onClick={() => setQrModalOpen(false)}
           role="dialog"
           aria-label="Enlarged QR code"

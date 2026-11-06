@@ -3,6 +3,7 @@ import Avatar from './Avatar';
 import ColorPicker from './ColorPicker';
 import type { ProfileResponse, ProfileUpdateRequest } from '../../api/auth';
 import { uploadAvatar } from '../../api/auth';
+import { useScrollLock } from '../../hooks/useScrollLock';
 
 interface UserEditModalProps {
   profile: ProfileResponse;
@@ -11,6 +12,7 @@ interface UserEditModalProps {
 }
 
 export default function UserEditModal({ profile, onSave, onClose }: UserEditModalProps) {
+  useScrollLock(true);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [phone, setPhone] = useState(profile.phone || '');
   const [accentColor, setAccentColor] = useState(profile.accentColor);
@@ -64,11 +66,11 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 modal-overlay"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8"
+        className="modal-panel w-full max-w-md rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-6 flex items-center justify-between">

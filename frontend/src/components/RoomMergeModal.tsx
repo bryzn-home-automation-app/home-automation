@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { mergeRoombaRooms, fetchRoombaCommands } from '../api/roomba';
 import { jitteredInterval } from '../hooks/useJitteredInterval';
 import type { RoomSelection } from './RoombaMap';
+import { useScrollLock } from '../hooks/useScrollLock';
 
 interface Props {
   rooms: RoomSelection[];
@@ -15,6 +16,7 @@ interface Props {
  * enqueueing it watches the command status and refreshes the floor plan when done.
  */
 export default function RoomMergeModal({ rooms, onClose }: Props) {
+  useScrollLock(true);
   const qc = useQueryClient();
   const [ack, setAck] = useState(false);
   const [commandId, setCommandId] = useState<number | null>(null);
@@ -66,14 +68,14 @@ export default function RoomMergeModal({ rooms, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay"
       role="dialog"
       aria-modal="true"
       aria-label="Merge rooms"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
+        className="modal-panel w-full max-w-md rounded-[24px] border border-appborder bg-appsurface-raised p-6 shadow-[0_20px_60px_var(--appshadow)]"
         onClick={(e) => e.stopPropagation()}
       >
         <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">

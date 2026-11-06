@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme, KPI_TONES, hexToRgba } from '../context/ThemeContext';
 import VirtualizedList from '../components/VirtualizedList';
 import { useMediaQuery } from '../hooks/useMediaQuery';
+import { useScrollLock } from '../hooks/useScrollLock';
 import { parseLocalDate } from '../utils/localDate';
 
 const DESKTOP_MEDIA_QUERY = '(min-width: 1024px)'; // matches this file's own lg: breakpoint usage
@@ -325,12 +326,13 @@ function DetailModal({ r, onClose, onEdit, onDelete }: {
   });
 
   useEscapeClose(onClose);
+  useScrollLock(true);
 
   const photos = [...parseList(r.photosBefore), ...parseList(r.photosDuring), ...parseList(r.photosAfter)];
   const docs = parseList(r.documents);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[5vh] overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[max(5vh,env(safe-area-inset-top))] overflow-y-auto overscroll-contain" onClick={onClose}>
       <div className="my-8 w-full max-w-2xl rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8" onClick={(e) => e.stopPropagation()}>
         {/* Header */}
         <div className="mb-6 flex items-start justify-between gap-4">
@@ -520,6 +522,7 @@ function FormModal({ editing, onClose, onSuccess }: {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   useEscapeClose(onClose);
+  useScrollLock(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -585,7 +588,7 @@ function FormModal({ editing, onClose, onSuccess }: {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[3vh] overflow-y-auto" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-[max(3vh,env(safe-area-inset-top))] overflow-y-auto overscroll-contain" onClick={onClose}>
       <div className="my-4 w-full max-w-xl rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8" onClick={(e) => e.stopPropagation()}>
         <div className="mb-6 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-apptext">{editing ? 'Edit Record' : 'Add Maintenance'}</h3>
