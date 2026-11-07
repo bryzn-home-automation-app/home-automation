@@ -127,6 +127,7 @@ export default memo(function App() {
     '/admin/logs': { eyebrow: 'Admin', title: 'Audit Logs' },
     '/admin/usage': { eyebrow: 'Admin', title: 'Usage', subtitle: 'Which tabs house members use the most.' },
     '/admin/presence': { eyebrow: 'Admin', title: "Who's Home", subtitle: 'From the phones on the home Wi-Fi.' },
+    '/admin/nuc': { eyebrow: 'Admin', title: 'NUC Health', subtitle: 'The home server itself: load, storage, temperature and restarts.' },
   };
   const pageHeader =
     PAGE_HEADERS[pathname] ??
@@ -200,6 +201,7 @@ export default memo(function App() {
     { path: '/admin/logs', label: 'Logs', icon: '📋', end: false },
     { path: '/admin/usage', label: 'Usage', icon: '📊', end: false },
     { path: '/admin/presence', label: "Who's Home", icon: '🏡', end: false },
+    { path: '/admin/nuc', label: 'NUC Health', icon: '🖥️', end: false },
   ];
 
   // ── Sidebar content (shared between desktop and mobile overlay) ──

@@ -37,6 +37,15 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.9.0", "stable", LocalDate.of(2026, 11, 7),
+                    "NUC Health",
+                    "A new admin page that keeps an eye on the NUC itself: how busy, how full, how hot, and whether it restarted.",
+                    List.of(
+                            change("new", "Admin → NUC Health shows the NUC's processor, memory, drive, temperatures and Wi-Fi now, and over the last day, week or month."),
+                            change("new", "It lists each app container with the memory it uses, and the programs working the NUC hardest."),
+                            change("new", "Problems are spelled out: a drive filling up, Docker not responding, running hot, set to sleep, or Windows waiting to restart."),
+                            change("new", "Admins are told when the NUC restarts, and whether it crashed or lost power, and when a problem lasts."),
+                            change("fixed", "Water bills come in again: the Gmail sign-in no longer runs out every week."))),
             define("1.8.1", "stable", LocalDate.of(2026, 11, 6),
                     "Thermostat changes in the log, phone fixes",
                     "See who changed a thermostat and when, and a round of fixes for pop-ups on a phone.",

@@ -41,6 +41,7 @@ const AuditLogs = lazy(() => import('./pages/admin/AuditLogs'));
 const DebugDashboard = lazy(() => import('./pages/admin/DebugDashboard'));
 const TabUsage = lazy(() => import('./pages/admin/TabUsage'));
 const WhosHome = lazy(() => import('./pages/admin/WhosHome'));
+const NucHealth = lazy(() => import('./pages/admin/NucHealth'));
 
 /**
  * Lazily-loaded route wrapper. Renders a shape-matched `PageSkeleton` until
@@ -82,6 +83,7 @@ const AuditLogsRoute = lazyRoute(AuditLogs, 'list');
 const DebugDashboardRoute = lazyRoute(DebugDashboard, 'default');
 const TabUsageRoute = lazyRoute(TabUsage, 'list');
 const WhosHomeRoute = lazyRoute(WhosHome, 'list');
+const NucHealthRoute = lazyRoute(NucHealth, 'stats-charts');
 
 // Phone alerts: the worker only handles pushes (no caching), registered up front on HTTPS.
 registerServiceWorker();
@@ -132,6 +134,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                     <Route path="admin/debug" element={<DebugDashboardRoute />} />
                     <Route path="admin/usage" element={<TabUsageRoute />} />
                     <Route path="admin/presence" element={<WhosHomeRoute />} />
+                    <Route path="admin/nuc" element={<NucHealthRoute />} />
                   </Route>
                 </Route>
               </Route>

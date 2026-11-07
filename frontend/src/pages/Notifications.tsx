@@ -24,6 +24,8 @@ const CATEGORIES = [
   { key: 'CAMERA', label: 'Cameras', icon: '📷' },
   { key: 'WIFI', label: 'WiFi', icon: '📶' },
   { key: 'WEATHER', label: 'Weather', icon: '🌦️' },
+  // The NUC's own health: admins only.
+  { key: 'SYSTEM', label: 'NUC', icon: '🖥️' },
 ] as const;
 
 const SEVERITIES = [
@@ -35,11 +37,11 @@ const SEVERITIES = [
 ] as const;
 
 const categoryIcons: Record<string, string> = {
-  ELECTRICAL: '⚡', GAS: '🔥', WATER: '💧', ROOMBA: '🤖', CAMERA: '📷', WIFI: '📶', WEATHER: '🌦️',
+  ELECTRICAL: '⚡', GAS: '🔥', WATER: '💧', ROOMBA: '🤖', CAMERA: '📷', WIFI: '📶', WEATHER: '🌦️', SYSTEM: '🖥️',
 };
 
 const categoryLabels: Record<string, string> = {
-  ELECTRICAL: 'Electric', GAS: 'Gas', WATER: 'Water', ROOMBA: 'Roomba', CAMERA: 'Cameras', WIFI: 'WiFi', WEATHER: 'Weather',
+  ELECTRICAL: 'Electric', GAS: 'Gas', WATER: 'Water', ROOMBA: 'Roomba', CAMERA: 'Cameras', WIFI: 'WiFi', WEATHER: 'Weather', SYSTEM: 'NUC',
 };
 
 const severityColors: Record<string, string> = {
@@ -137,7 +139,7 @@ const NotificationRow = memo(({ n }: { n: Notification }) => {
 NotificationRow.displayName = 'NotificationRow';
 
 export default function NotificationsPage() {
-  const { isGuest } = useAuth();
+  const { isGuest, isAdmin } = useAuth();
   const queryClient = useQueryClient();
   const [categoryFilter, setCategoryFilter] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
@@ -230,7 +232,7 @@ export default function NotificationsPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           {/* Category pills */}
           <div className="flex flex-wrap gap-2">
-            {CATEGORIES.map((c) => (
+            {CATEGORIES.filter((c) => c.key !== 'SYSTEM' || isAdmin).map((c) => (
               <button
                 key={c.key}
                 type="button"

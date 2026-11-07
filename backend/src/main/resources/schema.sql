@@ -831,3 +831,25 @@ CREATE TABLE IF NOT EXISTS network_devices (
     last_seen     TIMESTAMP   NOT NULL,
     present_since TIMESTAMP   NOT NULL
 );
+
+-- NUC Health (Admin → NUC Health). scripts/host-metrics.ps1 samples the NUC itself every
+-- minute (a container only sees Docker's VM); HostMetricsService stores each sample's
+-- headline numbers here for the charts, and keeps the full newest one in memory. Rates
+-- are averages over the minute before collected_at. Kept 90 days. UTC.
+CREATE TABLE IF NOT EXISTS host_metrics (
+    id                   BIGSERIAL PRIMARY KEY,
+    collected_at         TIMESTAMP NOT NULL UNIQUE,
+    cpu_pct              DOUBLE PRECISION,
+    mem_total_bytes      BIGINT,
+    mem_used_bytes       BIGINT,
+    -- the system drive (C:)
+    disk_total_bytes     BIGINT,
+    disk_free_bytes      BIGINT,
+    net_rx_bps           DOUBLE PRECISION,
+    net_tx_bps           DOUBLE PRECISION,
+    cpu_temp_c           DOUBLE PRECISION,
+    disk_temp_c          DOUBLE PRECISION,
+    containers_mem_bytes BIGINT,
+    -- a later boot_time than the previous row's means the NUC restarted
+    boot_time            TIMESTAMP
+);

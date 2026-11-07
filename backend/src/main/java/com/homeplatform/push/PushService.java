@@ -153,6 +153,7 @@ public class PushService {
             case CAMERA -> "/cameras";
             case ROOMBA -> "/roomba";
             case ELECTRICAL, GAS, WATER -> "/utility";
+            case SYSTEM -> "/admin/nuc";
             default -> "/notifications";
         };
     }

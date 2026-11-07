@@ -49,3 +49,5 @@ frontend/build/
 
 # Who's home scan output (scripts/presence-scan.ps1), read by the backend
 presence/
+# NUC Health samples (scripts/host-metrics.ps1), read by the backend
+host-metrics/

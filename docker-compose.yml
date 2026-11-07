@@ -115,6 +115,9 @@ services:
       # Who's home: scripts/presence-scan.ps1 (a SYSTEM task on the NUC host) writes
       # scan.json here every minute. Containers can't see LAN MACs themselves.
       - ./presence:/presence:ro
+      # NUC Health: scripts/host-metrics.ps1 (a SYSTEM task on the NUC host) writes
+      # metrics.json here every minute. A container only sees Docker's VM, not the NUC.
+      - ./host-metrics:/host-metrics:ro
 
   roomba-poller:
     build:

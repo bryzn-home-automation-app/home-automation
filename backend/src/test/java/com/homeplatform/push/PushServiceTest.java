@@ -92,6 +92,7 @@ class PushServiceTest {
         assertFalse(PushService.shouldPush(Category.ROOMBA, Severity.SUCCESS));
         assertEquals("/cameras", PushService.urlFor(Category.CAMERA));
         assertEquals("/utility", PushService.urlFor(Category.GAS));
+        assertEquals("/admin/nuc", PushService.urlFor(Category.SYSTEM));
     }
 
     @Test

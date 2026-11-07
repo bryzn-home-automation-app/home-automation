@@ -702,3 +702,91 @@ export interface Presence {
   /** Who a device can belong to (active members, not guests). */
   members: Array<{ id: number; name: string }>;
 }
+
+// ── NUC Health (Admin → NUC Health) ──
+
+/** One sample from the NUC's monitor (scripts/host-metrics.ps1). Any section can be null. */
+export interface HostSnapshot {
+  collectedAt: string;
+  intervalSeconds: number | null;
+  host: {
+    name: string | null; model: string | null; os: string | null; osBuild: string | null; cpuModel: string | null;
+    cores: number | null; logicalProcessors: number | null; bootTime: string | null;
+  } | null;
+  /** usagePct: share of all CPUs over the last minute; null on the monitor's first run. */
+  cpu: { usagePct: number | null; clockMhz: number | null; maxClockMhz: number | null } | null;
+  memory: { totalBytes: number | null; availableBytes: number | null; commitBytes: number | null; commitLimitBytes: number | null } | null;
+  disks: Array<{ name: string; label: string | null; totalBytes: number | null; freeBytes: number | null; readBps: number | null; writeBps: number | null }> | null;
+  physicalDisks: Array<{
+    name: string | null; mediaType: string | null; sizeBytes: number | null; health: string | null;
+    temperatureC: number | null; wearPct: number | null; powerOnHours: number | null;
+  }> | null;
+  temperatures: Array<{ name: string; celsius: number }> | null;
+  network: {
+    adapter: string | null; description: string | null; linkMbps: number | null; ip: string | null;
+    rxBps: number | null; txBps: number | null; tailscaleUp: boolean | null;
+    wifi: {
+      ssid: string | null; signalPct: number | null; rssi: number | null; band: string | null; channel: string | null;
+      radio: string | null; rxMbps: number | null; txMbps: number | null;
+    } | null;
+  } | null;
+  /** sleepAfterMinutes: 0 = never. */
+  power: { plan: string | null; sleepAfterMinutes: number | null; pendingReboot: boolean | null } | null;
+  /** Restarts, shutdowns and sleep in the last 30 days, newest first. */
+  events: Array<{ at: string; id: number; kind: 'unexpected' | 'restart' | 'shutdown' | 'boot' | 'sleep' | 'wake' | string; message: string | null }> | null;
+  /** Processes grouped by name; cpuPct is the share of the whole machine. */
+  topCpu: HostProcess[] | null;
+  topMemory: HostProcess[] | null;
+  docker: {
+    ok: boolean | null; error: string | null; version: string | null; cpus: number | null; memTotalBytes: number | null;
+    containers: HostContainer[] | null;
+  } | null;
+  agent: { version: number | null; durationMs: number | null; sectionMs: Record<string, number> | null; errors: string[] | null } | null;
+}
+
+export interface HostProcess { name: string; count: number | null; cpuPct: number | null; memBytes: number | null }
+
+/** cpuPct: share of Docker's CPUs. Usage is null for a container that isn't running. */
+export interface HostContainer {
+  name: string; project: string | null; image: string | null; state: string | null; status: string | null;
+  health: string | null; cpuPct: number | null; memBytes: number | null; memLimitBytes: number | null;
+}
+
+export interface HostCheck { key: string; level: 'critical' | 'warning'; title: string; detail: string }
+
+export interface HostHealth {
+  status: 'ONLINE' | 'OFFLINE' | 'NOT_SET_UP';
+  lastReportAt: string | null;
+  now: string;
+  latest: HostSnapshot | null;
+  /** Problems worth acting on, worst first; empty when all is well. */
+  checks: HostCheck[];
+  app: {
+    databaseBytes: number | null; largestTables: Array<{ name: string; bytes: number }> | null;
+    heapUsedBytes: number | null; heapMaxBytes: number | null; uptimeSeconds: number | null; threads: number | null;
+    samplesStored: number | null;
+  } | null;
+}
+
+export type HostRange = '24h' | '7d' | '30d';
+
+/** Bucket averages; a bucket with no sample is all nulls (a gap). Network in Mbps. */
+export interface HostPoint {
+  t: string; cpuAvg: number | null; cpuMax: number | null; memPct: number | null; cpuTempC: number | null;
+  diskTempC: number | null; rxMbps: number | null; txMbps: number | null;
+}
+
+export interface HostHistory {
+  range: HostRange;
+  bucketMinutes: number;
+  from: string;
+  to: string;
+  firstSampleAt: string | null;
+  points: HostPoint[];
+  summary: {
+    samples: number; cpuAvg: number | null; cpuPeak: number | null; memAvgPct: number | null; memPeakPct: number | null;
+    cpuTempPeak: number | null; rxBytes: number | null; txBytes: number | null;
+  } | null;
+  /** 5+ minutes without a sample; restarted: Windows started again during it. */
+  gaps: Array<{ from: string; to: string; minutes: number; restarted: boolean }>;
+}

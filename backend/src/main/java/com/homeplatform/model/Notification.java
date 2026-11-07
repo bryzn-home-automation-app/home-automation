@@ -49,7 +49,9 @@ public class Notification {
         ROOMBA,
         WIFI,
         CAMERA,
-        WEATHER
+        WEATHER,
+        /** The NUC itself (Admin → NUC Health); admins only. */
+        SYSTEM
     }
 
     public enum Severity {
