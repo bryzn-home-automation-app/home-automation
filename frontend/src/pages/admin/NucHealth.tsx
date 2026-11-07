@@ -550,6 +550,11 @@ export default function NucHealth() {
 
       {s ? (
         <>
+          {!online && (
+            <p className="-mb-1 text-xs text-apptext-muted">
+              Last readings, from {when(s.collectedAt)}. They update once the monitor reports again.
+            </p>
+          )}
           <Headline s={s} now={now} />
           <History range={range} onRange={setRange} history={history.data} loading={history.isLoading} />
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">

@@ -37,6 +37,12 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.9.1", "stable", LocalDate.of(2026, 11, 7),
+                    "Bottom bar fix",
+                    "The bottom bar stays at the bottom on an iPhone after you use the menu.",
+                    List.of(
+                            change("fixed", "On an iPhone, the bottom bar no longer drifts up the screen with the page after the menu or a pop-up has been open."),
+                            change("improved", "When NUC Health stops hearing from the NUC, it says the numbers are from the last report and how to get the monitor going again."))),
             define("1.9.0", "stable", LocalDate.of(2026, 11, 7),
                     "NUC Health",
                     "A new admin page that keeps an eye on the NUC itself: how busy, how full, how hot, and whether it restarted.",

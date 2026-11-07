@@ -67,6 +67,10 @@ public class HostMetricsService {
 
     static final String CRITICAL = "critical", WARNING = "warning";
     static final String TITLE_STOPPED = "NUC health monitor stopped";
+    /** What to do when the readings stop: the task that sends them is missing or failing. */
+    static final String MONITOR_FIX = "The HomeHostMetrics task on the NUC sends them every minute. If it isn't installed, "
+            + "run scripts\\install-host-metrics-task.cmd as administrator in the repo folder there; if it is, "
+            + "check it with schtasks /query /tn HomeHostMetrics.";
     static final String TITLE_RESTARTED = "NUC restarted";
 
     /** Notify when a check of this key is critical (or warning too) for {@code samples} samples in a row. */
@@ -340,8 +344,7 @@ public class HostMetricsService {
         Instant at = last.getCollectedAt().toInstant(ZoneOffset.UTC);
         if (Duration.between(at, clock.instant()).compareTo(STOPPED) < 0) return;
         notifyAdmins(TITLE_STOPPED, Severity.WARNING,
-                "No report from the NUC's health monitor since " + when(at) + ". On the NUC, check the HomeHostMetrics "
-                        + "task: schtasks /query /tn HomeHostMetrics.", REMIND_EVERY);
+                "No report from the NUC's health monitor since " + when(at) + ". " + MONITOR_FIX, REMIND_EVERY);
     }
 
     private void notifyAdmins(String title, Severity severity, String message, Duration dedup) {
@@ -369,7 +372,7 @@ public class HostMetricsService {
         List<Check> checks = new ArrayList<>();
         if ("OFFLINE".equals(status)) {
             checks.add(new Check("monitor", CRITICAL, "The health monitor stopped reporting",
-                    "Last report " + when(last) + ". On the NUC, check the HomeHostMetrics task: schtasks /query /tn HomeHostMetrics."));
+                    "Last report " + when(last) + ", so the numbers below are from then. " + MONITOR_FIX));
         }
         checks.addAll(checks(s, now));
         return new HostHealthResponse(status, last, now, s, checks, appStats());

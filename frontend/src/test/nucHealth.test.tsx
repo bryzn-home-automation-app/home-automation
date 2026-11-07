@@ -160,6 +160,13 @@ describe('NUC Health page', () => {
     vi.mocked(hostApi.fetchHostHealth).mockResolvedValue({ ...HEALTH, status: 'OFFLINE', lastReportAt: iso(3 * 3_600_000) });
     renderPage();
     expect(await screen.findByText('Monitor offline · last report 3 hr ago')).toBeInTheDocument();
+    expect(screen.getByText(/^Last readings, from /)).toBeInTheDocument(); // the tiles aren't passed off as current
+  });
+
+  it("doesn't call the readings old while the monitor is reporting", async () => {
+    renderPage();
+    await screen.findByText('Reported just now');
+    expect(screen.queryByText(/^Last readings, from /)).not.toBeInTheDocument();
   });
 
   it('switches the history range, and lists the quiet spells', async () => {
