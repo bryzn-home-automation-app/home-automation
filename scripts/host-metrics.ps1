@@ -54,6 +54,22 @@ function Section([string]$name, [scriptblock]$block) {
     $timings[$name] = $t.ElapsedMilliseconds
 }
 
+# Slow sections that rarely change (SSD health, which adapter is the LAN, the event log) are
+# read every few minutes and carried over in state.json in between, so the monitor itself
+# stays light: each one costs a second or two of CIM queries. A different $key (a new boot)
+# reads again at once.
+$state.cache = @{}
+function Cached([string]$name, [int]$minutes, [string]$key, [scriptblock]$block) {
+    $c = if ($prev -and $prev.cache) { $prev.cache.$name } else { $null }
+    if ($c -and $c.at -and "$($c.key)" -eq $key -and ($now - [datetime]::Parse($c.at).ToUniversalTime()).TotalMinutes -lt $minutes) {
+        $state.cache[$name] = $c
+        return $c.value
+    }
+    $v = Section $name $block
+    if ($null -ne $v) { $state.cache[$name] = @{ at = $now.ToString('o'); key = $key; value = $v } }
+    $v
+}
+
 $os = Get-CimInstance Win32_OperatingSystem
 $processor = @(Get-CimInstance Win32_Processor)[0]   # slow (~1 s): ask once
 
@@ -114,8 +130,8 @@ $disks = Section 'disks' {
     })
 }
 
-# Needs admin (the task runs as SYSTEM): SMART-style temperature and wear.
-$physicalDisks = Section 'physicalDisks' {
+# Needs admin (the task runs as SYSTEM): SMART-style temperature and wear. Every 10 minutes.
+$physicalDisks = Cached 'physicalDisks' 10 '' {
     @(Get-PhysicalDisk | ForEach-Object {
         $rel = try { $_ | Get-StorageReliabilityCounter } catch { $null }
         [ordered]@{
@@ -140,18 +156,30 @@ $temperatures = Section 'temperatures' {
 }
 
 # The LAN is the connected adapter with the default route (skips Tailscale, Hyper-V, WSL).
+# Which one it is (and its address) is looked up every 10 minutes; its traffic every run.
 # (Get-NetIPConfiguration finds the same but takes ~4 s.)
-$network = Section 'network' {
+$nic = Cached 'nic' 10 '' {
     $adapter = Get-NetRoute -DestinationPrefix '0.0.0.0/0' -ErrorAction SilentlyContinue | Sort-Object RouteMetric |
         ForEach-Object { Get-NetAdapter -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue } |
         Where-Object { $_.Status -eq 'Up' } | Select-Object -First 1
     if (-not $adapter) { throw 'No connected network adapter with a default route' }
     $ip = Get-NetIPAddress -InterfaceIndex $adapter.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1
-    $stats = Get-NetAdapterStatistics -Name $adapter.Name
-    $state.net = @{ rx = [string]$stats.ReceivedBytes; tx = [string]$stats.SentBytes; adapter = $adapter.Name }
-    $sameAdapter = $prev.net -and $prev.net.adapter -eq $adapter.Name
+    $tailscale = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceDescription -like 'Tailscale*' } | Select-Object -First 1
+    [ordered]@{
+        name        = $adapter.Name
+        description = $adapter.InterfaceDescription
+        linkMbps    = [math]::Round($adapter.ReceiveLinkSpeed / 1e6)
+        ip          = if ($ip) { $ip.IPAddress } else { $null }
+        tailscaleUp = [bool]($tailscale -and $tailscale.Status -eq 'Up')
+    }
+}
+$network = Section 'network' {
+    if (-not $nic) { throw 'No connected network adapter with a default route' }
+    $stats = Get-NetAdapterStatistics -Name $nic.name
+    $state.net = @{ rx = [string]$stats.ReceivedBytes; tx = [string]$stats.SentBytes; adapter = $nic.name }
+    $sameAdapter = $prev.net -and $prev.net.adapter -eq $nic.name
     $wifi = $null
-    if ($adapter.InterfaceDescription -match 'Wi-?Fi|Wireless|802\.11') {
+    if ($nic.description -match 'Wi-?Fi|Wireless|802\.11') {
         $w = @{}
         foreach ($line in (netsh wlan show interfaces)) {
             if ($line -match '^\s*([^:]+?)\s*:\s*(.*?)\s*$') { if (-not $w.ContainsKey($Matches[1])) { $w[$Matches[1]] = $Matches[2] } }
@@ -168,16 +196,15 @@ $network = Section 'network' {
             txMbps    = & $num $w['Transmit rate (Mbps)']
         }
     }
-    $tailscale = Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { $_.InterfaceDescription -like 'Tailscale*' } | Select-Object -First 1
     [ordered]@{
-        adapter     = $adapter.Name
-        description = $adapter.InterfaceDescription
-        linkMbps    = [math]::Round($adapter.ReceiveLinkSpeed / 1e6)
-        ip          = if ($ip) { $ip.IPAddress } else { $null }
+        adapter     = $nic.name
+        description = $nic.description
+        linkMbps    = $nic.linkMbps
+        ip          = $nic.ip
         rxBps       = if ($sameAdapter) { Rate $stats.ReceivedBytes $prev.net.rx } else { $null }
         txBps       = if ($sameAdapter) { Rate $stats.SentBytes $prev.net.tx } else { $null }
         wifi        = $wifi
-        tailscaleUp = [bool]($tailscale -and $tailscale.Status -eq 'Up')
+        tailscaleUp = $nic.tailscaleUp
     }
 }
 
@@ -193,7 +220,8 @@ $power = Section 'power' {
 
 # Restarts, shutdowns and sleep over the last 30 days, newest first: what happened when the
 # NUC went quiet. 41/6008 = it lost power or froze; 1074 = something asked it to restart.
-$events = Section 'events' {
+# Every 10 minutes, and straight away after a restart (the boot time is the key).
+$events = Cached 'events' 10 "$(if ($hostInfo) { $hostInfo.bootTime })" {
     $kinds = @{ 41 = 'unexpected'; 6008 = 'unexpected'; 1074 = 'restart'; 6005 = 'boot'; 6006 = 'shutdown'; 42 = 'sleep'; 1 = 'wake' }
     $since = $now.AddDays(-30).ToLocalTime()
     # Event 1 means "woke from sleep" only from Power-Troubleshooter (others log 1 for time changes).
@@ -202,7 +230,7 @@ $events = Section 'events' {
     @($found | Where-Object { $_ } | Sort-Object TimeCreated -Descending | Select-Object -First 20 | ForEach-Object {
             $kind = $kinds[$_.Id]
             # Windows puts invisible left-to-right marks around the digits of a date.
-            # (Literal characters: PowerShell 5.1's -replace ignores ‎ in a class.)
+            # (Literal characters: PowerShell 5.1 -replace ignores a backslash-u escape inside [...].)
             $msg = ($_.Message -replace "[$([char]0x200E)$([char]0x200F)]", '' -replace '\s+', ' ').Trim()
             if ($_.Id -eq 1074 -and $msg -match 'Shutdown Type:\s*power off') { $kind = 'shutdown' }
             if ($msg.Length -gt 300) { $msg = $msg.Substring(0, 300) }
@@ -341,7 +369,7 @@ $metrics = [ordered]@{
 
 # Write then rename, so the backend never reads a half-written file.
 $utf8 = New-Object Text.UTF8Encoding $false
-[IO.File]::WriteAllText("$stateFile.tmp", ($state | ConvertTo-Json -Depth 5 -Compress), $utf8)
+[IO.File]::WriteAllText("$stateFile.tmp", ($state | ConvertTo-Json -Depth 8 -Compress), $utf8)
 Move-Item -Force "$stateFile.tmp" $stateFile
 [IO.File]::WriteAllText("$outFile.tmp", ($metrics | ConvertTo-Json -Depth 6 -Compress), $utf8)
 Move-Item -Force "$outFile.tmp" $outFile
