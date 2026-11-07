@@ -64,4 +64,23 @@ describe('pull to refresh', () => {
     expect(refetch).not.toHaveBeenCalled();
     dialog.remove();
   });
+
+  it("on a phone, where the page scrolls in its own box, only pulls from the box's top", async () => {
+    const refetch = setup();
+    const box = document.body.appendChild(document.createElement('div'));
+    box.style.overflowY = 'auto';
+    const row = box.appendChild(document.createElement('p'));
+    const pullOn = (el: Element) => {
+      fireEvent.touchStart(el, { touches: [{ clientX: 100, clientY: 20 }] });
+      fireEvent.touchMove(el, { touches: [{ clientX: 100, clientY: 260 }] });
+      fireEvent.touchEnd(el, { touches: [] });
+    };
+    Object.defineProperty(box, 'scrollTop', { value: 300, configurable: true });
+    await act(async () => pullOn(row));
+    expect(refetch).not.toHaveBeenCalled();
+    Object.defineProperty(box, 'scrollTop', { value: 0, configurable: true });
+    await act(async () => pullOn(row));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    box.remove();
+  });
 });

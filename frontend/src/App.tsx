@@ -104,10 +104,14 @@ export default memo(function App() {
   // active tab (otherwise every page reads "Home"). Exact match, else the
   // longest matching path prefix, else the home default.
   const { pathname, hash } = useLocation();
+  // On a phone or tablet the page scrolls inside this box, not the window (see the shell below).
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
   // A new page starts at the top. Keyed on pathname only, so sub-tab (?view=) changes keep their
   // scroll; anchor links (#hash) are left to the browser.
   useLayoutEffect(() => {
-    if (!hash) window.scrollTo(0, 0);
+    if (hash) return;
+    window.scrollTo(0, 0);
+    if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
   const welcomeName = user?.displayName || user?.username || 'there';
   const PAGE_HEADERS: Record<string, { eyebrow: string; title: string; subtitle?: string }> = {
@@ -399,8 +403,15 @@ export default memo(function App() {
       {/* Bottom padding clears the fixed phone/tablet nav (hidden at lg), which
           grows by the iOS safe-area inset via its pb-safe. Only top padding is
           responsive: a py-* here would override the bottom value from sm up.
-          The top keeps clear of the status bar the Home Screen app draws over. */}
-      <div className="w-full px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(5rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))] lg:px-6 lg:pt-[max(1.5rem,env(safe-area-inset-top))] lg:pb-0 2xl:px-8">
+          The top keeps clear of the status bar the Home Screen app draws over.
+          Below lg the page scrolls inside this box and the window never moves.
+          With the window scrolling, the iOS 26 Home Screen app let the fixed bottom
+          nav drift up the screen by its own height mid-scroll, on every tab. */}
+      <div
+        ref={scrollerRef}
+        data-page-scroller
+        className="relative w-full px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] max-lg:h-[100dvh] max-lg:overflow-y-auto max-lg:overscroll-y-contain sm:px-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))] lg:px-6 lg:pt-[max(1.5rem,env(safe-area-inset-top))] lg:pb-0 2xl:px-8"
+      >
         <div
           className="absolute inset-x-0 top-0 -z-10 h-[32rem]"
           style={{
@@ -497,7 +508,8 @@ export default memo(function App() {
       </div>
 
       {/* ── Mobile bottom nav ── */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-appborder bg-appsurface lg:hidden pb-safe">
+      {/* touch-none: the window has nothing to scroll, so a swipe here would only bounce it. */}
+      <nav className="fixed inset-x-0 bottom-0 z-30 touch-none border-t border-appborder bg-appsurface lg:hidden pb-safe">
         <div className="mx-auto flex max-w-lg items-start justify-around gap-0.5 px-1 py-1.5">
           {/* Menu — leftmost, so the trigger sits on the same side as the
               left-anchored sidebar it opens. Hamburger (☰) reads as "menu". */}

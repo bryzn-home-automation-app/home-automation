@@ -6,11 +6,10 @@ import { useEffect } from 'react';
  * (scrollTo) still works, and the page keeps its position. Locks can overlap (a dialog
  * over the menu): the page is free again once the last one lets go.
  *
- * A touch screen blocks the swipe instead of hiding <html>'s overflow. In the iOS 26
- * Home Screen app, toggling that overflow left the fixed bottom bar scrolling along with
- * the page, stuck mid-screen, and it didn't keep the page still anyway (WebKit bug
- * 299084). A screen without touch hides the overflow, which also stops arrow-key and
- * space-bar scrolling.
+ * A touch screen blocks the swipe instead of hiding overflow: in Safari 26 hiding
+ * <html>'s overflow doesn't keep the page still (WebKit bug 299084). A screen without
+ * touch hides the overflow of the window and of the app's page box, which also stops
+ * arrow-key and space-bar scrolling.
  */
 export function useScrollLock(locked: boolean): void {
   useEffect(() => {
@@ -30,12 +29,12 @@ let release: (() => void) | null = null;
 
 function engage(): () => void {
   if (!(navigator.maxTouchPoints > 0)) {
-    const root = document.documentElement;
-    const previous = root.style.overflow;
-    root.style.overflow = 'hidden';
-    return () => {
-      root.style.overflow = previous;
-    };
+    // The window, and the app's own page box while the page scrolls in it (narrow screens).
+    const boxes = [document.documentElement, ...document.querySelectorAll<HTMLElement>('[data-page-scroller]')]
+      .filter((el) => el === document.documentElement || getComputedStyle(el).overflowY === 'auto');
+    const previous = boxes.map((el) => el.style.overflow);
+    boxes.forEach((el) => (el.style.overflow = 'hidden'));
+    return () => boxes.forEach((el, i) => (el.style.overflow = previous[i]));
   }
 
   let startX = 0;
@@ -70,15 +69,18 @@ function engage(): () => void {
 /**
  * Something between the gesture and the page takes it: a text box or slider, or a scroll
  * area (the menu, a dialog's body) with room left that way. `towardTop`: the gesture
- * scrolls up, toward the start.
+ * scrolls up, toward the start. The search stops at the overlay itself (it's fixed), so
+ * the page's own scroll box, which the overlay may sit inside, never counts.
  */
 function handledInside(target: EventTarget | null, towardTop: boolean): boolean {
   for (let el = target instanceof Element ? target : null; el && el !== document.body; el = el.parentElement) {
     if (el.matches('input, textarea, select, video, audio, [contenteditable="true"]')) return true;
-    const oy = getComputedStyle(el).overflowY;
+    const style = getComputedStyle(el);
+    const oy = style.overflowY;
     if ((oy === 'auto' || oy === 'scroll') && el.scrollHeight > el.clientHeight) {
       if (towardTop ? el.scrollTop > 0 : el.scrollTop + el.clientHeight < el.scrollHeight - 1) return true;
     }
+    if (style.position === 'fixed') break;
   }
   return false;
 }

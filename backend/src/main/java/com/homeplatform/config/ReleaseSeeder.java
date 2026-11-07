@@ -37,6 +37,11 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.9.2", "stable", LocalDate.of(2026, 11, 7),
+                    "Bottom bar, for real",
+                    "On an iPhone the bottom bar stays at the bottom of the screen, on every tab.",
+                    List.of(
+                            change("fixed", "On an iPhone, the bottom bar no longer floats up the screen as you scroll. Pages now scroll above it instead of under it."))),
             define("1.9.1", "stable", LocalDate.of(2026, 11, 7),
                     "Bottom bar fix",
                     "The bottom bar stays at the bottom on an iPhone after you use the menu.",

@@ -76,6 +76,20 @@ describe('useScrollLock', () => {
     expect(document.documentElement.style.overflow).toBe(''); // not left stuck on hidden
   });
 
+  it("also locks the app's page box while the page scrolls inside it, and only then", () => {
+    const box = document.body.appendChild(document.createElement('div'));
+    box.setAttribute('data-page-scroller', '');
+    box.style.overflowY = 'auto'; // a phone-width screen
+    const { rerender } = render(<Harness locked />);
+    expect(box.style.overflow).toBe('hidden');
+    rerender(<Harness locked={false} />);
+    expect(box.style.overflow).toBe('');
+
+    box.style.overflowY = ''; // a wide screen: hiding it would unstick the sticky sidebar
+    rerender(<Harness locked />);
+    expect(box.style.overflow).toBe('');
+  });
+
   describe('on a touch screen', () => {
     const touchScreen = () => Object.defineProperty(navigator, 'maxTouchPoints', { value: 5, configurable: true });
 
@@ -102,6 +116,17 @@ describe('useScrollLock', () => {
 
       unmount();
       expect(swipe(plain, 0, -40)).toBe(false); // free again once it closes
+    });
+
+    it("doesn't let the page's own scroll box take a swipe on an overlay inside it", () => {
+      touchScreen();
+      const page = scrollArea(100); // the page box, with room both ways
+      const overlay = page.appendChild(document.createElement('div'));
+      overlay.style.position = 'fixed';
+      const { unmount } = render(<Harness locked />);
+      expect(swipe(overlay, 0, -40)).toBe(true);
+      expect(swipe(page.firstChild as Element, 0, -40)).toBe(false); // outside the overlay, as before
+      unmount();
     });
   });
 });
