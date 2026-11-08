@@ -401,6 +401,7 @@ CREATE TABLE IF NOT EXISTS coserv_bills (
     electric_charge       NUMERIC(10,2),
     gas_usage_ccf         NUMERIC(10,2),
     gas_charge            NUMERIC(10,2),
+    gas_line_items        TEXT,          -- JSON array of the gas section's charge lines
     current_charges       NUMERIC(10,2),
     total_due             NUMERIC(10,2)  NOT NULL,
     pdf_path              VARCHAR(500),

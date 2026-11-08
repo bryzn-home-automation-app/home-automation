@@ -1,6 +1,7 @@
 package com.homeplatform.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonRawValue;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -14,8 +15,8 @@ import java.util.UUID;
  * Combined electric+gas CoServ bill, downloaded as a PDF from SmartHub Billing
  * History. CoServ issues one statement per billing cycle covering both services,
  * so this is one row per bill with both electric_* and gas_* columns, itemized at
- * the same category-total granularity as {@link WaterBill} (not every individual
- * charge line from the bill's per-meter breakdown). Append-only — never updated
+ * the same category-total granularity as {@link WaterBill}, plus the gas section's
+ * charge lines ({@link #gasLineItems}). Append-only — never updated
  * or deleted; a re-processed bill for the same period upserts via the unique
  * constraint on (account_id, billing_period_start, billing_period_end).
  */
@@ -62,6 +63,16 @@ public class CoservBill {
 
     @Column(name = "gas_charge", precision = 10, scale = 2)
     private BigDecimal gasCharge;
+
+    /**
+     * The gas section's charge lines as a JSON array written by
+     * {@code scripts/coserv-bill-parser.js}: {@code [{label, amount, kind, ccf?, rate?}]},
+     * kind being usage (per CCF), taxes or fixed. Sent to the client as an array.
+     * Null for bills parsed before it existed, or whose lines didn't add up to the gas charge.
+     */
+    @JsonRawValue
+    @Column(name = "gas_line_items", columnDefinition = "TEXT")
+    private String gasLineItems;
 
     @Column(name = "current_charges", precision = 10, scale = 2)
     private BigDecimal currentCharges;

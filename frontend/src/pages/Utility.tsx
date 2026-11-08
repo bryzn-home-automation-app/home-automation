@@ -68,9 +68,8 @@ export default memo(function Utility() {
 
       {view === 'gas' && (
         <div className="rounded-xl border border-appborder bg-appinset px-4 py-3 text-sm leading-6 text-apptext-soft">
-          <span className="font-medium text-apptext">Gas usage is only reported monthly.</span>{' '}
-          CoServ posts natural gas as a single figure per billing cycle, so you'll see one reading per
-          month rather than the daily/hourly detail available for electricity.
+          <span className="font-medium text-apptext">Gas is only reported monthly.</span>{' '}
+          CoServ reads the gas meter once a billing cycle, so this tab changes when a new bill comes in.
         </div>
       )}
 

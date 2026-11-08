@@ -10,9 +10,10 @@
  * 08/06/2026) — handled with a non-greedy skip to the first date pattern
  * rather than trying to bound the meter number's digit count.
  *
- * Captures the same category-total granularity as water_bills — usage and
- * charge totals per service, not every individual line item (PCRF/SCRF/PGF
- * etc. are not parsed).
+ * Captures usage and charge totals per service. The gas section's charge lines
+ * are also kept (gasLineItems), because the Gas tab shows what each bill paid
+ * for: at a few CCF a month most of the gas charge is flat. Electric lines
+ * (PCRF/SCRF etc.) are not parsed.
  */
 'use strict';
 
@@ -44,6 +45,44 @@ function monthNameToIso(monthName, day, year) {
 }
 
 const num = (s) => (s == null ? null : parseFloat(s.replace(/,/g, '')));
+
+// The gas block lists one charge per line between "Current Charges" and its
+// "Total Current Charges$X", e.g. "Purchased Gas Factor4 CCF  @ $1.33$5.32".
+const GAS_CHARGES_RE =
+  /Gas Service\s+Rate:[\s\S]*?\nCurrent Charges\s*\r?\n([\s\S]*?)Total Current Charges\$([\d,.]+)/;
+const CHARGE_LINE_RE = /^(.+?)(?:([\d,.]+)\s*CCF\s*@\s*\$([\d.]+))?(-)?\$([\d,.]+)(\s*CR)?$/;
+
+/**
+ * The gas section's charge lines, each tagged with what drives it:
+ *   usage — priced per CCF (Usage Charge, Purchased Gas Factor)
+ *   taxes — taxes and the city franchise fee, a share of the rest
+ *   fixed — flat amounts (Customer Charge, rate adjustments, one-time fees)
+ * Null when there is no gas section, a line doesn't read, or the lines don't
+ * add up to the gas charge, so a template change can't show a wrong split.
+ */
+function parseGasLineItems(text, gasCharge) {
+  const section = text.match(GAS_CHARGES_RE);
+  if (!section) return null;
+  const items = [];
+  for (const raw of section[1].split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const m = line.match(CHARGE_LINE_RE);
+    if (!m) return null;
+    const [, label, ccf, rate, minus, amount, credit] = m;
+    const item = {
+      label: label.trim(),
+      amount: (minus || credit ? -1 : 1) * num(amount),
+      kind: ccf ? 'usage' : /tax|franchise/i.test(label) ? 'taxes' : 'fixed',
+    };
+    if (ccf) Object.assign(item, { ccf: num(ccf), rate: num(rate) });
+    items.push(item);
+  }
+  const total = num(section[2]);
+  const sum = items.reduce((s, i) => s + i.amount, 0);
+  if (!items.length || Math.abs(sum - total) > 0.005 || Math.abs(total - gasCharge) > 0.005) return null;
+  return items;
+}
 
 /**
  * Parse the extracted text of one CoServ combined bill PDF.
@@ -81,9 +120,10 @@ function parseCoservBillText(text) {
     electricCharge: num(electricCharge),
     gasUsageCcf: gasUsageMatch ? num(gasUsageMatch[1]) : null,
     gasCharge: num(gasCharge),
+    gasLineItems: parseGasLineItems(text, num(gasCharge)),
     currentCharges: num(currentCharges),
     totalDue: num(totalDue),
   };
 }
 
-module.exports = { parseCoservBillText, mmddyyyyToIso, monthNameToIso };
+module.exports = { parseCoservBillText, parseGasLineItems, mmddyyyyToIso, monthNameToIso };

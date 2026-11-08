@@ -37,9 +37,9 @@ export function useUsageData(options?: { hourly?: boolean }) {
     staleTime: 300_000,
   });
 
-  // Per-meter totals
+  // Per-meter totals. Gas isn't here: CoServ reports it once a bill, so the Gas
+  // tab reads coserv_bills instead (see GasUsage).
   const electricMeter = meters.data?.find((m) => m.type === 'ELECTRIC');
-  const gasMeter = meters.data?.find((m) => m.type === 'GAS');
 
   const electricUsage = useQuery<EnergyUsage[]>({
     queryKey: ['energy-usage', electricMeter?.id],
@@ -48,16 +48,6 @@ export function useUsageData(options?: { hourly?: boolean }) {
         ? fetchRecentUsage(electricMeter.id, 60)
         : Promise.resolve([]),
     enabled: !!electricMeter && includeHourly,
-    staleTime: 120_000,
-    refetchInterval: usageInterval,
-    refetchIntervalInBackground: false,
-  });
-
-  const gasUsage = useQuery<EnergyUsage[]>({
-    queryKey: ['energy-usage', gasMeter?.id],
-    queryFn: () =>
-      gasMeter ? fetchRecentUsage(gasMeter.id, 60) : Promise.resolve([]),
-    enabled: !!gasMeter && includeHourly,
     staleTime: 120_000,
     refetchInterval: usageInterval,
     refetchIntervalInBackground: false,
@@ -88,27 +78,12 @@ export function useUsageData(options?: { hourly?: boolean }) {
     refetchIntervalInBackground: false,
   });
 
-  const gasTotal = useQuery({
-    queryKey: ['total-usage', gasMeter?.id],
-    queryFn: () =>
-      gasMeter
-        ? fetchTotalUsage(gasMeter.id, 60)
-        : Promise.resolve({ totalKwh: 0 }),
-    enabled: !!gasMeter,
-    staleTime: 120_000,
-    refetchInterval: totalInterval,
-    refetchIntervalInBackground: false,
-  });
-
   return {
     meters,
     config,
     electricMeter,
-    gasMeter,
     electricUsage,
-    gasUsage,
     electricDaily,
     electricTotal,
-    gasTotal,
   };
 }

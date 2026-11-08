@@ -5,7 +5,7 @@ import { currentSetpoint } from '../utils/thermostat';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 import { FOCUS_RING } from './ThermostatControls';
 
-// Same hoisted chart styling as UsageChart — CSS vars so both themes work.
+// Same hoisted chart styling as the other usage charts — CSS vars so both themes work.
 const CHART_MARGIN = { top: 5, right: 8, left: 0, bottom: 0 } as const;
 const TICK_PROPS = { fontSize: 11 } as const;
 const TOOLTIP_CONTENT_STYLE = {

@@ -109,12 +109,16 @@ export const CHART_SERIES: Record<string, {
  * 1.8-2.8:1 on the white light-mode chart, under the 3:1 minimum for chart
  * marks, so light gets the 600/700 step of the same hue (all >= 3.5:1;
  * `positive`/`caution` are also used as text and clear 4.5:1).
+ * The Gas tab's charge split (gasFixed/gasUsed/gasTaxes, stacked in that order)
+ * passed the dataviz palette validator on both chart backgrounds.
  */
 export const DATA_SERIES: Record<'light' | 'dark', {
   positive: string;
   caution: string;
   gasLine: string;
-  gasBar: string;
+  gasFixed: string;
+  gasUsed: string;
+  gasTaxes: string;
   water: string;
   sewer: string;
   refuse: string;
@@ -123,12 +127,14 @@ export const DATA_SERIES: Record<'light' | 'dark', {
 }> = {
   dark: {
     positive: '#22c55e', caution: '#f59e0b',
-    gasLine: '#38bdf8', gasBar: '#0ea5e9',
+    gasLine: '#38bdf8',
+    gasFixed: '#a16207', gasUsed: '#0284c7', gasTaxes: '#d946ef', // yellow-700, sky-600, fuchsia-500
     water: '#22d3ee', sewer: '#0ea5e9', refuse: '#6366f1', tax: '#a855f7', stormwater: '#14b8a6',
   },
   light: {
     positive: '#15803d', caution: '#b45309', // green-700, amber-700
-    gasLine: '#0284c7', gasBar: '#0369a1', // sky-600, sky-700
+    gasLine: '#0284c7', // sky-600
+    gasFixed: '#a16207', gasUsed: '#0369a1', gasTaxes: '#c026d3', // yellow-700, sky-700, fuchsia-600
     water: '#0891b2', sewer: '#0369a1', refuse: '#4f46e5', tax: '#9333ea', stormwater: '#0f766e',
   },
 };

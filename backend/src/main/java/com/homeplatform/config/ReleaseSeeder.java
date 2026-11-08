@@ -37,6 +37,14 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.10.0", "stable", LocalDate.of(2026, 11, 7),
+                    "Gas, by the bill",
+                    "The Gas tab now shows what each gas bill used and paid for, and when the next one comes.",
+                    List.of(
+                            change("improved", "Gas shows your last bill, the gas it used, its flat charges and when the next bill should arrive."),
+                            change("new", "Charts of gas used and gas charges for every bill, with the outside temperature for each billing cycle."),
+                            change("new", "The last gas bill is broken down line by line, with what a CCF of gas really costs and what you pay with none."),
+                            change("fixed", "Gas costs used a made-up price per unit and missed the flat charges, which are about half the bill."))),
             define("1.9.2", "stable", LocalDate.of(2026, 11, 7),
                     "Bottom bar, for real",
                     "On an iPhone the bottom bar stays at the bottom of the screen, on every tab.",

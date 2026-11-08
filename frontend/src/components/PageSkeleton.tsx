@@ -3,7 +3,7 @@ import { memo } from 'react';
 /**
  * PageSkeleton — shape-matched placeholder pages shown while a lazy chunk
  * is downloading. The visual language matches the existing loading states
- * in `StatTile.tsx` (lines 22-32) and `UsageChart.tsx` (lines 92-99):
+ * in `StatTile.tsx` and the chart cards (e.g. `MonthlyComparison.tsx`):
  * rounded-[20-28px] cards, `bg-appinset` placeholder blocks, `animate-pulse`,
  * `border-appborder` / `bg-appsurface-raised` surfaces.
  */
@@ -66,7 +66,7 @@ function StatsChartsSkeleton() {
           ))}
         </div>
 
-        {/* Chart panel — mirrors `UsageChart` loading card. */}
+        {/* Chart panel — mirrors a chart card's loading state. */}
         <div className="mt-6 animate-pulse rounded-[28px] border border-appborder bg-appsurface-raised p-5">
           <div className="mb-4 h-5 w-40 rounded bg-appinset" />
           <div className="h-72 rounded-2xl bg-appinset" />

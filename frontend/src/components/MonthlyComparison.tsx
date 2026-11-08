@@ -37,16 +37,6 @@ const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } a
 
 interface MonthlyComparisonProps {
   data: EnergyUsage[];
-  /**
-   * Pre-aggregated monthly totals ({ month: 'Sep 2026', kWh }). When provided,
-   * the chart plots these directly instead of deriving from `data` — the
-   * correct input for sources with no hourly rows (e.g. gas, which CoServ
-   * only reports monthly), since the default path only sums records whose
-   * `source` is a recognized hourly label and silently renders empty
-   * otherwise. `data` is still used for the loading/empty checks so the
-   * existing (electric) callers behave identically.
-   */
-  monthlyPoints?: Array<{ month: string; kWh: number }>;
   loading?: boolean;
   title?: string;
   /** Optional one-line explanation under the title. */
@@ -65,7 +55,6 @@ interface MonthlyComparisonProps {
  */
 function MonthlyComparison({
   data,
-  monthlyPoints,
   loading,
   title = 'Monthly Comparison',
   description,
@@ -78,7 +67,6 @@ function MonthlyComparison({
   // All hooks run before any early return (Rules of Hooks).
   // Group usage by month — use only hourly records to avoid granularity mixing
   const chartData = useMemo(() => {
-    if (monthlyPoints) return monthlyPoints;
     const byMonth = new Map<string, number>();
     data.forEach((d) => {
       if (!isHourlySource(d.source)) return;
@@ -93,7 +81,7 @@ function MonthlyComparison({
       month,
       kWh: Math.round(kWh * 100) / 100,
     }));
-  }, [data, monthlyPoints]);
+  }, [data]);
 
   const tooltipFormatter = useMemo(
     () => (value: number) => [`${value.toFixed(2)} ${unitLabel}`, 'Total'],
@@ -109,7 +97,7 @@ function MonthlyComparison({
     );
   }
 
-  if (monthlyPoints ? !monthlyPoints.length : !data.length) {
+  if (!data.length) {
     return (
       <div className="flex h-full flex-col rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
         <div className="mb-4">

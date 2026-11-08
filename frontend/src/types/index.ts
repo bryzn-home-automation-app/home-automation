@@ -68,6 +68,19 @@ export interface WaterBill {
   createdAt: string;
 }
 
+/**
+ * One charge line from a CoServ bill's gas section. `kind` says what drives it:
+ * usage is priced per CCF (with `ccf` and `rate`), taxes are a share of the rest,
+ * fixed is a flat amount (the customer charge, rate adjustments, one-time fees).
+ */
+export interface GasLineItem {
+  label: string;
+  amount: number;
+  kind: 'fixed' | 'usage' | 'taxes';
+  ccf?: number;
+  rate?: number;
+}
+
 /** Combined electric+gas CoServ bill downloaded from SmartHub Billing History. Append-only. */
 export interface CoservBill {
   id: number;
@@ -79,6 +92,8 @@ export interface CoservBill {
   electricCharge?: number;
   gasUsageCcf?: number;
   gasCharge?: number;
+  /** The gas section's charge lines; null for bills parsed before these were kept. */
+  gasLineItems?: GasLineItem[] | null;
   currentCharges?: number;
   totalDue: number;
   pdfPath?: string;

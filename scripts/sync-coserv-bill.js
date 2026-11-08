@@ -31,7 +31,7 @@ const { saveBillPdf } = require('./bill-storage');
 const BILLING_HISTORY_HASH = '#/billingHistory';
 const SOURCE = 'CoServ SmartHub PDF';
 const SOURCE_PROVIDER = 'coserv-smarthub-bill';
-const PROCESSING_VERSION = '1.0';
+const PROCESSING_VERSION = '1.1'; // 1.1: gas_line_items
 const PROVIDER_NAME = 'CoServ';
 
 // ─── Args ───────────────────────────────────────────────────────
@@ -98,9 +98,9 @@ async function upsertCoservBill(client, accountId, bill, batchId, pdfPath) {
   await client.query(
     `INSERT INTO coserv_bills (
        account_id, billing_period_start, billing_period_end, billing_date, due_date,
-       electric_usage_kwh, electric_charge, gas_usage_ccf, gas_charge, current_charges, total_due,
+       electric_usage_kwh, electric_charge, gas_usage_ccf, gas_charge, gas_line_items, current_charges, total_due,
        pdf_path, source, source_provider, ingestion_batch_id, processing_version, created_at
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW())
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,NOW())
      ON CONFLICT (account_id, billing_period_start, billing_period_end) DO UPDATE SET
        billing_date = EXCLUDED.billing_date,
        due_date = EXCLUDED.due_date,
@@ -108,6 +108,7 @@ async function upsertCoservBill(client, accountId, bill, batchId, pdfPath) {
        electric_charge = EXCLUDED.electric_charge,
        gas_usage_ccf = EXCLUDED.gas_usage_ccf,
        gas_charge = EXCLUDED.gas_charge,
+       gas_line_items = EXCLUDED.gas_line_items,
        current_charges = EXCLUDED.current_charges,
        total_due = EXCLUDED.total_due,
        pdf_path = EXCLUDED.pdf_path,
@@ -116,6 +117,7 @@ async function upsertCoservBill(client, accountId, bill, batchId, pdfPath) {
     [
       accountId, bill.billingPeriodStart, bill.billingPeriodEnd, bill.billingDate, bill.dueDate,
       bill.electricUsageKwh, bill.electricCharge, bill.gasUsageCcf, bill.gasCharge,
+      bill.gasLineItems ? JSON.stringify(bill.gasLineItems) : null,
       bill.currentCharges, bill.totalDue, pdfPath,
       SOURCE, SOURCE_PROVIDER, batchId, PROCESSING_VERSION,
     ]
@@ -184,7 +186,7 @@ async function main(cfg) {
       if (args.dryRun) {
         console.log(`── ${bill.billingPeriodStart} → ${bill.billingPeriodEnd} | ` +
           `electric ${bill.electricUsageKwh ?? 'n/a'} kWh $${bill.electricCharge} | ` +
-          `gas ${bill.gasUsageCcf ?? 'n/a'} CCF $${bill.gasCharge} | ` +
+          `gas ${bill.gasUsageCcf ?? 'n/a'} CCF $${bill.gasCharge}${bill.gasLineItems ? ` (${bill.gasLineItems.length} lines)` : ''} | ` +
           `total due $${bill.totalDue} (due ${bill.dueDate})`);
         continue;
       }
