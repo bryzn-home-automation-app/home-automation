@@ -32,6 +32,92 @@ const CATCH_UP_SECONDS = 6;
  */
 export const HLS_STALL_MS = 6_000;
 
+/** How often a play() the browser refused is tried again. */
+export const AUTOPLAY_RETRY_MS = 1_000;
+
+/** Events a page may start media from. On iPhone the touchend that ends a scroll doesn't count. */
+const GESTURES = ['touchend', 'click', 'keydown'] as const;
+
+type Unblocked = 'retry' | 'tap';
+
+/**
+ * Muted inline play(), and what to do when the browser refuses it. iPhone Safari
+ * sometimes rejects play() with NotAllowedError, mostly when the app has just come
+ * back from the background. The video then loads but stays paused, and on 11-08 the
+ * tiles sat on "Waking camera…" over a picture that was ready (half that day's app
+ * opens, every camera at once). So a refused start is tried again every second and
+ * on the next tap anywhere on the page, and reported (onBlocked) so the tile can ask
+ * for that tap.
+ */
+class Autoplay {
+  error: string | null = null;
+  blocked = false;
+  unblockedBy: Unblocked | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private stopped = false;
+
+  constructor(
+    private readonly video: HTMLVideoElement,
+    private readonly onBlocked?: (blocked: boolean) => void,
+  ) {}
+
+  play(): void {
+    const v = this.video;
+    v.muted = true;
+    v.play().catch((err: unknown) => {
+      if (this.stopped) return;
+      this.error ??= err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      if ((err as { name?: string } | null)?.name === 'NotAllowedError') this.block();
+      else v.addEventListener('canplay', () => void v.play().catch(() => {}), { once: true });
+    });
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.clear();
+  }
+
+  private block() {
+    if (this.blocked) return;
+    this.blocked = true;
+    this.timer = setInterval(() => this.retry('retry'), AUTOPLAY_RETRY_MS);
+    for (const g of GESTURES) document.addEventListener(g, this.onGesture, { capture: true, passive: true });
+    this.video.addEventListener('playing', this.onPlaying);
+    this.onBlocked?.(true);
+  }
+
+  private onGesture = () => this.retry('tap');
+
+  /** It started by itself after all. */
+  private onPlaying = () => this.unblock('retry');
+
+  /**
+   * Inside a tap Safari always lets the video start. A play() it accepts leaves
+   * `paused` false straight away, before any frame, so that's when the block is over.
+   */
+  private retry(how: Unblocked) {
+    const v = this.video;
+    if (this.stopped || !v.paused) return;
+    v.play().catch(() => {});
+    if (!v.paused) this.unblock(how);
+  }
+
+  private unblock(how: Unblocked) {
+    if (!this.blocked || this.stopped) return;
+    this.blocked = false;
+    this.unblockedBy = how;
+    this.clear();
+    this.onBlocked?.(false);
+  }
+
+  private clear() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    for (const g of GESTURES) document.removeEventListener(g, this.onGesture, { capture: true });
+    this.video.removeEventListener('playing', this.onPlaying);
+  }
+}
+
 type MediaSourceCtor = typeof MediaSource;
 
 function mediaSourceCtor(): { ctor: MediaSourceCtor; managed: boolean } | null {
@@ -111,6 +197,9 @@ export interface MseDiagnostics {
   buffered: Array<[number, number]>;
   error: string | null;
   playError: string | null;
+  /** The browser is refusing to start the picture right now (see Autoplay). */
+  blocked: boolean;
+  unblockedBy: Unblocked | null;
 }
 
 export interface MsePlayerHandlers {
@@ -120,6 +209,8 @@ export interface MsePlayerHandlers {
   onError?: (message: string) => void;
   /** The server closed the stream (e.g. the bridge's battery budget). */
   onEnded?: () => void;
+  /** True while the browser won't start the picture without a tap; false once it will. */
+  onBlocked?: (blocked: boolean) => void;
 }
 
 /** What CameraTile drives: MSE over a WebSocket, or the browser's own HLS player. */
@@ -136,7 +227,7 @@ export interface LivePlayer {
 export class HlsPlayer implements LivePlayer {
   private stopped = false;
   private playing = false;
-  private playError: string | null = null;
+  private readonly autoplay: Autoplay;
   private stallTimer: ReturnType<typeof setInterval> | null = null;
   private lastTime = -1;
   private lastMoved = 0;
@@ -145,7 +236,9 @@ export class HlsPlayer implements LivePlayer {
   constructor(
     private readonly video: HTMLVideoElement,
     private readonly handlers: MsePlayerHandlers = {},
-  ) {}
+  ) {
+    this.autoplay = new Autoplay(video, handlers.onBlocked);
+  }
 
   start(url: string): void {
     const v = this.video;
@@ -156,15 +249,13 @@ export class HlsPlayer implements LivePlayer {
     v.addEventListener('error', this.onError);
     v.addEventListener('ended', this.onEnded);
     v.src = url;
-    v.play().catch((err: unknown) => {
-      this.playError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      v.addEventListener('canplay', () => void v.play().catch(() => {}), { once: true });
-    });
+    this.autoplay.play();
     this.stallTimer = setInterval(this.checkStall, 1_000);
   }
 
   stop(): void {
     this.stopped = true;
+    this.autoplay.stop();
     if (this.stallTimer) clearInterval(this.stallTimer);
     this.stallTimer = null;
     const v = this.video;
@@ -186,7 +277,9 @@ export class HlsPlayer implements LivePlayer {
       currentTime: Math.round(v.currentTime * 10) / 10,
       videoSize: `${v.videoWidth}x${v.videoHeight}`,
       error: v.error ? `code ${v.error.code}${v.error.message ? `: ${v.error.message}` : ''}` : null,
-      playError: this.playError,
+      playError: this.autoplay.error,
+      blocked: this.autoplay.blocked,
+      unblockedBy: this.autoplay.unblockedBy,
       stalls: this.stalls,
     };
   }
@@ -238,12 +331,14 @@ export class MsePlayer implements LivePlayer {
   private mime: string | null = null;
   private fragments = 0;
   private bytes = 0;
-  private playError: string | null = null;
+  private readonly autoplay: Autoplay;
 
   constructor(
     private readonly video: HTMLVideoElement,
     private readonly handlers: MsePlayerHandlers = {},
-  ) {}
+  ) {
+    this.autoplay = new Autoplay(video, handlers.onBlocked);
+  }
 
   start(path: string): void {
     const source = mediaSourceCtor();
@@ -278,6 +373,7 @@ export class MsePlayer implements LivePlayer {
 
   stop(): void {
     this.stopped = true;
+    this.autoplay.stop();
     this.video.removeEventListener('playing', this.onVideoPlaying);
     const ws = this.ws;
     this.ws = null;
@@ -379,7 +475,7 @@ export class MsePlayer implements LivePlayer {
         // Safari waits at 0 forever — a black tile. Start where the data starts.
         this.started = true;
         if (v.currentTime < start) v.currentTime = start;
-        this.play();
+        this.autoplay.play();
       } else if (!v.paused && !v.seeking && end - v.currentTime > CATCH_UP_SECONDS) {
         // Fell well behind while playing (a stall, a backgrounded tab): rejoin live.
         v.currentTime = end - 1;
@@ -414,16 +510,6 @@ export class MsePlayer implements LivePlayer {
     }
   }
 
-  /** Muted inline play, retried once the browser can actually play. */
-  private play() {
-    const v = this.video;
-    v.muted = true;
-    v.play().catch((err: unknown) => {
-      this.playError = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
-      v.addEventListener('canplay', () => void v.play().catch(() => {}), { once: true });
-    });
-  }
-
   diagnostics(): MseDiagnostics {
     const v = this.video;
     const b = this.sb?.buffered;
@@ -441,7 +527,9 @@ export class MsePlayer implements LivePlayer {
       currentTime: Math.round(v.currentTime * 10) / 10,
       buffered: ranges,
       error: v.error ? `code ${v.error.code}${v.error.message ? `: ${v.error.message}` : ''}` : null,
-      playError: this.playError,
+      playError: this.autoplay.error,
+      blocked: this.autoplay.blocked,
+      unblockedBy: this.autoplay.unblockedBy,
     };
   }
 

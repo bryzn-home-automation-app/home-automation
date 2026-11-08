@@ -102,31 +102,45 @@ function LiveVideo({
   onStatus,
   onError,
   onEnded,
+  onBlocked,
 }: {
   cameraId: string;
   onStatus: (s: LiveStatus) => void;
   onError: (message: string) => void;
   onEnded: () => void;
+  onBlocked: (blocked: boolean) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   // Latest callbacks without restarting the stream when the parent re-renders.
-  const cb = useRef({ onStatus, onError, onEnded });
-  cb.current = { onStatus, onError, onEnded };
+  const cb = useRef({ onStatus, onError, onEnded, onBlocked });
+  cb.current = { onStatus, onError, onEnded, onBlocked };
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
     let cancelled = false;
     let playing = false;
+    let reported = false;
+    let wasBlocked = false;
     const hls = preferHls();
     const Player = hls ? HlsPlayer : MsePlayer;
+    const report = (extra: Record<string, unknown> = {}) => {
+      reported = true;
+      void reportLiveDiagnostics(cameraId, { ...player.diagnostics(), playing, ...extra, userAgent: navigator.userAgent });
+    };
     const player: LivePlayer = new Player(video, {
       onPlaying: () => {
         playing = true;
         cb.current.onStatus('playing');
+        // A start the browser refused gets a second report once it's going, saying how.
+        if (reported && wasBlocked) report({ event: 'recovered' });
       },
       onError: (m) => cb.current.onError(m),
       onEnded: () => cb.current.onEnded(),
+      onBlocked: (b) => {
+        wasBlocked ||= b;
+        cb.current.onBlocked(b);
+      },
     });
     cb.current.onStatus('connecting');
     startCameraLive(cameraId, hls ? 'hls' : 'mse')
@@ -138,15 +152,14 @@ function LiveVideo({
       });
     // One report per live session, so a black tile on some phone shows up in the
     // backend log with the codec, bytes received and the video element's state.
-    const report = setTimeout(() => {
-      if (!cancelled) {
-        void reportLiveDiagnostics(cameraId, { ...player.diagnostics(), playing, userAgent: navigator.userAgent });
-      }
+    const timer = setTimeout(() => {
+      if (!cancelled) report();
     }, 8_000);
     return () => {
       cancelled = true;
-      clearTimeout(report);
+      clearTimeout(timer);
       player.stop();
+      cb.current.onBlocked(false);
     };
   }, [cameraId]);
 
@@ -168,6 +181,8 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
   const [budgetHit, setBudgetHit] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [status, setStatus] = useState<LiveStatus | null>(null);
+  // The phone won't start the picture until someone taps (see Autoplay in msePlayer).
+  const [blocked, setBlocked] = useState(false);
   // Bumping the session remounts LiveVideo (a fresh ticket + socket).
   const [session, setSession] = useState(0);
   const [reconnects, setReconnects] = useState(0);
@@ -219,6 +234,12 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
     setRequested(false);
     setBudgetHit(false);
   };
+  // A tap is the one thing Safari never refuses, so start the video right inside it.
+  // (Any tap on the page does it too, for every tile: see Autoplay.)
+  const playFromTap = () => {
+    onWake();
+    void pictureRef.current?.querySelector('video')?.play().catch(() => {});
+  };
 
   // The stream ended under us. For a battery camera that's usually the bridge's own
   // budget recycling a stream the app primed before this tab opened (CameraPrimer),
@@ -265,6 +286,12 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
     );
   } else if (!streaming && battery) {
     overlay = <PlayButton onClick={start} name={camera.name} />;
+  } else if (streaming && status !== 'playing' && blocked) {
+    overlay = (
+      <OverlayAction label="Play" onClick={playFromTap}>
+        Your phone wants a tap to start live view
+      </OverlayAction>
+    );
   } else if (streaming && status !== 'playing') {
     overlay = <OverlayNote>{battery ? 'Waking camera…' : 'Connecting…'}</OverlayNote>;
   }
@@ -294,6 +321,7 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
             onStatus={setStatus}
             onError={(m) => setLiveError(m)}
             onEnded={onEnded}
+            onBlocked={setBlocked}
           />
         )}
         <div className="pointer-events-none absolute left-3 top-3 flex gap-2">

@@ -65,6 +65,7 @@ public class CameraService {
     private final CameraStatusRepository statusRepo;
     private final CameraBatteryReadingRepository readingRepo;
     private final CameraStreamTickets tickets;
+    private final CameraPrimer primer;
     private final double latitude;
     private final double longitude;
     private final Clock clock;
@@ -84,19 +85,21 @@ public class CameraService {
                          CameraStatusRepository statusRepo,
                          CameraBatteryReadingRepository readingRepo,
                          CameraStreamTickets tickets,
+                         CameraPrimer primer,
                          @Value("${app.property-latitude:0}") double latitude,
                          @Value("${app.property-longitude:0}") double longitude) {
-        this(ha, deviceRepo, statusRepo, readingRepo, tickets, latitude, longitude, Clock.systemUTC());
+        this(ha, deviceRepo, statusRepo, readingRepo, tickets, primer, latitude, longitude, Clock.systemUTC());
     }
 
     CameraService(HomeAssistantService ha, SmartDeviceRepository deviceRepo, CameraStatusRepository statusRepo,
-                  CameraBatteryReadingRepository readingRepo, CameraStreamTickets tickets,
+                  CameraBatteryReadingRepository readingRepo, CameraStreamTickets tickets, CameraPrimer primer,
                   double latitude, double longitude, Clock clock) {
         this.ha = ha;
         this.deviceRepo = deviceRepo;
         this.statusRepo = statusRepo;
         this.readingRepo = readingRepo;
         this.tickets = tickets;
+        this.primer = primer;
         this.latitude = latitude;
         this.longitude = longitude;
         this.clock = clock;
@@ -137,6 +140,12 @@ public class CameraService {
         CachedImage hit = snapshots.get(d.getId());
         if (hit != null) {
             if (hit.at().plus(SNAPSHOT_CACHE).isAfter(now)) return hit.image();
+            // While the app keeps live view warm, every camera's stream is running or about
+            // to start, and the bridge takes a wired camera's fresh still from a second live
+            // session of its own. The two then stall each other: on 11-08 the Living Room
+            // start took 34 s instead of ~8 s both times a still was fetched alongside it.
+            // The live picture covers the still within seconds, so the cached one will do.
+            if (primer.primed() && wired(d)) return hit.image();
             if (hit.at().plus(SNAPSHOT_STALE_OK).isAfter(now) && !eventSince(d, hit.at())) {
                 refreshInBackground(d);
                 return hit.image();
@@ -148,10 +157,11 @@ public class CameraService {
     /**
      * Keep wired cameras' stills warm (called from the 15-minute HA snapshot) so the
      * first view of the tab is instant. Battery cameras are left alone: their stills
-     * come from the last event, and asking for more could wake them.
+     * come from the last event, and asking for more could wake them. Skipped while live
+     * view is warm, for the reason in {@link #snapshot}.
      */
     public void prewarmSnapshots() {
-        if (!ha.isActive()) return;
+        if (!ha.isActive() || primer.primed()) return;
         for (SmartDevice d : deviceRepo.findByKindAndEnabledTrueOrderByNameAsc(SmartDevice.Kind.CAMERA)) {
             statusRepo.findByDeviceId(d.getId())
                     .filter(st -> st.isAvailable() && CameraStatus.POWER_WIRED.equals(st.getPowerSource()))
@@ -183,6 +193,12 @@ public class CameraService {
         LocalDateTime since = utc(at);
         return statusRepo.findByDeviceId(d.getId())
                 .map(st -> isAfter(st.getLastMotionAt(), since) || isAfter(st.getLastPersonAt(), since))
+                .orElse(false);
+    }
+
+    private boolean wired(SmartDevice d) {
+        return statusRepo.findByDeviceId(d.getId())
+                .map(st -> CameraStatus.POWER_WIRED.equals(st.getPowerSource()))
                 .orElse(false);
     }
 

@@ -35,6 +35,7 @@ class CameraServiceTest {
     private CameraStatusRepository statusRepo;
     private CameraBatteryReadingRepository readingRepo;
     private CameraStreamTickets tickets;
+    private CameraPrimer primer;
     private CameraService service;
     private SmartDevice camera;
     private CameraStatus status;
@@ -46,7 +47,8 @@ class CameraServiceTest {
         statusRepo = mock(CameraStatusRepository.class);
         readingRepo = mock(CameraBatteryReadingRepository.class);
         tickets = new CameraStreamTickets(Clock.fixed(NOW, ZoneOffset.UTC));
-        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, 32.78, -96.80,
+        primer = mock(CameraPrimer.class);
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, primer, 32.78, -96.80,
                 Clock.fixed(NOW, ZoneOffset.UTC));
         when(ha.isActive()).thenReturn(true);
         camera = SmartDevice.builder().id(3L).publicId(PUBLIC_ID).providerEntityId("camera.driveway")
@@ -113,7 +115,7 @@ class CameraServiceTest {
     void staleWhileRefreshing() {
         var clock = new ThermostatChangeRecorderTest.MutableClock();
         clock.now = NOW;
-        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, 32.78, -96.80, clock);
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, primer, 32.78, -96.80, clock);
         var first = new HomeAssistantClient.CameraImage(new byte[]{1}, "image/jpeg");
         var second = new HomeAssistantClient.CameraImage(new byte[]{2}, "image/jpeg");
         when(ha.cameraSnapshot(camera)).thenReturn(first, second);
@@ -129,7 +131,7 @@ class CameraServiceTest {
     void eventForcesFreshStill() {
         var clock = new ThermostatChangeRecorderTest.MutableClock();
         clock.now = NOW;
-        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, 32.78, -96.80, clock);
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, primer, 32.78, -96.80, clock);
         var before = new HomeAssistantClient.CameraImage(new byte[]{1}, "image/jpeg");
         var after = new HomeAssistantClient.CameraImage(new byte[]{2}, "image/jpeg");
         when(ha.cameraSnapshot(camera)).thenReturn(before, after);
@@ -138,6 +140,30 @@ class CameraServiceTest {
         clock.now = NOW.plusSeconds(120);
         status.setLastMotionAt(LocalDateTime.ofInstant(NOW.plusSeconds(60), ZoneOffset.UTC));
         assertSame(after, service.snapshot(ID));
+    }
+
+    @Test
+    @DisplayName("while live view is warm, a wired camera's cached still is served and no fresh one is fetched")
+    void noFreshStillWhileLiveIsWarm() {
+        var clock = new ThermostatChangeRecorderTest.MutableClock();
+        clock.now = NOW;
+        service = new CameraService(ha, deviceRepo, statusRepo, readingRepo, tickets, primer, 32.78, -96.80, clock);
+        status.setPowerSource(CameraStatus.POWER_WIRED);
+        var cached = new HomeAssistantClient.CameraImage(new byte[]{1}, "image/jpeg");
+        when(ha.cameraSnapshot(camera)).thenReturn(cached);
+        assertSame(cached, service.snapshot(ID)); // nothing cached yet: fetched even while warm
+
+        when(primer.primed()).thenReturn(true);
+        clock.now = NOW.plusSeconds(120);
+        status.setLastPersonAt(LocalDateTime.ofInstant(NOW.plusSeconds(60), ZoneOffset.UTC));
+        assertSame(cached, service.snapshot(ID), "a person event doesn't force a fresh still while live is warm");
+        service.prewarmSnapshots();
+        verify(ha, after(200).times(1)).cameraSnapshot(camera);
+
+        // A battery camera's still never opens a session of its own, so it's fetched as usual.
+        status.setPowerSource(CameraStatus.POWER_BATTERY);
+        service.snapshot(ID);
+        verify(ha, times(2)).cameraSnapshot(camera);
     }
 
     @Test

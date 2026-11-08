@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { HLS_STALL_MS, HlsPlayer, MsePlayer } from '../utils/msePlayer';
+import { AUTOPLAY_RETRY_MS, HLS_STALL_MS, HlsPlayer, MsePlayer } from '../utils/msePlayer';
 
 // Fakes just big enough to drive MsePlayer: a SourceBuffer that finishes each
 // operation on the next tick (firing updateend) and can be told to throw.
@@ -181,6 +181,68 @@ describe('HlsPlayer', () => {
     vi.advanceTimersByTime(20_000);
     expect(onEnded).toHaveBeenCalledTimes(1);
     player.stop();
+  });
+
+  /** A video whose play() the browser refuses until `allow` is set, the way iPhone Safari does. */
+  function refusingVideo() {
+    const v = fakeVideo() as HTMLVideoElement & { paused: boolean; allow: boolean };
+    v.paused = true;
+    v.allow = false;
+    v.play = vi.fn(() => {
+      if (!v.allow) return Promise.reject(new DOMException('The request is not allowed', 'NotAllowedError'));
+      v.paused = false;
+      return Promise.resolve();
+    });
+    return v;
+  }
+
+  it('keeps trying a start Safari refused, and asks for a tap meanwhile', async () => {
+    const video = refusingVideo();
+    const onBlocked = vi.fn();
+    const player = new HlsPlayer(video, { onBlocked });
+    player.start('/camera-stream/t/stream.m3u8');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onBlocked).toHaveBeenLastCalledWith(true);
+    expect(player.diagnostics()).toMatchObject({ blocked: true, playError: expect.stringContaining('NotAllowedError') });
+
+    await vi.advanceTimersByTimeAsync(3 * AUTOPLAY_RETRY_MS);
+    expect(video.play).toHaveBeenCalledTimes(4);
+    expect(onBlocked).toHaveBeenCalledTimes(1);
+
+    // The block lifts (the app has settled): the next retry gets it going, no tap needed.
+    video.allow = true;
+    await vi.advanceTimersByTimeAsync(AUTOPLAY_RETRY_MS);
+    expect(onBlocked).toHaveBeenLastCalledWith(false);
+    expect(player.diagnostics()).toMatchObject({ blocked: false, unblockedBy: 'retry' });
+    await vi.advanceTimersByTimeAsync(5 * AUTOPLAY_RETRY_MS);
+    expect(video.play).toHaveBeenCalledTimes(5);
+    player.stop();
+  });
+
+  it('starts a refused video on the next tap anywhere on the page', async () => {
+    const video = refusingVideo();
+    const onBlocked = vi.fn();
+    const player = new HlsPlayer(video, { onBlocked });
+    player.start('/camera-stream/t/stream.m3u8');
+    await vi.advanceTimersByTimeAsync(0);
+
+    video.allow = true; // inside a tap, Safari lets it start
+    document.body.dispatchEvent(new Event('touchend', { bubbles: true }));
+    expect(onBlocked).toHaveBeenLastCalledWith(false);
+    expect(player.diagnostics()).toMatchObject({ unblockedBy: 'tap' });
+    player.stop();
+  });
+
+  it('stops listening for taps once stopped', async () => {
+    const video = refusingVideo();
+    const player = new HlsPlayer(video, {});
+    player.start('/camera-stream/t/stream.m3u8');
+    await vi.advanceTimersByTimeAsync(0);
+    player.stop();
+    const calls = vi.mocked(video.play).mock.calls.length;
+    document.body.dispatchEvent(new Event('click', { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(5 * AUTOPLAY_RETRY_MS);
+    expect(video.play).toHaveBeenCalledTimes(calls);
   });
 
   it("doesn't count the wait before the first frame as a stall", () => {

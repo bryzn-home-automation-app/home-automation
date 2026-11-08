@@ -20,7 +20,12 @@ import { friendlyError, socketUrl, supportedCodecs } from '../utils/msePlayer';
 const players = vi.hoisted(() => ({
   started: [] as string[],
   stopped: 0,
-  handlers: [] as Array<{ onPlaying?: () => void; onEnded?: () => void; onError?: (m: string) => void }>,
+  handlers: [] as Array<{
+    onPlaying?: () => void;
+    onEnded?: () => void;
+    onError?: (m: string) => void;
+    onBlocked?: (blocked: boolean) => void;
+  }>,
 }));
 
 vi.mock('../utils/msePlayer', async (importOriginal) => {
@@ -290,6 +295,24 @@ describe('CameraTile', () => {
     update({ idle: true });
     expect(players.stopped).toBe(2);
     expect(screen.getByText(/nobody was watching/)).toBeInTheDocument();
+  });
+
+  it('asks for a tap when the phone holds the picture back, and plays it from that tap', async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    renderTile(driveway);
+    await waitFor(() => expect(players.started).toHaveLength(1));
+    const player = players.handlers[players.handlers.length - 1];
+
+    act(() => player.onBlocked?.(true));
+    expect(screen.queryByText('Waking camera…')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+    expect(play).toHaveBeenCalled();
+
+    act(() => player.onBlocked?.(false));
+    expect(screen.getByText('Waking camera…')).toBeInTheDocument();
+    act(() => player.onPlaying?.());
+    expect(screen.getByText('Live')).toBeInTheDocument();
+    play.mockRestore();
   });
 
   it('shows a retry when live view fails, without looping', async () => {

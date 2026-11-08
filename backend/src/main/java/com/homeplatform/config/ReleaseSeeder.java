@@ -37,6 +37,12 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("1.10.1", "stable", LocalDate.of(2026, 11, 8),
+                    "Cameras start more reliably",
+                    "Live view on an iPhone no longer gets stuck on \"Waking camera…\".",
+                    List.of(
+                            change("fixed", "On an iPhone, live view no longer sticks on \"Waking camera…\" when the video has arrived. If the phone holds it back, one tap on Play starts every camera."),
+                            change("fixed", "The Living Room camera no longer takes half a minute to start when someone's in the room."))),
             define("1.10.0", "stable", LocalDate.of(2026, 11, 7),
                     "Gas, by the bill",
                     "The Gas tab now shows what each gas bill used and paid for, and when the next one comes.",
