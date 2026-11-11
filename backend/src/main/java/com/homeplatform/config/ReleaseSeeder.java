@@ -37,6 +37,13 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("2.6.0", "stable", LocalDate.of(2026, 11, 11),
+                    "Forgot your password?",
+                    "House members can set a new Home password themselves by confirming their birthday.",
+                    List.of(
+                            change("new", "Forgot password? on the sign-in page lets a house member set a new Home password after confirming their birthday. It works only at the app's secure address."),
+                            change("new", "People: Bryan can set each member's birthday and clear wrong tries. He is told about every reset and every wrong birthday."),
+                            change("fixed", "Profile: the switches on the Weather alerts card stay inside the card."))),
             define("2.5.0", "stable", LocalDate.of(2026, 11, 11),
                     "A clearer Roomba map and quicker commands",
                     "The map shows cleaned ground in its own colour and where the robot went over twice, and commands reach the robot sooner.",
