@@ -81,6 +81,14 @@
             <artifactId>spring-security-crypto</artifactId>
         </dependency>
 
+        <!-- Argon2id for the Home (Authelia) password a member resets with their birthday:
+             spring-security-crypto's Argon2PasswordEncoder needs it (AutheliaUsersFile) -->
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcprov-jdk18on</artifactId>
+            <version>1.80</version>
+        </dependency>
+
         <!-- Dev tools -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

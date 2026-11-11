@@ -101,11 +101,19 @@ export async function fetchGuestInviteCode(): Promise<string> {
   return data.code;
 }
 
-/**
- * What the login page offers: "Sign in with Home" (home SSO), and whether the retired password
- * form is switched back on (an emergency switch on the server).
- */
-export async function oidcConfig(): Promise<{ enabled: boolean; passwordLogin: boolean }> {
+/** What the sign-in page offers (GET /api/auth/oidc/config). */
+export interface SignInOptions {
+  /** "Sign in with Home" (home SSO). */
+  enabled: boolean;
+  /** The retired password form, switched back on (an emergency switch on the server). */
+  passwordLogin: boolean;
+  /** "Forgot password?": a member sets a new Home password with their birthday. */
+  passwordReset?: boolean;
+  /** Home's shortest allowed password (Authelia's policy). */
+  passwordMinLength?: number;
+}
+
+export async function oidcConfig(): Promise<SignInOptions> {
   const { data } = await api.get('/auth/oidc/config');
   return data;
 }
@@ -132,9 +140,10 @@ export interface ResetPasswordRequest {
 }
 
 /**
- * "Forgot password?": a member proves who they are with the birthday the admin stored for them.
+ * "Forgot password?": a member proves who they are with the birthday the admin stored for them and
+ * chooses a new Home password (the one Sign in with Home asks for, in every home app).
  * Errors: 400 bad input (the message says what), 401 no match (always the same answer), 429 too
- * many tries (`retryAfterSeconds`), 403 password sign-in is off, 503 unavailable.
+ * many tries (`retryAfterSeconds`), 404 switched off, 503 unavailable.
  */
 export async function resetPassword(req: ResetPasswordRequest): Promise<void> {
   await api.post('/auth/reset-password', req);

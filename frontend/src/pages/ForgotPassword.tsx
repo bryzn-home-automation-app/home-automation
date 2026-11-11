@@ -2,11 +2,23 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { oidcConfig, resetPassword } from '../api/auth';
 import BirthdayInput from '../components/BirthdayInput';
+import { SECURE_APP_URL } from '../components/PushSettings';
 import { Button, Field, Input, LinkButton, Notice, Panel, Stack } from '../components/ui';
 import DoorFrame from './door/DoorFrame';
 
 /** Every kind of no-match gets this one answer from the server; the page says it the same way. */
 export const NO_MATCH = 'That didn’t match. Check your username and birthday, or ask Bryan.';
+
+/** Home's shortest password (Authelia's policy), until the server says otherwise. */
+const DEFAULT_MIN_LENGTH = 8;
+
+/**
+ * Whether a new password typed here travels encrypted: the HTTPS (Tailscale) address, or this
+ * machine during development. The plain-http LAN address would send it across the Wi-Fi as is.
+ */
+export function isPrivateEnough(loc: Pick<Location, 'protocol' | 'hostname'>): boolean {
+  return loc.protocol === 'https:' || loc.hostname === 'localhost' || loc.hostname === '127.0.0.1';
+}
 
 type Problem = { tone: 'problem' | 'headsup'; title: string; body?: string };
 
@@ -36,8 +48,8 @@ export function problemFor(err: unknown): Problem {
       };
     case 400:
       return { tone: 'problem', title: data?.error || 'Check the form and try again.' };
-    case 403:
-      return { tone: 'headsup', title: 'Password reset is switched off.', body: 'Use Sign in with Home, or ask Bryan.' };
+    case 404:
+      return { tone: 'headsup', title: 'Password reset is switched off.', body: 'If you can’t sign in with Home, ask Bryan.' };
     case undefined:
       return { tone: 'problem', title: 'Couldn’t reach the home server.', body: 'Check your connection and try again in a minute.' };
     default:
@@ -47,15 +59,16 @@ export function problemFor(err: unknown): Problem {
 
 /*
  * "Forgot password?" for household members: username, the birthday the admin saved for them, and a
- * new password. It exists only while the server's password sign-in switch is on (otherwise there's
- * no password to reset, and the page says so up front, like Create account).
+ * new Home password, the one Sign in with Home asks for in every home app. Offered only while the
+ * server has it switched on (it needs Home's users file); otherwise the page says so up front.
  */
 export default function ForgotPassword() {
   const navigate = useNavigate();
   const location = useLocation();
-  // Whether password sign-in is on: null until the server answers. If it can't be asked, the
-  // form shows and the server has the last word.
+  // Whether reset is switched on: null until the server answers. If it can't be asked, the form
+  // shows and the server has the last word.
   const [open, setOpen] = useState<boolean | null>(null);
+  const [minLength, setMinLength] = useState(DEFAULT_MIN_LENGTH);
   const [username, setUsername] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [password, setPassword] = useState('');
@@ -66,7 +79,10 @@ export default function ForgotPassword() {
 
   useEffect(() => {
     oidcConfig()
-      .then((c) => setOpen(c.passwordLogin))
+      .then((c) => {
+        setOpen(c.passwordReset === true);
+        if (c.passwordMinLength && c.passwordMinLength > 0) setMinLength(c.passwordMinLength);
+      })
       .catch(() => setOpen(true));
   }, []);
 
@@ -83,8 +99,8 @@ export default function ForgotPassword() {
       setProblem({ tone: 'problem', title: 'Enter your username and your full birthday.' });
       return;
     }
-    if (password.length < 6) {
-      setProblem({ tone: 'problem', title: 'Your new password needs at least 6 characters.' });
+    if (Array.from(password).length < minLength) {
+      setProblem({ tone: 'problem', title: `Your new password needs at least ${minLength} characters.` });
       return;
     }
     if (password !== confirm) {
@@ -96,9 +112,10 @@ export default function ForgotPassword() {
     setBusy(true);
     try {
       await resetPassword({ username: user, birthDate, newPassword: password });
-      // Back to sign in, with where they were headed (if anywhere) and a confirmation.
+      // Back to sign in, with where they were headed (if anywhere) and a confirmation that says to
+      // use Sign in with Home.
       const prior = (location.state && typeof location.state === 'object' ? location.state : {}) as Record<string, unknown>;
-      navigate('/login', { replace: true, state: { ...prior, passwordReset: true, username: user } });
+      navigate('/login', { replace: true, state: { ...prior, passwordReset: true } });
     } catch (err) {
       setProblem(problemFor(err));
       setBusy(false);
@@ -117,15 +134,28 @@ export default function ForgotPassword() {
     return (
       <Plate>
         <Notice tone="neutral" title="Password reset is switched off.">
-          Family accounts use Sign in with Home now. If you can’t get in, ask Bryan.
+          If you can’t sign in with Home, ask Bryan.
         </Notice>
         <LinkButton to="/login" state={location.state} variant="primary" block icon="home">Go to sign in</LinkButton>
       </Plate>
     );
   }
 
+  if (!isPrivateEnough(window.location)) {
+    return (
+      <Plate>
+        <Notice tone="headsup" title="Use the secure address for this.">
+          This address would send your new password across the Wi-Fi unprotected.
+        </Notice>
+        <a className="fp-link text-apptext fp-t-center" href={`${SECURE_APP_URL}/forgot-password`}>
+          {SECURE_APP_URL.replace('https://', '')}/forgot-password
+        </a>
+      </Plate>
+    );
+  }
+
   return (
-    <Plate lead="Choose a new one with your username and the birthday saved for your account.">
+    <Plate lead="Choose a new password for Sign in with Home with your username and the birthday saved for your account.">
       <form onSubmit={handleSubmit} noValidate>
         <Stack>
           <Field label="Username">
@@ -141,7 +171,7 @@ export default function ForgotPassword() {
             />
           </Field>
           <BirthdayInput onChange={(iso) => { setBirthDate(iso); clear(); }} disabled={busy} />
-          <Field label="New password" help="At least 6 characters">
+          <Field label="New password" help={`At least ${minLength} characters. It’s the one for every home app.`}>
             <Input
               name="new-password"
               type="password"

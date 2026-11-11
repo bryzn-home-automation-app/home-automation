@@ -70,7 +70,7 @@ describe('People page', () => {
     (authApi.fetchPendingUsers as any).mockResolvedValue([]);
     (authApi.updateUserRole as any).mockResolvedValue(USERS[1]);
     (authApi.fetchBirthdays as any).mockResolvedValue([]);
-    (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: true });
+    (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: false, passwordReset: true, passwordMinLength: 8 });
   });
 
   it('never offers an admin the controls for their own account (B-181)', async () => {
@@ -115,7 +115,8 @@ describe('People page', () => {
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: 'Manage Mai' }));
       const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
-      expect(within(dialog).getByText(/Save Mai's birthday so they can choose a new password/)).toBeInTheDocument();
+      expect(within(dialog).getByText(/Save Mai's birthday so they can choose a new Home password/)).toBeInTheDocument();
+      expect(within(dialog).queryByText('Password reset is switched off.')).toBeNull();
       const save = within(dialog).getByRole('button', { name: 'Save birthday' });
       expect(save).toBeDisabled();
 
@@ -152,12 +153,13 @@ describe('People page', () => {
       expect(within(dialog).queryByLabelText('Month')).toBeNull();
     });
 
-    it('tells the admin when password sign-in is off, so the link is hidden', async () => {
-      (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: false });
+    it('tells the admin when the server has reset switched off, so the link is hidden', async () => {
+      (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: false, passwordReset: false, passwordMinLength: 8 });
       renderPage();
       fireEvent.click(await screen.findByRole('button', { name: 'Manage Mai' }));
       const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
-      expect(await within(dialog).findByText('Password sign-in is switched off.')).toBeInTheDocument();
+      expect(await within(dialog).findByText('Password reset is switched off.')).toBeInTheDocument();
+      expect(within(dialog).getByText(/AUTHELIA_USERS_FILE/)).toBeInTheDocument();
     });
 
     it('members never load anyone’s birthday', async () => {

@@ -83,6 +83,11 @@ services:
       OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-homeplatform}
       OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
       OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-https://nuc.tailf10ac4.ts.net/api/auth/oidc/callback}
+      # "Forgot password?": a member's new Home password, by birthday, written into Authelia's
+      # users file through the authelia_data mount below. Blank = off; on the NUC set it to
+      # /authelia/users_database.yml once the members' birthdays are saved in People.
+      AUTHELIA_USERS_FILE: ${AUTHELIA_USERS_FILE:-}
+      AUTHELIA_ADMIN_GROUPS: ${AUTHELIA_ADMIN_GROUPS:-admin}
       SPRINGDOC_API_DOCS_ENABLED: ${SPRINGDOC_API_DOCS_ENABLED:-false}
       SPRINGDOC_SWAGGER_UI_ENABLED: ${SPRINGDOC_SWAGGER_UI_ENABLED:-false}
       # Home Assistant — blank/false keeps the integration off (stack still boots).
@@ -118,6 +123,11 @@ services:
       # NUC Health: scripts/host-metrics.ps1 (a SYSTEM task on the NUC host) writes
       # metrics.json here every minute. A container only sees Docker's VM, not the NUC.
       - ./host-metrics:/host-metrics:ro
+      # Authelia's data (../home-sso), for "Forgot password?" (AutheliaUsersFile). The folder,
+      # not the one file: the new users file is renamed into place, which a single-file mount
+      # can't take, and Authelia reloads on that rename. The backend only touches
+      # users_database.yml and password-reset-backups/ in it.
+      - authelia_data:/authelia
 
   roomba-poller:
     build:
@@ -268,6 +278,12 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Home SSO's Authelia volume, owned by ../home-sso (its scripts/import-users.sh created it);
+  # external, so nothing here can create or delete it. On a machine without home-sso, a full
+  # `docker compose up` needs it to exist: `docker volume create home-sso_authelia_data`.
+  authelia_data:
+    name: home-sso_authelia_data
+    external: true
   postgres_data:
   redis_data:
   uploads_data:

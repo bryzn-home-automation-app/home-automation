@@ -40,7 +40,7 @@ function claimAutoSso(): boolean {
   }
 }
 
-type Options = { sso: boolean; password: boolean; unreachable?: boolean };
+type Options = { sso: boolean; password: boolean; reset: boolean; unreachable?: boolean };
 
 /*
  * The front door: one large key, "Sign in with Home", set in a recessed bezel on a bare
@@ -54,10 +54,10 @@ export default function Login() {
   const [searchParams, setSearchParams] = useSearchParams();
   const ssoReturn = searchParams.has('sso');
   const ssoError = searchParams.get('sso_error');
-  // Back from "Forgot password?" with a new password: say so, and keep the username they typed.
+  // Back from "Forgot password?" with a new Home password: say so, and wait for a tap on Sign in
+  // with Home rather than going straight there, so they see it.
   const resetDone = (location.state as { passwordReset?: unknown } | null)?.passwordReset === true;
-  const resetUser = (location.state as { username?: unknown } | null)?.username;
-  const [username, setUsername] = useState(resetDone && typeof resetUser === 'string' ? resetUser : '');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(ssoError ? SSO_ERRORS[ssoError] ?? SSO_ERRORS.failed : '');
   const [loading, setLoading] = useState(false);
@@ -78,24 +78,25 @@ export default function Login() {
   const loadOptions = useCallback(() => {
     setChecking(true);
     oidcConfig()
-      .then((c) => setOptions({ sso: c.enabled && isHttps, password: c.passwordLogin }))
+      .then((c) => setOptions({ sso: c.enabled && isHttps, password: c.passwordLogin, reset: c.passwordReset === true }))
       // The server didn't answer (a restart, weak Wi-Fi): still offer the key, but say so, and
       // don't bounce to home SSO by itself, which would land on a bare 502 page (B-014).
-      .catch(() => setOptions({ sso: isHttps, password: false, unreachable: true }))
+      .catch(() => setOptions({ sso: isHttps, password: false, reset: false, unreachable: true }))
       .finally(() => setChecking(false));
   }, [isHttps]);
   useEffect(loadOptions, [loadOptions]);
 
   // "Sign in with Home" is the only way in, so go straight there: someone already signed in to home
   // SSO lands in the app without a tap. Not after Sign out (that would sign straight back in), not
-  // after an SSO error, not while the server isn't answering, and not twice within two minutes, so
-  // pressing Back on the sign-in page shows this page instead of bouncing forward again.
+  // after an SSO error, not while the server isn't answering, not right after a password reset, and
+  // not twice within two minutes, so pressing Back on the sign-in page shows this page instead of
+  // bouncing forward again.
   useEffect(() => {
-    if (!options?.sso || options.password || options.unreachable || ssoReturn || ssoError || signedOut || !claimAutoSso()) return;
+    if (!options?.sso || options.password || options.unreachable || ssoReturn || ssoError || signedOut || resetDone || !claimAutoSso()) return;
     setFinishingSso(true);
     rememberReturnPath(returnTo);
     startHomeSso();
-  }, [options, ssoReturn, ssoError, signedOut, returnTo]);
+  }, [options, ssoReturn, ssoError, signedOut, resetDone, returnTo]);
 
   // Back from home SSO: swap the one-time code (an HttpOnly cookie) for a session. The ref keeps
   // React's dev double-effect from spending the code twice.
@@ -163,7 +164,7 @@ export default function Login() {
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}
-            autoFocus={!options.sso && !resetDone}
+            autoFocus={!options.sso}
           />
         </Field>
         <Field label="Password">
@@ -173,16 +174,11 @@ export default function Login() {
             value={password}
             onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
             autoComplete="current-password"
-            autoFocus={!options.sso && resetDone}
           />
         </Field>
         <Button type="submit" variant={options.sso ? 'secondary' : 'primary'} size={options.sso ? 'md' : 'lg'} block icon="log-in" busy={loading} busyLabel="Signing in…">
           Sign in
         </Button>
-        {/* Members only (the server checks); carries where they were headed through the detour. */}
-        <p className="fp-small fp-t-center">
-          <Link className="fp-link text-apptext-muted" to="/forgot-password" state={location.state}>Forgot password?</Link>
-        </p>
       </Stack>
     </form>
   ) : null;
@@ -191,7 +187,9 @@ export default function Login() {
     <DoorFrame center>
       <Panel className="flex w-[min(100%,440px)] flex-col gap-5 [--apppanel-pad:24px] lg:w-[460px] lg:gap-[22px] lg:[--apppanel-pad:32px]">
         {resetDone && !error ? (
-          <Notice tone="ok" title="Password changed." live="polite">Sign in with your new password.</Notice>
+          <Notice tone="ok" title="Home password changed." live="polite">
+            Tap Sign in with Home and use your new password. It’s the same one for every home app.
+          </Notice>
         ) : signedOut && options?.sso && !error && (
           <Notice tone="ok" title="You’re signed out." live="polite">Sign in again whenever you like.</Notice>
         )}
@@ -232,6 +230,13 @@ export default function Login() {
               <p className="-mt-2 flex items-center justify-center gap-2">
                 <Lamp tone="ok" size="s" />
                 <span className="fp-small fp-muted">The home server is on</span>
+              </p>
+            )}
+            {/* A new Home password by birthday (members only; the server checks). Carries where
+                they were headed through the detour. */}
+            {options.reset && (
+              <p className="-mt-2 fp-small fp-t-center">
+                <Link className="fp-link text-apptext-muted" to="/forgot-password" state={location.state}>Forgot password?</Link>
               </p>
             )}
           </>

@@ -25,6 +25,7 @@ public class UsageStorageMigration implements ApplicationRunner {
     }
 
     private void ensureDedicatedUsageStorage() {
+        addUserColumns();
         createDedicatedTables();
         createFutureModuleTables();
         dropRetiredTables();
@@ -74,6 +75,12 @@ public class UsageStorageMigration implements ApplicationRunner {
         // NOTE: electric_usage (daily Green Button) is kept as a standalone table
         // for reconciliation. It is NOT in the energy_usage view — only the hourly
         // table feeds consumption charts to avoid double-counting.
+    }
+
+    /** Columns added to users after it was created (schema.sql has them for new databases). */
+    private void addUserColumns() {
+        // A member's "Forgot password?" birthday (PasswordResetService); NULL = reset off.
+        jdbcTemplate.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE");
     }
 
     private void createDedicatedTables() {

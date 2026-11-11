@@ -1,10 +1,14 @@
+// @vitest-environment-options {"url": "https://nuc.tailf10ac4.ts.net/login"}
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import * as authApi from '../api/auth';
 import { isoBirthday, formatBirthday } from '../components/BirthdayInput';
-import { NO_MATCH, pausedFor, problemFor } from '../pages/ForgotPassword';
+import { NO_MATCH, isPrivateEnough, pausedFor, problemFor } from '../pages/ForgotPassword';
+
+/** As production runs: Sign in with Home only, password form retired, reset switched on. */
+const PRODUCTION = { enabled: true, passwordLogin: false, passwordReset: true, passwordMinLength: 8 };
 
 vi.mock('../api/auth', async () => {
   const actual = await vi.importActual('../api/auth');
@@ -14,9 +18,9 @@ vi.mock('../api/auth', async () => {
     heartbeat: vi.fn().mockResolvedValue(undefined),
     login: vi.fn(),
     resetPassword: vi.fn(),
-    // Password sign-in switched on (the server's emergency switch), so the form and link show.
-    oidcConfig: vi.fn().mockResolvedValue({ enabled: true, passwordLogin: true }),
+    oidcConfig: vi.fn(),
     oidcExchange: vi.fn(),
+    startHomeSso: vi.fn(),
   };
 });
 
@@ -57,31 +61,43 @@ const submit = () => fireEvent.click(screen.getByRole('button', { name: /set new
 describe('Forgot password', () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     vi.clearAllMocks();
+    (authApi.oidcConfig as any).mockResolvedValue(PRODUCTION);
+    // As when someone comes Back from the Home sign-in page: the sign-in page stays put.
+    sessionStorage.setItem('sso_auto_started_at', String(Date.now()));
   });
 
-  it('is linked from under the sign-in form, keeping where the person was headed', async () => {
+  it('is linked beside Sign in with Home, with password sign-in off, keeping where the person was headed', async () => {
     const from = { pathname: '/cameras', search: '', hash: '' };
     await renderAt('/login', { from });
+    expect(screen.getByText('Sign in with Home')).toHaveAttribute('href', '/api/auth/oidc/start');
     const link = screen.getByRole('link', { name: 'Forgot password?' });
     expect(link).toHaveAttribute('href', '/forgot-password');
     fireEvent.click(link);
     expect(await screen.findByRole('heading', { name: 'Forgot your password?' })).toBeInTheDocument();
+    expect(screen.getByText(/Choose a new password for Sign in with Home/)).toBeInTheDocument();
   });
 
-  it('is not offered while password sign-in is switched off, and the page says why', async () => {
-    (authApi.oidcConfig as any).mockResolvedValueOnce({ enabled: true, passwordLogin: false });
+  it('is offered once, beside Home, not under the emergency password form (that password is the app’s own)', async () => {
+    (authApi.oidcConfig as any).mockResolvedValue({ ...PRODUCTION, passwordLogin: true });
+    await renderAt('/login');
+    expect(screen.getAllByRole('link', { name: 'Forgot password?' })).toHaveLength(1);
+  });
+
+  it('is not offered while switched off, and the page says why', async () => {
+    (authApi.oidcConfig as any).mockResolvedValue({ ...PRODUCTION, passwordReset: false });
     const login = await renderAt('/login');
+    expect(screen.getByText('Sign in with Home')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Forgot password?' })).not.toBeInTheDocument();
     login.unmount();
 
-    (authApi.oidcConfig as any).mockResolvedValueOnce({ enabled: true, passwordLogin: false });
     await renderAt('/forgot-password');
     expect(await screen.findByText('Password reset is switched off.')).toBeInTheDocument();
     expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
   });
 
-  it('asks for username, a month/day/year birthday and the new password twice', async () => {
+  it('asks for username, a month/day/year birthday and the new password twice, with Home’s length rule', async () => {
     await renderAt('/forgot-password');
     expect(screen.getByLabelText('Username')).toHaveAttribute('autocomplete', 'username');
     expect(screen.getByRole('group', { name: 'Birthday' })).toBeInTheDocument();
@@ -90,9 +106,11 @@ describe('Forgot password', () => {
     expect(screen.getByLabelText('Year')).toBeInTheDocument();
     expect(screen.getByLabelText('New password')).toHaveAttribute('autocomplete', 'new-password');
     expect(screen.getByLabelText('New password again')).toHaveAttribute('type', 'password');
+    expect(screen.getByText('At least 8 characters. It’s the one for every home app.')).toBeInTheDocument();
   });
 
-  it('sends the birthday as yyyy-MM-dd and returns to sign in with a confirmation and the username filled in', async () => {
+  it('sends the birthday as yyyy-MM-dd and returns to sign in, saying to use Sign in with Home, without bouncing there', async () => {
+    sessionStorage.clear(); // no Back-button cooldown: only the reset keeps the page put
     (authApi.resetPassword as any).mockResolvedValue(undefined);
     await renderAt('/forgot-password');
     fillForm({ username: ' robin ' });
@@ -101,9 +119,10 @@ describe('Forgot password', () => {
     await waitFor(() => expect(authApi.resetPassword).toHaveBeenCalledWith({
       username: 'robin', birthDate: '1994-07-09', newPassword: 'new-secret-1',
     }));
-    expect(await screen.findByText('Password changed.')).toBeInTheDocument();
-    expect(screen.getByText('Sign in with your new password.')).toBeInTheDocument();
-    expect(screen.getByLabelText('Username')).toHaveValue('robin');
+    expect(await screen.findByText('Home password changed.')).toBeInTheDocument();
+    expect(screen.getByText(/Tap Sign in with Home and use your new password/)).toBeInTheDocument();
+    expect(screen.getByText('Sign in with Home')).toHaveAttribute('href', '/api/auth/oidc/start');
+    expect(authApi.startHomeSso).not.toHaveBeenCalled();
   });
 
   it('catches mismatched or short passwords and a missing birthday before asking the server', async () => {
@@ -113,9 +132,9 @@ describe('Forgot password', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('The two passwords don’t match.');
     expect(screen.getByText('Doesn’t match the one above')).toBeInTheDocument();
 
-    fillForm({ password: '123', again: '123' });
+    fillForm({ password: '1234567', again: '1234567' });
     submit();
-    expect(await screen.findByText('Your new password needs at least 6 characters.')).toBeInTheDocument();
+    expect(await screen.findByText('Your new password needs at least 8 characters.')).toBeInTheDocument();
 
     fillForm();
     fireEvent.change(screen.getByLabelText('Month'), { target: { value: '2' } });
@@ -123,6 +142,16 @@ describe('Forgot password', () => {
     fireEvent.change(screen.getByLabelText('Day'), { target: { value: '29' } }); // no Feb 29 in 1995
     submit();
     expect(await screen.findByText('Enter your username and your full birthday.')).toBeInTheDocument();
+    expect(authApi.resetPassword).not.toHaveBeenCalled();
+  });
+
+  it('takes the length rule from the server', async () => {
+    (authApi.oidcConfig as any).mockResolvedValue({ ...PRODUCTION, passwordMinLength: 12 });
+    await renderAt('/forgot-password');
+    expect(await screen.findByText('At least 12 characters. It’s the one for every home app.')).toBeInTheDocument();
+    fillForm({ password: 'eleven-char' });
+    submit();
+    expect(await screen.findByText('Your new password needs at least 12 characters.')).toBeInTheDocument();
     expect(authApi.resetPassword).not.toHaveBeenCalled();
   });
 
@@ -136,7 +165,7 @@ describe('Forgot password', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'That didn’t match. Check your username and birthday, or ask Bryan.',
     );
-    expect(screen.queryByText('Password changed.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Home password changed.')).not.toBeInTheDocument();
   });
 
   it('says plainly when resets are paused, and for how long', async () => {
@@ -175,10 +204,16 @@ describe('Forgot password helpers', () => {
 
   it('maps every server answer to something a person can act on', () => {
     expect(problemFor({ response: { status: 401, data: {} } }).title).toBe(NO_MATCH);
-    expect(problemFor({ response: { status: 400, data: { error: 'Password must be at least 6 characters.' } } }).title)
-      .toBe('Password must be at least 6 characters.');
-    expect(problemFor({ response: { status: 403, data: {} } }).title).toBe('Password reset is switched off.');
+    expect(problemFor({ response: { status: 400, data: { error: 'Password must be at least 8 characters.' } } }).title)
+      .toBe('Password must be at least 8 characters.');
+    expect(problemFor({ response: { status: 404, data: {} } }).title).toBe('Password reset is switched off.');
     expect(problemFor({ response: { status: 503, data: {} } }).title).toBe('Password reset isn’t available right now.');
     expect(problemFor(new Error('Network Error')).title).toBe('Couldn’t reach the home server.');
+  });
+
+  it('only takes a new password over HTTPS (or on this machine in development)', () => {
+    expect(isPrivateEnough({ protocol: 'https:', hostname: 'nuc.tailf10ac4.ts.net' })).toBe(true);
+    expect(isPrivateEnough({ protocol: 'http:', hostname: '192.168.4.228' })).toBe(false);
+    expect(isPrivateEnough({ protocol: 'http:', hostname: 'localhost' })).toBe(true);
   });
 });

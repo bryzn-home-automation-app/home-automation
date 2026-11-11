@@ -6,6 +6,9 @@ import com.homeplatform.model.User;
 import com.homeplatform.model.User.AccountStatus;
 import com.homeplatform.model.User.Role;
 import com.homeplatform.repository.UserRepository;
+import com.homeplatform.security.AutheliaUsersFile;
+import com.homeplatform.security.AutheliaUsersFile.Accounts;
+import com.homeplatform.security.AutheliaUsersFile.UsersFileException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,24 +25,29 @@ import java.util.NoSuchElementException;
 
 /**
  * "Forgot password?" for household members: a member who knows their username and the birthday an
- * admin stored for them can choose a new password from the sign-in page.
+ * admin stored for them can choose a new Home password (the one "Sign in with Home" asks for, kept
+ * in Authelia's users file and shared by every app behind it) from the sign-in page.
  *
  * <p>A birthday is a weak secret (the owner chose it knowingly), so everything else is as tight as
  * it can be:
  * <ul>
- *   <li>Only ACTIVE accounts with role USER and a stored birthday qualify. Never admins, guests or
- *       sign-ups waiting for approval, whatever is stored.</li>
- *   <li>Unknown username, ineligible account, no birthday stored and wrong birthday all get the same
- *       answer, count against the same limits and take the same minimum time; the date is compared
- *       in constant time.</li>
+ *   <li>Checked twice. Here: only ACTIVE accounts with role USER and a stored birthday, never
+ *       admins, guests or sign-ups waiting for approval, whatever is stored. In the users file
+ *       ({@link AutheliaUsersFile}): exactly one Home account uses the member's email, and it isn't
+ *       disabled or in an admin group. The file is checked again under its lock as it's changed.</li>
+ *   <li>Unknown username, ineligible account, no birthday, wrong birthday and a Home account that
+ *       can't be changed this way all get the same answer, count against the same limits and take
+ *       the same minimum time; the date is compared in constant time.</li>
  *   <li>Wrong tries are limited per username (5 in 15 minutes, then an hour's pause; 10 in a day,
  *       then a day's pause) and per client address (20 in 15 minutes, then an hour). The limits
  *       live in Redis and fail closed: no Redis, no resets.</li>
  *   <li>Every attempt is written to app_events (category "auth"; never the birthday or password).
- *       Admins get an in-app and phone notice when a reset succeeds or a username gets paused.</li>
+ *       Admins get an in-app and phone notice when a reset succeeds, a username gets paused, or a
+ *       matched birthday couldn't change the Home password.</li>
  * </ul>
- * A reset doesn't sign the member's other devices out: there is no per-user token revocation
- * (see {@link UserService#setPassword}).
+ * Off unless the users file is configured (AUTHELIA_USERS_FILE). A reset doesn't end sessions
+ * already open: Authelia's sessions live in its own Redis, and the app's JWTs aren't tied to a
+ * password; see the admin notice.
  */
 @Service
 public class PasswordResetService {
@@ -48,6 +56,11 @@ public class PasswordResetService {
 
     static final String SOURCE = "PasswordReset";
     static final String CATEGORY = "auth";
+
+    /** Authelia's password policy in ../home-sso (password_policy.standard.min_length). */
+    public static final int MIN_PASSWORD_LENGTH = 8;
+    /** Long enough for any passphrase; keeps an absurd request from being hashed. */
+    static final int MAX_PASSWORD_LENGTH = 128;
 
     /** Wrong tries per username: this many in {@link #USER_WINDOW}, then {@link #USER_LOCKOUT}. */
     static final int USER_MAX = 5;
@@ -68,7 +81,7 @@ public class PasswordResetService {
     private static final LocalDate NOTHING_STORED = LocalDate.of(1, 1, 1);
     private static final LocalDate EARLIEST = LocalDate.of(1900, 1, 1);
 
-    public enum Outcome { RESET, INVALID, NO_MATCH, THROTTLED, UNAVAILABLE }
+    public enum Outcome { RESET, INVALID, NO_MATCH, THROTTLED, UNAVAILABLE, OFF }
 
     /**
      * @param error             what to show for {@link Outcome#INVALID} (input problems that don't
@@ -83,21 +96,26 @@ public class PasswordResetService {
     public record Birthday(Long userId, LocalDate birthDate) {}
 
     private final UserRepository users;
-    private final UserService userService;
+    private final AutheliaUsersFile homeAccounts;
     private final LoginRateLimiter limiter;
     private final AppEventService events;
     private final NotificationService notifications;
     private final Duration minResponse;
 
-    public PasswordResetService(UserRepository users, UserService userService, LoginRateLimiter limiter,
+    public PasswordResetService(UserRepository users, AutheliaUsersFile homeAccounts, LoginRateLimiter limiter,
                                 AppEventService events, NotificationService notifications,
                                 @Value("${app.security.password-reset.min-response-ms:500}") long minResponseMs) {
         this.users = users;
-        this.userService = userService;
+        this.homeAccounts = homeAccounts;
         this.limiter = limiter;
         this.events = events;
         this.notifications = notifications;
         this.minResponse = Duration.ofMillis(minResponseMs);
+    }
+
+    /** Whether "Forgot password?" is offered at all: only with the Home users file configured. */
+    public boolean isEnabled() {
+        return homeAccounts.isConfigured();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -105,6 +123,7 @@ public class PasswordResetService {
     // ═══════════════════════════════════════════════════════════
 
     public Result reset(String rawUsername, LocalDate birthDate, String newPassword, String ip) {
+        if (!isEnabled()) return Result.of(Outcome.OFF);
         // Input checks first: they don't depend on any account, so they reveal nothing.
         String username = rawUsername == null ? "" : rawUsername.trim();
         if (username.isEmpty() || birthDate == null) {
@@ -113,7 +132,7 @@ public class PasswordResetService {
         if (birthDate.isBefore(EARLIEST) || birthDate.isAfter(LocalDate.now())) {
             return new Result(Outcome.INVALID, "Enter your birthday.", 0);
         }
-        String problem = UserService.passwordProblem(newPassword);
+        String problem = passwordProblem(newPassword);
         if (problem != null) return new Result(Outcome.INVALID, problem, 0);
 
         Keys keys = new Keys(username, ip);
@@ -144,6 +163,20 @@ public class PasswordResetService {
         }
     }
 
+    /** What's wrong with {@code password} as a new Home password, or null when Authelia would take it. */
+    public static String passwordProblem(String password) {
+        if (password == null || password.isBlank() || password.codePointCount(0, password.length()) < MIN_PASSWORD_LENGTH) {
+            return "Password must be at least " + MIN_PASSWORD_LENGTH + " characters.";
+        }
+        if (password.codePointCount(0, password.length()) > MAX_PASSWORD_LENGTH) {
+            return "Password is too long. Use up to " + MAX_PASSWORD_LENGTH + " characters.";
+        }
+        if (password.chars().anyMatch(Character::isISOControl)) {
+            return "Password can't contain tabs or line breaks.";
+        }
+        return null;
+    }
+
     private Result attempt(String username, LocalDate birthDate, String newPassword, Keys keys, String who) {
         User user = users.findByUsernameIgnoreCase(username).orElse(null);
         String refusal = refusal(user);
@@ -151,16 +184,33 @@ public class PasswordResetService {
         // Always compare, in constant time, so the paths take the same work.
         boolean same = MessageDigest.isEqual(dateBytes(stored), dateBytes(birthDate));
 
+        // The users file is read on every attempt, matched or not, so whether it's readable can't
+        // say anything about the birthday.
+        Accounts home;
+        try {
+            home = homeAccounts.read();
+        } catch (UsersFileException e) {
+            events.log(CATEGORY, "ERROR", SOURCE, "Password reset unavailable for " + who + ": the Home users file " + e.getMessage(), null);
+            return Result.of(Outcome.UNAVAILABLE);
+        }
+
         if (refusal == null && same) {
-            userService.setPassword(user, newPassword);
-            limiter.clear(keys.user);
-            limiter.clear(keys.day);
-            events.info(CATEGORY, SOURCE, "Password reset with a birthday for " + who);
+            String homeRefusal = home.refusal(user.getEmail());
+            if (homeRefusal == null) {
+                try {
+                    AutheliaUsersFile.Changed changed = homeAccounts.setPassword(user.getEmail(), newPassword);
+                    return succeeded(user, changed, keys, who);
+                } catch (AutheliaUsersFile.Refused e) {
+                    homeRefusal = e.getMessage(); // changed between the read and the write
+                } catch (UsersFileException e) {
+                    return writeFailed(user, e, who);
+                }
+            }
+            refusal = "birthday matched, but " + homeRefusal;
             String name = nameOf(user);
-            notifyAdmins(name + " reset their password",
-                    name + " chose a new password from the sign-in page, using their birthday. If that wasn't "
-                            + name + ", turn the account off in People and clear its birthday.");
-            return Result.of(Outcome.RESET);
+            notifyAdmins(Severity.WARNING, name + "'s Home password wasn't reset",
+                    "Someone gave " + name + "'s birthday on the sign-in page, but " + homeRefusal
+                            + ", so nothing changed and they were told it didn't match.");
         }
 
         String why = refusal != null ? refusal : "birthday didn't match";
@@ -173,11 +223,35 @@ public class PasswordResetService {
                 + (paused != null ? ". Resets for this username are now paused for " + paused : ""));
         if (paused != null && user != null) {
             String name = nameOf(user);
-            notifyAdmins("Password resets paused for " + name,
-                    "Someone entered the wrong birthday for " + name + "'s account too many times, so resetting its password is paused for "
+            notifyAdmins(Severity.WARNING, "Password resets paused for " + name,
+                    "Someone entered the wrong birthday for " + name + "'s account too many times, so resetting their Home password is paused for "
                             + paused + ". If it wasn't " + name + ", you can clear the birthday in People.");
         }
         return Result.of(Outcome.NO_MATCH);
+    }
+
+    private Result succeeded(User user, AutheliaUsersFile.Changed changed, Keys keys, String who) {
+        limiter.clear(keys.user);
+        limiter.clear(keys.day);
+        events.info(CATEGORY, SOURCE, "Home password reset with a birthday for " + who + ": Home account '"
+                + changed.homeUsername() + "', previous users file kept as " + changed.backup());
+        String name = nameOf(user);
+        notifyAdmins(Severity.WARNING, name + " reset their Home password",
+                name + " chose a new Home password from the sign-in page, using their birthday. It opens every app behind "
+                        + "Sign in with Home. If that wasn't " + name + ", disable their Home account ('" + changed.homeUsername()
+                        + "' in the users file) and clear their birthday in People. Devices already signed in stay signed in.");
+        return Result.of(Outcome.RESET);
+    }
+
+    /** The birthday matched but the file couldn't be changed safely: nothing changed (or it was put back). */
+    private Result writeFailed(User user, UsersFileException e, String who) {
+        String name = nameOf(user);
+        events.log(CATEGORY, "ERROR", SOURCE, "Home password reset for " + who + " failed: the Home users file " + e.getMessage(), null);
+        log.error("Home password reset for '{}' failed: the users file {}", user.getUsername(), e.getMessage());
+        notifyAdmins(e.signInAtRisk() ? Severity.CRITICAL : Severity.WARNING,
+                e.signInAtRisk() ? "Home sign-in may be broken" : name + "'s Home password reset failed",
+                name + " gave the right birthday to reset their Home password, but the Home users file " + e.getMessage() + ".");
+        return Result.of(Outcome.UNAVAILABLE);
     }
 
     /** Why {@code user} can't reset by birthday, or null when they can (the reason goes to the log only). */
@@ -200,10 +274,10 @@ public class PasswordResetService {
         }
     }
 
-    private void notifyAdmins(String title, String message) {
+    private void notifyAdmins(Severity severity, String title, String message) {
         for (User admin : users.findByRoleAndStatus(Role.ADMIN, AccountStatus.ACTIVE)) {
             try {
-                notifications.createAndPush(admin.getId(), Category.SYSTEM, Severity.WARNING, title, message, "/users");
+                notifications.createAndPush(admin.getId(), Category.SYSTEM, severity, title, message, "/users");
             } catch (Exception e) {
                 log.warn("Couldn't notify admin {} about a password reset: {}", admin.getId(), e.getMessage());
             }

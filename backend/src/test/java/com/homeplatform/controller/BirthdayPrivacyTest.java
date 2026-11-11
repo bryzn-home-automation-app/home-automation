@@ -148,12 +148,16 @@ class BirthdayPrivacyTest {
     }
 
     @Test
-    @DisplayName("the new password goes through registration's hashing: the member signs in with it")
-    void resetPasswordSignsIn() {
-        userService.setPassword(member, "fresh-password-9");
-        assertTrue(userRepo.findById(member.getId()).orElseThrow().getPasswordHash().startsWith("$2"), "bcrypt");
-        var login = userService.login(new com.homeplatform.dto.LoginRequest("leaktest", "fresh-password-9"), "10.0.0.6", "test");
-        assertEquals("leaktest", login.username());
-        assertThrows(IllegalArgumentException.class, () -> userService.setPassword(member, "short"));
+    @DisplayName("without a Home users file (AUTHELIA_USERS_FILE unset) the app boots with Forgot password off: not offered, 404")
+    void offWithoutUsersFile() throws Exception {
+        String config = mvc.perform(get("/api/auth/oidc/config")).andReturn().getResponse().getContentAsString();
+        assertTrue(config.contains("\"passwordReset\":false"), config);
+        assertTrue(config.contains("\"passwordMinLength\":8"), config);
+        var resp = mvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"leaktest\",\"birthDate\":\"1991-04-27\",\"newPassword\":\"fresh-password-9\"}"))
+                .andReturn().getResponse();
+        assertEquals(404, resp.getStatus());
+        assertEquals("{\"error\":\"Password reset isn't turned on.\"}", resp.getContentAsString());
+        assertFalse(passwordReset.isEnabled());
     }
 }

@@ -50,6 +50,14 @@ app:
     # self-registration stay switchable for local dev and for emergencies (Authelia down);
     # docker-compose turns them off.
     password-login-enabled: ${PASSWORD_LOGIN_ENABLED:true}
+  # "Forgot password?" (PasswordResetService): a member who gives the birthday an admin stored for
+  # them chooses a new Home password, written into Authelia's users file (../home-sso), the one
+  # every app behind Sign in with Home checks. Off unless the file's location is set;
+  # docker-compose mounts Authelia's data volume at /authelia. Accounts in these Authelia groups
+  # can never be reset this way.
+  password-reset:
+    authelia-users-file: ${AUTHELIA_USERS_FILE:}
+    authelia-admin-groups: ${AUTHELIA_ADMIN_GROUPS:admin}
   # Home SSO ("Sign in with Home", Authelia in ../home-sso). Off unless OIDC_ENABLED=true and
   # issuer + secret are set.
   oidc:

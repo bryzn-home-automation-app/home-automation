@@ -2,6 +2,7 @@ package com.homeplatform.controller;
 
 import com.homeplatform.security.OidcLoginStore;
 import com.homeplatform.security.OidcService;
+import com.homeplatform.service.PasswordResetService;
 import com.homeplatform.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
@@ -34,20 +35,26 @@ public class OidcController {
     private final OidcService oidc;
     private final OidcLoginStore store;
     private final UserService userService;
+    private final PasswordResetService passwordReset;
     private final boolean passwordLoginEnabled;
 
-    public OidcController(OidcService oidc, OidcLoginStore store, UserService userService,
+    public OidcController(OidcService oidc, OidcLoginStore store, UserService userService, PasswordResetService passwordReset,
                           @Value("${app.auth.password-login-enabled:true}") boolean passwordLoginEnabled) {
         this.oidc = oidc;
         this.store = store;
         this.userService = userService;
+        this.passwordReset = passwordReset;
         this.passwordLoginEnabled = passwordLoginEnabled;
     }
 
-    /** What the login page offers: "Sign in with Home", and the password form only if it's still on. */
+    /**
+     * What the login page offers: "Sign in with Home", the password form only if it's still on, and
+     * "Forgot password?" (a new Home password, by birthday) with Home's password length rule.
+     */
     @GetMapping("/config")
-    public Map<String, Boolean> config() {
-        return Map.of("enabled", oidc.isEnabled(), "passwordLogin", passwordLoginEnabled);
+    public Map<String, Object> config() {
+        return Map.of("enabled", oidc.isEnabled(), "passwordLogin", passwordLoginEnabled,
+                "passwordReset", passwordReset.isEnabled(), "passwordMinLength", PasswordResetService.MIN_PASSWORD_LENGTH);
     }
 
     @GetMapping("/start")

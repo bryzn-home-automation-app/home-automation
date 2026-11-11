@@ -23,6 +23,7 @@ public class AuthController {
     /** Family accounts sign in through home SSO only; password sign-in and self-registration are retired. */
     static final Map<String, String> PASSWORD_LOGIN_OFF =
             Map.of("error", "Password sign-in has been replaced by Sign in with Home.");
+    static final Map<String, String> RESET_OFF = Map.of("error", "Password reset isn't turned on.");
 
     private final UserService userService;
     private final LoginRateLimiter rateLimiter;
@@ -66,14 +67,15 @@ public class AuthController {
     }
 
     /**
-     * Forgot password: a member proves who they are with the birthday an admin stored for them
-     * (PasswordResetService). Public. Every kind of no-match gets the same 401 and body. Exists only
-     * while password sign-in does: with it off, a new password couldn't be used anyway.
+     * Forgot password: a member proves who they are with the birthday an admin stored for them and
+     * chooses a new Home password, the one "Sign in with Home" asks for (PasswordResetService).
+     * Public, and independent of the password sign-in switch. Every kind of no-match gets the same
+     * 401 and body. 404 while it's off (no Home users file configured).
      */
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody(required = false) PasswordResetRequest req,
                                            HttpServletRequest httpReq) {
-        if (!passwordLoginEnabled) return ResponseEntity.status(403).body(PASSWORD_LOGIN_OFF);
+        if (!passwordReset.isEnabled()) return ResponseEntity.status(404).body(RESET_OFF);
         if (req == null) return ResponseEntity.badRequest().body(Map.of("error", "Enter your username and birthday."));
         LocalDate birthDate = null;
         if (req.birthDate() != null) {
@@ -94,6 +96,7 @@ public class AuthController {
                             "retryAfterSeconds", result.retryAfterSeconds()));
             case UNAVAILABLE -> ResponseEntity.status(503)
                     .body(Map.of("error", "Password reset isn't available right now. Try again later."));
+            case OFF -> ResponseEntity.status(404).body(RESET_OFF);
         };
     }
 

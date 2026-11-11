@@ -3,6 +3,7 @@ package com.homeplatform.controller;
 import com.homeplatform.dto.LoginResponse;
 import com.homeplatform.security.OidcLoginStore;
 import com.homeplatform.security.OidcService;
+import com.homeplatform.service.PasswordResetService;
 import com.homeplatform.service.UserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,6 +23,7 @@ class OidcControllerTest {
     private OidcService oidc;
     private OidcLoginStore store;
     private UserService users;
+    private PasswordResetService passwordReset;
     private OidcController controller;
 
     @BeforeEach
@@ -29,7 +31,8 @@ class OidcControllerTest {
         oidc = mock(OidcService.class);
         store = new OidcLoginStore();
         users = mock(UserService.class);
-        controller = new OidcController(oidc, store, users, false);
+        passwordReset = mock(PasswordResetService.class);
+        controller = new OidcController(oidc, store, users, passwordReset, false);
         when(oidc.isEnabled()).thenReturn(true);
     }
 
@@ -50,9 +53,12 @@ class OidcControllerTest {
     }
 
     @Test
-    @DisplayName("config tells the login page what to offer")
+    @DisplayName("config tells the login page what to offer, Forgot password and its length rule included")
     void config() {
-        assertEquals(java.util.Map.of("enabled", true, "passwordLogin", false), controller.config());
+        assertEquals(java.util.Map.of("enabled", true, "passwordLogin", false, "passwordReset", false, "passwordMinLength", 8),
+                controller.config());
+        when(passwordReset.isEnabled()).thenReturn(true);
+        assertEquals(true, controller.config().get("passwordReset"), "on with the Home users file, whatever passwordLogin is");
     }
 
     @Test

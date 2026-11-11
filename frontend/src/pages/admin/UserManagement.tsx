@@ -509,7 +509,7 @@ function ResetBirthday({ user, birthday }: { user: AdminUser; birthday: string |
   const [error, setError] = useState<string | null>(null);
   // Remount the picker when the stored date changes (saved or cleared) so it shows it.
   const [pickerKey, setPickerKey] = useState(0);
-  // The sign-in page only offers "Forgot password?" while password sign-in is on.
+  // The sign-in page only offers "Forgot password?" while the server has it switched on.
   const config = useQuery({ queryKey: ['oidc-config'], queryFn: oidcConfig, staleTime: 60_000 });
 
   const save = useMutation({
@@ -552,12 +552,12 @@ function ResetBirthday({ user, birthday }: { user: AdminUser; birthday: string |
       <p className="fp-label">Forgot password</p>
       <p className="fp-small fp-muted">
         {birthday
-          ? `${name} can choose a new password from the sign-in page with their username and birthday, ${formatBirthday(birthday)}. Only admins see it.`
-          : `Save ${name}'s birthday so they can choose a new password from the sign-in page if they forget it. Only admins see it.`}
+          ? `${name} can choose a new Home password from the sign-in page with their username and birthday, ${formatBirthday(birthday)}. Only admins see it.`
+          : `Save ${name}'s birthday so they can choose a new Home password from the sign-in page if they forget it. Only admins see it.`}
       </p>
-      {config.data && !config.data.passwordLogin && (
-        <Notice tone="headsup" title="Password sign-in is switched off.">
-          The sign-in page hides “Forgot password?” until password sign-in is switched back on at the home server.
+      {config.data && !config.data.passwordReset && (
+        <Notice tone="headsup" title="Password reset is switched off.">
+          The sign-in page hides “Forgot password?” until the home server can reach Home’s users file (AUTHELIA_USERS_FILE).
         </Notice>
       )}
       <BirthdayInput
