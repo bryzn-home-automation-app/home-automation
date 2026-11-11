@@ -168,6 +168,18 @@ describe('Forgot password', () => {
     expect(screen.queryByText('Home password changed.')).not.toBeInTheDocument();
   });
 
+  it('says where to go when the home server only takes resets at the secure address (nginx’s 404), not a raw error', async () => {
+    (authApi.resetPassword as any).mockRejectedValue({
+      response: { status: 404, data: { error: 'Password reset only works in the app at its secure address.', where: 'https' } },
+    });
+    await renderAt('/forgot-password');
+    fillForm();
+    submit();
+    expect(await screen.findByText('Password reset only works in the app at its secure address.')).toBeInTheDocument();
+    expect(screen.getByText('Open nuc.tailf10ac4.ts.net with Tailscale on and try there, or ask Bryan.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Username')).toBeInTheDocument();
+  });
+
   it('says plainly when resets are paused, and for how long', async () => {
     (authApi.resetPassword as any).mockRejectedValue({
       response: { status: 429, data: { error: 'Too many tries.', retryAfterSeconds: 3600 } },
@@ -207,6 +219,8 @@ describe('Forgot password helpers', () => {
     expect(problemFor({ response: { status: 400, data: { error: 'Password must be at least 8 characters.' } } }).title)
       .toBe('Password must be at least 8 characters.');
     expect(problemFor({ response: { status: 404, data: {} } }).title).toBe('Password reset is switched off.');
+    expect(problemFor({ response: { status: 404, data: { where: 'https' } } }).title)
+      .toBe('Password reset only works in the app at its secure address.');
     expect(problemFor({ response: { status: 503, data: {} } }).title).toBe('Password reset isn’t available right now.');
     expect(problemFor(new Error('Network Error')).title).toBe('Couldn’t reach the home server.');
   });

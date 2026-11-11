@@ -34,9 +34,17 @@ export function pausedFor(seconds: number | undefined): string {
 
 /** What to show for a failed reset, from the server's answer. */
 export function problemFor(err: unknown): Problem {
-  const e = err as { response?: { status?: number; data?: { error?: string; retryAfterSeconds?: number } } };
+  const e = err as { response?: { status?: number; data?: { error?: string; retryAfterSeconds?: number; where?: string } } };
   const status = e?.response?.status;
   const data = e?.response?.data;
+  // nginx answers this way from anywhere but the tailnet's HTTPS address (nginx/default.conf).
+  if (status === 404 && data?.where === 'https') {
+    return {
+      tone: 'headsup',
+      title: 'Password reset only works in the app at its secure address.',
+      body: `Open ${SECURE_APP_URL.replace('https://', '')} with Tailscale on and try there, or ask Bryan.`,
+    };
+  }
   switch (status) {
     case 401:
       return { tone: 'problem', title: NO_MATCH };
@@ -145,7 +153,7 @@ export default function ForgotPassword() {
     return (
       <Plate>
         <Notice tone="headsup" title="Use the secure address for this.">
-          This address would send your new password across the Wi-Fi unprotected.
+          Password reset only works in the app at its secure address, with Tailscale on. If you can’t get there, ask Bryan.
         </Notice>
         <a className="fp-link text-apptext fp-t-center" href={`${SECURE_APP_URL}/forgot-password`}>
           {SECURE_APP_URL.replace('https://', '')}/forgot-password

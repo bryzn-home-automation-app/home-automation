@@ -18,6 +18,7 @@ describe('Forgot password on the LAN address', () => {
     await act(async () => { await Promise.resolve(); });
 
     expect(await screen.findByText('Use the secure address for this.')).toBeInTheDocument();
+    expect(screen.getByText(/If you can’t get there, ask Bryan\./)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'nuc.tailf10ac4.ts.net/forgot-password' }))
       .toHaveAttribute('href', 'https://nuc.tailf10ac4.ts.net/forgot-password');
     expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
