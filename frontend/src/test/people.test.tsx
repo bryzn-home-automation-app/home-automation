@@ -17,6 +17,9 @@ vi.mock('../api/auth', () => ({
   updateUserRole: vi.fn(),
   disableUser: vi.fn(),
   reactivateUser: vi.fn(),
+  fetchBirthdays: vi.fn(),
+  setBirthday: vi.fn(),
+  oidcConfig: vi.fn(),
 }));
 
 import UserManagement, { householdOf, visibleEmail } from '../pages/admin/UserManagement';
@@ -66,6 +69,8 @@ describe('People page', () => {
     (authApi.fetchAllUsers as any).mockResolvedValue(USERS);
     (authApi.fetchPendingUsers as any).mockResolvedValue([]);
     (authApi.updateUserRole as any).mockResolvedValue(USERS[1]);
+    (authApi.fetchBirthdays as any).mockResolvedValue([]);
+    (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: true });
   });
 
   it('never offers an admin the controls for their own account (B-181)', async () => {
@@ -102,6 +107,66 @@ describe('People page', () => {
     expect(screen.queryByText(/guest\.local/)).toBeNull();
     expect(screen.queryByRole('button', { name: /^Manage / })).toBeNull();
     expect(screen.queryByText('Asked to join')).toBeNull();
+  });
+
+  describe('Forgot-password birthdays (made-up dates)', () => {
+    it("an admin saves a member's birthday from month/day/year pickers", async () => {
+      (authApi.setBirthday as any).mockResolvedValue({ userId: 2, birthDate: '1990-03-04' });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage Mai' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
+      expect(within(dialog).getByText(/Save Mai's birthday so they can choose a new password/)).toBeInTheDocument();
+      const save = within(dialog).getByRole('button', { name: 'Save birthday' });
+      expect(save).toBeDisabled();
+
+      fireEvent.change(within(dialog).getByLabelText('Month'), { target: { value: '3' } });
+      fireEvent.change(within(dialog).getByLabelText('Day'), { target: { value: '4' } });
+      fireEvent.change(within(dialog).getByLabelText('Year'), { target: { value: '1990' } });
+      fireEvent.click(save);
+      await waitFor(() => expect(authApi.setBirthday).toHaveBeenCalledWith(2, '1990-03-04'));
+      expect(await within(dialog).findByText('Saved.')).toBeInTheDocument();
+    });
+
+    it('shows a stored birthday to the admin, marks the member in the roster, and clears it', async () => {
+      (authApi.fetchBirthdays as any).mockResolvedValue([{ userId: 2, birthDate: '1990-03-04' }]);
+      (authApi.setBirthday as any).mockResolvedValue({ userId: 2, birthDate: null });
+      renderPage();
+      expect(await screen.findByText(/birthday reset on/)).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage Mai' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
+      expect(within(dialog).getByText(/with their username and birthday, March 4, 1990/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Clear' }));
+      await waitFor(() => expect(authApi.setBirthday).toHaveBeenCalledWith(2, null));
+    });
+
+    it('offers no birthday for an admin or guest account', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      (authApi.fetchAllUsers as any).mockResolvedValue([
+        ...USERS,
+        user({ id: 5, username: 'pat', displayName: 'Pat', role: 'ADMIN', email: 'pat@example.com' }),
+      ]);
+      render(<MemoryRouter><QueryClientProvider client={qc}><UserManagement /></QueryClientProvider></MemoryRouter>);
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage Pat' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Manage Pat' });
+      expect(within(dialog).queryByText('Forgot password')).toBeNull();
+      expect(within(dialog).queryByLabelText('Month')).toBeNull();
+    });
+
+    it('tells the admin when password sign-in is off, so the link is hidden', async () => {
+      (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: false });
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage Mai' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
+      expect(await within(dialog).findByText('Password sign-in is switched off.')).toBeInTheDocument();
+    });
+
+    it('members never load anyone’s birthday', async () => {
+      state.isAdmin = false;
+      renderPage();
+      await screen.findAllByText('Mai');
+      expect(authApi.fetchBirthdays).not.toHaveBeenCalled();
+      expect(screen.queryByText(/birthday reset on/)).toBeNull();
+    });
   });
 
   it('says the load failed instead of "no users" (B-005)', async () => {

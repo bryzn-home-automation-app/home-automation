@@ -124,6 +124,22 @@ export async function oidcExchange(): Promise<LoginResponse> {
   return data;
 }
 
+export interface ResetPasswordRequest {
+  username: string;
+  /** yyyy-MM-dd */
+  birthDate: string;
+  newPassword: string;
+}
+
+/**
+ * "Forgot password?": a member proves who they are with the birthday the admin stored for them.
+ * Errors: 400 bad input (the message says what), 401 no match (always the same answer), 429 too
+ * many tries (`retryAfterSeconds`), 403 password sign-in is off, 503 unavailable.
+ */
+export async function resetPassword(req: ResetPasswordRequest): Promise<void> {
+  await api.post('/auth/reset-password', req);
+}
+
 export async function fetchMe(): Promise<LoginResponse> {
   const { data } = await api.get('/auth/me');
   return data;
@@ -170,6 +186,24 @@ export async function disableUser(userId: number): Promise<void> {
 
 export async function reactivateUser(userId: number): Promise<void> {
   await api.post(`/admin/users/${userId}/reactivate`);
+}
+
+/** A stored reset birthday (admins only; no other API ever returns one). */
+export interface UserBirthday {
+  userId: number;
+  /** yyyy-MM-dd */
+  birthDate: string;
+}
+
+export async function fetchBirthdays(): Promise<UserBirthday[]> {
+  const { data } = await api.get('/admin/users/birthdays');
+  return data;
+}
+
+/** Set (members only) or, with null, clear the birthday a member resets their password with. */
+export async function setBirthday(userId: number, birthDate: string | null): Promise<UserBirthday> {
+  const { data } = await api.put(`/admin/users/${userId}/birthday`, { birthDate });
+  return data;
 }
 
 export async function fetchGuestSessions(): Promise<GuestSession[]> {

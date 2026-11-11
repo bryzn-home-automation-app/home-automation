@@ -469,6 +469,10 @@ CREATE TABLE IF NOT EXISTS users (
     phone             VARCHAR(30),
     avatar_url        VARCHAR(500),
     accent_color      VARCHAR(7)   NOT NULL DEFAULT '#34d399',
+    -- Self-service password reset check, set per member by an admin (never ADMIN/GUEST).
+    -- NULL = reset off. Returned only by the admin API. Existing databases get it from
+    -- ddl-auto: update.
+    birth_date        DATE,
     created_at      TIMESTAMP    NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMP    NOT NULL DEFAULT NOW()
 );

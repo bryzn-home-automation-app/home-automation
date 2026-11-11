@@ -286,6 +286,40 @@ public class UserService {
     }
 
     // ═══════════════════════════════════════════════════════════
+    // New password (the birthday reset, PasswordResetService)
+    // ═══════════════════════════════════════════════════════════
+
+    /** Registration's rule (RegisterRequest: not blank, at least 6 characters). */
+    public static final int MIN_PASSWORD_LENGTH = 6;
+    /** bcrypt reads only 72 bytes, and Spring's encoder refuses more rather than cut it short. */
+    static final int MAX_PASSWORD_BYTES = 72;
+
+    /** What's wrong with {@code password} as a new password, or null when it can be used. */
+    public static String passwordProblem(String password) {
+        if (password == null || password.isBlank() || password.length() < MIN_PASSWORD_LENGTH) {
+            return "Password must be at least " + MIN_PASSWORD_LENGTH + " characters.";
+        }
+        if (password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > MAX_PASSWORD_BYTES) {
+            return "Password is too long. Use up to " + MAX_PASSWORD_BYTES + " letters and numbers.";
+        }
+        return null;
+    }
+
+    /**
+     * Gives {@code user} a new password, hashed exactly as registration does. Signed-in devices stay
+     * signed in: a JWT is checked against the account's status and role, not its password, so
+     * there's nothing to revoke them with short of turning the account off.
+     */
+    @Transactional
+    public void setPassword(User user, String newPassword) {
+        String problem = passwordProblem(newPassword);
+        if (problem != null) throw new IllegalArgumentException(problem);
+        user.setPasswordHash(hashPassword(newPassword));
+        userRepo.save(user);
+        log.info("Password changed for user '{}'", user.getUsername());
+    }
+
+    // ═══════════════════════════════════════════════════════════
     // Admin: User management
     // ═══════════════════════════════════════════════════════════
 

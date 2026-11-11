@@ -5,11 +5,15 @@ import {
   denyUser,
   disableUser,
   fetchAllUsers,
+  fetchBirthdays,
   fetchPendingUsers,
+  oidcConfig,
   reactivateUser,
+  setBirthday,
   updateUserRole,
   type AdminUser,
 } from '../../api/auth';
+import BirthdayInput, { formatBirthday } from '../../components/BirthdayInput';
 import { useAuth } from '../../context/AuthContext';
 import { usePageMeta } from '../../components/shell/PageMeta';
 import {
@@ -96,6 +100,9 @@ export default function UserManagement() {
 
   const allUsers = useQuery({ queryKey: ['all-users'], queryFn: fetchAllUsers });
   const pendingUsers = useQuery({ queryKey: ['admin-users-pending'], queryFn: fetchPendingUsers, enabled: isAdmin });
+  // The birthdays members reset a forgotten password with: admins only, and only this endpoint has them.
+  const birthdays = useQuery({ queryKey: ['admin-user-birthdays'], queryFn: fetchBirthdays, enabled: isAdmin });
+  const birthdayOf = (userId: number) => birthdays.data?.find((b) => b.userId === userId)?.birthDate ?? null;
   usePageMeta({ subtitle: allUsers.dataUpdatedAt ? `Updated ${formatTime(allUsers.dataUpdatedAt)}` : undefined });
 
   const refreshLists = () => {
@@ -292,7 +299,14 @@ export default function UserManagement() {
                   {household.length > 0 ? (
                     <List>
                       {household.map((u) => (
-                        <PersonRow key={u.id} user={u} isAdmin={isAdmin} isSelf={u.id === me?.userId} onManage={() => setManaging(u)} />
+                        <PersonRow
+                          key={u.id}
+                          user={u}
+                          isAdmin={isAdmin}
+                          isSelf={u.id === me?.userId}
+                          resetOn={isAdmin && u.role === 'USER' && birthdayOf(u.id) != null}
+                          onManage={() => setManaging(u)}
+                        />
                       ))}
                     </List>
                   ) : (
@@ -398,6 +412,7 @@ export default function UserManagement() {
       {managing && (
         <ManageDialog
           user={managing}
+          birthday={birthdayOf(managing.id)}
           savingRole={roleMut.isPending}
           disabling={disableMut.isPending}
           onClose={() => setManaging(null)}
@@ -458,13 +473,15 @@ function PendingRequest({ user, busy, onApprove, onDeny }: { user: AdminUser; bu
 }
 
 /** One person in the roster: face (lit while online), name and role, when they were last here. */
-function PersonRow({ user, isAdmin, isSelf, onManage }: { user: AdminUser; isAdmin: boolean; isSelf: boolean; onManage: () => void }) {
+function PersonRow({ user, isAdmin, isSelf, resetOn, onManage }: { user: AdminUser; isAdmin: boolean; isSelf: boolean; resetOn?: boolean; onManage: () => void }) {
   const name = nameOf(user);
   const seen = user.isOnline ? 'Online now' : user.lastLoginAt ? `Last signed in ${lastSeen(user.lastLoginAt)}` : 'Not signed in yet';
   const meta = [
     isSelf ? `You · ${seen.charAt(0).toLowerCase()}${seen.slice(1)}` : seen,
     visibleEmail(user, isAdmin),
     isAdmin ? plural(user.loginCount, 'sign-in') : null,
+    // Admins only (resetOn is never set otherwise): this member can use "Forgot password?".
+    resetOn ? 'birthday reset on' : null,
   ].filter(Boolean).join(' · ');
   return (
     <Row
@@ -479,12 +496,111 @@ function PersonRow({ user, isAdmin, isSelf, onManage }: { user: AdminUser; isAdm
 }
 
 /**
+ * "Forgot password?" for one member: the birthday they prove who they are with on the sign-in
+ * page. Set or change it (members only), or clear it to turn their reset off. Admins and guests
+ * can't reset this way whatever is stored; a stale one (from before a role change) can be cleared.
+ */
+function ResetBirthday({ user, birthday }: { user: AdminUser; birthday: string | null }) {
+  const queryClient = useQueryClient();
+  const name = nameOf(user);
+  const member = user.role === 'USER';
+  const [draft, setDraft] = useState(birthday ?? '');
+  const [saved, setSaved] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  // Remount the picker when the stored date changes (saved or cleared) so it shows it.
+  const [pickerKey, setPickerKey] = useState(0);
+  // The sign-in page only offers "Forgot password?" while password sign-in is on.
+  const config = useQuery({ queryKey: ['oidc-config'], queryFn: oidcConfig, staleTime: 60_000 });
+
+  const save = useMutation({
+    mutationFn: (date: string | null) => setBirthday(user.id, date),
+    onMutate: () => {
+      setError(null);
+      setSaved(null);
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(e?.response?.data?.error || e?.message || 'Could not save the birthday');
+    },
+    onSuccess: (result) => {
+      setSaved(result.birthDate ? 'Saved.' : 'Cleared.');
+      setDraft(result.birthDate ?? '');
+      setPickerKey((k) => k + 1);
+      queryClient.invalidateQueries({ queryKey: ['admin-user-birthdays'] });
+    },
+  });
+
+  if (!member) {
+    return (
+      <Stack gap="s">
+        <p className="fp-label">Forgot password</p>
+        <p className="fp-small fp-muted">
+          A birthday is saved for {name}, but only members can reset their password with one. Clearing it removes it.
+        </p>
+        <div>
+          <Button variant="danger-quiet" busy={save.isPending} busyLabel="Clearing…" onClick={() => save.mutate(null)}>
+            Clear birthday
+          </Button>
+        </div>
+        {error && <Notice tone="problem" live="assertive">{error}</Notice>}
+      </Stack>
+    );
+  }
+
+  return (
+    <Stack gap="s">
+      <p className="fp-label">Forgot password</p>
+      <p className="fp-small fp-muted">
+        {birthday
+          ? `${name} can choose a new password from the sign-in page with their username and birthday, ${formatBirthday(birthday)}. Only admins see it.`
+          : `Save ${name}'s birthday so they can choose a new password from the sign-in page if they forget it. Only admins see it.`}
+      </p>
+      {config.data && !config.data.passwordLogin && (
+        <Notice tone="headsup" title="Password sign-in is switched off.">
+          The sign-in page hides “Forgot password?” until password sign-in is switched back on at the home server.
+        </Notice>
+      )}
+      <BirthdayInput
+        key={pickerKey}
+        legend={`${name}'s birthday`}
+        defaultValue={birthday ?? undefined}
+        onChange={(iso) => {
+          setDraft(iso);
+          setSaved(null);
+        }}
+        disabled={save.isPending}
+      />
+      <span className="fp-btn-row">
+        <Button
+          variant="primary"
+          icon="check"
+          disabled={!draft || draft === birthday}
+          busy={save.isPending && save.variables != null}
+          busyLabel="Saving…"
+          onClick={() => save.mutate(draft)}
+        >
+          {birthday ? 'Change birthday' : 'Save birthday'}
+        </Button>
+        {birthday && (
+          <Button variant="danger-quiet" busy={save.isPending && save.variables == null} busyLabel="Clearing…" onClick={() => save.mutate(null)}>
+            Clear
+          </Button>
+        )}
+      </span>
+      {saved && !error && <p className="fp-small fp-muted" role="status">{saved}</p>}
+      {error && <Notice tone="problem" live="assertive">{error}</Notice>}
+    </Stack>
+  );
+}
+
+/**
  * Manage one person (admins, never on their own account): their role, chosen and then saved
  * (it used to save the moment it was picked; B-181), and turning the account off, behind a
  * confirmation.
  */
 function ManageDialog({
   user,
+  birthday,
   savingRole,
   disabling,
   onClose,
@@ -492,6 +608,8 @@ function ManageDialog({
   onDisable,
 }: {
   user: AdminUser;
+  /** The stored reset birthday (yyyy-MM-dd), or null. */
+  birthday: string | null;
   savingRole: boolean;
   disabling: boolean;
   onClose: () => void;
@@ -553,6 +671,7 @@ function ManageDialog({
             <Seg kind="radio" fit="fill" label={`Role for ${name}`} value={role} onChange={setRole} options={ROLE_OPTIONS} />
             <p className="fp-small fp-muted mt-2">Admins also get the admin pages. Guests can't see Cameras or Maintenance.</p>
           </Fieldset>
+          {(user.role === 'USER' || birthday) && <ResetBirthday user={user} birthday={birthday} />}
           {user.status === 'ACTIVE' && (
             <Stack gap="s">
               <p className="fp-label">Access</p>

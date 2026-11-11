@@ -14,7 +14,7 @@ const KEY = 'sso_return_to';
 export function safeReturnPath(path: unknown): string | null {
   if (typeof path !== 'string' || !path.startsWith('/') || path.startsWith('//') || path.includes('\\')) return null;
   const bare = path.split(/[?#]/)[0];
-  if (bare === '/login' || bare === '/register' || bare.startsWith('/guest')) return null;
+  if (bare === '/login' || bare === '/register' || bare === '/forgot-password' || bare.startsWith('/guest')) return null;
   return path;
 }
 

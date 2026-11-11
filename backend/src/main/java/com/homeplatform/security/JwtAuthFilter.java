@@ -22,6 +22,9 @@ public class JwtAuthFilter implements Filter {
             "/api/auth/login",
             "/api/auth/register",
             "/api/auth/guest-login",
+            // "Forgot password?" on the sign-in page (PasswordResetService). Exact match only,
+            // like everything here: the path compared is the decoded servlet path (ef4f992).
+            "/api/auth/reset-password",
             // Home SSO: the steps before there is a token (OidcController)
             "/api/auth/oidc/config",
             "/api/auth/oidc/start",

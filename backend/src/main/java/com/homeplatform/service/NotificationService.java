@@ -100,6 +100,23 @@ public class NotificationService {
     }
 
     /**
+     * A notice that always reaches the phone too, whatever its severity, opening {@code url} when
+     * tapped: for admin-only notices that aren't an alert type members choose (a password reset).
+     */
+    @Transactional
+    public Notification createAndPush(Long userId, Category category, Severity severity, String title, String message, String url) {
+        Notification saved = repo.save(Notification.builder()
+                .userId(userId)
+                .category(category)
+                .severity(severity)
+                .title(title)
+                .message(message)
+                .build());
+        if (events != null) events.publishEvent(new NotificationCreatedEvent(userId, category, severity, title, message, true, url));
+        return saved;
+    }
+
+    /**
      * An alert of a known type, honoring the member's settings: not created at all when
      * they turned the type off, and pushed to their phone only when they chose that.
      * Returns null when skipped.

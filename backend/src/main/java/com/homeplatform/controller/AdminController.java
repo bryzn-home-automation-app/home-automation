@@ -2,22 +2,28 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.AdminUserResponse;
 import com.homeplatform.dto.GuestSessionResponse;
+import com.homeplatform.service.PasswordResetService;
 import com.homeplatform.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestController
 @RequestMapping("/api/admin")
 public class AdminController {
 
     private final UserService userService;
+    private final PasswordResetService passwordReset;
 
-    public AdminController(UserService userService) {
+    public AdminController(UserService userService, PasswordResetService passwordReset) {
         this.userService = userService;
+        this.passwordReset = passwordReset;
     }
 
     private void requireAdmin(HttpServletRequest request) {
@@ -109,6 +115,42 @@ public class AdminController {
         requireAdmin(request);
         userService.reactivateUser(userId);
         return ResponseEntity.ok(Map.of("status", "reactivated"));
+    }
+
+    // ── Reset birthdays ("Forgot password?" for members) ──
+    // The only place a stored birthday is ever returned: /api/auth/users, /me and /profile never
+    // carry it, and the entity field is @JsonIgnore.
+
+    @GetMapping("/users/birthdays")
+    public ResponseEntity<List<PasswordResetService.Birthday>> birthdays(HttpServletRequest request) {
+        requireAdmin(request);
+        return ResponseEntity.ok(passwordReset.birthdays());
+    }
+
+    /** Body {"birthDate": "yyyy-MM-dd"} sets it (members only); {"birthDate": null} clears it. */
+    @PutMapping("/users/{userId}/birthday")
+    public ResponseEntity<?> setBirthday(
+            @PathVariable Long userId,
+            @RequestBody(required = false) Map<String, String> body,
+            HttpServletRequest request) {
+        requireAdmin(request);
+        String raw = body == null ? null : body.get("birthDate");
+        LocalDate date = null;
+        if (raw != null && !raw.isBlank()) {
+            try {
+                date = LocalDate.parse(raw.trim());
+            } catch (DateTimeParseException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Enter a date like 1990-03-04."));
+            }
+        }
+        String admin = request.getAttribute("username") instanceof String u ? u : "An admin";
+        try {
+            return ResponseEntity.ok(passwordReset.setBirthday(userId, date, admin));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     // ── Guest sessions ──

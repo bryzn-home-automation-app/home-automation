@@ -109,10 +109,48 @@ class JwtAuthFilterTest {
         }
     }
 
+    /** Runs the filter with no token on a request Tomcat would hand it: raw URI and decoded servlet path. */
+    private boolean passesWithoutToken(String rawUri, String servletPath) throws Exception {
+        var req = new MockHttpServletRequest("POST", rawUri);
+        req.setServletPath(servletPath);
+        FilterChain chain = mock(FilterChain.class);
+        var resp = new MockHttpServletResponse();
+        filter.doFilter(req, resp, chain);
+        boolean passed = mockingDetails(chain).getInvocations().size() == 1;
+        assertEquals(passed ? 200 : 401, resp.getStatus(), rawUri);
+        return passed;
+    }
+
+    @Test
+    @DisplayName("the password reset is public by its exact path only")
+    void resetPasswordExactMatchOnly() throws Exception {
+        assertTrue(passesWithoutToken("/api/auth/reset-password", "/api/auth/reset-password"));
+        // An encoded spelling of the reset path is still the reset path once decoded.
+        assertTrue(passesWithoutToken("/api/auth/%72eset-password", "/api/auth/reset-password"));
+
+        // Near misses, and paths that only contain or start with it, need a token.
+        for (String path : new String[]{
+                "/api/auth/reset-password/", "/api/auth/reset-password/x", "/api/auth/reset-passwordx",
+                "/api/auth/reset-password.json", "/api/auth/Reset-Password", "/api/auth/reset-password/me",
+                "/api/admin/users/birthdays", "/api/admin/users/2/birthday", "/api/auth/users"}) {
+            assertFalse(passesWithoutToken(path, path), path);
+        }
+        // Raw URIs that mention the public path but decode (or normalise) to a protected one.
+        String[][] disguised = {
+                {"/api/auth/reset-password/../me", "/api/auth/me"},
+                {"/api/auth/reset-password/..%2Fusers", "/api/auth/users"},
+                {"/api/auth/reset-password;x/../../admin/users/birthdays", "/api/admin/users/birthdays"},
+                {"/api/auth/reset-password%2F..%2F..%2Fadmin%2Fusers", "/api/admin/users"},
+        };
+        for (String[] d : disguised) {
+            assertFalse(passesWithoutToken(d[0], d[1]), d[0]);
+        }
+    }
+
     @Test
     @DisplayName("public endpoints and static assets pass without a token")
     void publicPathsPass() throws Exception {
-        for (String path : new String[]{"/api/health", "/api/auth/login", "/index.html", "/assets/app.js"}) {
+        for (String path : new String[]{"/api/health", "/api/auth/login", "/api/auth/reset-password", "/index.html", "/assets/app.js"}) {
             var req = new MockHttpServletRequest("GET", path);
             req.setServletPath(path);
             FilterChain chain = mock(FilterChain.class);

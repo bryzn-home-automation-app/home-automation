@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, SIGNED_OUT_KEY } from '../context/AuthContext';
 import { login as apiLogin, oidcConfig, oidcExchange, startHomeSso } from '../api/auth';
 import { SECURE_APP_URL } from '../components/PushSettings';
@@ -54,7 +54,10 @@ export default function Login() {
   const [searchParams, setSearchParams] = useSearchParams();
   const ssoReturn = searchParams.has('sso');
   const ssoError = searchParams.get('sso_error');
-  const [username, setUsername] = useState('');
+  // Back from "Forgot password?" with a new password: say so, and keep the username they typed.
+  const resetDone = (location.state as { passwordReset?: unknown } | null)?.passwordReset === true;
+  const resetUser = (location.state as { username?: unknown } | null)?.username;
+  const [username, setUsername] = useState(resetDone && typeof resetUser === 'string' ? resetUser : '');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(ssoError ? SSO_ERRORS[ssoError] ?? SSO_ERRORS.failed : '');
   const [loading, setLoading] = useState(false);
@@ -160,7 +163,7 @@ export default function Login() {
             autoComplete="username"
             autoCapitalize="none"
             spellCheck={false}
-            autoFocus={!options.sso}
+            autoFocus={!options.sso && !resetDone}
           />
         </Field>
         <Field label="Password">
@@ -170,11 +173,16 @@ export default function Login() {
             value={password}
             onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
             autoComplete="current-password"
+            autoFocus={!options.sso && resetDone}
           />
         </Field>
         <Button type="submit" variant={options.sso ? 'secondary' : 'primary'} size={options.sso ? 'md' : 'lg'} block icon="log-in" busy={loading} busyLabel="Signing in…">
           Sign in
         </Button>
+        {/* Members only (the server checks); carries where they were headed through the detour. */}
+        <p className="fp-small fp-t-center">
+          <Link className="fp-link text-apptext-muted" to="/forgot-password" state={location.state}>Forgot password?</Link>
+        </p>
       </Stack>
     </form>
   ) : null;
@@ -182,7 +190,9 @@ export default function Login() {
   return (
     <DoorFrame center>
       <Panel className="flex w-[min(100%,440px)] flex-col gap-5 [--apppanel-pad:24px] lg:w-[460px] lg:gap-[22px] lg:[--apppanel-pad:32px]">
-        {signedOut && options?.sso && !error && (
+        {resetDone && !error ? (
+          <Notice tone="ok" title="Password changed." live="polite">Sign in with your new password.</Notice>
+        ) : signedOut && options?.sso && !error && (
           <Notice tone="ok" title="You’re signed out." live="polite">Sign in again whenever you like.</Notice>
         )}
 

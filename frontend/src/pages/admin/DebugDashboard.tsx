@@ -158,6 +158,8 @@ const CATEGORIES = [
   { value: 'weather', label: 'Weather' },
   { value: 'camera', label: 'Cameras' },
   { value: 'home-assistant', label: 'Home Assistant' },
+  // Password resets with a birthday: every attempt, the birthdays admins set (PasswordResetService).
+  { value: 'auth', label: 'Sign-in' },
 ] as const;
 
 const LEVELS = [

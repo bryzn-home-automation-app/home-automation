@@ -2,13 +2,17 @@ package com.homeplatform.controller;
 
 import com.homeplatform.dto.*;
 import com.homeplatform.service.LoginRateLimiter;
+import com.homeplatform.service.PasswordResetService;
 import com.homeplatform.service.UserService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeParseException;
 import java.util.List;
 import java.util.Map;
 
@@ -22,12 +26,14 @@ public class AuthController {
 
     private final UserService userService;
     private final LoginRateLimiter rateLimiter;
+    private final PasswordResetService passwordReset;
     private final boolean passwordLoginEnabled;
 
-    public AuthController(UserService userService, LoginRateLimiter rateLimiter,
+    public AuthController(UserService userService, LoginRateLimiter rateLimiter, PasswordResetService passwordReset,
                           @Value("${app.auth.password-login-enabled:true}") boolean passwordLoginEnabled) {
         this.userService = userService;
         this.rateLimiter = rateLimiter;
+        this.passwordReset = passwordReset;
         this.passwordLoginEnabled = passwordLoginEnabled;
     }
 
@@ -57,6 +63,38 @@ public class AuthController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(403).body(Map.of("error", e.getMessage()));
         }
+    }
+
+    /**
+     * Forgot password: a member proves who they are with the birthday an admin stored for them
+     * (PasswordResetService). Public. Every kind of no-match gets the same 401 and body. Exists only
+     * while password sign-in does: with it off, a new password couldn't be used anyway.
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody(required = false) PasswordResetRequest req,
+                                           HttpServletRequest httpReq) {
+        if (!passwordLoginEnabled) return ResponseEntity.status(403).body(PASSWORD_LOGIN_OFF);
+        if (req == null) return ResponseEntity.badRequest().body(Map.of("error", "Enter your username and birthday."));
+        LocalDate birthDate = null;
+        if (req.birthDate() != null) {
+            try {
+                birthDate = LocalDate.parse(req.birthDate().trim());
+            } catch (DateTimeParseException e) {
+                return ResponseEntity.badRequest().body(Map.of("error", "Enter your birthday."));
+            }
+        }
+        var result = passwordReset.reset(req.username(), birthDate, req.newPassword(), getClientIp(httpReq));
+        return switch (result.outcome()) {
+            case RESET -> ResponseEntity.ok(Map.of("status", "reset"));
+            case INVALID -> ResponseEntity.badRequest().body(Map.of("error", result.error()));
+            case NO_MATCH -> ResponseEntity.status(401).body(Map.of("error", PasswordResetService.NO_MATCH));
+            case THROTTLED -> ResponseEntity.status(429)
+                    .header(HttpHeaders.RETRY_AFTER, String.valueOf(result.retryAfterSeconds()))
+                    .body(Map.of("error", "Too many tries. Password reset is paused for now.",
+                            "retryAfterSeconds", result.retryAfterSeconds()));
+            case UNAVAILABLE -> ResponseEntity.status(503)
+                    .body(Map.of("error", "Password reset isn't available right now. Try again later."));
+        };
     }
 
     /** Guest sign-in — creates an ACTIVE guest account immediately (no approval).

@@ -21,6 +21,7 @@ const GuestLogin = lazy(() => import('./pages/GuestLogin'));
 const GuestHome = lazy(() => import('./pages/GuestHome'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'));
 
 // ── Protected pages (auth required) ──
 const HomeSummary = lazy(() => import('./pages/HomeSummary'));
@@ -71,6 +72,7 @@ const GuestLoginRoute = lazyRoute(GuestLogin, 'form', true);
 const GuestHomeRoute = lazyRoute(GuestHome, 'hero', true);
 const LoginRoute = lazyRoute(Login, 'form', true);
 const RegisterRoute = lazyRoute(Register, 'form', true);
+const ForgotPasswordRoute = lazyRoute(ForgotPassword, 'form', true);
 const HomeSummaryRoute = lazyRoute(HomeSummary, 'stats-charts');
 const UtilityRoute = lazyRoute(Utility, 'stats-charts');
 const RoombaRoute = lazyRoute(Roomba, 'stats-charts');
@@ -113,6 +115,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
               <Route path="/guest/home" element={<GuestHomeRoute />} />
               <Route path="/login" element={<LoginRoute />} />
               <Route path="/register" element={<RegisterRoute />} />
+              <Route path="/forgot-password" element={<ForgotPasswordRoute />} />
 
               {/* ── Protected: main app shell (any authenticated user) ── */}
               <Route element={<ProtectedRoute />}>

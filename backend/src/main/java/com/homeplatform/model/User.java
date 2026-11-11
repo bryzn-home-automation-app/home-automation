@@ -1,7 +1,9 @@
 package com.homeplatform.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -64,6 +66,15 @@ public class User {
     @Column(name = "accent_color", length = 7)
     @Builder.Default
     private String accentColor = "#34d399";
+
+    /**
+     * The one check for a member's self-service password reset (PasswordResetService). Set by an
+     * admin, members only; null means resetting is off for this account. No API but the admin
+     * ones returns it, and @JsonIgnore keeps it out should this entity ever be serialised.
+     */
+    @JsonIgnore
+    @Column(name = "birth_date")
+    private LocalDate birthDate;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
