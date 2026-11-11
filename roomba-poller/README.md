@@ -42,6 +42,23 @@ Dedup is two-layered so re-polls and process restarts never double-insert:
   inserting, the poller checks `SELECT 1 FROM roomba_runs WHERE
   source = 'roombapy-prime' AND started_at = <mission start>`.
 
+### Pass count (the map's "Cleaned twice")
+
+The cloud's live coverage (`coverage.geojson` in the live-map bundle) is a union
+with no pass count, so `coverage_passes.py` counts passes from the live position
+stream: every cleaning sample is drawn on a 5 cm grid, and a cell counts again
+only when the robot comes back to it a minute later, or crosses it at an angle
+after 10 s (neighbouring lanes overlap by design and never count). Twice-over
+ground narrower than the robot is dropped before display. The grid lives in
+`PollerState` (it outlasts the live-map task's restarts, pauses and recharges)
+and is written onto the `roomba_coverage` row every 15 s: `passes` for the map,
+`pass_grid` to carry on after a poller restart mid-clean. Pure functions, tested
+with the standard library only:
+
+```bash
+python -m unittest discover -s roomba-poller -v
+```
+
 ## Robustness
 
 Fail-open. Any cloud or DB error in a cycle is logged and swallowed; the loop

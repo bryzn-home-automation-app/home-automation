@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { fetchRoombaPosition, fetchRoombaCoverage } from '../api/roomba';
+import { fetchRoombaPosition, fetchRoombaCoverage, type RoombaPasses } from '../api/roomba';
 import { EmptyState, ErrorState, Icon, Loading, SkelBlock } from './ui';
 import {
   alternateTones,
@@ -232,6 +232,9 @@ export default memo(function RoombaMap({
   // Pattern / clip ids, unique per map on the page.
   const idGrid = useSvgId('fpmap-grid');
   const idLanes = useSvgId('fpmap-lanes');
+  const idTwice = useSvgId('fpmap-twice');
+  const idCleaned = useSvgId('fpmap-cleaned');
+  const idNotCleaned = useSvgId('fpmap-notcleaned');
   const idLast = useSvgId('fpmap-last');
   const idKeepOut = useSvgId('fpmap-keepout');
   const idNoMop = useSvgId('fpmap-nomop');
@@ -496,10 +499,11 @@ export default memo(function RoombaMap({
   });
 
   // Project the coverage polygons into SVG space using the same transform as the
-  // map, tagged cleaned (vacuumed) vs traveled so they render at different shades.
+  // map, tagged cleaned (vacuumed) vs traveled so they render at different shades,
+  // plus the ground cleaned twice or more (the poller's pass count).
   const coverageLayer = useMemo(() => {
     const cov = running ? coverageQuery.data ?? null : null;
-    if (!cov?.coverage?.features || !model) return [];
+    if (!cov?.coverage?.features || !model) return { paths: [], cleaned: '', twice: '' };
     const project = model.project;
     const ringsToPath = (rings: GeoPosition[][]): string => {
       let d = '';
@@ -526,7 +530,10 @@ export default memo(function RoombaMap({
     }
     // Traveled first, cleaned painted on top (darker).
     out.sort((a, b) => (a.mode === 'cleaned' ? 1 : 0) - (b.mode === 'cleaned' ? 1 : 0));
-    return out;
+    // The twice-over area is drawn only inside the cloud's cleaned ground, so the two
+    // layers always agree (the pass count comes from a different source).
+    const cleaned = out.filter((c) => c.mode === 'cleaned').map((c) => c.d).join('');
+    return { paths: out, cleaned, twice: cleaned ? twicePath(cov.passes, project) : '' };
   }, [running, coverageQuery.data, model]);
 
   // ── Static SVG layers ──────────────────────────────────────────────
@@ -598,9 +605,17 @@ export default memo(function RoombaMap({
           <pattern id={idGrid} patternUnits="userSpaceOnUse" x={gridX - step / 2} y={gridY - step / 2} width={step} height={step}>
             <circle cx={step / 2} cy={step / 2} r={0.9 * upp} fill="var(--appmap-grid)" />
           </pattern>
+          {/* Cleaned this run: fine lanes over a wash, in the cleaned colour. */}
           <pattern id={idLanes} patternUnits="userSpaceOnUse" width={lane * 4} height={lane}>
-            <rect width={lane * 4} height={lane} fill="var(--apptext)" fillOpacity={0.07} />
-            <rect y={lane / 2 - 0.5 * upp} width={lane * 4} height={upp} fill="var(--apptext)" fillOpacity={0.4} />
+            <rect width={lane * 4} height={lane} fill="var(--appmap-cleaned)" fillOpacity={0.12} />
+            <rect y={lane / 2 - 0.5 * upp} width={lane * 4} height={upp} fill="var(--appmap-cleaned)" fillOpacity={0.6} />
+          </pattern>
+          {/* Cleaned twice: laid over the lanes above, it adds rules across them (a
+              second pass, crosswise) and deepens the wash, so twice-over ground reads
+              as ruled both ways, not only as a darker shade. */}
+          <pattern id={idTwice} patternUnits="userSpaceOnUse" width={lane} height={lane}>
+            <rect width={lane} height={lane} fill="var(--appmap-cleaned)" fillOpacity={0.16} />
+            <rect x={lane / 2 - 0.5 * upp} width={upp} height={lane} fill="var(--appmap-cleaned)" fillOpacity={0.45} />
           </pattern>
           {/* The last clean, when docked: the same lanes, wider apart and faint. */}
           <pattern id={idLast} patternUnits="userSpaceOnUse" width={lane * 4} height={lane * 1.25}>
@@ -675,7 +690,7 @@ export default memo(function RoombaMap({
         })}
       </>
     );
-  }, [model, isMerging, mergeSelection, drawnWidth, lastCleanSet, idGrid, idLanes, idLast, idKeepOut, idNoMop, idClip]);
+  }, [model, isMerging, mergeSelection, drawnWidth, lastCleanSet, idGrid, idLanes, idTwice, idLast, idKeepOut, idNoMop, idClip]);
 
   const staticOverlay = useMemo(() => {
     if (!model) return null;
@@ -1075,21 +1090,43 @@ export default memo(function RoombaMap({
         {staticBase}
 
         {/* Live cleaning coverage — the instrument's filled arc: what has been vacuumed
-            or mopped this run is ruled with fine lanes over a wash, like the passes
-            themselves; ground only travelled over gets the wash alone; the rest of the plate
-            stays bare. Clipped to the floor, and drawn under the walls so they stay crisp. */}
-        {coverageLayer.length > 0 && (
+            or mopped this run is ruled with fine lanes over a wash in the cleaned colour,
+            like the passes themselves; ground cleaned twice or more is ruled across as
+            well, on a deeper wash; ground only travelled over gets a faint ink wash; the
+            rest of the plate stays bare. Clipped to the floor, and drawn under the walls
+            so they stay crisp. */}
+        {coverageLayer.paths.length > 0 && (
           <g clipPath={`url(#${idClip})`} style={{ pointerEvents: 'none' }}>
-            {coverageLayer.map((c, i) => (
-              <path
-                key={`cov-${i}`}
-                d={c.d}
-                fillRule="evenodd"
-                fill={c.mode === 'cleaned' ? `url(#${idLanes})` : 'var(--apptext)'}
-                fillOpacity={c.mode === 'cleaned' ? 1 : 0.05}
-                stroke="none"
-              />
-            ))}
+            {coverageLayer.cleaned && (
+              <>
+                <clipPath id={idCleaned}>
+                  <path d={coverageLayer.cleaned} clipRule="evenodd" />
+                </clipPath>
+                {/* Everything but the cleaned ground (even-odd against a huge square), so the
+                    travel wash stays on travelled-only ground instead of muddying the lanes. */}
+                <clipPath id={idNotCleaned}>
+                  <path d={`M-1e5 -1e5H1e5V1e5H-1e5Z${coverageLayer.cleaned}`} clipRule="evenodd" />
+                </clipPath>
+              </>
+            )}
+            {coverageLayer.paths.map((c, i) =>
+              c.mode === 'cleaned' ? (
+                <path key={`cov-${i}`} d={c.d} fillRule="evenodd" fill={`url(#${idLanes})`} stroke="none" />
+              ) : (
+                <path
+                  key={`cov-${i}`}
+                  d={c.d}
+                  fillRule="evenodd"
+                  fill="var(--apptext)"
+                  fillOpacity={0.05}
+                  clipPath={coverageLayer.cleaned ? `url(#${idNotCleaned})` : undefined}
+                  stroke="none"
+                />
+              ),
+            )}
+            {coverageLayer.twice && (
+              <path d={coverageLayer.twice} fill={`url(#${idTwice})`} clipPath={`url(#${idCleaned})`} stroke="none" />
+            )}
           </g>
         )}
 
@@ -1208,8 +1245,9 @@ export default memo(function RoombaMap({
         // battery doesn't take a row of its own under it.
         <div className="mt-3 flex items-center justify-between gap-x-4">
           <ul className="fp-dial-legend fp-map-legend min-w-0 flex-1 justify-start" aria-label="Map key">
-            {coverageLayer.length > 0 && <MapKey kind="cleaned">Cleaned this run</MapKey>}
-            {coverageLayer.length === 0 && legend?.lastClean && lastClean && <MapKey kind="last">{lastClean.label}</MapKey>}
+            {coverageLayer.paths.length > 0 && <MapKey kind="cleaned">Cleaned this run</MapKey>}
+            {coverageLayer.twice && <MapKey kind="twice">Cleaned twice</MapKey>}
+            {coverageLayer.paths.length === 0 && legend?.lastClean && lastClean && <MapKey kind="last">{lastClean.label}</MapKey>}
             {legend?.keepOut && <MapKey kind="keepout">Off-limits</MapKey>}
             {legend?.noMop && <MapKey kind="nomop">No mopping</MapKey>}
             {legend?.wall && <MapKey kind="wall">Virtual wall</MapKey>}
@@ -1242,7 +1280,31 @@ function isNoMop(category: string): boolean {
   return category.includes('NO_MOP') || category.includes('MOP');
 }
 
-type MapKeyKind = 'cleaned' | 'last' | 'keepout' | 'nomop' | 'wall' | 'robot' | 'dock' | 'num';
+/**
+ * The ground cleaned twice as one SVG path: each of the poller's rectangles ([ix, iy, w, h]
+ * in grid cells, metres = value * cell, y up) projected into the plan. One path, so
+ * neighbouring rectangles fill without seams. Empty when there is nothing usable.
+ */
+export function twicePath(
+  passes: RoombaPasses | null | undefined,
+  project: (p: GeoPosition) => [number, number],
+): string {
+  const cell = passes?.cell;
+  if (!passes || !Array.isArray(passes.rects) || typeof cell !== 'number' || !(cell > 0)) return '';
+  let d = '';
+  for (const r of passes.rects) {
+    if (!Array.isArray(r) || r.length < 4) continue;
+    const [ix, iy, w, h] = r;
+    if (![ix, iy, w, h].every(Number.isFinite) || w <= 0 || h <= 0) continue;
+    // The plan's y runs down, so the rectangle's top edge on screen is its top in metres.
+    const [x0, y0] = project([ix * cell, (iy + h) * cell]);
+    const [x1, y1] = project([(ix + w) * cell, iy * cell]);
+    d += `M${x0.toFixed(1)} ${y0.toFixed(1)}H${x1.toFixed(1)}V${y1.toFixed(1)}H${x0.toFixed(1)}Z`;
+  }
+  return d;
+}
+
+type MapKeyKind = 'cleaned' | 'twice' | 'last' | 'keepout' | 'nomop' | 'wall' | 'robot' | 'dock' | 'num';
 
 /** A legend swatch, drawn with the same strokes, hatches and fills as the mark on the plan. */
 function MapSwatch({ kind, n }: { kind: MapKeyKind; n?: number }) {
@@ -1253,13 +1315,29 @@ function MapSwatch({ kind, n }: { kind: MapKeyKind; n?: number }) {
   let body: ReactNode;
   switch (kind) {
     case 'cleaned':
+    case 'twice':
+      // The plan's lanes at the same 4px pitch; twice adds the crosswise rules and the
+      // deeper wash on top, as on the plan.
+      body = (
+        <>
+          <defs>
+            <pattern id={id} patternUnits="userSpaceOnUse" width={4} height={4}>
+              <rect width={4} height={4} fill="var(--appmap-cleaned)" fillOpacity={kind === 'twice' ? 0.26 : 0.12} />
+              <rect y={1.5} width={4} height={1} fill="var(--appmap-cleaned)" fillOpacity={0.6} />
+              {kind === 'twice' && <rect x={1.5} width={1} height={4} fill="var(--appmap-cleaned)" fillOpacity={0.45} />}
+            </pattern>
+          </defs>
+          {plate}
+          <rect x={0.5} y={0.5} width={W - 1} height={H - 1} rx={2} fill={`url(#${id})`} />
+        </>
+      );
+      break;
     case 'last':
       body = (
         <>
           <defs>
-            <pattern id={id} patternUnits="userSpaceOnUse" width={16} height={kind === 'cleaned' ? 4 : 5}>
-              {kind === 'cleaned' && <rect width={16} height={4} fill="var(--apptext)" fillOpacity={0.07} />}
-              <rect y={kind === 'cleaned' ? 1.5 : 2.05} width={16} height={kind === 'cleaned' ? 1 : 0.9} fill="var(--apptext)" fillOpacity={kind === 'cleaned' ? 0.4 : 0.11} />
+            <pattern id={id} patternUnits="userSpaceOnUse" width={16} height={5}>
+              <rect y={2.05} width={16} height={0.9} fill="var(--apptext)" fillOpacity={0.11} />
             </pattern>
           </defs>
           {plate}

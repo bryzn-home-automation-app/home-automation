@@ -258,12 +258,26 @@ CREATE TABLE IF NOT EXISTS roomba_position (
 -- from the live-map bundle while a mission runs, UNIQUE robot_id). `coverage` is
 -- a GeoJSON FeatureCollection; features carry an operatingModes property
 -- (vacuuming = cleaned, traveling = passed through). Read-only + staleness-gated.
+-- mission_id is the mission's start, epoch seconds (the bundle's missionStartTime).
+-- The cloud gives no pass count, so the poller counts passes from the live position
+-- stream (roomba-poller/coverage_passes.py) and UPDATEs them onto this row:
+--   passes            the area cleaned twice or more, {"v":1,"cell":0.05,
+--                     "rects":[[ix,iy,w,h],...]} in grid cells (metres = value*cell)
+--   pass_grid         every visited cell with its count, {"v":1,"cell":0.05,
+--                     "runs":[[iy,ix0,n,count],...]}; poller-only, read back after a
+--                     restart mid-clean (not mapped in the JPA entity)
+--   passes_mission_id the mission both belong to (its start, epoch seconds); the API
+--                     shows passes only when it matches mission_id
 CREATE TABLE IF NOT EXISTS roomba_coverage (
-    id            SERIAL PRIMARY KEY,
-    robot_id      VARCHAR(64)  NOT NULL UNIQUE,
-    mission_id    VARCHAR(64),
-    coverage      JSONB        NOT NULL,
-    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+    id                 SERIAL PRIMARY KEY,
+    robot_id           VARCHAR(64)  NOT NULL UNIQUE,
+    mission_id         VARCHAR(64),
+    coverage           JSONB        NOT NULL,
+    updated_at         TIMESTAMP    NOT NULL DEFAULT NOW(),
+    passes             JSONB,
+    pass_grid          JSONB,
+    passes_mission_id  VARCHAR(64),
+    passes_updated_at  TIMESTAMP
 );
 
 -- App release notes for the "What's New" tab. Authored in code and upserted by

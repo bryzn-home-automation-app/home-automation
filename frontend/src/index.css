@@ -375,6 +375,11 @@
   --appmap-plate-alt:   color-mix(in srgb, var(--apptext) 4.5%, var(--appsurface));
   --appmap-plate-alt2:  color-mix(in srgb, var(--apptext) 8%, var(--appsurface));
   --appmap-grid:        var(--appborder-strong);
+  /* Ground cleaned this run: a fixed petrol teal, not the app colour. The app colour
+     marks a selection on this map (merge), and a member can pick a red or an amber
+     that would read as the keep-out or no-mop marks. Teal stays clear of ink, red,
+     amber and the success green; the solid clears 4.5:1 on all three plate tones. */
+  --appmap-cleaned:     #006b81;
 
   /* people: a person's colour is data; the initials on it are always ink */
   --appavatar-ink:      #15181a;
@@ -540,6 +545,7 @@
   --appmap-floor:       #16191b;
   --appmap-room:        rgba(238, 241, 239, 0.05);
   --appmap-dot:         rgba(238, 241, 239, 0.12);
+  --appmap-cleaned:     #60c8dd;
 
   color-scheme: dark;
 }
