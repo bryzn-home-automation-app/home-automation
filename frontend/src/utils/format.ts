@@ -324,7 +324,9 @@ export function formatRelative(input: DateInput | null | undefined, now: DateInp
   const days = Math.abs(daysBetween(at, nowMs) ?? 0);
   if (min < 1) return 'Just now';
   if (min < 60) return future ? `in ${min} min` : `${min} min ago`;
-  if (days === 0) {
+  // Within half a day, hours read better than the calendar: at 12:10 AM something from 11 PM is
+  // "1 hr ago", not "Yesterday".
+  if (days === 0 || min < 12 * 60) {
     const hr = Math.floor(min / 60);
     return future ? `in ${hr} hr` : `${hr} hr ago`;
   }

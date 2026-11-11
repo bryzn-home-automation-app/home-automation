@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { Camera, CameraBatteryReading } from '../types';
@@ -254,8 +254,15 @@ describe('battery helpers', () => {
       expect(batteryAxis([98, 4])).toEqual(FULL_BATTERY_AXIS);
       // 20–100% would hardly be a zoom: the plain scale reads better.
       expect(batteryAxis([98, 27])).toEqual(FULL_BATTERY_AXIS);
-      // Near full and nothing low still has to reach down to the alert line.
-      expect(batteryAxis([92, 97])).toEqual(FULL_BATTERY_AXIS);
+    });
+
+    it('zooms in on healthy batteries instead of reaching down to the alert line', () => {
+      expect(batteryAxis([94, 97, 100])).toEqual({ domain: [80, 100], ticks: [80, 85, 90, 95, 100], full: false });
+    });
+
+    it('brings the alert line back once a camera is within 15 points of it', () => {
+      const a = batteryAxis([44, 52]);
+      check(a);
     });
 
     it("doesn't magnify a flat line", () => {
@@ -265,10 +272,8 @@ describe('battery helpers', () => {
       check(a);
     });
 
-    it('stretches to show the alert line when every reading is well above it', () => {
-      const a = batteryAxis([62, 70]);
-      expect(a).toEqual({ domain: [20, 80], ticks: [20, 40, 60, 80], full: false });
-      check(a);
+    it('leaves the alert line off the scale when every reading is well above it', () => {
+      expect(batteryAxis([62, 70])).toEqual({ domain: [55, 80], ticks: [55, 60, 65, 70, 75, 80], full: false });
     });
 
     it('falls back to 0–100% with no readings', () => {
@@ -580,6 +585,10 @@ describe('CameraBatteryChart', () => {
   });
 
   it('keeps the day-by-day detail, grouped per camera', () => {
+    // Pinned to midday at home: readings "3 hours ago" taken just after midnight would straddle two days.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-09T18:00:00Z'));
+    onTestFinished(() => { vi.useRealTimers(); });
     render(<CameraBatteryChart tracks={[track(driveway), track(backyard, { history: history([60, 50, 41]) })]} range={24} onRangeChange={() => {}} />);
     expect(screen.getByRole('region', { name: 'Driveway, day by day' })).toHaveTextContent(/\+10% charged/);
     expect(screen.getByRole('region', { name: 'Backyard, day by day' })).toHaveTextContent(/−19% used/);

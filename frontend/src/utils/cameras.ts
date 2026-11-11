@@ -266,21 +266,27 @@ const MAX_FIT_SPAN = 75;
 
 /**
  * A y-axis fitted to the readings (every camera's, in the chart's window) rather than 0–100%:
- * the lowest and highest reading, and the alert threshold, with a few points of padding, then
+ * the lowest and highest reading (and the alert threshold, once a camera is within `near` points
+ * of it), with a few points of padding, then
  * snapped out to round 5 / 10 / 20 % ticks (3 to 6 of them), never below 0 or above 100, and at
  * least `minSpan` points tall so a camera holding steady doesn't look like it's swinging. No
  * readings, or readings that need three quarters of the scale or more, give the plain 0–100% axis.
  */
 export function batteryAxis(
   values: ReadonlyArray<number | null | undefined>,
-  opts: { threshold?: number; pad?: number; minSpan?: number } = {},
+  opts: { threshold?: number; pad?: number; minSpan?: number; near?: number } = {},
 ): BatteryAxis {
   const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
   if (!nums.length) return FULL_BATTERY_AXIS;
-  const { threshold = BATTERY_LOW, pad = 3, minSpan = 20 } = opts;
+  const { threshold = BATTERY_LOW, pad = 3, minSpan = 20, near = 15 } = opts;
   const clamp = (v: number) => Math.min(100, Math.max(0, v));
-  let lo = clamp(Math.min(...nums, threshold) - pad);
-  let hi = clamp(Math.max(...nums, threshold) + pad);
+  const min = Math.min(...nums);
+  const max = Math.max(...nums);
+  // The alert line only earns a place on the scale once a camera is getting close to it; batteries
+  // sitting at 94–100% get an 80–100% axis, not one dragged down to 30%.
+  const showThreshold = min <= threshold + near;
+  let lo = clamp((showThreshold ? Math.min(min, threshold) : min) - pad);
+  let hi = clamp((showThreshold ? Math.max(max, threshold) : max) + pad);
   if (hi - lo < minSpan) {
     const mid = (lo + hi) / 2;
     lo = mid - minSpan / 2;

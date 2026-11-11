@@ -1,6 +1,7 @@
-import { memo, useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
-import ThermostatCard from '../components/ThermostatCard';
+import ThermostatCard, { thermostatPanelId } from '../components/ThermostatCard';
 import ThermostatHistoryChart, { type HistoryRange } from '../components/ThermostatHistoryChart';
 import { discoverHomeDevices, errorMessage, errorStatus, fetchThermostatHistory, fetchThermostats } from '../api/climate';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
@@ -13,16 +14,24 @@ import {
   Notice,
   QueryState,
   Screen,
-  Seg,
-  SegPanel,
   SkelInstrumentPanel,
   SkelPanel,
-  useSearchParamState,
+  cx,
 } from '../components/ui';
 import { formatTime } from '../utils/format';
-import { formatTemp, unitSymbol } from '../utils/thermostat';
+import { unitSymbol } from '../utils/thermostat';
 import { staleReason } from '../utils/cameras';
 import type { Thermostat, ThermostatReading } from '../types';
+
+/**
+ * Every thermostat at once, each in its own panel: two side by side from tablet width (three
+ * on a very wide screen once there are three or more), stacked in the same order on a phone.
+ * One thermostat keeps a single full-width panel.
+ */
+function gridClass(n: number): string | null {
+  if (n < 2) return null;
+  return cx('grid grid-cols-1 gap-[var(--appgap)] md:grid-cols-2', n >= 3 && 'min-[120rem]:grid-cols-3');
+}
 
 export default memo(function Climate() {
   const { user, isAdmin } = useAuth();
@@ -46,11 +55,20 @@ export default memo(function Climate() {
 
   usePageMeta({ subtitle: thermostatsQuery.dataUpdatedAt ? `Updated ${formatTime(thermostatsQuery.dataUpdatedAt)}` : undefined });
 
-  // The thermostat on screen lives in the URL (?thermostat=…), so a reload or the sleep screen
-  // comes back to it.
-  const ids = useMemo(() => thermostats.map((t) => t.id), [thermostats]);
-  const [selectedParam, setSelected] = useSearchParamState('thermostat', ids, ids[0] ?? '');
-  const selectedId = selectedParam || ids[0] || '';
+  // ?thermostat=<id> is a deep link: every thermostat is on screen, so it brings that one's
+  // panel into view and moves focus to it (once per link, not on every refresh).
+  const [params] = useSearchParams();
+  const target = params.get('thermostat');
+  const shownFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!target || shownFor.current === target || !thermostats.some((t) => t.id === target)) return;
+    const el = document.getElementById(thermostatPanelId(target));
+    if (!el) return;
+    shownFor.current = target;
+    const still = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView?.({ block: 'start', behavior: still ? 'auto' : 'smooth' });
+    el.focus({ preventScroll: true });
+  }, [target, thermostats]);
 
   // combine keeps the merged result referentially stable between renders, so
   // the chart's memo only recomputes when a history query actually changes.
@@ -113,7 +131,13 @@ export default memo(function Climate() {
         error={firstError}
         loading={
           <div className="fp-stack fp-stack--page">
-            <SkelInstrumentPanel readouts={2} />
+            {/* The panels' own shape: two columns, each stacking its dial over the facts. */}
+            <div className={cx(gridClass(2), '[&_.fp-ip]:grid-cols-1')}>
+              <SkelInstrumentPanel readouts={2} />
+              <div className="max-md:hidden">
+                <SkelInstrumentPanel readouts={2} />
+              </div>
+            </div>
             <SkelPanel chart />
           </div>
         }
@@ -139,7 +163,10 @@ export default memo(function Climate() {
         }
       >
         {(list: Thermostat[]) => {
-          const t = list.find((x) => x.id === selectedId) ?? list[0];
+          const cards = list.map((t) => (
+            <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
+          ));
+          const grid = gridClass(list.length);
           return (
             <>
               {thermostatsQuery.isError && (
@@ -154,40 +181,16 @@ export default memo(function Climate() {
                   }
                 />
               )}
-              {list.length > 1 && (
-                <Seg
-                  id="climate-thermostat"
-                  label="Thermostat"
-                  value={t.id}
-                  onChange={setSelected}
-                  options={list.map((x) => ({
-                    value: x.id,
-                    label: (
-                      <>
-                        {x.name}
-                        <span className="ml-2 font-medium tabular-nums">{formatTemp(x.temperature)}°</span>
-                      </>
-                    ),
-                  }))}
-                />
-              )}
-              {list.length > 1 ? (
-                <SegPanel id="climate-thermostat" value={t.id}>
-                  <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
-                </SegPanel>
-              ) : (
-                <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
-              )}
+              {grid ? <div className={grid}>{cards}</div> : cards}
               <ThermostatHistoryChart
                 thermostats={list}
-                selectedId={t.id}
                 history={history.history}
                 failed={history.failed}
                 onRetry={history.refetch}
                 retrying={history.fetching}
                 range={range}
                 onRangeChange={setRange}
-                unit={unitSymbol(t.temperatureUnit)}
+                unit={unitSymbol(list[0]?.temperatureUnit)}
               />
             </>
           );

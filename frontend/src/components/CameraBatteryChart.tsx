@@ -201,6 +201,8 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
   );
   const axis = scale === 'fit' ? fitted : FULL_BATTERY_AXIS;
   const scaleWords = `${axis.domain[0]}–${axis.domain[1]}%`;
+  // Healthy batteries zoom in above the alert line; the legend then says where it is instead.
+  const thresholdOnScale = axis.domain[0] < BATTERY_LOW;
 
   const query: QueryLike<Combined> = {
     data: combined,
@@ -279,7 +281,9 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
                     <ReferenceArea key={n.from} x1={n.from} x2={n.to} y1={axis.domain[0]} y2={axis.domain[1]} fill={palette.band} ifOverflow="hidden" />
                   ))}
                   {/* Below the alert line, a faint warm wash: a line sitting on 30% still reads against it. */}
-                  <ReferenceArea y1={axis.domain[0]} y2={BATTERY_LOW} fill={palette.warn} fillOpacity={LOW_ZONE_OPACITY} ifOverflow="hidden" />
+                  {thresholdOnScale && (
+                    <ReferenceArea y1={axis.domain[0]} y2={BATTERY_LOW} fill={palette.warn} fillOpacity={LOW_ZONE_OPACITY} ifOverflow="hidden" />
+                  )}
 
                   <CartesianGrid {...t.grid} />
                   <XAxis
@@ -294,7 +298,7 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
                     minTickGap={14}
                   />
                   <YAxis {...t.axis} domain={axis.domain} ticks={axis.ticks} tickFormatter={percentTick} width={44} />
-                  <ReferenceLine y={BATTERY_LOW} {...t.reference} strokeWidth={THRESHOLD_WIDTH} />
+                  {thresholdOnScale && <ReferenceLine y={BATTERY_LOW} {...t.reference} strokeWidth={THRESHOLD_WIDTH} />}
                   <Tooltip
                     content={<BatteryTooltip tracks={shown} palette={palette} />}
                     cursor={t.tooltip.cursor}
@@ -346,7 +350,7 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
               <span className="fp-lg-item">
                 {/* The threshold's own dots, not a dash a camera line could be mistaken for. */}
                 <LineSwatch colour={t.reference.stroke} dash={t.reference.strokeDasharray} width={THRESHOLD_WIDTH} />
-                Alert at {BATTERY_LOW}%, shaded below
+                {thresholdOnScale ? `Alert at ${BATTERY_LOW}%, shaded below` : `Alert at ${BATTERY_LOW}%, below this scale`}
               </span>
               {!axis.full && <span className="fp-lg-item fp-mono">Scale {scaleWords}</span>}
             </div>

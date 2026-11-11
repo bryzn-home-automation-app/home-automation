@@ -8,7 +8,6 @@ import {
   Button,
   Dial,
   DialCentre,
-  InstrumentPanel,
   Lamp,
   List,
   Notice,
@@ -19,6 +18,7 @@ import {
   Row,
   Seg,
   Verdict,
+  cx,
   toneTextClass,
   type DialRing,
   type IconName,
@@ -150,14 +150,22 @@ interface ThermostatCardProps {
   canControl: boolean;
   /** Logged-in user, so their own changes read "Set by you". */
   currentUserId?: number | null;
+  className?: string;
+}
+
+/** The id of a thermostat's panel: ?thermostat=<id> scrolls to it. */
+export function thermostatPanelId(id: string): string {
+  return `climate-thermostat-${id}`;
 }
 
 /**
- * One thermostat as the page's answer: the dial (indoor temperature, the heat and cool
- * setpoints as marks, − / + keys under it), the verdict, who changed it last, the mode keys,
- * and below it the comfort settings and any hold.
+ * One thermostat, self-contained, in its own panel headed by its name and status: the dial
+ * (indoor temperature, the heat and cool setpoints as marks, − / + keys under it) and the mode
+ * keys, then the verdict, humidity and schedule, the comfort settings and any hold, and who
+ * changed it last. Every control acts on this thermostat only; the page shows one per
+ * thermostat, side by side.
  */
-function ThermostatCard({ thermostat: t, canControl, currentUserId }: ThermostatCardProps) {
+function ThermostatCard({ thermostat: t, canControl, currentUserId, className }: ThermostatCardProps) {
   const cmd = useThermostatCommands(t);
   const unit = unitSymbol(t.temperatureUnit);
   const [hint, setHint] = useState<string | null>(null);
@@ -341,179 +349,192 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
       ),
   }));
 
-  const instrument = (
-    <>
-      <Dial rings={[ring]} label={dialSentence} className="-mb-6">
-        <DialCentre label={t.name} note={statusChip(t).text}>
-          <Num size="xl" value={`${formatTemp(t.temperature)}°`} />
-        </DialCentre>
-      </Dial>
-      <div className="flex w-full max-w-[360px] flex-wrap justify-center gap-3">
-        {setpoint.kind === 'none' ? (
-          <p className="w-full rounded-well bg-appinset px-3 py-3.5 text-center text-small text-apptext-muted">
-            {t.hvacMode === 'off' ? 'The system is off. Pick a mode to set a temperature.' : 'No setpoint reported.'}
-          </p>
-        ) : setpoint.kind === 'range' ? (
-          <>
-            <SetpointTile
-              side="heat" label="Heat to" deviceName={t.name} value={shownLow} unit={unit}
-              pending={draft?.kind === 'range'} flash={flash === 'heat'} readOnly={!canControl}
-              disabled={disabled}
-              lowerDisabled={shownLow != null && shownLow <= lim.min}
-              onStep={(d) => guard(() => stepRange('low', d))}
-            />
-            <SetpointTile
-              side="cool" label="Cool to" deviceName={t.name} value={shownHigh} unit={unit}
-              pending={draft?.kind === 'range'} flash={flash === 'cool'} readOnly={!canControl}
-              disabled={disabled}
-              raiseDisabled={shownHigh != null && shownHigh >= lim.max}
-              onStep={(d) => guard(() => stepRange('high', d))}
-            />
-          </>
-        ) : (
-          <SetpointTile
-            side={t.hvacMode === 'heat' ? 'heat' : 'cool'}
-            label={t.hvacMode === 'heat' ? 'Heat to' : 'Cool to'}
-            deviceName={t.name} value={shownSingle} unit={unit}
-            pending={draft?.kind === 'single'} flash={false} readOnly={!canControl}
-            disabled={disabled}
-            lowerDisabled={shownSingle != null && shownSingle <= lim.min}
-            raiseDisabled={shownSingle != null && shownSingle >= lim.max}
-            onStep={(d) => guard(() => stepSingle(d))}
-          />
-        )}
-        <p className="flex min-h-5 w-full flex-wrap items-center justify-center gap-2 text-center text-small" role="status">
-          {status && (
-            <>
-              {status.spinner && <Spinner className="text-apptext-muted" />}
-              <span className={toneTextClass(status.tone)}>{status.text}</span>
-              {status.retry && (
-                <Button size="sm" variant="quiet" icon="refresh" onClick={status.retry}>
-                  Retry
-                </Button>
-              )}
-            </>
-          )}
-        </p>
-        <span className="fp-sr-only" aria-live="polite">{cmd.announce}</span>
-      </div>
-    </>
-  );
-
   const last = t.lastChange;
   const lastWhat = last ? changeWhat(last) : null;
+  const chip = statusChip(t);
 
   return (
     <>
-      <InstrumentPanel
-        instrument={instrument}
-        verdict={<Verdict tone={verdict.tone} note={verdict.note}>{verdict.text}</Verdict>}
-        readouts={
-          <Readouts count={2}>
-            <Readout label="Humidity" value={formatTemp(t.humidity)} unit="%" note="At the thermostat" />
-            <Readout
-              label="Schedule"
-              value={hold ? 'Paused' : 'Running'}
-              note={hold ? holdLabel(t.presetMode) : t.presetMode ? `${presetLabel(t.presetMode)} comfort` : 'Following the schedule'}
-            />
-          </Readouts>
+      {/* The thermostat's own section, named by its heading. Its inner layout follows the
+          panel's width (a container query), not the window's: in a half-width column the dial
+          sits on top with the facts under it; a wide panel puts them side by side. */}
+      <Panel
+        id={thermostatPanelId(t.id)}
+        tabIndex={-1}
+        title={t.name}
+        subtitle={chip.text}
+        action={
+          !canControl ? (
+            <Badge plain icon="eye">
+              View only
+            </Badge>
+          ) : undefined
         }
-        foot={
-          <>
-            <span className="fp-cluster">
-              <Lamp tone={stale || !t.available ? 'headsup' : 'ok'} size="s" />
-              <span className="fp-mono">{t.updatedAt ? `Updated ${agoText(t.updatedAt)}` : 'No reading yet'}</span>
-            </span>
-            {!canControl && (
-              <Badge plain icon="eye">
-                View only
-              </Badge>
-            )}
-          </>
-        }
+        className={cx(
+          '@container flex h-full scroll-mt-24 flex-col focus:outline-none [&_.fp-panel-title]:text-[length:var(--appfs-lead)]',
+          className,
+        )}
       >
-        {last && (
-          <div className="fp-stack fp-stack--s">
-            <p className="fp-label">Last change</p>
-            <List inset>
-              <Row
-                compact
-                icon={CHANGE_ICON[last.actor] ?? 'user'}
-                title={changeWho(last, currentUserId)}
-                meta={
+        <div className="grid flex-1 grid-rows-[auto_1fr] gap-4 @min-[44rem]:grid-cols-[minmax(260px,4fr)_minmax(0,6fr)] @min-[44rem]:grid-rows-1 @min-[44rem]:gap-8">
+          <div className="flex min-w-0 flex-col items-center gap-3">
+            <Dial
+              rings={[ring]}
+              label={dialSentence}
+              className="-mb-7 [--fp-dial-max:188px] @min-[24rem]:[--fp-dial-max:220px] @min-[44rem]:-mb-6 @min-[44rem]:[--fp-dial-max:var(--appdial-max)]"
+            >
+              <DialCentre label="Inside">
+                <Num size="xl" value={`${formatTemp(t.temperature)}°`} />
+              </DialCentre>
+            </Dial>
+            <div className="flex w-full max-w-[360px] flex-wrap justify-center gap-x-3 gap-y-2">
+              {setpoint.kind === 'none' ? (
+                <p className="w-full rounded-well bg-appinset px-3 py-3.5 text-center text-small text-apptext-muted">
+                  {t.hvacMode === 'off' ? 'The system is off. Pick a mode to set a temperature.' : 'No setpoint reported.'}
+                </p>
+              ) : setpoint.kind === 'range' ? (
+                <>
+                  <SetpointTile
+                    side="heat" label="Heat to" deviceName={t.name} value={shownLow} unit={unit}
+                    pending={draft?.kind === 'range'} flash={flash === 'heat'} readOnly={!canControl}
+                    disabled={disabled}
+                    lowerDisabled={shownLow != null && shownLow <= lim.min}
+                    onStep={(d) => guard(() => stepRange('low', d))}
+                  />
+                  <SetpointTile
+                    side="cool" label="Cool to" deviceName={t.name} value={shownHigh} unit={unit}
+                    pending={draft?.kind === 'range'} flash={flash === 'cool'} readOnly={!canControl}
+                    disabled={disabled}
+                    raiseDisabled={shownHigh != null && shownHigh >= lim.max}
+                    onStep={(d) => guard(() => stepRange('high', d))}
+                  />
+                </>
+              ) : (
+                <SetpointTile
+                  side={t.hvacMode === 'heat' ? 'heat' : 'cool'}
+                  label={t.hvacMode === 'heat' ? 'Heat to' : 'Cool to'}
+                  deviceName={t.name} value={shownSingle} unit={unit}
+                  pending={draft?.kind === 'single'} flash={false} readOnly={!canControl}
+                  disabled={disabled}
+                  lowerDisabled={shownSingle != null && shownSingle <= lim.min}
+                  raiseDisabled={shownSingle != null && shownSingle >= lim.max}
+                  onStep={(d) => guard(() => stepSingle(d))}
+                />
+              )}
+              <p className="flex min-h-5 w-full flex-wrap items-center justify-center gap-2 text-center text-small" role="status">
+                {status && (
                   <>
-                    <span className="fp-mono">{formatStamp(last.at)}</span>
-                    {lastWhat ? ` · ${lastWhat}` : ''}
+                    {status.spinner && <Spinner className="text-apptext-muted" />}
+                    <span className={toneTextClass(status.tone)}>{status.text}</span>
+                    {status.retry && (
+                      <Button size="sm" variant="quiet" icon="refresh" onClick={status.retry}>
+                        Retry
+                      </Button>
+                    )}
                   </>
-                }
-              />
-            </List>
-          </div>
-        )}
-        {canControl && t.hvacModes.length > 0 && (
-          <div className="fp-stack fp-stack--s">
-            <p className="fp-label" aria-hidden="true">Mode</p>
-            <Seg
-              kind="radio"
-              label={`${t.name} mode`}
-              value={t.hvacMode ?? ''}
-              onChange={(m) => guard((confirmed) => onMode(m, confirmed))}
-              options={modeOptions}
-            />
-          </div>
-        )}
-      </InstrumentPanel>
-
-      {(hold || (canControl && presets.length > 0)) && (
-        <Panel title="Comfort and schedule" subtitle="The thermostat switches between these through the day">
-          <div className="fp-stack">
-            {/* B-106: no Comfort row at all when the thermostat offers nothing to pick. */}
-            {canControl && presets.length > 0 && (
-              <div className="fp-chips" role="group" aria-label={`${t.name} comfort setting`}>
-                {presets.map((p) => {
-                  const active = t.presetMode === p;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      className="fp-chip aria-disabled:cursor-default aria-disabled:opacity-40"
-                      aria-pressed={active}
-                      aria-disabled={settingsLocked || undefined}
-                      onClick={() => {
-                        if (!active && !settingsLocked) guard(() => cmd.hold(p));
-                      }}
-                    >
-                      {presetLabel(p)}
-                    </button>
-                  );
-                })}
+                )}
+              </p>
+              <span className="fp-sr-only" aria-live="polite">{cmd.announce}</span>
+            </div>
+            {canControl && t.hvacModes.length > 0 && (
+              <div className="w-full max-w-[420px]">
+                <Seg
+                  kind="radio"
+                  fit="fill"
+                  label={`${t.name} mode`}
+                  value={t.hvacMode ?? ''}
+                  onChange={(m) => guard((confirmed) => onMode(m, confirmed))}
+                  options={modeOptions}
+                />
               </div>
             )}
-            {hold && (
-              <Notice
-                tone="neutral"
-                icon="pause"
-                title={`${holdLabel(t.presetMode)} · schedule paused`}
-                action={
-                  canControl ? (
-                    <Button
-                      size="sm"
-                      aria-disabled={settingsLocked || undefined}
-                      onClick={() => {
-                        if (!settingsLocked) guard(() => cmd.resume());
-                      }}
-                    >
-                      Resume schedule
-                    </Button>
-                  ) : undefined
-                }
-              >
-                The schedule takes over again once someone resumes it.
-              </Notice>
-            )}
           </div>
-        </Panel>
-      )}
+
+          <div className="fp-stack min-w-0">
+            <Verdict tone={verdict.tone} note={verdict.note}>{verdict.text}</Verdict>
+            <Readouts count={2}>
+              <Readout label="Humidity" value={formatTemp(t.humidity)} unit="%" note="At the thermostat" />
+              <Readout
+                label="Schedule"
+                value={hold ? 'Paused' : 'Running'}
+                note={hold ? holdLabel(t.presetMode) : t.presetMode ? `${presetLabel(t.presetMode)} comfort` : 'Following the schedule'}
+              />
+            </Readouts>
+            {(hold || (canControl && presets.length > 0)) && (
+              <div className="fp-stack fp-stack--s">
+                <p className="fp-label" aria-hidden="true">Comfort</p>
+                {/* B-106: no Comfort row at all when the thermostat offers nothing to pick. */}
+                {canControl && presets.length > 0 && (
+                  <div className="fp-chips" role="group" aria-label={`${t.name} comfort setting`}>
+                    {presets.map((p) => {
+                      const active = t.presetMode === p;
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          className="fp-chip aria-disabled:cursor-default aria-disabled:opacity-40"
+                          aria-pressed={active}
+                          aria-disabled={settingsLocked || undefined}
+                          onClick={() => {
+                            if (!active && !settingsLocked) guard(() => cmd.hold(p));
+                          }}
+                        >
+                          {presetLabel(p)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {hold && (
+                  <Notice
+                    tone="neutral"
+                    icon="pause"
+                    title={`${holdLabel(t.presetMode)} · schedule paused`}
+                    action={
+                      canControl ? (
+                        <Button
+                          size="sm"
+                          aria-disabled={settingsLocked || undefined}
+                          onClick={() => {
+                            if (!settingsLocked) guard(() => cmd.resume());
+                          }}
+                        >
+                          Resume schedule
+                        </Button>
+                      ) : undefined
+                    }
+                  >
+                    The schedule takes over again once someone resumes it.
+                  </Notice>
+                )}
+              </div>
+            )}
+            {last && (
+              <div className="fp-stack fp-stack--s">
+                <p className="fp-label">Last change</p>
+                <List inset>
+                  <Row
+                    compact
+                    icon={CHANGE_ICON[last.actor] ?? 'user'}
+                    title={changeWho(last, currentUserId)}
+                    meta={
+                      <>
+                        <span className="fp-mono">{formatStamp(last.at)}</span>
+                        {lastWhat ? ` · ${lastWhat}` : ''}
+                      </>
+                    }
+                  />
+                </List>
+              </div>
+            )}
+            <div className="fp-ip-foot mt-auto">
+              <span className="fp-cluster">
+                <Lamp tone={stale || !t.available ? 'headsup' : 'ok'} size="s" />
+                <span className="fp-mono">{t.updatedAt ? `Updated ${agoText(t.updatedAt)}` : 'No reading yet'}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      </Panel>
 
       <ConfirmThermostatChangeModal
         open={pendingAction != null && recentOther != null}

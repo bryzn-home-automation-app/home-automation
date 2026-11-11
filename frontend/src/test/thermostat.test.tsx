@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import type { Thermostat, ThermostatChange, ThermostatReading } from '../types';
 import {
   activityText,
@@ -17,7 +18,7 @@ import {
   sortedModes,
   statusChip,
 } from '../utils/thermostat';
-import { buildSeries } from '../components/ThermostatHistoryChart';
+import { buildSeries, mergeSeries } from '../components/ThermostatHistoryChart';
 import { isStale, limits, STALE_AFTER_MS } from '../utils/thermostat';
 
 vi.mock('../api/climate', async (importOriginal) => {
@@ -28,8 +29,28 @@ vi.mock('../api/climate', async (importOriginal) => {
     setThermostatMode: vi.fn().mockResolvedValue({}),
     holdThermostat: vi.fn().mockResolvedValue({}),
     resumeThermostat: vi.fn().mockResolvedValue({}),
+    fetchThermostats: vi.fn(),
+    fetchThermostatHistory: vi.fn(),
+    discoverHomeDevices: vi.fn().mockResolvedValue({}),
   };
 });
+
+// The Climate page reads the signed-in person; the card itself does not.
+const authState = { role: 'USER' as 'ADMIN' | 'USER' | 'GUEST' };
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: { userId: 42, username: 'bryan', displayName: 'Bryan', role: authState.role },
+    isAdmin: authState.role === 'ADMIN',
+    isGuest: authState.role === 'GUEST',
+  }),
+}));
+
+// Recharts' ResponsiveContainer measures with ResizeObserver, which jsdom lacks.
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
 
 import * as climate from '../api/climate';
 import ThermostatCard from '../components/ThermostatCard';
@@ -195,6 +216,31 @@ describe('buildSeries', () => {
 
   it('adds no live point for an unavailable thermostat', () => {
     expect(buildSeries([], { ...upstairs, available: false })).toEqual([]);
+  });
+});
+
+describe('mergeSeries', () => {
+  it('puts every thermostat on one time axis: temperatures interpolated, setpoints held', () => {
+    const a = [
+      { t: 0, temp: 70, heat: 68, cool: 75 },
+      { t: 100, temp: 72, heat: 69, cool: 75 },
+    ];
+    const b = [
+      { t: 50, temp: 65, heat: 66, cool: null },
+      { t: 150, temp: 66, heat: 66, cool: null },
+    ];
+    expect(mergeSeries([a, b])).toEqual([
+      { t: 0, temp0: 70, heat0: 68, cool0: 75, temp1: null, heat1: null, cool1: null },
+      { t: 50, temp0: 71, heat0: 68, cool0: 75, temp1: 65, heat1: 66, cool1: null },
+      { t: 100, temp0: 72, heat0: 69, cool0: 75, temp1: 65.5, heat1: 66, cool1: null },
+      { t: 150, temp0: null, heat0: null, cool0: null, temp1: 66, heat1: 66, cool1: null },
+    ]);
+  });
+
+  it('leaves a thermostat with no readings empty', () => {
+    expect(mergeSeries([[{ t: 5, temp: 70, heat: null, cool: null }], []])).toEqual([
+      { t: 5, temp0: 70, heat0: null, cool0: null, temp1: null, heat1: null, cool1: null },
+    ]);
   });
 });
 
@@ -432,5 +478,183 @@ describe('review fixes', () => {
       low: 68,
       high: 75,
     });
+  });
+});
+
+describe('Climate page: every thermostat side by side', { timeout: 20_000 }, () => {
+  const downstairs: Thermostat = {
+    ...auto,
+    id: 'd0wn',
+    name: 'Downstairs',
+    temperature: 71.2,
+    heatSetpoint: 68,
+    coolSetpoint: 75,
+    presetMode: 'home',
+  };
+  const up: Thermostat = { ...upstairs, temperature: 69.4 };
+  const readings = (temp: number): ThermostatReading[] => [
+    {
+      recordedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+      temperature: temp,
+      humidity: 50,
+      targetTemperature: 72,
+      heatSetpoint: null,
+      coolSetpoint: 72,
+      hvacMode: 'cool',
+      hvacAction: 'idle',
+      presetMode: null,
+      source: 'ha_websocket',
+    },
+  ];
+  let failUpstairsHistory = false;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    authState.role = 'USER';
+    failUpstairsHistory = false;
+    vi.mocked(climate.fetchThermostats).mockResolvedValue([downstairs, up]);
+    vi.mocked(climate.fetchThermostatHistory).mockImplementation(async (id: string) => {
+      if (id === up.id && failUpstairsHistory) throw new Error('history down');
+      return readings(id === up.id ? 69 : 71);
+    });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  async function mountClimate(path = '/climate') {
+    const { default: Climate } = await import('../pages/Climate');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={[path]}>
+          <Climate />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  async function renderClimate(path = '/climate') {
+    await mountClimate(path);
+    return {
+      down: await screen.findByRole('region', { name: 'Downstairs' }, { timeout: 10_000 }),
+      up: screen.getByRole('region', { name: 'Upstairs' }),
+    };
+  }
+
+  it('shows every thermostat at once, each headed by its name, with no tabs', async () => {
+    const { down, up: upPanel } = await renderClimate();
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(within(down).getByRole('heading', { name: 'Downstairs' })).toBeTruthy();
+    expect(within(down).getByText('Idle · 68–75°')).toBeTruthy();
+    expect(within(down).getByText('71° and comfortable.')).toBeTruthy();
+    expect(within(upPanel).getByRole('heading', { name: 'Upstairs' })).toBeTruthy();
+    expect(within(upPanel).getByText('69° and holding.')).toBeTruthy();
+    // Each panel carries its own comfort and mode keys (no separate "Comfort and schedule" panel).
+    expect(within(down).getByRole('group', { name: 'Downstairs comfort setting' })).toBeTruthy();
+    expect(within(upPanel).getByRole('radiogroup', { name: 'Upstairs mode' })).toBeTruthy();
+    expect(screen.queryByText('Comfort and schedule')).toBeNull();
+  });
+
+  it("each panel's controls act on its own thermostat only", async () => {
+    const { down, up: upPanel } = await renderClimate();
+    vi.useFakeTimers();
+    fireEvent.click(within(upPanel).getByRole('button', { name: 'Raise Upstairs cool-to temperature' }));
+    // Upstairs waits to send; its mode keys hold, Downstairs' stay live.
+    expect((within(upPanel).getByRole('radio', { name: 'Heat' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(down).getByRole('radio', { name: 'Heat' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(within(down).queryByText('Sending in a moment…')).toBeNull();
+    await act(async () => {
+      vi.advanceTimersByTime(1300);
+    });
+    expect(climate.setThermostatTemperature).toHaveBeenCalledTimes(1);
+    expect(climate.setThermostatTemperature).toHaveBeenCalledWith('a1b2', { temperature: 73 });
+    vi.useRealTimers();
+    fireEvent.click(within(down).getByRole('radio', { name: 'Heat' }));
+    await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('d0wn', 'heat'));
+    expect(climate.setThermostatMode).toHaveBeenCalledTimes(1);
+  });
+
+  it("a comfort key holds only its own thermostat", async () => {
+    const { down } = await renderClimate();
+    fireEvent.click(within(down).getByRole('button', { name: 'Sleep' }));
+    await waitFor(() => expect(climate.holdThermostat).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(climate.holdThermostat).mock.calls[0][0]).toBe('d0wn');
+  });
+
+  it('?thermostat=<id> brings that panel into view and focuses it', async () => {
+    const scroll = vi.fn();
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scroll;
+    try {
+      const { up: upPanel } = await renderClimate('/climate?thermostat=a1b2');
+      await waitFor(() => expect(document.activeElement).toBe(upPanel));
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.instances[0]).toBe(upPanel);
+      // Both are still on screen: it is a scroll target, not a tab.
+      expect(screen.getByRole('region', { name: 'Downstairs' })).toBeTruthy();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+  });
+
+  it('draws every thermostat on one history chart, naming each with its temperature now', async () => {
+    await renderClimate();
+    const panel = screen.getByRole('region', { name: 'Temperature history' });
+    await waitFor(() => expect(climate.fetchThermostatHistory).toHaveBeenCalledTimes(2));
+    expect(await within(panel).findByText('Downstairs')).toBeTruthy();
+    expect(within(panel).getByText('Upstairs')).toBeTruthy();
+    expect(within(panel).getByText('71°')).toBeTruthy();
+    expect(within(panel).getByText('69°')).toBeTruthy();
+    expect(within(panel).queryByText('Heat to')).toBeNull();
+    fireEvent.click(within(panel).getByRole('button', { name: 'With setpoints' }));
+    expect(within(panel).getByText('Heat to')).toBeTruthy();
+    expect(within(panel).getByText('Cool to')).toBeTruthy();
+  });
+
+  it("one thermostat's history failing still shows the other, and says which failed", async () => {
+    failUpstairsHistory = true;
+    await renderClimate();
+    const panel = screen.getByRole('region', { name: 'Temperature history' });
+    expect(await within(panel).findByText("Couldn't load the Upstairs history.")).toBeTruthy();
+    expect(within(panel).getByText('Downstairs')).toBeTruthy();
+    expect(within(panel).queryByText('Upstairs')).toBeNull();
+    expect(within(panel).queryByText("Couldn't load the history")).toBeNull();
+    failUpstairsHistory = false;
+    fireEvent.click(within(panel).getByRole('button', { name: 'Try again' }));
+    await waitFor(() => expect(within(panel).queryByText("Couldn't load the Upstairs history.")).toBeNull());
+    expect(within(panel).getByText('Upstairs')).toBeTruthy();
+  });
+
+  it('both failing is one error for the chart', async () => {
+    vi.mocked(climate.fetchThermostatHistory).mockRejectedValue(new Error('down'));
+    await renderClimate();
+    const panel = screen.getByRole('region', { name: 'Temperature history' });
+    expect(await within(panel).findByText("Couldn't load the history")).toBeTruthy();
+  });
+
+  it('guests see both thermostats, view only', async () => {
+    authState.role = 'GUEST';
+    const { down, up: upPanel } = await renderClimate();
+    for (const p of [down, upPanel]) {
+      expect(within(p).queryByRole('button')).toBeNull();
+      expect(within(p).queryByRole('radio')).toBeNull();
+      expect(within(p).getByText('View only')).toBeTruthy();
+    }
+  });
+
+  it("says Home Assistant isn't connected on a 503", async () => {
+    vi.mocked(climate.fetchThermostats).mockRejectedValue(
+      Object.assign(new Error('Request failed'), { isAxiosError: true, response: { status: 503, data: { error: 'Home Assistant is unavailable' } } }),
+    );
+    await mountClimate();
+    expect(await screen.findByText("Home Assistant isn't connected", {}, { timeout: 10_000 })).toBeTruthy();
+  });
+
+  it('offers an admin the search when there are no thermostats', async () => {
+    authState.role = 'ADMIN';
+    vi.mocked(climate.fetchThermostats).mockResolvedValue([]);
+    await mountClimate();
+    expect(await screen.findByText('No thermostats yet', {}, { timeout: 10_000 })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Look for thermostats' })).toBeTruthy();
   });
 });
