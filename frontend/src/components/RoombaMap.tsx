@@ -1095,18 +1095,27 @@ export default memo(function RoombaMap({
             well, on a deeper wash; ground only travelled over gets a faint ink wash; the
             rest of the plate stays bare. Clipped to the floor, and drawn under the walls
             so they stay crisp. */}
-        {coverageLayer.paths.length > 0 && (
+        {coverageLayer.paths.length > 0 && (() => {
+          const cleanedPaths = coverageLayer.paths.filter((c) => c.mode === 'cleaned').map((c) => c.d);
+          return (
           <g clipPath={`url(#${idClip})`} style={{ pointerEvents: 'none' }}>
             {coverageLayer.cleaned && (
               <>
+                {/* One path per cleaned feature (a clip's children are unioned), so two
+                    features that overlap, say vacuumed and mopped, don't cancel out. */}
                 <clipPath id={idCleaned}>
-                  <path d={coverageLayer.cleaned} clipRule="evenodd" />
+                  {cleanedPaths.map((d, i) => (
+                    <path key={i} d={d} clipRule="evenodd" />
+                  ))}
                 </clipPath>
-                {/* Everything but the cleaned ground (even-odd against a huge square), so the
-                    travel wash stays on travelled-only ground instead of muddying the lanes. */}
-                <clipPath id={idNotCleaned}>
-                  <path d={`M-1e5 -1e5H1e5V1e5H-1e5Z${coverageLayer.cleaned}`} clipRule="evenodd" />
-                </clipPath>
+                {/* Everything but the cleaned ground, so the travel wash stays on
+                    travelled-only ground instead of muddying the lanes. */}
+                <mask id={idNotCleaned} maskUnits="userSpaceOnUse" x={-width} y={-height} width={width * 3} height={height * 3}>
+                  <rect x={-width} y={-height} width={width * 3} height={height * 3} fill="#fff" />
+                  {cleanedPaths.map((d, i) => (
+                    <path key={i} d={d} fillRule="evenodd" fill="#000" />
+                  ))}
+                </mask>
               </>
             )}
             {coverageLayer.paths.map((c, i) =>
@@ -1119,7 +1128,7 @@ export default memo(function RoombaMap({
                   fillRule="evenodd"
                   fill="var(--apptext)"
                   fillOpacity={0.05}
-                  clipPath={coverageLayer.cleaned ? `url(#${idNotCleaned})` : undefined}
+                  mask={coverageLayer.cleaned ? `url(#${idNotCleaned})` : undefined}
                   stroke="none"
                 />
               ),
@@ -1128,7 +1137,8 @@ export default memo(function RoombaMap({
               <path d={coverageLayer.twice} fill={`url(#${idTwice})`} clipPath={`url(#${idCleaned})`} stroke="none" />
             )}
           </g>
-        )}
+          );
+        })()}
 
         {/* Static overlay layers (zones, walls, dock, labels, room hit-areas) —
             memoized; unaffected by position/coverage polls. */}

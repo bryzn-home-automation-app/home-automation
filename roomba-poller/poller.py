@@ -602,11 +602,22 @@ def save_passes(conninfo, robot_id, mission_id, shown, grid):
     An UPDATE: the row is the coverage's, created by upsert_coverage."""
     sql = """
         UPDATE roomba_coverage
-        SET passes = %s, pass_grid = %s, passes_mission_id = %s, passes_updated_at = NOW()
+        SET passes = %s, passes_mission_id = %s, passes_updated_at = NOW()
         WHERE robot_id = %s
     """
     with psycopg.connect(conninfo, autocommit=True) as conn:
-        conn.execute(sql, (Json(shown), Json(grid), mission_id, robot_id))
+        conn.execute(sql, (Json(shown, dumps=_compact_json), mission_id, robot_id))
+        # Its own statement: pass_grid is only the restart backup (and a column the
+        # backend's migration adds), so if it can't be written the map still gets `passes`.
+        try:
+            conn.execute("UPDATE roomba_coverage SET pass_grid = %s WHERE robot_id = %s",
+                         (Json(grid, dumps=_compact_json), robot_id))
+        except Exception as e:  # noqa: BLE001
+            log.warning("pass grid backup not written: %s: %s", type(e).__name__, e)
+
+
+def _compact_json(obj):
+    return json.dumps(obj, separators=(",", ":"))
 
 
 def _resume_passes(conninfo, robot_id, key):
