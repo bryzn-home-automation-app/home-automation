@@ -9,6 +9,8 @@ import { ThemeProvider } from './context/ThemeContext';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute, AdminRoute, MemberRoute } from './components/Guard';
 import PageSkeleton, { type PageSkeletonVariant } from './components/PageSkeleton';
+import { IconSprite } from './components/ui/Icon';
+import NotFound from './components/shell/NotFound';
 import App from './App';
 import { registerServiceWorker } from './utils/push';
 import { watchForAppUpdates } from './utils/appUpdate';
@@ -45,28 +47,29 @@ const NucHealth = lazy(() => import('./pages/admin/NucHealth'));
 
 /**
  * Lazily-loaded route wrapper. Renders a shape-matched `PageSkeleton` until
- * the chunk resolves, then swaps in the real page component. This replaces
- * the previous single `SuspenseFallback` so each route flashes a layout that
- * matches the destination page (stats-charts / list / form / hero / default)
- * instead of a generic "Loading..." card.
+ * the chunk resolves, then swaps in the real page component, so each route
+ * flashes the shape of the page to come (stats-charts / list / cards / form /
+ * hero / default) instead of a generic "Loading..." card. Pages in the shell get
+ * just the body; the public pages (`fullPage`) get a whole page around it.
  */
 function lazyRoute<P extends object>(
   Component: ComponentType<P>,
-  variant: PageSkeletonVariant
+  variant: PageSkeletonVariant,
+  fullPage = false,
 ) {
   return function LazyRoute(props: P) {
     return (
-      <Suspense fallback={<PageSkeleton variant={variant} />}>
+      <Suspense fallback={<PageSkeleton variant={variant} fullPage={fullPage} />}>
         <Component {...props} />
       </Suspense>
     );
   };
 }
 
-const GuestLoginRoute = lazyRoute(GuestLogin, 'form');
-const GuestHomeRoute = lazyRoute(GuestHome, 'hero');
-const LoginRoute = lazyRoute(Login, 'form');
-const RegisterRoute = lazyRoute(Register, 'form');
+const GuestLoginRoute = lazyRoute(GuestLogin, 'form', true);
+const GuestHomeRoute = lazyRoute(GuestHome, 'hero', true);
+const LoginRoute = lazyRoute(Login, 'form', true);
+const RegisterRoute = lazyRoute(Register, 'form', true);
 const HomeSummaryRoute = lazyRoute(HomeSummary, 'stats-charts');
 const UtilityRoute = lazyRoute(Utility, 'stats-charts');
 const RoombaRoute = lazyRoute(Roomba, 'stats-charts');
@@ -74,13 +77,13 @@ const ClimateRoute = lazyRoute(Climate, 'stats-charts');
 const CamerasRoute = lazyRoute(Cameras, 'stats-charts');
 const WiFiPageRoute = lazyRoute(WiFiPage, 'list');
 const NotificationsRoute = lazyRoute(NotificationsPage, 'list');
-const ProfilePageRoute = lazyRoute(ProfilePage, 'form');
+const ProfilePageRoute = lazyRoute(ProfilePage, 'cards');
 const MaintenanceDashboardRoute = lazyRoute(MaintenanceDashboard, 'list');
 const UpdatesRoute = lazyRoute(Updates, 'list');
 const UserManagementRoute = lazyRoute(UserManagement, 'list');
 const GuestManagementRoute = lazyRoute(GuestManagement, 'list');
 const AuditLogsRoute = lazyRoute(AuditLogs, 'list');
-const DebugDashboardRoute = lazyRoute(DebugDashboard, 'default');
+const DebugDashboardRoute = lazyRoute(DebugDashboard, 'list');
 const TabUsageRoute = lazyRoute(TabUsage, 'list');
 const WhosHomeRoute = lazyRoute(WhosHome, 'list');
 const NucHealthRoute = lazyRoute(NucHealth, 'stats-charts');
@@ -98,6 +101,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <AuthProvider>
+          {/* The icon sprite every <Icon> points at, once, above the router so the
+              public pages (sign-in, guest welcome) have it as well as the shell. */}
+          <IconSprite />
           <BrowserRouter>
             <Routes>
               {/* ── Public routes (no auth required) ── */}
@@ -139,18 +145,8 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                 </Route>
               </Route>
 
-              {/* ── Catch-all redirect ── */}
-              <Route path="*" element={
-                <div className="flex min-h-screen items-center justify-center bg-appbg">
-                  <div className="text-center">
-                    <p className="text-4xl mb-4">🏠</p>
-                    <h1 className="text-2xl font-semibold text-apptext">Page Not Found</h1>
-                    <p className="mt-2 text-apptext-muted">
-                      <a href="/" className="text-appaccent-text hover:text-appaccent">Return home</a>
-                    </p>
-                  </div>
-                </div>
-              } />
+              {/* ── Anything else: a plain "not found" page with a way home ── */}
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </BrowserRouter>
         </AuthProvider>

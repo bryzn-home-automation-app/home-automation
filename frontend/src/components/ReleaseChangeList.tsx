@@ -1,60 +1,56 @@
-import { useTheme } from '../context/ThemeContext';
 import type { ChangeType, ReleaseChange } from '../api/releases';
+import { Badge, type IconName } from './ui';
 
-// The app themes via CSS-variable tokens (no Tailwind `dark:` variant), so raw
-// palette classes render the SAME in both themes. Light-300 shades wash out on
-// the near-white light-mode card, so each status color carries an explicit
-// light/dark pair chosen for contrast (the useTheme() pattern the app uses).
-const CHANGE_STYLE: Record<ChangeType, { label: string; icon: string; dark: string; light: string }> = {
-  new: {
-    label: 'New',
-    icon: '✨',
-    dark: 'border-emerald-300/25 bg-emerald-300/10 text-emerald-300',
-    light: 'border-emerald-600/30 bg-emerald-600/10 text-emerald-700',
-  },
-  improved: {
-    label: 'Improved',
-    icon: '⬆️',
-    dark: 'border-sky-300/25 bg-sky-300/10 text-sky-300',
-    light: 'border-sky-600/30 bg-sky-600/10 text-sky-700',
-  },
-  fixed: {
-    label: 'Fixed',
-    icon: '🔧',
-    dark: 'border-amber-300/25 bg-amber-300/10 text-amber-300',
-    light: 'border-amber-600/30 bg-amber-600/10 text-amber-700',
-  },
-};
+/** The three kinds, in the order a release reads best: what's new first. */
+const KINDS: { type: ChangeType; label: string; icon: IconName }[] = [
+  { type: 'new', label: 'New', icon: 'sparkles' },
+  { type: 'improved', label: 'Improved', icon: 'arrow-up' },
+  { type: 'fixed', label: 'Fixed', icon: 'check' },
+];
 
-/** Theme-aware chip style; neutral fallback for any type the backend adds later. */
-function changeStyle(type: ChangeType, isDark: boolean) {
-  const s = CHANGE_STYLE[type];
-  if (!s) return { label: type, icon: '•', className: 'border-appborder bg-appinset text-apptext-muted' };
-  return { label: s.label, icon: s.icon, className: isDark ? s.dark : s.light };
+/** Changes of each kind, known kinds first and anything the backend adds later after them. */
+export function groupChanges(changes: readonly ReleaseChange[]): { type: string; label: string; icon: IconName; items: ReleaseChange[] }[] {
+  const groups = KINDS.map((k) => ({ ...k, items: changes.filter((c) => c.type === k.type) as ReleaseChange[] }));
+  const other = changes.filter((c) => !KINDS.some((k) => k.type === c.type));
+  const extra = [...new Set(other.map((c) => c.type))].map((t) => ({
+    type: t,
+    label: t ? t.charAt(0).toUpperCase() + t.slice(1) : 'Other',
+    icon: 'info' as IconName,
+    items: other.filter((c) => c.type === t),
+  }));
+  return [...groups, ...extra].filter((g) => g.items.length > 0);
 }
 
-/** The list of change line items for a release — a type chip + plain-language text. */
+/**
+ * A release's changes grouped New / Improved / Fixed: a plain badge per kind (a word and an
+ * icon, never colour alone) beside its sentences. Used by What's new and the What's new dialog.
+ */
 export default function ReleaseChangeList({ changes }: { changes: ReleaseChange[] }) {
-  const { isDark } = useTheme();
   return (
-    <ul className="space-y-2.5">
-      {changes.map((change, i) => {
-        const style = changeStyle(change.type, isDark);
-        return (
-          <li
-            key={i}
-            className="flex flex-col gap-2 rounded-xl border border-appborder bg-appinset px-3.5 py-3 sm:flex-row sm:items-start sm:gap-3"
-          >
-            <span
-              className={`inline-flex shrink-0 items-center gap-1 self-start rounded-full border px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.1em] ${style.className}`}
-            >
-              <span aria-hidden="true">{style.icon}</span>
-              {style.label}
-            </span>
-            <span className="min-w-0 break-words text-sm leading-6 text-apptext">{change.text}</span>
-          </li>
-        );
-      })}
-    </ul>
+    <div className="flex flex-col">
+      {groupChanges(changes).map((g, i) => (
+        <section
+          key={g.type}
+          aria-label={`${g.label}, ${g.items.length}`}
+          className={`grid grid-cols-1 gap-x-4 sm:grid-cols-[112px_minmax(0,1fr)] ${i > 0 ? 'mt-3 border-t border-appborder pt-3' : ''}`}
+        >
+          <p className="flex min-h-[28px] items-center gap-2 self-start sm:mt-2.5">
+            <Badge plain ink={g.type === 'new'} icon={g.icon}>{g.label}</Badge>
+            <span className="fp-mono text-xs text-apptext-muted" aria-hidden="true">{g.items.length}</span>
+          </p>
+          <ul className="fp-list">
+            {g.items.map((c, j) => (
+              <li key={j}>
+                <div className="fp-row fp-row--compact">
+                  <span className="fp-row-main">
+                    <span className="fp-row-title fp-row-title--regular break-words leading-snug">{c.text}</span>
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }

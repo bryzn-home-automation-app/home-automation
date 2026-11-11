@@ -10,8 +10,46 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="HomeOS" />
+    <!-- iOS draws a white clock on this bar; index.css backs it with ink in the light theme. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="theme-color" content="#020617" />
+    <!-- The light enamel; ThemeContext keeps it in step with the theme and finish. -->
+    <meta name="theme-color" content="#e9ecea" />
+    <!--
+      Paint the saved theme and finish before the first frame. Without this the page
+      drew the stylesheet's default until the JavaScript loaded and only then flipped,
+      so a dark choice flashed light (and, before Faceplate, a light choice flashed
+      navy). Mirrors ThemeContext: same localStorage keys, no choice = light, Auto =
+      the theme it last showed (the sun maths lives in the bundle), Device = the
+      phone's setting. themeBoot.test.ts runs this script against ThemeProvider.
+    -->
+    <script id="theme-boot">
+      (function () {
+        var root = document.documentElement;
+        function read(key) {
+          try { return window.localStorage.getItem(key); } catch (e) { return null; }
+        }
+        function deviceDark() {
+          try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; }
+        }
+        var mode = read('theme');
+        var last = read('theme-resolved');
+        var dark =
+          mode === 'dark' ? true :
+          mode === 'auto' ? (last ? last === 'dark' : deviceDark()) :
+          mode === 'system' ? deviceDark() :
+          false;
+        var palette = 'default';
+        var keys = ['palette', 'palette-dark', 'palette-light'];
+        for (var i = 0; i < keys.length; i++) {
+          var p = read(keys[i]);
+          if (p === 'ocean' || p === 'sunset' || p === 'violet') { palette = p; break; }
+        }
+        root.setAttribute('data-theme', dark ? 'dark' : 'light');
+        root.setAttribute('data-palette', palette);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta && dark) meta.setAttribute('content', '#121416');
+      })();
+    </script>
     <title>HomeOS</title>
   </head>
   <body class="bg-appbg text-apptext min-h-screen">

@@ -5,6 +5,9 @@ import type { Camera, CameraBatteryReading } from '../types';
 import {
   BATTERY_LIVE_BUDGET_MS,
   ago,
+  batteryLampTone,
+  summaryDays,
+  timeTicks,
   autoLive,
   batterySeries,
   batteryTone,
@@ -58,7 +61,7 @@ vi.mock('../api/cameras', () => ({
 }));
 
 import * as camerasApi from '../api/cameras';
-import CameraTile from '../components/CameraTile';
+import CameraTile, { PRESET_NOTE_MS } from '../components/CameraTile';
 
 const driveway: Camera = {
   id: 'cam-1',
@@ -130,8 +133,9 @@ describe('battery helpers', () => {
     expect(reported[1].charge).toBe(50);
   });
 
-  it('sums gains and use per local day, newest first', () => {
-    const at = (h: number, d = 20) => new Date(2026, 9, d, h).toISOString();
+  it("sums gains and use per day at home, newest first", () => {
+    // Central daylight time: 11 PM on the 19th at home is already the 20th in UTC.
+    const at = (h: number, d = 20) => `2026-10-${d}T${String(h).padStart(2, '0')}:00:00-05:00`;
     const days = dailySummary([
       reading(at(8, 19), 40),
       reading(at(14, 19), 58),
@@ -157,6 +161,45 @@ describe('battery helpers', () => {
       { from: t('2026-10-20T23:50:00Z'), to: t('2026-10-21T06:00:00Z') },
     ]);
     expect(nightWindows([], 0, 10)).toEqual([]);
+  });
+
+  it('lists only days that start inside the window (B-021)', () => {
+    // Now is Mon Oct 19, 5 PM at home; the 24 h window starts Sun 5 PM, so Sunday is cut off.
+    const now = new Date('2026-10-19T17:00:00-05:00').getTime();
+    const readings = [
+      reading('2026-10-18T18:00:00-05:00', 60),
+      reading('2026-10-18T22:00:00-05:00', 58),
+      reading('2026-10-19T10:00:00-05:00', 56),
+      reading('2026-10-19T14:00:00-05:00', 66),
+    ];
+    expect(summaryDays(readings, now - 24 * 3_600_000).map((d) => d.day)).toEqual(['2026-10-19']);
+    expect(summaryDays(readings, now - 168 * 3_600_000).map((d) => d.day)).toEqual(['2026-10-19', '2026-10-18']);
+  });
+
+  it('calls a gain sun only when it came in daylight (B-109)', () => {
+    const daylight = [{ from: '2026-10-19T07:30:00-05:00', to: '2026-10-19T18:40:00-05:00' }];
+    const sunny = summaryDays([reading('2026-10-19T10:00:00-05:00', 50), reading('2026-10-19T14:00:00-05:00', 60)], 0, daylight);
+    expect(sunny[0]).toMatchObject({ gained: 10, solar: true });
+    const cable = summaryDays([reading('2026-10-19T01:00:00-05:00', 50), reading('2026-10-19T03:00:00-05:00', 70)], 0, daylight);
+    expect(cable[0]).toMatchObject({ gained: 20, solar: false });
+  });
+
+  it('lamps a battery on the camera alert thresholds, never while charging', () => {
+    expect(batteryLampTone(31)).toBe('ok');
+    expect(batteryLampTone(30)).toBe('headsup');
+    expect(batteryLampTone(15)).toBe('problem');
+    expect(batteryLampTone(12, true)).toBe('ok');
+    expect(batteryLampTone(null)).toBe('neutral');
+  });
+
+  it('puts time ticks on whole hours at home (B-102)', () => {
+    const from = new Date('2026-10-19T17:20:00-05:00').getTime();
+    const day = timeTicks(from, from + 24 * 3_600_000, 24);
+    expect(day[0]).toBe(new Date('2026-10-19T18:00:00-05:00').getTime());
+    expect(day.every((t, i) => i === 0 || t - day[i - 1] === 3 * 3_600_000)).toBe(true);
+    const week = timeTicks(from, from + 168 * 3_600_000, 168);
+    expect(week).toHaveLength(7);
+    expect(week[0]).toBe(new Date('2026-10-20T00:00:00-05:00').getTime());
   });
 });
 
@@ -283,7 +326,7 @@ describe('CameraTile', () => {
 
   it('a wired camera streams by itself and stops when the tab is hidden', async () => {
     const { update } = renderTile(indoor);
-    expect(screen.getByText('🔌 Wired power')).toBeInTheDocument();
+    expect(screen.getByText('Wired power')).toBeInTheDocument();
     await waitFor(() => expect(players.started).toHaveLength(1));
 
     update({ pageVisible: false });
@@ -341,8 +384,55 @@ describe('CameraTile', () => {
     await waitFor(() => expect(camerasApi.nudgeCamera).toHaveBeenCalledWith('cam-2', 'left'));
   });
 
+  it('Stop really stops a live battery camera, and Play starts it again (B-022)', async () => {
+    renderTile(driveway);
+    await waitFor(() => expect(players.started).toHaveLength(1));
+    act(() => players.handlers[players.handlers.length - 1].onPlaying?.());
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }));
+    expect(players.stopped).toBe(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Watch Driveway live' }));
+    await waitFor(() => expect(players.started).toHaveLength(2));
+  });
+
+  it('drops Live the moment a stream ends, while it reconnects (B-111)', async () => {
+    renderTile(indoor);
+    await waitFor(() => expect(players.started).toHaveLength(1));
+    act(() => players.handlers[players.handlers.length - 1].onPlaying?.());
+    expect(screen.getByText('Live')).toBeInTheDocument();
+    act(() => players.handlers[players.handlers.length - 1].onEnded?.());
+    expect(screen.queryByText('Live')).not.toBeInTheDocument();
+    expect(screen.getByText('Connecting…')).toBeInTheDocument();
+  });
+
+  it('a live-view error is forgotten when the app is left and reopened (B-112)', async () => {
+    vi.mocked(camerasApi.startCameraLive).mockRejectedValueOnce(new Error('502'));
+    const { update } = renderTile(indoor);
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    update({ pageVisible: false });
+    update({ pageVisible: true });
+    await waitFor(() => expect(camerasApi.startCameraLive).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('the "Moving to" note clears once the camera has had time to get there (B-119)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderTile({ ...driveway, presets: [{ index: 2, name: 'Position 2' }] });
+    fireEvent.click(screen.getByRole('button', { name: 'Position 2' }));
+    expect(await screen.findByText(/Moving to Position 2/)).toBeInTheDocument();
+    await act(async () => {
+      vi.advanceTimersByTime(PRESET_NOTE_MS + 10);
+    });
+    expect(screen.queryByText(/Moving to Position 2/)).not.toBeInTheDocument();
+  });
+
+  it('a cable charge shows no sun (B-109)', () => {
+    renderTile({ ...driveway, chargingStatus: 'Charging' });
+    expect(screen.getByText(/Charging/)).toBeInTheDocument();
+    expect(screen.queryByText(/Solar/)).not.toBeInTheDocument();
+  });
+
   it('highlights a recent person detection', () => {
-    renderTile({ ...driveway, lastPersonAt: new Date(Date.now() - 30_000).toISOString() });
+    renderTile({ ...driveway, lastPersonAt: new Date(Date.now() - 10_000).toISOString() });
     expect(screen.getByText(/Person · just now/)).toBeInTheDocument();
   });
 });

@@ -1,0 +1,87 @@
+/* Cameras — only the camera frames: the featured live tile in the answer, scene details (the detection box),
+   pan/tilt keys on the picture, live/paused states, the recording thumbnails and the player. */
+
+/* the answer: the live tile is the instrument, so it gets the wider column */
+.screen[data-route="cameras"] .cam-ip .ip-instrument { align-items: stretch; }
+.screen[data-route="cameras"] .cam-ip .media { width: 100%; }
+@media (min-width: 720px) {
+  .screen[data-route="cameras"] .cam-ip { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+}
+@media (min-width: 1024px) {
+  .screen[data-route="cameras"] .cam-ip { grid-template-columns: minmax(0, 11fr) minmax(0, 9fr); }
+}
+
+/* scene details: the box a camera draws around the person it spotted (drawn in currentColor inside the shared scenes) */
+.screen[data-route="cameras"] .scene,
+.screen[data-route="cameras"] .cam-thumb > svg { color: var(--lamp-warn); }
+
+/* live vs paused: the play key only shows when a picture isn't streaming; pan/tilt only while live */
+.screen[data-route="cameras"] .media-frame.is-live .media-play,
+.screen[data-route="cameras"] .media-frame:not(.is-live) .cam-ptz,
+.screen[data-route="cameras"] .media-frame:not(.is-live) .media-time { display: none; }
+.screen[data-route="cameras"] .media-frame:not(.is-live):not(.is-offline) > .scene { opacity: .55; }
+.screen[data-route="cameras"] .media-frame.is-waking .media-play { display: none; }
+
+/* fresh activity (under 2 minutes) is the one inverted plate on the picture */
+.screen[data-route="cameras"] .media-note.cam-fresh { background: var(--media-ink); color: var(--media-bg); }
+
+/* pan / tilt keys centred on each edge of the picture: 36px discs with a 44px hit area */
+.screen[data-route="cameras"] .cam-ptz {
+  position: absolute; z-index: 1; display: grid; place-items: center; width: 36px; height: 36px; padding: 0;
+  border: 1px solid var(--media-ink-soft); border-radius: 50%; background: var(--media-scrim); color: var(--media-ink);
+  transition: transform var(--t-fast);
+}
+.screen[data-route="cameras"] .cam-ptz::after { content: ""; position: absolute; inset: -4px; border-radius: 50%; }
+.screen[data-route="cameras"] .cam-ptz .icon { width: 20px; height: 20px; }
+.screen[data-route="cameras"] .cam-ptz:active { transform: translateY(1px); }
+.screen[data-route="cameras"] .cam-ptz:focus-visible { outline: 2px solid var(--media-ink); outline-offset: 2px; }
+.screen[data-route="cameras"] .cam-ptz--up { top: 12px; left: calc(50% - 18px); }
+.screen[data-route="cameras"] .cam-ptz--down { bottom: 12px; left: calc(50% - 18px); }
+.screen[data-route="cameras"] .cam-ptz--left { left: 12px; top: calc(50% - 18px); }
+.screen[data-route="cameras"] .cam-ptz--right { right: 12px; top: calc(50% - 18px); }
+.screen[data-route="cameras"] .media-offline .btn { margin-top: 6px; }
+
+/* under each tile: power line, then saved positions */
+.screen[data-route="cameras"] .cam-cap-keys { gap: 2px; flex-wrap: nowrap; }
+.screen[data-route="cameras"] .cam-plug { color: var(--graphite); }
+.screen[data-route="cameras"] .cam-turn { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; padding-top: 6px; }
+.screen[data-route="cameras"] .cam-grid { row-gap: 28px; }
+
+/* recordings: day heads with a count, rows with a 16:9 thumbnail */
+.screen[data-route="cameras"] .cam-day { display: flex; flex-direction: column; gap: 4px; }
+.screen[data-route="cameras"] .cam-day[hidden] { display: none; }
+.screen[data-route="cameras"] .cam-day-count { margin-left: auto; }
+.screen[data-route="cameras"] .cam-rec { gap: 14px; padding-inline: 4px; border-radius: var(--r-well); }
+.screen[data-route="cameras"] .cam-thumb {
+  position: relative; flex: none; width: 104px; aspect-ratio: 16 / 9; overflow: hidden;
+  border-radius: 6px; background: var(--media-bg);
+}
+.screen[data-route="cameras"] .cam-thumb > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.screen[data-route="cameras"] .cam-thumb-dur {
+  position: absolute; right: 4px; bottom: 4px; padding: 1px 5px; border-radius: 4px;
+  background: var(--media-scrim); color: var(--media-ink); font-family: var(--mono); font-size: 11px; line-height: 1.4; font-variant-numeric: tabular-nums;
+}
+.screen[data-route="cameras"] .cam-rec .row-title { font-variant-numeric: tabular-nums; }
+@media (min-width: 1024px) {
+  .screen[data-route="cameras"] .cam-thumb { width: 128px; }
+  .screen[data-route="cameras"] .cam-recs > li:nth-child(odd) > .cam-rec { padding-right: 16px; }
+  .screen[data-route="cameras"] .cam-recs > li:nth-child(even) > .cam-rec { padding-left: 16px; }
+}
+.screen[data-route="cameras"] .cam-more-n { margin-left: 8px; font-weight: 400; }
+.screen[data-route="cameras"] .cam-older { padding-top: 16px; }
+.screen[data-route="cameras"] .cam-older-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* player and full-screen view */
+.screen[data-route="cameras"] .cam-player { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 832px; margin-inline: auto; }
+.screen[data-route="cameras"] .cam-scrub { display: flex; align-items: center; gap: 8px; }
+.screen[data-route="cameras"] .cam-scrub-bar { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-top: 18px; }
+.screen[data-route="cameras"] .cam-scrub .mono { font-size: 12px; font-variant-numeric: tabular-nums; }
+.screen[data-route="cameras"] .cam-scrub [data-p-bar] { transition: width 240ms linear; }
+.screen[data-route="cameras"] .cam-player-note { text-align: center; }
+/* on a phone the player fills the screen, so the picture sits in the middle of it, the way a phone shows video */
+@media (max-width: 639px) {
+  .screen[data-route="cameras"] [data-modal^="cameras-"] .dialog-body--well { display: flex; flex-direction: column; justify-content: safe center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .screen[data-route="cameras"] .cam-scrub [data-p-bar] { transition: none; }
+}

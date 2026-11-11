@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, type FormEvent, type ChangeEvent } from 'react';
+import { useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import Avatar from './Avatar';
-import ColorPicker from './ColorPicker';
+import ColorPicker, { colorName } from './ColorPicker';
 import type { ProfileResponse, ProfileUpdateRequest } from '../../api/auth';
 import { uploadAvatar } from '../../api/auth';
-import { useScrollLock } from '../../hooks/useScrollLock';
+import { Button, Dialog, Field, Input, Notice, Stack } from '../ui';
 
 interface UserEditModalProps {
   profile: ProfileResponse;
@@ -11,8 +11,13 @@ interface UserEditModalProps {
   onClose: () => void;
 }
 
+/**
+ * Edit profile: photo, display name, phone and colour, in a kit Dialog (focus moves in and
+ * comes back, Escape and the back gesture close it, and it is marked as a dialog so
+ * pull-to-refresh leaves it alone; B-043). A tap outside doesn't close it once something
+ * has been changed.
+ */
 export default function UserEditModal({ profile, onSave, onClose }: UserEditModalProps) {
-  useScrollLock(true);
   const [displayName, setDisplayName] = useState(profile.displayName);
   const [phone, setPhone] = useState(profile.phone || '');
   const [accentColor, setAccentColor] = useState(profile.accentColor);
@@ -23,14 +28,15 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
   const [saveError, setSaveError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dirty =
+    displayName !== profile.displayName ||
+    phone !== (profile.phone || '') ||
+    accentColor !== profile.accentColor ||
+    avatarUrl !== profile.avatarUrl;
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.target;
+    const file = input.files?.[0];
     if (!file) return;
     setUploadError('');
     setUploading(true);
@@ -41,20 +47,26 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
       setUploadError(err.response?.data?.error || 'Upload failed');
     } finally {
       setUploading(false);
+      // Let the same file be picked again after a failure: the browser fires no change for
+      // a file the input already holds (B-161).
+      input.value = '';
     }
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: FormEvent) => {
+    e?.preventDefault();
     if (!displayName.trim()) return;
     setSaving(true);
     setSaveError('');
     try {
       await onSave({
         displayName: displayName.trim(),
-        phone: phone.trim() || undefined,
+        // Sent as is, blank included: the server clears the number for a blank string but
+        // leaves it alone when the field is missing, so `|| undefined` meant a cleared phone
+        // number never went away (B-028). The photo works the same way.
+        phone: phone.trim(),
         accentColor,
-        avatarUrl: avatarUrl || undefined,
+        avatarUrl: avatarUrl ?? '',
       });
       onClose();
     } catch (err: any) {
@@ -64,122 +76,75 @@ export default function UserEditModal({ profile, onSave, onClose }: UserEditModa
     }
   };
 
+  const colour = colorName(accentColor);
+
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 modal-overlay"
-      onClick={onClose}
+    <Dialog
+      open
+      onClose={onClose}
+      eyebrow="Profile"
+      title="Edit profile"
+      closeOnBackdrop={!dirty}
+      footer={
+        <>
+          <Button variant="quiet" onClick={onClose}>Cancel</Button>
+          <Button
+            variant="primary"
+            onClick={() => handleSubmit()}
+            disabled={!displayName.trim() || uploading}
+            busy={saving}
+            busyLabel="Saving…"
+          >
+            Save changes
+          </Button>
+        </>
+      }
     >
-      <div
-        className="modal-panel w-full max-w-md rounded-[32px] border border-appborder bg-appsurface p-6 shadow-[0_20px_60px_var(--appshadow-lg)] sm:p-8"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-6 flex items-center justify-between">
-          <h3 className="text-xl font-semibold text-apptext">Edit Profile</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-appborder text-apptext-muted transition-colors hover:bg-appinset"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Photo upload area */}
-        <div className="mb-6 flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="group relative"
-            disabled={uploading}
-          >
-            <Avatar
-              displayName={displayName}
-              avatarUrl={avatarUrl}
-              accentColor={accentColor}
-              size={96}
-            />
-            {/* Hover overlay */}
-            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-              <span className="text-2xl text-white">📷</span>
-            </div>
-            {uploading && (
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
-                <span className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              </div>
-            )}
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-          <span className="text-xs text-apptext-muted">
-            {avatarUrl ? 'Tap to change photo' : 'Tap to add a photo'}
-          </span>
-          {uploadError && (
-            <p className="text-xs text-apptext-danger">{uploadError}</p>
-          )}
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Display Name
-            </label>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Phone Number
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="214-555-0199"
-              className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-            />
-          </div>
-
-          <div>
-            <label className="mb-3 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Accent Color
-            </label>
-            <ColorPicker selected={accentColor} onChange={setAccentColor} />
-          </div>
-
-          {saveError && (
-            <p role="alert" className="text-sm text-apptext-danger">{saveError}</p>
-          )}
-
-          <div className="flex gap-3 pt-2">
+      <form onSubmit={handleSubmit}>
+        <Stack gap="l">
+          <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={onClose}
-              className="flex-1 rounded-2xl border border-appborder bg-appinset px-4 py-3 text-sm font-semibold text-apptext-soft transition-colors hover:bg-appinset-strong"
+              onClick={() => fileRef.current?.click()}
+              disabled={uploading}
+              aria-label={avatarUrl ? 'Change photo' : 'Add a photo'}
+              className="relative shrink-0 rounded-full"
             >
-              Cancel
+              <Avatar displayName={displayName} avatarUrl={avatarUrl} accentColor={accentColor} size={88} />
             </button>
-            <button
-              type="submit"
-              disabled={saving || !displayName.trim() || uploading}
-              className="flex-1 rounded-2xl bg-appaccent px-4 py-3 text-sm font-semibold text-appaccent-fg shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 disabled:opacity-50"
-            >
-              {saving ? 'Saving...' : 'Save Changes'}
-            </button>
+            <Stack gap="xs" className="min-w-0">
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" icon="image" onClick={() => fileRef.current?.click()} busy={uploading} busyLabel="Uploading…">
+                  {avatarUrl ? 'Change photo' : 'Add a photo'}
+                </Button>
+                {avatarUrl && (
+                  <Button size="sm" variant="danger-quiet" icon="trash" onClick={() => setAvatarUrl(null)} disabled={uploading}>
+                    Remove photo
+                  </Button>
+                )}
+              </div>
+              {uploadError && <p className="fp-small fp-t-problem" role="alert">{uploadError}</p>}
+            </Stack>
+            <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} hidden />
           </div>
-        </form>
-      </div>
-    </div>
+
+          <Field label="Display name">
+            <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} autoComplete="name" required />
+          </Field>
+          <Field label="Phone number" optional help="Clear it to remove your number.">
+            <Input type="tel" mono value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="214-555-0199" autoComplete="tel" />
+          </Field>
+
+          <Stack gap="s">
+            <span className="fp-label">Your colour{colour ? ` · ${colour}` : ''}</span>
+            <ColorPicker selected={accentColor} onChange={setAccentColor} />
+          </Stack>
+
+          {saveError && <Notice tone="problem" live="assertive">{saveError}</Notice>}
+          {/* Enter in a field saves, as the old form did. */}
+          <button type="submit" hidden />
+        </Stack>
+      </form>
+    </Dialog>
   );
 }

@@ -1,321 +1,415 @@
-import { memo, useDeferredValue, useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useDeferredValue, useId, useMemo, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   fetchNotifications,
-  markRead,
+  fetchUnreadCount,
   markAllRead,
+  markRead,
   type Notification,
 } from '../api/notifications';
-import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
-import VirtualizedList from '../components/VirtualizedList';
+import { usePageMeta } from '../components/shell/PageMeta';
+import {
+  Button,
+  Chips,
+  Disclosure,
+  EmptyState,
+  Field,
+  Icon,
+  Input,
+  InstrumentPanel,
+  Lamp,
+  LinkButton,
+  List,
+  Num,
+  Panel,
+  QueryState,
+  Readout,
+  Readouts,
+  Screen,
+  SkelRows,
+  Stack,
+  StatusText,
+  Switch,
+  Verdict,
+  type ChipOption,
+} from '../components/ui';
+import { formatDate, formatDayName, formatStamp, formatTime, homeDayKey, homeToday, plural, toInstant } from '../utils/format';
+import { notificationCategory, severityStatus, worstTone, type Tone } from '../utils/status';
 
-/** Title line + two-line message + category line, with a few px to spare (rows clip). */
-const ROW_HEIGHT = 132;
-const LIST_HEIGHT = 640; // matches the old max-h-[40rem]
+const LIMIT = 100;
+/** Rows shown before "Show older alerts" (lists never scroll in their own box; B-006). */
+const FIRST_ROWS = 20;
 
-const CATEGORIES = [
-  { key: '', label: 'All', icon: '📋' },
-  { key: 'ELECTRICAL', label: 'Electric', icon: '⚡' },
-  { key: 'GAS', label: 'Gas', icon: '🔥' },
-  { key: 'WATER', label: 'Water', icon: '💧' },
-  { key: 'ROOMBA', label: 'Roomba', icon: '🤖' },
-  { key: 'CAMERA', label: 'Cameras', icon: '📷' },
-  { key: 'WIFI', label: 'WiFi', icon: '📶' },
-  { key: 'WEATHER', label: 'Weather', icon: '🌦️' },
-  // The NUC's own health: admins only.
-  { key: 'SYSTEM', label: 'NUC', icon: '🖥️' },
-] as const;
+type CategoryKey = 'all' | 'ELECTRICAL' | 'WEATHER' | 'CAMERA' | 'ROOMBA' | 'WATER' | 'SYSTEM';
+type SeverityKey = 'all' | 'CRITICAL' | 'WARNING' | 'INFO' | 'SUCCESS';
 
-const SEVERITIES = [
-  { key: '', label: 'All' },
-  { key: 'CRITICAL', label: 'Critical' },
-  { key: 'WARNING', label: 'Warning' },
-  { key: 'INFO', label: 'Info' },
-  { key: 'SUCCESS', label: 'Success' },
-] as const;
+/**
+ * The category chips. Gas and Wi-Fi are left out: nothing sends alerts in those categories,
+ * so their chips could only ever show an empty list (B-152). Water alerts are the admin-only
+ * Gmail warning and System the home server's health, so both are for admins only.
+ */
+const CATEGORIES: { key: Exclude<CategoryKey, 'all'>; adminOnly?: boolean }[] = [
+  { key: 'ELECTRICAL' },
+  { key: 'WEATHER' },
+  { key: 'CAMERA' },
+  { key: 'ROOMBA' },
+  { key: 'WATER', adminOnly: true },
+  { key: 'SYSTEM', adminOnly: true },
+];
 
-const categoryIcons: Record<string, string> = {
-  ELECTRICAL: '⚡', GAS: '🔥', WATER: '💧', ROOMBA: '🤖', CAMERA: '📷', WIFI: '📶', WEATHER: '🌦️', SYSTEM: '🖥️',
-};
+const SEVERITIES: Exclude<SeverityKey, 'all'>[] = ['CRITICAL', 'WARNING', 'INFO', 'SUCCESS'];
 
-const categoryLabels: Record<string, string> = {
-  ELECTRICAL: 'Electric', GAS: 'Gas', WATER: 'Water', ROOMBA: 'Roomba', CAMERA: 'Cameras', WIFI: 'WiFi', WEATHER: 'Weather', SYSTEM: 'NUC',
-};
-
-const severityColors: Record<string, string> = {
-  CRITICAL: 'border-red-400/30 bg-red-400/10 text-red-300',
-  WARNING:  'border-amber-400/30 bg-amber-400/10 text-amber-300',
-  INFO:     'border-sky-400/30 bg-sky-400/10 text-sky-300',
-  SUCCESS:  'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-};
-
-const severityDots: Record<string, string> = {
-  CRITICAL: 'bg-red-400 shadow-[0_0_10px_rgba(248,113,113,0.6)]',
-  WARNING:  'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]',
-  INFO:     'bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.6)]',
-  SUCCESS:  'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.6)]',
-};
-
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+/** Every filter the list can have; the unfiltered params are shared with the page's answer. */
+function listParams(category: CategoryKey, severity: SeverityKey, unreadOnly: boolean) {
+  return {
+    category: category === 'all' ? undefined : category,
+    severity: severity === 'all' ? undefined : severity,
+    unread: unreadOnly,
+    limit: LIMIT,
+  };
 }
 
-// Memoized — the list re-renders on the 30s poll and on every search keystroke;
-// unchanged rows should skip reconciliation.
-const NotificationRow = memo(({ n }: { n: Notification }) => {
-  const queryClient = useQueryClient();
-  const readMut = useMutation({
-    mutationFn: (id: number) => markRead(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
-    },
-  });
+/** Search titles and messages (client side, over what the server sent). */
+export function searchAlerts(list: readonly Notification[], query: string): Notification[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [...list];
+  return list.filter((n) => n.title.toLowerCase().includes(q) || (n.message ?? '').toLowerCase().includes(q));
+}
 
-  return (
-    <div
-      className={`flex items-start gap-4 overflow-hidden rounded-2xl border px-5 py-3 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-appaccent ${
-        n.isRead ? '' : 'cursor-pointer'
-      } ${
-        n.isRead
-          ? 'border-appborder-light bg-appinset opacity-60 hover:opacity-90'
-          : 'border-appborder bg-appinset-strong hover:border-appborder-hover'
-      }`}
-      style={{ height: ROW_HEIGHT - 12, boxSizing: 'border-box' }}
-      // Unread rows act as buttons (tap/Enter/Space marks read); read rows have no action.
-      {...(n.isRead
-        ? {}
-        : {
-            role: 'button',
-            tabIndex: 0,
-            onKeyDown: (e: React.KeyboardEvent) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                readMut.mutate(n.id);
-              }
-            },
-          })}
-      onClick={() => { if (!n.isRead) readMut.mutate(n.id); }}
-    >
-      {/* Severity dot */}
-      <span className={`mt-1.5 inline-flex h-3 w-3 shrink-0 rounded-full ${severityDots[n.severity] ?? 'bg-slate-400'}`} />
+/** Alerts grouped by the home's calendar day, newest day first (the list arrives newest first). */
+export function groupByDay(list: readonly Notification[]): { day: string; items: Notification[] }[] {
+  const groups: { day: string; items: Notification[] }[] = [];
+  for (const n of list) {
+    const day = homeDayKey(n.createdAt) ?? '';
+    const last = groups[groups.length - 1];
+    if (last && last.day === day) last.items.push(n);
+    else groups.push({ day, items: [n] });
+  }
+  return groups;
+}
 
-      {/* Content */}
-      <div className="min-w-0 flex-1">
-        {/* One line, like the clamped message below: a phone used to wrap a long title
-            or the badge onto a second line, and the row spilled over the next one. The
-            severity sits on the bottom line so the title gets the full width. */}
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-semibold text-apptext" title={n.title}>{n.title}</span>
-          {!n.isRead && (
-            <span className="inline-flex h-2 w-2 shrink-0 rounded-full bg-appaccent" />
-          )}
-        </div>
-        {n.message && (
-          // Clamped to a fixed line count (not unbounded wrap) so every row is
-          // the same height — required for VirtualizedList's fixed-itemHeight
-          // windowing math below.
-          <p className="mt-1 line-clamp-2 text-sm text-apptext-soft leading-5">{n.message}</p>
-        )}
-        <div className="mt-2 flex items-center gap-3 text-xs text-apptext-dim">
-          <span className={`shrink-0 rounded-full border px-2 py-0 text-3xs font-semibold uppercase tracking-[0.1em] ${severityColors[n.severity] ?? ''}`}>
-            {n.severity}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            {categoryIcons[n.category]} {categoryLabels[n.category]}
-          </span>
-          <span>{timeAgo(n.createdAt)}</span>
-        </div>
-      </div>
-    </div>
-  );
-});
-NotificationRow.displayName = 'NotificationRow';
+/** Severity counts over the last 7 days (home days, today included). */
+export function weekTally(list: readonly Notification[], now: Date = new Date()): Record<Exclude<SeverityKey, 'all'>, number> {
+  const tally = { CRITICAL: 0, WARNING: 0, INFO: 0, SUCCESS: 0 };
+  const cutoff = now.getTime() - 7 * 86_400_000;
+  for (const n of list) {
+    const at = toInstant(n.createdAt);
+    if (at == null || at < cutoff) continue;
+    if (n.severity in tally) tally[n.severity as keyof typeof tally]++;
+  }
+  return tally;
+}
 
 export default function NotificationsPage() {
   const { isGuest, isAdmin } = useAuth();
   const queryClient = useQueryClient();
-  const [categoryFilter, setCategoryFilter] = useState('');
-  const [severityFilter, setSeverityFilter] = useState('');
+  const [category, setCategory] = useState<CategoryKey>('all');
+  const [severity, setSeverity] = useState<SeverityKey>('all');
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [search, setSearch] = useState('');
-  // Defer the search filter so typing stays responsive — the (potentially 100-row)
-  // re-filter + list reconcile runs at a lower priority instead of on every keystroke.
+  // Defer the search filter so typing stays responsive.
   const deferredSearch = useDeferredValue(search);
   const notifInterval = useJitteredInterval(30_000);
 
-  const params = useMemo(() => ({
-    category: categoryFilter || undefined,
-    severity: severityFilter || undefined,
-    unread: unreadOnly,
-    limit: 100,
-  }), [categoryFilter, severityFilter, unreadOnly]);
-
+  const params = useMemo(() => listParams(category, severity, unreadOnly), [category, severity, unreadOnly]);
   const notifications = useQuery({
     queryKey: ['notifications', params],
     queryFn: () => fetchNotifications(params),
     refetchInterval: notifInterval,
     refetchIntervalInBackground: false,
   });
-
-  const markAllMut = useMutation({
-    mutationFn: markAllRead,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notifications'] });
-      queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
-    },
+  // The page's answer is about everything, whatever the list is filtered to. Unfiltered, this
+  // is the same query (same key) as the list, so it costs nothing extra.
+  const allParams = useMemo(() => listParams('all', 'all', false), []);
+  const all = useQuery({
+    queryKey: ['notifications', allParams],
+    queryFn: () => fetchNotifications(allParams),
+    refetchInterval: notifInterval,
+    refetchIntervalInBackground: false,
   });
+  // The real unread count, the shell's own query (B-026: counting the filtered page made the
+  // number and the button disagree with the header, while Mark all read clears everything).
+  const unreadCount = useQuery({ queryKey: ['notifications-unread-count'], queryFn: fetchUnreadCount, staleTime: 30_000 });
 
-  const data = notifications.data ?? [];
-  const unread = data.filter((n) => !n.isRead).length;
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    queryClient.invalidateQueries({ queryKey: ['notifications-unread-count'] });
+  };
+  const markAllMut = useMutation({ mutationFn: markAllRead, onSuccess: invalidate });
+  const readMut = useMutation({ mutationFn: (id: number) => markRead(id), onSuccess: invalidate });
 
-  // Client-side search filter
-  const filtered = useMemo(() => {
-    if (!deferredSearch.trim()) return data;
-    const q = deferredSearch.toLowerCase();
-    return data.filter((n) =>
-      n.title.toLowerCase().includes(q) ||
-      (n.message && n.message.toLowerCase().includes(q))
-    );
-  }, [data, deferredSearch]);
+  usePageMeta({ subtitle: all.dataUpdatedAt ? `Updated ${formatTime(all.dataUpdatedAt)}` : undefined });
+
+  const filtering = category !== 'all' || severity !== 'all' || unreadOnly || deferredSearch.trim() !== '';
+  const clearFilters = () => {
+    setCategory('all');
+    setSeverity('all');
+    setUnreadOnly(false);
+    setSearch('');
+  };
+
+  const allList = all.data ?? [];
+  const unread = unreadCount.data ?? allList.filter((n) => !n.isRead).length;
+  const unreadList = allList.filter((n) => !n.isRead);
+  const tally = weekTally(allList);
+  const today = homeToday();
+  const todays = allList.filter((n) => homeDayKey(n.createdAt) === today);
+  const weekTotal = tally.CRITICAL + tally.WARNING + tally.INFO + tally.SUCCESS;
+
+  const verdictTone: Tone = unread === 0 ? 'ok' : worstTone(unreadList.map((n) => severityStatus(n.severity).tone));
+  const verdictText = unread === 0 ? "You're all caught up." : `${plural(unread, 'unread alert')}.`;
+  const verdictNote =
+    unread === 0
+      ? allList[0]
+        ? `Last alert: ${formatStamp(allList[0].createdAt)}.`
+        : 'Alerts from the house land here as they happen.'
+      : unreadList[0]
+        ? `Newest: ${unreadList[0].title}.`
+        : 'Open an alert to read all of it.';
+
+  const categoryOptions: ChipOption<CategoryKey>[] = [
+    { value: 'all', label: 'All' },
+    ...CATEGORIES.filter((c) => !c.adminOnly || isAdmin).map((c) => {
+      const cat = notificationCategory(c.key);
+      return { value: c.key, label: cat.label, icon: cat.icon };
+    }),
+  ];
+  const severityOptions: ChipOption<SeverityKey>[] = [
+    { value: 'all', label: 'Any' },
+    ...SEVERITIES.map((s) => ({ value: s, label: severityStatus(s).label })),
+  ];
 
   return (
-    <div className="space-y-6 sm:space-y-7">
-      {/* Header */}
-      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
-              Notifications
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-              Notification Center
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
-              Stay informed about your home&rsquo;s activity across all integrations. Filter by category, severity, or search through past notifications.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Unread</p>
-              <p className="mt-2 text-lg font-semibold text-apptext">{unread}</p>
-            </div>
-            {!isGuest && (
-              <Link
-                to="/profile#alert-types"
-                className="rounded-2xl border border-appborder px-4 py-3 text-sm font-semibold text-apptext-soft transition-colors hover:border-appborder-hover hover:text-apptext"
-              >
-                Alert settings
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={() => markAllMut.mutate()}
-              disabled={markAllMut.isPending || unread === 0}
-              className="rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3 text-sm font-semibold text-appaccent-text transition-colors hover:bg-appaccent-soft/80 disabled:opacity-40"
-            >
-              Mark all read
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Filters */}
-      <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          {/* Category pills */}
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.filter((c) => c.key !== 'SYSTEM' || isAdmin).map((c) => (
-              <button
-                key={c.key}
-                type="button"
-                onClick={() => setCategoryFilter(c.key)}
-                className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                  categoryFilter === c.key
-                    ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                    : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover hover:text-apptext-soft'
-                }`}
-              >
-                <span>{c.icon}</span> {c.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Severity filter */}
-            {SEVERITIES.map((s) => (
-              <button
-                key={s.key}
-                type="button"
-                onClick={() => setSeverityFilter(s.key)}
-                className={`rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors ${
-                  severityFilter === s.key
-                    ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                    : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-
-            {/* Unread toggle */}
-            <button
-              type="button"
-              onClick={() => setUnreadOnly(!unreadOnly)}
-              className={`rounded-full border px-2.5 py-1 text-2xs font-medium transition-colors ${
-                unreadOnly
-                  ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                  : 'border-appborder bg-appinset text-apptext-muted hover:border-appborder-hover'
-              }`}
-            >
-              🔵 Unread
-            </button>
-
-            {/* Search */}
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              className="rounded-full border border-appborder bg-appinset px-3 py-1.5 text-xs text-apptext placeholder:text-apptext-dim focus:outline-none focus:border-appaccent"
+    <Screen>
+      <InstrumentPanel
+        instrument={<Annunciator unread={all.data || unreadCount.data != null ? unread : null} tally={all.data ? tally : null} />}
+        verdict={
+          all.isError && !all.data ? (
+            <Verdict tone="headsup" note="The home server didn't answer. Try again in a moment.">Couldn't load your alerts.</Verdict>
+          ) : !all.data ? (
+            <Verdict tone="neutral">Loading your alerts…</Verdict>
+          ) : (
+            <Verdict tone={verdictTone} note={verdictNote}>{verdictText}</Verdict>
+          )
+        }
+        readouts={
+          <Readouts count={2}>
+            <Readout
+              label="Today"
+              value={all.data ? todays.length : '—'}
+              unit={todays.length === 1 ? 'alert' : 'alerts'}
+              note={all.data ? (todays.length ? `${todays.filter((n) => !n.isRead).length} unread` : 'Nothing yet today') : undefined}
             />
-          </div>
+            <Readout
+              label="Past 7 days"
+              value={all.data ? weekTotal : '—'}
+              unit={weekTotal === 1 ? 'alert' : 'alerts'}
+              note={all.data ? (tally.CRITICAL ? `${plural(tally.CRITICAL, 'problem')}` : 'No problems') : undefined}
+            />
+          </Readouts>
+        }
+      >
+        <div className="fp-btn-row">
+          <Button
+            variant="primary"
+            icon="check"
+            onClick={() => markAllMut.mutate()}
+            disabled={unread === 0}
+            busy={markAllMut.isPending}
+            busyLabel="Marking…"
+          >
+            {unread > 0 ? `Mark all ${unread} read` : 'Mark all read'}
+          </Button>
+          {!isGuest && (
+            <LinkButton to="/profile?view=alerts#alert-types" variant="quiet" icon="settings">
+              Alert settings
+            </LinkButton>
+          )}
         </div>
-      </section>
+      </InstrumentPanel>
 
-      {/* Notification list */}
-      <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        {notifications.isLoading ? (
-          <div className="space-y-3 animate-pulse">
-            {[1, 2, 3, 4].map((i) => <div key={i} className="h-20 rounded-2xl bg-appinset" />)}
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center gap-3 text-center">
-            <span className="text-3xl">🔔</span>
-            <p className="text-sm text-apptext-muted">
-              {data.length === 0
-                ? 'No notifications yet. Activity from your home will appear here.'
-                : 'No notifications match your filters.'}
-            </p>
-          </div>
-        ) : (
-          <VirtualizedList
-            items={filtered}
-            height={Math.min(LIST_HEIGHT, filtered.length * ROW_HEIGHT)}
-            itemHeight={ROW_HEIGHT}
-            overscan={4}
-            className="pr-1"
-            renderItem={(n) => <NotificationRow key={n.id} n={n} />}
-          />
-        )}
-      </section>
+      <Panel title="Everything the house told you" subtitle="Newest first. Tap an alert to read all of it.">
+        <Stack gap="m">
+          <Chips label="Show alerts from" value={category} onChange={setCategory} options={categoryOptions} />
+          <Disclosure
+            summary={<span className="inline-flex items-center gap-2"><Icon name="sliders" />Search and more filters</span>}
+            openSummary={<span className="inline-flex items-center gap-2"><Icon name="sliders" />Fewer filters</span>}
+            defaultOpen={severity !== 'all' || unreadOnly || search !== ''}
+          >
+            <Stack gap="m" className="pt-3">
+              <Field label="Search">
+                <Input
+                  type="search"
+                  icon="search"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search titles and messages"
+                  aria-label="Search alerts"
+                />
+              </Field>
+              <Stack gap="s">
+                <span className="fp-label">How much it mattered</span>
+                <Chips label="How much it mattered" value={severity} onChange={setSeverity} options={severityOptions} />
+              </Stack>
+              <List inset>
+                <li>
+                  <Switch checked={unreadOnly} onChange={setUnreadOnly} label="Unread only" help="Hide the ones you've already read" />
+                </li>
+              </List>
+            </Stack>
+          </Disclosure>
+        </Stack>
+
+        <div className="mt-4">
+          <QueryState
+            query={notifications}
+            what="your alerts"
+            loading={<SkelRows count={5} />}
+            isEmpty={(d) => searchAlerts(d, deferredSearch).length === 0}
+            empty={
+              filtering ? (
+                <EmptyState
+                  icon="filter"
+                  title="Nothing matches these filters"
+                  action={<Button size="sm" onClick={clearFilters}>Clear filters</Button>}
+                >
+                  Clear the filters to see every alert.
+                </EmptyState>
+              ) : (
+                <EmptyState icon="bell" title="No alerts yet">
+                  Alerts from the house land here as they happen.
+                </EmptyState>
+              )
+            }
+          >
+            {(data) => {
+              const shown = searchAlerts(data, deferredSearch);
+              const first = shown.slice(0, FIRST_ROWS);
+              const rest = shown.slice(FIRST_ROWS);
+              return (
+                <>
+                  <AlertDays list={first} onOpen={(n) => { if (!n.isRead) readMut.mutate(n.id); }} />
+                  {rest.length > 0 && (
+                    <Disclosure variant="row" summary={`Show ${plural(rest.length, 'older alert')}`} openSummary="Hide older alerts" className="mt-4">
+                      <AlertDays list={rest} onOpen={(n) => { if (!n.isRead) readMut.mutate(n.id); }} />
+                    </Disclosure>
+                  )}
+                </>
+              );
+            }}
+          </QueryState>
+        </div>
+      </Panel>
+    </Screen>
+  );
+}
+
+/** The instrument: the unread counter, and a lamp per severity with the past week's count. */
+function Annunciator({ unread, tally }: { unread: number | null; tally: Record<Exclude<SeverityKey, 'all'>, number> | null }) {
+  return (
+    <div className="grid w-full max-w-[380px] grid-cols-[minmax(112px,5fr)_minmax(0,7fr)] items-stretch gap-4">
+      <div className="flex flex-col items-center justify-center gap-2 rounded-well bg-appinset px-2.5 py-4 shadow-[var(--appwell-shadow)]">
+        <span className="fp-label">Unread</span>
+        <Num size="xl" value={unread ?? '—'} />
+      </div>
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <p className="fp-label">Past 7 days</p>
+        <ul aria-label="Alerts in the past 7 days, by how much they mattered">
+          {SEVERITIES.map((s) => {
+            const st = severityStatus(s);
+            const n = tally?.[s];
+            return (
+              <li key={s} className="grid min-h-[30px] grid-cols-[9px_minmax(0,1fr)_auto] items-center gap-2.5 border-t border-appborder">
+                <Lamp tone={n ? st.tone : 'neutral'} />
+                <span className={`fp-label ${n ? 'text-apptext' : 'text-apptext-muted'}`}>{st.label}</span>
+                <span className={`fp-mono ${n ? 'text-apptext' : 'text-apptext-muted'}`}>{n ?? '—'}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }
+
+/** Alerts under a heading per home day; each row opens to show its whole message. */
+function AlertDays({ list, onOpen }: { list: readonly Notification[]; onOpen: (n: Notification) => void }) {
+  return (
+    <div className="flex flex-col gap-5">
+      {groupByDay(list).map((g) => (
+        <AlertDay key={g.day} day={g.day} items={g.items} onOpen={onOpen} />
+      ))}
+    </div>
+  );
+}
+
+function AlertDay({ day, items, onOpen }: { day: string; items: Notification[]; onOpen: (n: Notification) => void }) {
+  const id = useId();
+  const name = formatDayName(day);
+  const date = formatDate(day);
+  return (
+    <section aria-labelledby={id}>
+      <h3 className="fp-tl-day" id={id}>
+        <span className="fp-label">{name}</span>
+        {name !== date && <span className="fp-mono">{date}</span>}
+      </h3>
+      <ul className="fp-list">
+        {items.map((n) => (
+          <AlertRow key={n.id} n={n} onOpen={onOpen} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/**
+ * One alert: its severity lamp, title, "Heads-up · Electric" and the time. Tapping it opens
+ * the whole message under it (B-025: the message used to be cut at two lines with no way to
+ * read the rest) and marks it read.
+ */
+function AlertRow({ n, onOpen }: { n: Notification; onOpen: (n: Notification) => void }) {
+  const [open, setOpen] = useState(false);
+  const msgId = useId();
+  const sev = severityStatus(n.severity);
+  const cat = notificationCategory(n.category);
+  return (
+    <li>
+      <button
+        type="button"
+        className={`fp-row fp-row--compact ${n.isRead ? '' : 'fp-is-unread'}`}
+        aria-expanded={open}
+        aria-controls={msgId}
+        onClick={() => {
+          setOpen((o) => !o);
+          if (!open) onOpen(n);
+        }}
+      >
+        <span className="fp-row-lead fp-row-lead--lamp">
+          <Lamp tone={sev.tone} />
+        </span>
+        <span className="fp-row-main">
+          <span className="fp-row-title fp-row-title--regular">
+            {n.title}
+            {!n.isRead && <span className="fp-sr-only"> Unread.</span>}
+          </span>
+          <span className="fp-row-meta">
+            <StatusText status={sev} /> · {cat.label}
+          </span>
+        </span>
+        <span className="fp-row-trail">
+          <span className="fp-mono">{formatTime(n.createdAt)}</span>
+          <Icon name={open ? 'chevron-up' : 'chevron-down'} className="fp-chev" />
+        </span>
+      </button>
+      <div id={msgId} hidden={!open} className="pb-3.5 pl-8 pr-1">
+        <p className="fp-prose whitespace-pre-line text-apptext">{n.message || 'No more to it than the title.'}</p>
+        <p className="fp-small fp-muted mt-1.5">
+          <span className="fp-mono">{formatDate(n.createdAt)}, {formatTime(n.createdAt)}</span> · {cat.label}
+        </p>
+      </div>
+    </li>
+  );
+}
+

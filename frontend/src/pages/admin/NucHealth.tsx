@@ -1,163 +1,282 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchHostHealth, fetchHostHistory } from '../../api/host';
-import { errorMessage } from '../../api/climate';
-import { FOCUS_RING } from '../../components/ThermostatControls';
+import {
+  Badge,
+  Chips,
+  DialLegend,
+  Disclosure,
+  EmptyState,
+  ErrorState,
+  Gauge,
+  InstrumentPanel,
+  KeyValue,
+  KV,
+  Lamp,
+  List,
+  Loading,
+  Meter,
+  MeterRow,
+  Num,
+  Panel,
+  QueryState,
+  Readout,
+  Readouts,
+  Row,
+  Screen,
+  SkelBlock,
+  SkelInstrumentPanel,
+  SkelPanel,
+  Split,
+  Verdict,
+  useChartTheme,
+  type ChartTone,
+  type LegendItem,
+} from '../../components/ui';
+import { usePageMeta } from '../../components/shell/PageMeta';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { useMediaQuery } from '../../hooks/useMediaQuery';
-import { ago } from '../../utils/cameras';
-import { bits, bytes, duration, eventDetail, eventLabel, pct, perSecond, powerEvents, processLabel, since, usedPct, when } from '../../utils/host';
+import {
+  formatDateTime,
+  formatDuration,
+  formatDurationBetween,
+  formatHour,
+  formatRelative,
+  formatShortDate,
+  formatStamp,
+  formatTime,
+  formatWeekday,
+  plural,
+} from '../../utils/format';
+import { checkStatus, worstTone, type Tone } from '../../utils/status';
+import { bits, bytes, eventDetail, eventLabel, pct, perSecond, powerEvents, processLabel, usedPct } from '../../utils/host';
 import type { HostCheck, HostContainer, HostHealth, HostHistory, HostPoint, HostProcess, HostRange, HostSnapshot } from '../../types';
 
-function Card({ title, aside, children }: { title?: string; aside?: React.ReactNode; children: React.ReactNode }) {
+/*
+ * Admin → Server health. The NUC's monitor (scripts/host-metrics.ps1) reports once a minute.
+ * Temperatures come from Windows in Celsius and are shown in °C, labelled, as the monitor and
+ * its alerts state them (converting would make the thresholds below disagree with the alerts).
+ */
+
+/** "Just now" mid-sentence; a date keeps its capital. */
+const inSentence = (rel: string) => (rel === 'Just now' || rel === 'Yesterday' ? rel.toLowerCase() : rel);
+
+/** The heads-up and problem lines for each vital (the same ones the old tiles coloured at). */
+const LIMITS = {
+  cpu: [85, 95],
+  memory: [90, 95],
+  disk: [85, 95],
+  temp: [85, 95],
+} as const;
+
+function levelTone(v: number | null | undefined, [warn, bad]: readonly [number, number]): Tone {
+  if (v == null) return 'neutral';
+  return v >= bad ? 'problem' : v >= warn ? 'headsup' : 'ok';
+}
+const GAUGE_TONE: Record<Tone, ChartTone> = { ok: 'ink', neutral: 'ink', info: 'ink', headsup: 'warn', problem: 'problem' };
+const zones = ([warn, bad]: readonly [number, number], max: number) => [
+  { from: warn, to: bad, tone: 'warn' as const },
+  { from: bad, to: max, tone: 'problem' as const },
+];
+
+// ── The instrument: six gauges ──
+
+interface Vital {
+  key: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  /** The centre figure, already formatted. */
+  shown: ReactNode;
+  unit?: string;
+  sub?: ReactNode;
+  tone: Tone;
+  zones?: Array<{ from: number; to: number; tone: ChartTone }>;
+  /** What a screen reader hears for the gauge. */
+  spoken: string;
+}
+
+function VitalGauge({ v }: { v: Vital }) {
   return (
-    <section className="rounded-[24px] border border-appborder bg-appsurface-raised p-4 shadow-[0_10px_28px_var(--appshadow)] sm:p-5">
-      {(title || aside) && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {title && <h3 className="text-sm font-semibold text-apptext">{title}</h3>}
-          {aside}
+    <div className="flex min-w-0 flex-col items-center gap-1 text-center">
+      <Gauge value={v.value} min={v.min} max={v.max} tone={GAUGE_TONE[v.tone]} zones={v.zones} size={132} label={v.spoken}>
+        <div className="fp-dial-centre pt-[6%]">
+          <Num size="m" value={v.shown} unit={v.unit} className="whitespace-nowrap" />
         </div>
-      )}
-      {children}
-    </section>
-  );
-}
-
-/** A status word beside a dot, never color alone. */
-function Dot({ tone, children }: { tone: 'good' | 'warn' | 'bad' | 'off'; children: React.ReactNode }) {
-  const dot = { good: 'bg-appsuccess', warn: 'bg-appwarning', bad: 'bg-appdanger', off: 'bg-apptext-dim' }[tone];
-  const text = { good: 'text-apptext-success', warn: 'text-apptext-warning', bad: 'text-apptext-danger', off: 'text-apptext-muted' }[tone];
-  return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${text}`}>
-      <span className={`h-2 w-2 shrink-0 rounded-full ${dot}`} aria-hidden="true" />
-      {children}
-    </span>
-  );
-}
-
-/** A labelled value; the headline numbers row. */
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'warn' | 'bad' }) {
-  const color = tone === 'bad' ? 'text-apptext-danger' : tone === 'warn' ? 'text-apptext-warning' : 'text-apptext';
-  return (
-    <div className="min-w-0 rounded-[20px] border border-appborder bg-appsurface-raised p-4 shadow-[0_8px_24px_var(--appshadow)] sm:rounded-[24px]">
-      <p className="text-2xs font-medium uppercase tracking-[0.16em] text-apptext-muted">{label}</p>
-      <p className={`mt-2 truncate text-2xl font-semibold tracking-[-0.03em] tabular-nums ${color}`}>{value}</p>
-      {sub && <p className="mt-1 truncate text-xs text-apptext-dim" title={sub}>{sub}</p>}
+      </Gauge>
+      <span className="fp-label inline-flex items-center gap-1.5">
+        {v.tone === 'headsup' || v.tone === 'problem' ? <Lamp tone={v.tone} size="s" label /> : null}
+        {v.label}
+      </span>
+      {v.sub != null && <span className="text-xs leading-tight text-apptext-muted">{v.sub}</span>}
     </div>
   );
 }
 
-/** A thin used/free bar with the share written beside it. */
-function Meter({ value, label }: { value: number | null; label: string }) {
-  const v = value == null ? 0 : Math.max(0, Math.min(100, value));
-  const fill = v >= 95 ? 'bg-appdanger' : v >= 85 ? 'bg-appwarning' : 'bg-appaccent';
-  return (
-    <div className="flex items-center gap-3">
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-appinset" role="meter" aria-label={label}
-        aria-valuemin={0} aria-valuemax={100} aria-valuenow={value == null ? undefined : Math.round(v)}>
-        <div className={`h-full rounded-full ${fill}`} style={{ width: `${v}%` }} />
-      </div>
-      <span className="w-10 text-right text-xs tabular-nums text-apptext-soft">{pct(value)}</span>
-    </div>
-  );
-}
-
-function Checks({ checks, online }: { checks: HostCheck[]; online: boolean }) {
-  if (!checks.length) {
-    return online ? (
-      <Card>
-        <Dot tone="good">All good: nothing on the NUC needs attention.</Dot>
-      </Card>
-    ) : null;
-  }
-  return (
-    <Card title="Needs attention">
-      <ul className="flex flex-col gap-3">
-        {checks.map((c, i) => (
-          <li key={`${c.key}-${i}`} className="flex gap-3">
-            <span aria-hidden="true" className="mt-0.5 text-base leading-none">{c.level === 'critical' ? '⛔' : '⚠️'}</span>
-            <div className="min-w-0">
-              <p className={`text-sm font-semibold ${c.level === 'critical' ? 'text-apptext-danger' : 'text-apptext-warning'}`}>
-                <span className="sr-only">{c.level === 'critical' ? 'Critical: ' : 'Warning: '}</span>
-                {c.title}
-              </p>
-              {c.detail && <p className="mt-0.5 break-words text-xs text-apptext-muted">{c.detail}</p>}
-            </div>
-          </li>
-        ))}
-      </ul>
-    </Card>
-  );
-}
-
-function Headline({ s, now }: { s: HostSnapshot; now: number }) {
+function vitals(s: HostSnapshot, now: number): Vital[] {
   const memUsed = usedPct(s.memory?.totalBytes, s.memory?.availableBytes);
   const sys = s.disks?.find((d) => d.name === 'C:') ?? s.disks?.[0];
   const diskUsed = usedPct(sys?.totalBytes, sys?.freeBytes);
   const cpuTemp = s.temperatures?.length ? Math.max(...s.temperatures.map((t) => t.celsius)) : null;
   const ssdTemp = s.physicalDisks?.find((d) => d.temperatureC != null)?.temperatureC ?? null;
-  const wifi = s.network?.wifi;
-  const tone = (v: number | null, warn: number, bad: number) => (v == null ? undefined : v >= bad ? 'bad' : v >= warn ? 'warn' : undefined);
+  const cpu = s.cpu?.usagePct ?? null;
+  const rx = s.network?.rxBps;
+  // Network spans kbps to Gbps, so its gauge is logarithmic: 1 kbps at the bottom, 1 Gbps at the top.
+  const rxLog = rx != null && rx > 0 ? Math.max(0, Math.log10((rx * 8) / 1000)) : 0;
+  const upMin = s.host?.bootTime ? (now - new Date(s.host.bootTime).getTime()) / 60_000 : null;
+  return [
+    {
+      key: 'cpu', label: 'Processor', value: cpu ?? 0, min: 0, max: 100, shown: cpu == null ? '—' : Math.round(cpu), unit: cpu == null ? undefined : '%',
+      sub: 'Last minute', tone: levelTone(cpu, LIMITS.cpu), zones: zones(LIMITS.cpu, 100), spoken: `Processor ${pct(cpu)}`,
+    },
+    {
+      key: 'mem', label: 'Memory', value: memUsed ?? 0, min: 0, max: 100, shown: memUsed == null ? '—' : Math.round(memUsed), unit: memUsed == null ? undefined : '%',
+      sub: s.memory?.totalBytes ? `${bytes((s.memory.totalBytes ?? 0) - (s.memory.availableBytes ?? 0))} of ${bytes(s.memory.totalBytes)}` : undefined,
+      tone: levelTone(memUsed, LIMITS.memory), zones: zones(LIMITS.memory, 100), spoken: `Memory ${pct(memUsed)} in use`,
+    },
+    {
+      key: 'disk', label: sys ? `Drive ${sys.name}` : 'Drive', value: diskUsed ?? 0, min: 0, max: 100,
+      shown: diskUsed == null ? '—' : Math.round(diskUsed), unit: diskUsed == null ? undefined : '%',
+      sub: sys ? `${bytes(sys.freeBytes)} free` : undefined, tone: levelTone(diskUsed, LIMITS.disk), zones: zones(LIMITS.disk, 100),
+      spoken: `${sys ? `Drive ${sys.name}` : 'Drive'} ${pct(diskUsed)} full`,
+    },
+    {
+      key: 'temp', label: 'Temperature', value: cpuTemp ?? 20, min: 20, max: 100,
+      shown: cpuTemp == null ? '—' : Math.round(cpuTemp), unit: cpuTemp == null ? undefined : '°C',
+      sub: ssdTemp != null ? `SSD ${Math.round(ssdTemp)} °C` : 'Processor', tone: levelTone(cpuTemp, LIMITS.temp), zones: zones(LIMITS.temp, 100),
+      spoken: cpuTemp == null ? 'Temperature unknown' : `Processor ${Math.round(cpuTemp)} degrees Celsius`,
+    },
+    {
+      key: 'net', label: 'Network', value: rxLog, min: 0, max: 6, shown: bits(rx).split(' ')[0], unit: bits(rx).split(' ')[1],
+      sub: `Up ${bits(s.network?.txBps)}${s.network?.wifi?.signalPct != null ? ` · Wi‑Fi ${s.network.wifi.signalPct}%` : ''}`,
+      tone: 'neutral', spoken: `Download ${bits(rx)}, upload ${bits(s.network?.txBps)}`,
+    },
+    {
+      key: 'up', label: 'Up for', value: upMin == null ? 0 : Math.min(30, upMin / 1440), min: 0, max: 30,
+      // The centre has room for one figure: whole days (hours on the first day); the sub line has it all.
+      shown: upMin == null ? '—' : upMin >= 1440 ? Math.floor(upMin / 1440) : Math.floor(upMin / 60),
+      unit: upMin == null ? undefined : upMin >= 1440 ? (upMin < 2880 ? 'day' : 'days') : 'hr',
+      sub: s.host?.bootTime ? `${formatDurationBetween(s.host.bootTime, now)}, since ${formatStamp(s.host.bootTime)}` : undefined, tone: 'neutral',
+      spoken: upMin == null ? 'Uptime unknown' : `Up for ${formatDurationBetween(s.host?.bootTime, now)}`,
+    },
+  ];
+}
+
+function Cluster({ s, now }: { s: HostSnapshot; now: number }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6 lg:gap-4">
-      <Stat label="Processor" value={pct(s.cpu?.usagePct)} tone={tone(s.cpu?.usagePct ?? null, 85, 95)}
-        sub="average, last minute" />
-      <Stat label="Memory" value={pct(memUsed)} tone={tone(memUsed, 90, 95)}
-        sub={s.memory?.totalBytes ? `${bytes((s.memory.totalBytes ?? 0) - (s.memory.availableBytes ?? 0))} of ${bytes(s.memory.totalBytes)}` : undefined} />
-      <Stat label={sys ? `Drive ${sys.name}` : 'Drive'} value={pct(diskUsed)} tone={tone(diskUsed, 85, 95)}
-        sub={sys ? `${bytes(sys.freeBytes)} free` : undefined} />
-      <Stat label="Temperature" value={cpuTemp == null ? '—' : `${Math.round(cpuTemp)} °C`} tone={tone(cpuTemp, 85, 95)}
-        sub={ssdTemp != null ? `SSD ${Math.round(ssdTemp)} °C` : undefined} />
-      <Stat label="Network" value={`↓ ${bits(s.network?.rxBps)}`}
-        sub={`↑ ${bits(s.network?.txBps)}${wifi?.signalPct != null ? ` · Wi-Fi ${wifi.signalPct}%` : ''}`} />
-      <Stat label="Up for" value={since(s.host?.bootTime, now)} sub={s.host?.bootTime ? `since ${when(s.host.bootTime)}` : undefined} />
+    <div className="flex w-full flex-col items-center gap-3">
+      <div className="grid w-full max-w-[480px] grid-cols-3 gap-x-2.5 gap-y-4 lg:gap-x-4 lg:gap-y-5">
+        {vitals(s, now).map((v) => <VitalGauge key={v.key} v={v} />)}
+      </div>
+      <DialLegend items={[{ label: 'Heads-up', tone: 'warn', key: 'mark' }, { label: 'Problem', tone: 'problem', key: 'mark' }]} />
     </div>
+  );
+}
+
+function Answer({ data, s, now }: { data: HostHealth; s: HostSnapshot | null; now: number }) {
+  const online = data.status === 'ONLINE';
+  const checks = data.checks;
+  // The verdict's lamp is the worst thing listed under it.
+  const tone: Tone = worstTone(checks.map((c) => checkStatus(c.level).tone));
+  const first = checks[0];
+  const sys = s?.disks?.find((d) => d.name === 'C:') ?? s?.disks?.[0];
+  const containers = s?.docker?.containers ?? [];
+  const running = containers.filter((c) => c.state === 'running').length;
+  const events = powerEvents(s?.events);
+  const restarts = events.filter((e) => e.kind === 'boot' || e.kind === 'unexpected');
+  const unexpected = events.filter((e) => e.kind === 'unexpected').length;
+  const diskTone = levelTone(usedPct(sys?.totalBytes, sys?.freeBytes), LIMITS.disk);
+
+  const verdict = !online ? (
+    <Verdict
+      tone="problem"
+      note={s ? `Last readings, from ${formatDateTime(s.collectedAt)}. They update once the monitor reports again.` : 'Nothing has come in yet.'}
+    >
+      The health monitor stopped reporting.
+    </Verdict>
+  ) : first ? (
+    <Verdict tone={tone} note={checks.length > 1 ? `${first.detail} ${plural(checks.length - 1, 'other thing')} below.` : first.detail}>
+      {first.title}.
+    </Verdict>
+  ) : (
+    <Verdict tone="ok" note="All good: nothing on the NUC needs attention.">The home server is healthy.</Verdict>
+  );
+
+  return (
+    <InstrumentPanel
+      instrument={s ? <Cluster s={s} now={now} /> : <EmptyState compact icon="server" title="No readings yet" />}
+      verdict={verdict}
+      readouts={
+        s ? (
+          <Readouts count={3}>
+            <Readout
+              label={sys ? `Free on ${sys.name}` : 'Free space'}
+              tone={diskTone === 'ok' ? undefined : diskTone}
+              value={bytes(sys?.freeBytes).split(' ')[0]}
+              unit={bytes(sys?.freeBytes).split(' ')[1]}
+              note={sys ? `Of ${bytes(sys.totalBytes)}` : undefined}
+            />
+            <Readout
+              label="Containers"
+              value={s.docker?.ok ? running : '—'}
+              unit={s.docker?.ok ? `of ${containers.length}` : undefined}
+              note={s.docker?.ok ? 'Running' : "Docker isn't answering"}
+            />
+            <Readout label="Restarts" value={restarts.length} note={`Last 30 days${unexpected ? `, ${unexpected} unexpected` : ''}`} />
+          </Readouts>
+        ) : undefined
+      }
+      foot={
+        <>
+          <span className="fp-cluster">
+            <Lamp tone={online ? 'ok' : 'problem'} size="s" />
+            <span className="fp-mono">
+              {online
+                ? `Reported ${inSentence(formatRelative(data.lastReportAt))}`
+                : `Monitor offline · last report ${data.lastReportAt ? inSentence(formatRelative(data.lastReportAt)) : 'never'}`}
+            </span>
+          </span>
+          {s?.agent?.durationMs != null && <span className="fp-mono">Report took {(s.agent.durationMs / 1000).toFixed(1)} s</span>}
+        </>
+      }
+    >
+      {checks.length > 0 && <Checks checks={checks} />}
+    </InstrumentPanel>
+  );
+}
+
+/** Everything the server flags, worst first, each with its word as well as its lamp. */
+function Checks({ checks }: { checks: HostCheck[] }) {
+  return (
+    <section aria-label="Needs attention">
+      <List inset>
+        {checks.map((c, i) => (
+          <Row key={`${c.key}-${i}`} compact lamp={checkStatus(c.level).tone} title={c.title} meta={c.detail} />
+        ))}
+      </List>
+    </section>
   );
 }
 
 // ── History charts ──
 
 const CHART_MARGIN = { top: 5, right: 8, left: 0, bottom: 0 } as const;
-const TICK = { fill: 'var(--appchart-tick)', fontSize: 11 } as const;
-const AXIS_LINE = { stroke: 'var(--appchart-grid)' } as const;
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: 'var(--appchart-bg)',
-  border: '1px solid var(--appchart-border)',
-  borderRadius: '16px',
-  fontSize: '13px',
-  color: 'var(--apptext)',
-  boxShadow: '0 20px 50px var(--appshadow-lg)',
-} as const;
-const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
 
-const RANGES: Array<[HostRange, string]> = [
-  ['24h', '24 h'],
-  ['7d', '7 d'],
-  ['30d', '30 d'],
-];
+const RANGES = [
+  { value: '24h', label: '24 hours' },
+  { value: '7d', label: '7 days' },
+  { value: '30d', label: '30 days' },
+] as const;
 
 function formatTick(t: number, range: HostRange): string {
-  const d = new Date(t);
-  if (range === '24h') return d.toLocaleTimeString(undefined, { hour: 'numeric' });
-  if (range === '7d') return d.toLocaleDateString(undefined, { weekday: 'short' });
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (range === '24h') return formatHour(t);
+  if (range === '7d') return formatWeekday(t);
+  return formatShortDate(t);
 }
 
-interface Series { key: keyof HostPoint; label: string; color: string }
-
-function Legend({ series }: { series: Series[] }) {
-  return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-apptext-soft">
-      {series.map((s) => (
-        <span key={s.key} className="inline-flex items-center gap-1.5">
-          <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={s.color} strokeWidth="2.5" /></svg>
-          {s.label}
-        </span>
-      ))}
-    </div>
-  );
-}
+interface Series { key: keyof HostPoint; label: string; tone: 'ink' | 'heat' | 'cool' | 'graphite'; dashed?: boolean }
 
 const MetricChart = memo(function MetricChart({ title, note, series, data, domain, ticks, unit, range, digits = 0 }: {
   title: string;
@@ -170,49 +289,47 @@ const MetricChart = memo(function MetricChart({ title, note, series, data, domai
   range: HostRange;
   digits?: number;
 }) {
+  // Hooks first (the chart rule), then the drawing.
+  const t = useChartTheme();
   const narrow = useMediaQuery('(max-width: 639px)');
   const hasData = data.some((p) => series.some((s) => p[s.key] != null));
+  const legend: LegendItem[] = series.map((s) => ({ label: s.label, tone: s.tone, key: s.dashed ? 'dash' : 'line' }));
   return (
-    <div className="min-w-0 rounded-2xl border border-appborder bg-appinset p-3">
+    <figure className="m-0 min-w-0">
       <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-xs font-semibold text-apptext">{title}</p>
-        {note && <p className="text-2xs tabular-nums text-apptext-muted">{note}</p>}
+        <figcaption className="fp-label">{title}</figcaption>
+        {note && <span className="fp-mono text-xs text-apptext-muted">{note}</span>}
       </div>
-      {series.length > 1 && <div className="mb-2"><Legend series={series} /></div>}
+      {series.length > 1 && <DialLegend items={legend} className="mb-2 justify-start" />}
       {!hasData ? (
-        <div className="flex h-[150px] items-center justify-center px-6 text-center text-xs text-apptext-muted">
-          Nothing to draw yet: the line fills in as the NUC reports, once a minute.
-        </div>
+        <EmptyState compact title="Nothing to draw yet">The line fills in as the NUC reports, once a minute.</EmptyState>
       ) : (
         <ResponsiveContainer width="100%" height={150} debounce={80}>
           <LineChart data={data} margin={CHART_MARGIN}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--appchart-grid)" vertical={false} />
-            <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']}
-              tickFormatter={(t: number) => formatTick(t, range)} tick={TICK} axisLine={AXIS_LINE} tickLine={false}
-              minTickGap={narrow ? 48 : 32} />
-            <YAxis domain={ticks ? [ticks[0], ticks[ticks.length - 1]] : domain} ticks={ticks} width={40} tick={TICK}
-              axisLine={AXIS_LINE} tickLine={false} allowDecimals={digits > 0} />
+            <CartesianGrid {...t.grid} />
+            <XAxis dataKey="t" type="number" scale="time" domain={['dataMin', 'dataMax']} {...t.axis}
+              tickFormatter={(v: number) => formatTick(v, range)} minTickGap={narrow ? 48 : 32} />
+            <YAxis domain={ticks ? [ticks[0], ticks[ticks.length - 1]] : domain} ticks={ticks} width={40} {...t.axis} allowDecimals={digits > 0} />
             <Tooltip
-              contentStyle={TOOLTIP_CONTENT_STYLE}
-              labelStyle={TOOLTIP_LABEL_STYLE}
-              labelFormatter={(t: number) => new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+              {...t.tooltip}
+              // B-039: a 7- or 30-day chart names the date, not only a weekday.
+              labelFormatter={(v: number) => formatDateTime(v)}
               formatter={(value: number, key: string) => [
                 `${Number(value).toFixed(digits)} ${unit}`.trim(),
                 series.find((s) => s.key === key)?.label ?? key,
               ]}
             />
             {series.map((s) => (
-              <Line key={s.key} dataKey={s.key} type="monotone" stroke={s.color} strokeWidth={2} dot={false}
-                connectNulls={false} isAnimationActive={false} />
+              <Line key={s.key} dataKey={s.key} type="monotone" stroke={t.series[s.tone]} strokeWidth={2} dot={false}
+                strokeDasharray={s.dashed ? t.dash : undefined} connectNulls={false} isAnimationActive={false} />
             ))}
           </LineChart>
         </ResponsiveContainer>
       )}
-    </div>
+    </figure>
   );
 });
 
-const COOL = 'var(--appchart-cool)';
 /** Round ticks a little beyond the data (35, 45, 55 °C) for series without a fixed 0–100 scale. */
 function roundTicks(data: Array<Record<string, number | null>>, keys: string[]): number[] | undefined {
   const values = data.flatMap((p) => keys.map((k) => p[k])).filter((v): v is number => v != null);
@@ -224,13 +341,15 @@ function roundTicks(data: Array<Record<string, number | null>>, keys: string[]):
   for (let t = Math.floor(lo / step) * step; t <= hi; t += step) ticks.push(t);
   return ticks;
 }
-const HEAT = 'var(--appchart-heat)';
 
-function History({ range, onRange, history, loading }: {
+function History({ range, onRange, history, loading, failed, onRetry, retrying }: {
   range: HostRange;
   onRange: (r: HostRange) => void;
   history: HostHistory | undefined;
   loading: boolean;
+  failed: boolean;
+  onRetry: () => void;
+  retrying: boolean;
 }) {
   const data = useMemo(
     () => (history?.points ?? []).map((p) => ({ ...p, t: new Date(p.t).getTime() }) as unknown as Record<string, number | null>),
@@ -240,65 +359,60 @@ function History({ range, onRange, history, loading }: {
   const sum = history?.summary;
   const fresh = history?.firstSampleAt && new Date(history.firstSampleAt).getTime() > new Date(history.from).getTime() + 3_600_000;
   return (
-    <Card
+    <Panel
       title="History"
-      aside={
-        <div className="flex gap-1 rounded-full border border-appborder bg-appinset p-1" role="group" aria-label="History range">
-          {RANGES.map(([r, label]) => (
-            <button key={r} type="button" aria-pressed={range === r} onClick={() => onRange(r)}
-              className={`h-9 rounded-full px-3 text-3xs font-semibold uppercase tracking-[0.14em] transition-colors sm:px-4 ${FOCUS_RING} ${
-                range === r ? 'bg-appaccent-soft text-apptext' : 'text-apptext-muted hover:text-apptext'
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
-      }
+      subtitle={fresh ? `Recording since ${formatDateTime(history?.firstSampleAt)}; earlier times are blank` : 'Averages for each stretch of the range'}
+      action={<Chips label="History range" value={range} onChange={onRange} options={RANGES} />}
     >
-      {fresh && (
-        <p className="mb-3 text-xs text-apptext-muted">Recording since {when(history?.firstSampleAt)}; earlier times are blank.</p>
-      )}
-      {loading && !history ? (
-        <div className="h-[200px] animate-pulse rounded-2xl bg-appinset" />
+      {!history && failed ? (
+        <ErrorState compact title="Couldn't load the history" onRetry={onRetry} retrying={retrying} />
+      ) : loading && !history ? (
+        <Loading label="Loading the history"><SkelBlock height={200} /></Loading>
       ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
           <MetricChart title="Processor" unit="%" range={range} data={data} domain={[0, 100]}
             note={sum?.cpuAvg != null ? `avg ${pct(sum.cpuAvg)} · busiest minute ${pct(sum.cpuPeak)}` : undefined}
-            series={[{ key: 'cpuAvg', label: 'Processor', color: COOL }]} />
+            series={[{ key: 'cpuAvg', label: 'Processor', tone: 'ink' }]} />
           <MetricChart title="Memory in use" unit="%" range={range} data={data} domain={[0, 100]}
             note={sum?.memAvgPct != null ? `avg ${pct(sum.memAvgPct)} · peak ${pct(sum.memPeakPct)}` : undefined}
-            series={[{ key: 'memPct', label: 'Memory', color: COOL }]} />
-          <MetricChart title="Temperature" unit="°C" range={range} data={data} domain={['auto', 'auto']} ticks={tempTicks}
+            series={[{ key: 'memPct', label: 'Memory', tone: 'ink' }]} />
+          <MetricChart title="Temperature, °C" unit="°C" range={range} data={data} domain={['auto', 'auto']} ticks={tempTicks}
             note={sum?.cpuTempPeak != null ? `hottest ${Math.round(sum.cpuTempPeak)} °C` : undefined}
-            series={[{ key: 'cpuTempC', label: 'Processor', color: HEAT }, { key: 'diskTempC', label: 'SSD', color: COOL }]} />
-          <MetricChart title="Home network" unit="Mbps" digits={2} range={range} data={data} domain={[0, 'auto']}
+            series={[{ key: 'cpuTempC', label: 'Processor', tone: 'heat' }, { key: 'diskTempC', label: 'SSD', tone: 'cool' }]} />
+          <MetricChart title="Home network, Mbps" unit="Mbps" digits={2} range={range} data={data} domain={[0, 'auto']}
             note={sum?.rxBytes != null ? `↓ ${bytes(sum.rxBytes)} · ↑ ${bytes(sum.txBytes)}` : undefined}
-            series={[{ key: 'rxMbps', label: 'Download', color: COOL }, { key: 'txMbps', label: 'Upload', color: HEAT }]} />
+            series={[{ key: 'rxMbps', label: 'Download', tone: 'ink' }, { key: 'txMbps', label: 'Upload', tone: 'graphite', dashed: true }]} />
         </div>
       )}
       {history && history.gaps.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold text-apptext">Times it went quiet</p>
-          <ul className="flex flex-col gap-1.5">
+        <div className="mt-5">
+          <p className="fp-label mb-2">Times it went quiet</p>
+          <List inset>
             {[...history.gaps].reverse().map((g) => (
-              <li key={g.from} className="text-xs text-apptext-muted">
-                <span className="tabular-nums text-apptext-soft">{when(g.from)} → {when(g.to)}</span>
-                {' · '}{duration(g.minutes)}{g.restarted ? ' · it restarted' : ''}
-              </li>
+              <Row
+                key={g.from}
+                compact
+                lamp="neutral"
+                title={`${formatDateTime(g.from)} – ${formatTime(g.to)}`}
+                meta={g.restarted ? 'It restarted' : 'The monitor missed its checks'}
+                value={formatDuration(g.minutes)}
+              />
             ))}
-          </ul>
+          </List>
         </div>
       )}
-    </Card>
+    </Panel>
   );
 }
 
-// ── Detail cards ──
+// ── Detail panels ──
 
-function containerTone(c: HostContainer): ['good' | 'warn' | 'bad' | 'off', string] {
-  if (c.state === 'running') return c.health === 'unhealthy' ? ['warn', 'Running · unhealthy'] : ['good', c.health === 'healthy' ? 'Running · healthy' : 'Running'];
-  if (c.state === 'restarting') return ['warn', 'Restarting'];
-  return [c.name.startsWith('homeplatform-') ? 'bad' : 'off', c.status ?? c.state ?? 'Stopped'];
+function containerStatus(c: HostContainer): { tone: Tone; label: string } {
+  if (c.state === 'running') {
+    return c.health === 'unhealthy' ? { tone: 'headsup', label: 'Running · unhealthy' } : { tone: 'ok', label: c.health === 'healthy' ? 'Running · healthy' : 'Running' };
+  }
+  if (c.state === 'restarting') return { tone: 'headsup', label: 'Restarting' };
+  return { tone: c.name.startsWith('homeplatform-') ? 'problem' : 'neutral', label: c.status ?? c.state ?? 'Stopped' };
 }
 
 function Containers({ docker }: { docker: HostSnapshot['docker'] }) {
@@ -307,54 +421,122 @@ function Containers({ docker }: { docker: HostSnapshot['docker'] }) {
     (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || (b.memBytes ?? 0) - (a.memBytes ?? 0));
   const running = list.filter((c) => c.state === 'running').length;
   return (
-    <Card
+    <Panel
       title="Containers"
-      aside={docker.ok ? (
-        <span className="text-2xs text-apptext-muted">
-          {running} of {list.length} running · Docker {docker.version ?? ''}{docker.memTotalBytes ? ` · ${bytes(docker.memTotalBytes)} VM` : ''}
-        </span>
-      ) : <Dot tone="bad">Docker isn't responding</Dot>}
+      subtitle={docker.ok
+        ? `${running} of ${list.length} running · Docker ${docker.version ?? ''}${docker.memTotalBytes ? ` · ${bytes(docker.memTotalBytes)} VM` : ''}`
+        : undefined}
     >
       {!docker.ok ? (
-        <p className="text-xs text-apptext-muted">{docker.error ?? 'No answer from Docker.'} Container details come back once it does.</p>
+        <EmptyState compact title="Docker isn't responding">
+          {docker.error ?? 'No answer from Docker.'} Container details come back once it does.
+        </EmptyState>
       ) : (
-        <ul className="divide-y divide-appborder">
+        <List>
           {list.map((c) => {
-            const [tone, label] = containerTone(c);
+            const st = containerStatus(c);
             return (
-              <li key={c.name} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-apptext" title={c.image ?? undefined}>{c.name}</p>
-                  <Dot tone={tone}>{label}</Dot>
-                </div>
-                {c.state === 'running' && (
-                  <p className="text-xs tabular-nums text-apptext-soft">
-                    {pct(c.cpuPct, 1)} CPU · {bytes(c.memBytes)}
-                  </p>
-                )}
-              </li>
+              <Row
+                key={c.name}
+                title={<span className="break-all">{c.name}</span>}
+                meta={c.state === 'running' ? `${pct(c.cpuPct, 1)} processor · ${bytes(c.memBytes)}` : c.image ?? undefined}
+                trail={<Badge tone={st.tone} className="whitespace-nowrap">{st.label}</Badge>}
+              />
             );
           })}
-        </ul>
+        </List>
       )}
-    </Card>
+    </Panel>
+  );
+}
+
+function Storage({ s, app }: { s: HostSnapshot; app: HostHealth['app'] }) {
+  return (
+    <Panel title="Storage">
+      <div className="fp-stack">
+        {(s.disks ?? []).map((d) => {
+          const used = usedPct(d.totalBytes, d.freeBytes);
+          return (
+            <MeterRow key={d.name} label={<strong>Drive {d.name}{d.label ? ` (${d.label})` : ''}</strong>} value={`${pct(used)} full`}>
+              <Meter value={(used ?? 0) / 100} segments={20} label={`Drive ${d.name} used`} tone={levelTone(used, LIMITS.disk) === 'ok' ? 'neutral' : levelTone(used, LIMITS.disk)} valueText={`${pct(used)} full`} />
+              <span className="fp-small fp-muted col-span-full">
+                {bytes(d.freeBytes)} free of {bytes(d.totalBytes)} · reading {perSecond(d.readBps)}, writing {perSecond(d.writeBps)}
+              </span>
+            </MeterRow>
+          );
+        })}
+        <KeyValue>
+          {(s.physicalDisks ?? []).map((p) => (
+            <KV
+              key={p.name ?? 'disk'}
+              label={`${p.mediaType && p.mediaType !== 'Unspecified' ? p.mediaType : 'Disk'}${p.name ? `, ${p.name}` : ''}`}
+              tone={p.health === 'Healthy' ? undefined : 'problem'}
+              value={[
+                p.health ?? 'Unknown',
+                p.temperatureC != null ? `${Math.round(p.temperatureC)} °C` : null,
+                p.wearPct != null ? `${p.wearPct}% worn` : null,
+              ].filter(Boolean).join(' · ')}
+            />
+          ))}
+          {app?.databaseBytes != null && <KV kind="group" label="This app's database" value={bytes(app.databaseBytes)} />}
+          {(app?.largestTables ?? []).slice(0, 4).map((t) => (
+            <KV key={t.name} kind="sub" label={<span className="fp-mono">{t.name}</span>} value={bytes(t.bytes)} />
+          ))}
+        </KeyValue>
+      </div>
+    </Panel>
+  );
+}
+
+function Power({ s }: { s: HostSnapshot }) {
+  const events = powerEvents(s.events);
+  const head = events.slice(0, 6);
+  const rest = events.slice(6, 12);
+  const row = (e: (typeof events)[number], i: number) => (
+    <Row
+      key={`${e.at}-${e.id}-${i}`}
+      compact
+      lamp={e.kind === 'unexpected' ? 'headsup' : 'neutral'}
+      title={eventLabel(e.kind)}
+      meta={<>{eventDetail(e) ? `${eventDetail(e)} · ` : ''}<span className="fp-mono">{formatDateTime(e.at)}</span></>}
+    />
+  );
+  return (
+    <Panel title="Power and restarts" subtitle="From the Windows event log">
+      <KeyValue cols>
+        <KV label="Last started" value={formatDateTime(s.host?.bootTime)} />
+        <KV label="Power plan" value={s.power?.plan ?? '—'} />
+        <KV label="Sleeps after" value={s.power?.sleepAfterMinutes == null ? '—' : s.power.sleepAfterMinutes === 0 ? 'Never' : `${s.power.sleepAfterMinutes} min`} />
+        <KV
+          label="Windows updates"
+          tone={s.power?.pendingReboot ? 'headsup' : undefined}
+          value={s.power?.pendingReboot ? 'Waiting on a restart' : 'Nothing pending'}
+        />
+      </KeyValue>
+      {head.length > 0 && (
+        <div className="mt-4">
+          <p className="fp-label mb-2">Last 30 days</p>
+          <List inset cols>{head.map(row)}</List>
+          {rest.length > 0 && (
+            <Disclosure summary={`Show ${plural(rest.length, 'older event')}`} openSummary="Hide older events" className="mt-2">
+              <List inset cols>{rest.map(row)}</List>
+            </Disclosure>
+          )}
+        </div>
+      )}
+    </Panel>
   );
 }
 
 function ProcessList({ title, rows, value }: { title: string; rows: HostProcess[]; value: (p: HostProcess) => string }) {
   return (
     <div className="min-w-0">
-      <p className="mb-2 text-xs font-semibold text-apptext">{title}</p>
-      <ol className="flex flex-col gap-1.5">
+      <p className="fp-label mb-1">{title}</p>
+      <KeyValue>
         {rows.map((p) => (
-          <li key={p.name} className="flex items-baseline justify-between gap-3 text-xs">
-            <span className="min-w-0 truncate text-apptext-soft" title={p.name}>
-              {processLabel(p.name)}{p.count && p.count > 1 ? <span className="text-apptext-dim"> ×{p.count}</span> : null}
-            </span>
-            <span className="shrink-0 tabular-nums text-apptext">{value(p)}</span>
-          </li>
+          <KV key={p.name} label={<>{processLabel(p.name)}{p.count && p.count > 1 ? <span className="fp-muted"> ×{p.count}</span> : null}</>} value={value(p)} />
         ))}
-      </ol>
+      </KeyValue>
     </div>
   );
 }
@@ -362,136 +544,69 @@ function ProcessList({ title, rows, value }: { title: string; rows: HostProcess[
 function Processes({ s }: { s: HostSnapshot }) {
   if (!s.topCpu?.length && !s.topMemory?.length) return null;
   return (
-    <Card title="What's using it">
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-        <ProcessList title="Busiest (last minute)" rows={s.topCpu ?? []} value={(p) => pct(p.cpuPct, 1)} />
-        <ProcessList title="Most memory" rows={s.topMemory ?? []} value={(p) => bytes(p.memBytes)} />
-      </div>
-    </Card>
-  );
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline justify-between gap-4 py-1.5 text-xs">
-      <dt className="shrink-0 text-apptext-muted">{label}</dt>
-      <dd className="min-w-0 truncate text-right text-apptext-soft">{children}</dd>
-    </div>
-  );
-}
-
-function Storage({ s, app }: { s: HostSnapshot; app: HostHealth['app'] }) {
-  return (
-    <Card title="Storage">
-      <div className="flex flex-col gap-4">
-        {(s.disks ?? []).map((d) => (
-          <div key={d.name}>
-            <div className="mb-1.5 flex items-baseline justify-between gap-3 text-xs">
-              <span className="font-semibold text-apptext">Drive {d.name}{d.label ? ` (${d.label})` : ''}</span>
-              <span className="tabular-nums text-apptext-muted">{bytes(d.freeBytes)} free of {bytes(d.totalBytes)}</span>
-            </div>
-            <Meter value={usedPct(d.totalBytes, d.freeBytes)} label={`Drive ${d.name} used`} />
-            <p className="mt-1 text-2xs tabular-nums text-apptext-dim">Reading {perSecond(d.readBps)} · writing {perSecond(d.writeBps)}</p>
-          </div>
-        ))}
-        <dl className="divide-y divide-appborder">
-          {(s.physicalDisks ?? []).map((p) => (
-            <Row key={p.name ?? 'disk'} label={p.mediaType && p.mediaType !== 'Unspecified' ? p.mediaType : 'Disk'}>
-              <Dot tone={p.health === 'Healthy' ? 'good' : 'bad'}>{p.health ?? 'Unknown'}</Dot>
-              {p.temperatureC != null && <span className="ml-2 tabular-nums">{Math.round(p.temperatureC)} °C</span>}
-              {p.wearPct != null && <span className="ml-2 tabular-nums">{p.wearPct}% worn</span>}
-            </Row>
-          ))}
-          {app?.databaseBytes != null && <Row label="This app's database">{bytes(app.databaseBytes)}</Row>}
-          {(app?.largestTables ?? []).slice(0, 4).map((t) => (
-            <Row key={t.name} label={`· ${t.name}`}>{bytes(t.bytes)}</Row>
-          ))}
-        </dl>
-      </div>
-    </Card>
-  );
-}
-
-function Power({ s }: { s: HostSnapshot }) {
-  const events = powerEvents(s.events).slice(0, 12);
-  return (
-    <Card title="Power and restarts">
-      <dl className="divide-y divide-appborder">
-        <Row label="Last started">{when(s.host?.bootTime)}</Row>
-        <Row label="Power plan">{s.power?.plan ?? '—'}</Row>
-        <Row label="Sleeps after">
-          {s.power?.sleepAfterMinutes == null ? '—' : s.power.sleepAfterMinutes === 0 ? 'Never' : `${s.power.sleepAfterMinutes} min`}
-        </Row>
-        <Row label="Windows updates">{s.power?.pendingReboot ? 'Waiting on a restart' : 'Nothing pending'}</Row>
-      </dl>
-      {events.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-semibold text-apptext">Last 30 days</p>
-          <ul className="flex flex-col gap-2">
-            {events.map((e, i) => {
-              const detail = eventDetail(e);
-              return (
-                <li key={`${e.at}-${e.id}-${i}`} className="text-xs">
-                  <span className="tabular-nums text-apptext-soft">{when(e.at)}</span>
-                  {' · '}
-                  <span className={e.kind === 'unexpected' ? 'font-semibold text-apptext-warning' : 'text-apptext'}>{eventLabel(e.kind)}</span>
-                  {detail && <p className="mt-0.5 break-words text-2xs text-apptext-dim">{detail}</p>}
-                </li>
-              );
-            })}
-          </ul>
+    <Panel flush aria-label="What's using it">
+      <Disclosure variant="row" summary="What's using it" openSummary="What's using it">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <ProcessList title="Busiest (last minute)" rows={s.topCpu ?? []} value={(p) => pct(p.cpuPct, 1)} />
+          <ProcessList title="Most memory" rows={s.topMemory ?? []} value={(p) => bytes(p.memBytes)} />
         </div>
-      )}
-    </Card>
+      </Disclosure>
+    </Panel>
   );
 }
 
+/** The machine's particulars. KeyValue wraps a long value under itself instead of cutting it off (B-179). */
 function About({ s, app }: { s: HostSnapshot; app: HostHealth['app'] }) {
   const n = s.network;
   const w = n?.wifi;
   return (
-    <Card title="About the NUC">
-      <dl className="divide-y divide-appborder">
-        <Row label="Model">{s.host?.model ?? '—'}</Row>
-        <Row label="Windows">{[s.host?.os, s.host?.osBuild].filter(Boolean).join(' · ') || '—'}</Row>
-        <Row label="Processor">
-          {s.host?.cpuModel ?? '—'}
-          {s.host?.cores ? ` · ${s.host.cores} cores, ${s.host.logicalProcessors} threads` : ''}
-        </Row>
-        <Row label="Memory">{bytes(s.memory?.totalBytes)}</Row>
-        {(s.physicalDisks ?? []).map((p) => (
-          <Row key={p.name ?? 'disk'} label="Drive">{[p.name, bytes(p.sizeBytes)].filter(Boolean).join(' · ')}</Row>
-        ))}
-        <Row label="Network">{[n?.adapter, n?.ip].filter(Boolean).join(' · ') || '—'}</Row>
-        {w && (
-          <Row label="Wi-Fi">
-            {[w.ssid, w.band, w.channel ? `channel ${w.channel}` : null, w.signalPct != null ? `${w.signalPct}% signal` : null,
-              w.rxMbps ? `${w.rxMbps} Mbps link` : null].filter(Boolean).join(' · ')}
-          </Row>
-        )}
-        <Row label="Remote access (Tailscale)">
-          {n?.tailscaleUp == null ? '—' : <Dot tone={n.tailscaleUp ? 'good' : 'bad'}>{n.tailscaleUp ? 'Connected' : 'Down'}</Dot>}
-        </Row>
-        {app && (
-          <Row label="This app's server">
-            {bytes(app.heapUsedBytes)} of {bytes(app.heapMaxBytes)} memory · up {app.uptimeSeconds != null ? duration(Math.floor(app.uptimeSeconds / 60)) : '—'}
-          </Row>
-        )}
-        {s.agent?.durationMs != null && <Row label="Monitor">checked in {(s.agent.durationMs / 1000).toFixed(1)} s</Row>}
-      </dl>
-    </Card>
+    <Panel flush aria-label="About this machine">
+      <Disclosure variant="row" summary="About this machine" openSummary="About this machine">
+        <KeyValue>
+          <KV label="Model" value={s.host?.model ?? '—'} />
+          <KV label="Windows" value={[s.host?.os, s.host?.osBuild].filter(Boolean).join(' · ') || '—'} />
+          <KV
+            label="Processor"
+            value={`${s.host?.cpuModel ?? '—'}${s.host?.cores ? ` · ${s.host.cores} cores, ${s.host.logicalProcessors} threads` : ''}`}
+          />
+          <KV label="Memory" value={bytes(s.memory?.totalBytes)} />
+          {(s.physicalDisks ?? []).map((p) => (
+            <KV key={p.name ?? 'disk'} label="Drive" value={[p.name, bytes(p.sizeBytes)].filter(Boolean).join(' · ')} />
+          ))}
+          <KV label="Network" value={[n?.adapter, n?.ip].filter(Boolean).join(' · ') || '—'} />
+          {w && (
+            <KV
+              label="Wi-Fi"
+              value={[w.ssid, w.band, w.channel ? `channel ${w.channel}` : null, w.signalPct != null ? `${w.signalPct}% signal` : null,
+                w.rxMbps ? `${w.rxMbps} Mbps link` : null].filter(Boolean).join(' · ')}
+            />
+          )}
+          <KV
+            label="Remote access (Tailscale)"
+            tone={n?.tailscaleUp === false ? 'problem' : undefined}
+            value={n?.tailscaleUp == null ? '—' : n.tailscaleUp ? 'Connected' : 'Down'}
+          />
+          {app && (
+            <KV
+              label="This app's server"
+              value={`${bytes(app.heapUsedBytes)} of ${bytes(app.heapMaxBytes)} memory · up ${app.uptimeSeconds != null ? formatDuration(app.uptimeSeconds / 60) : '—'}`}
+            />
+          )}
+          {s.agent?.durationMs != null && <KV label="Monitor" value={`checked in ${(s.agent.durationMs / 1000).toFixed(1)} s`} />}
+        </KeyValue>
+      </Disclosure>
+    </Panel>
   );
 }
 
 function NotSetUp() {
   return (
-    <Card title="Set up the NUC's health monitor">
-      <p className="text-sm text-apptext">The page fills in once the NUC starts reporting.</p>
-      <p className="mt-2 text-xs text-apptext-muted">
-        On the NUC, from an admin prompt in the repo folder, run <code className="rounded bg-appinset px-1 py-0.5">scripts\install-host-metrics-task.cmd</code>.
+    <Panel title="Set up the NUC's health monitor" subtitle="The page fills in once the NUC starts reporting">
+      <p className="fp-small fp-muted">
+        On the NUC, from an admin prompt in the repo folder, run <code className="fp-mono rounded bg-appinset px-1 py-0.5">scripts\install-host-metrics-task.cmd</code>.
         It adds a task that checks the NUC every minute. The first numbers show up within two minutes.
       </p>
-    </Card>
+    </Panel>
   );
 }
 
@@ -516,65 +631,57 @@ export default function NucHealth() {
     placeholderData: keepPreviousData,
     enabled: health.data != null && health.data.status !== 'NOT_SET_UP',
   });
+  usePageMeta({ subtitle: health.dataUpdatedAt ? `Checked ${formatTime(health.dataUpdatedAt)}` : undefined });
 
-  if (health.isLoading) return <div className="h-40 animate-pulse rounded-[24px] bg-appinset" />;
-  if (health.isError || !health.data) {
-    return (
-      <Card>
-        <p className="text-sm text-apptext">Couldn't load the NUC's health: {errorMessage(health.error)}</p>
-      </Card>
-    );
-  }
+  const historyPanel = (
+    <History
+      range={range}
+      onRange={setRange}
+      history={history.data}
+      loading={history.isLoading}
+      failed={history.isError}
+      onRetry={() => void history.refetch()}
+      retrying={history.isFetching}
+    />
+  );
 
-  const data = health.data;
-  if (data.status === 'NOT_SET_UP') return <NotSetUp />;
-  const s = data.latest;
-  const online = data.status === 'ONLINE';
-  const now = new Date(data.now).getTime();
-
+  // A failed poll keeps the last readings with a slim notice (B-187), which matters most
+  // exactly when the server is struggling; only a failed first load replaces the page.
   return (
-    <div className="flex flex-col gap-4 lg:gap-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-xs text-apptext-muted">
-          {s?.host?.model ?? 'The NUC'} checks itself every minute: load, memory, storage, temperature, network and the
-          app's containers.
-        </p>
-        {online ? (
-          <Dot tone="good">Reported {ago(data.lastReportAt)}</Dot>
-        ) : (
-          <Dot tone="bad">Monitor offline · last report {ago(data.lastReportAt) || 'never'}</Dot>
-        )}
-      </div>
-
-      <Checks checks={data.checks} online={online} />
-
-      {s ? (
-        <>
-          {!online && (
-            <p className="-mb-1 text-xs text-apptext-muted">
-              Last readings, from {when(s.collectedAt)}. They update once the monitor reports again.
-            </p>
-          )}
-          <Headline s={s} now={now} />
-          <History range={range} onRange={setRange} history={history.data} loading={history.isLoading} />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
-            <Containers docker={s.docker} />
-            <div className="flex flex-col gap-4 lg:gap-5">
-              <Processes s={s} />
-              <Storage s={s} app={data.app} />
-            </div>
-            <Power s={s} />
-            <About s={s} app={data.app} />
-          </div>
-        </>
-      ) : (
-        <>
-          <History range={range} onRange={setRange} history={history.data} loading={history.isLoading} />
-          <Card>
-            <p className="text-xs text-apptext-muted">The latest details show up with the next report.</p>
-          </Card>
-        </>
-      )}
-    </div>
+    <Screen>
+      <QueryState
+        query={health}
+        what="the server's health"
+        loading={<><SkelInstrumentPanel readouts={3} /><SkelPanel chart /></>}
+        isEmpty={() => false}
+      >
+        {(data) => {
+          if (data.status === 'NOT_SET_UP') return <NotSetUp />;
+          const s = data.latest;
+          const now = new Date(data.now).getTime();
+          return (
+            <>
+              <Answer data={data} s={s} now={now} />
+              {historyPanel}
+              {s ? (
+                <>
+                  <Split ratio="even">
+                    <Containers docker={s.docker} />
+                    <Storage s={s} app={data.app} />
+                  </Split>
+                  <Power s={s} />
+                  <Split ratio="even">
+                    <Processes s={s} />
+                    <About s={s} app={data.app} />
+                  </Split>
+                </>
+              ) : (
+                <EmptyState compact title="The latest details show up with the next report" />
+              )}
+            </>
+          );
+        }}
+      </QueryState>
+    </Screen>
   );
 }

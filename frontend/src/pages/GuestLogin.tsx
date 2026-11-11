@@ -1,8 +1,36 @@
-import { useState, useRef, type FormEvent, type ChangeEvent } from 'react';
-import { guestLogin, uploadAvatar } from '../api/auth';
-import Avatar from '../components/profile/Avatar';
-import ColorPicker from '../components/profile/ColorPicker';
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import axios from 'axios';
+import { Link } from 'react-router-dom';
+import { guestLogin } from '../api/auth';
+import { PRESET_COLORS } from '../components/profile/ColorPicker';
+import { Button, Field, FormGrid, Icon, Input, InstrumentPanel, Lamp, LinkButton, Notice, Stack, Swatches, Verdict } from '../components/ui';
+import { formatDate, formatTime } from '../utils/format';
+import DoorFrame from './door/DoorFrame';
+import VisitorBadge from './guest/VisitorBadge';
 
+const GUEST_DAYS = 30;
+const SWATCHES = PRESET_COLORS.map(({ hex, name }) => ({ value: hex, label: name, color: hex }));
+
+/**
+ * The new guest's photo goes up only after they are signed in, with their own token (B-033):
+ * /api/upload/avatar needs a session, which a first-time visitor doesn't have until guest-login
+ * answers. Plain axios, not the app's client, so a family member's token stored in this browser
+ * can't be sent instead and put the guest's photo on the family member's profile. Returns the
+ * saved photo's URL.
+ */
+async function saveGuestPhoto(file: File, token: string): Promise<string> {
+  const headers = { Authorization: `Bearer ${token}` };
+  const form = new FormData();
+  form.append('file', file);
+  const { data } = await axios.post<{ avatarUrl: string }>('/api/upload/avatar', form, { headers, timeout: 30_000 });
+  await axios.put('/api/auth/profile', { avatarUrl: data.avatarUrl }, { headers, timeout: 30_000 });
+  return data.avatarUrl;
+}
+
+/*
+ * Guest welcome: a visitor makes their badge (name, the code from their host, a colour, an
+ * optional photo) and checks in. Then a short "you're in" with the way to the lobby.
+ */
 export default function GuestLogin() {
   const [name, setName] = useState('');
   const [code, setCode] = useState(() =>
@@ -11,26 +39,35 @@ export default function GuestLogin() {
       : ''
   );
   const [accentColor, setAccentColor] = useState('#A855F7');
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // The picked photo stays on this device (a preview) until check-in.
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [savedPhoto, setSavedPhoto] = useState<string | null>(null);
+  const [photoFailed, setPhotoFailed] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [checkedInAt, setCheckedInAt] = useState<Date | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [submittedName, setSubmittedName] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // Free the preview's object URL when it is replaced or the page goes.
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const file = input.files?.[0];
+    // Let the same file be picked again after removing it (B-161).
+    input.value = '';
     if (!file) return;
-    setUploading(true);
-    try {
-      const { avatarUrl: url } = await uploadAvatar(file);
-      setAvatarUrl(url);
-    } catch {
-      setError('Photo upload failed. Try again.');
-    } finally {
-      setUploading(false);
-    }
+    setError('');
+    setPhoto(file);
+    setPreview(URL.createObjectURL(file));
+  };
+
+  const removePhoto = () => {
+    setPhoto(null);
+    setPreview(null);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -49,17 +86,23 @@ export default function GuestLogin() {
 
     setLoading(true);
     try {
-      const resp = await guestLogin({
-        displayName: trimmed,
-        accentColor,
-        avatarUrl: avatarUrl || undefined,
-      }, code.trim());
+      const resp = await guestLogin({ displayName: trimmed, accentColor }, code.trim());
+      let avatar = '';
+      if (photo) {
+        try {
+          avatar = await saveGuestPhoto(photo, resp.token);
+          setSavedPhoto(avatar);
+        } catch {
+          // Checked in either way; the welcome says the photo didn't make it.
+          setPhotoFailed(true);
+        }
+      }
       sessionStorage.setItem('guestName', resp.displayName);
       sessionStorage.setItem('guestToken', resp.token);
       sessionStorage.setItem('guestAccent', accentColor);
-      sessionStorage.setItem('guestAvatar', avatarUrl || '');
+      sessionStorage.setItem('guestAvatar', avatar);
       setSubmittedName(trimmed);
-      setSubmittedName(trimmed);
+      setCheckedInAt(new Date());
       setSubmitted(true);
     } catch (err: any) {
       setError(err.response?.data?.error || err.message || 'Connection failed. Please try again.');
@@ -68,204 +111,124 @@ export default function GuestLogin() {
     }
   };
 
-  if (submitted) {
+  const foot = <>Live here? <Link className="fp-link text-apptext" to="/login">Sign in instead</Link></>;
+
+  if (submitted && checkedInAt) {
+    const until = new Date(checkedInAt.getTime() + GUEST_DAYS * 24 * 60 * 60 * 1000);
     return (
-      <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
-        <div className="w-full max-w-md text-center">
-          <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
-            {/* Avatar preview on success */}
-            <div className="mx-auto mb-5 flex justify-center">
-              <Avatar displayName={submittedName} avatarUrl={avatarUrl} accentColor={accentColor} size={80} />
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.04em] text-apptext">
-              Welcome, {submittedName}!
-            </h1>
-            <p className="mt-3 text-apptext-soft leading-6">
-              You&rsquo;re now connected as a guest. Your session is active and the homeowner has been notified.
-            </p>
-
-            <div className="mt-6 rounded-2xl border border-appborder bg-appinset p-4 text-left">
-              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Session Info</p>
-              <div className="mt-2 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-apptext-muted">Status</span>
-                  <span className="font-medium text-apptext-success">Active</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-apptext-muted">Connected at</span>
-                  <span className="text-apptext-soft">{new Date().toLocaleTimeString()}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-apptext-muted">Expires</span>
-                  <span className="text-apptext-soft">
-                    {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
-                      month: 'short', day: 'numeric', year: 'numeric',
-                    })}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => { window.location.href = '/guest/home'; }}
-              className="mt-6 w-full rounded-2xl px-4 py-3.5 text-sm font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98]"
-              style={{ background: accentColor }}
-            >
-              See Who&rsquo;s Here →
-            </button>
-
-            <p className="mt-4 text-xs text-apptext-muted">
-              Guest access auto-expires after 30 days.
-            </p>
-
-            {/* bryzncode trademark */}
-            <div className="mt-4 flex items-center justify-center gap-1.5">
-              <span className="text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-dim">
-                powered by
-              </span>
-              <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-apptext-warning/90">
-                bryzncode
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <DoorFrame foot={foot}>
+        <InstrumentPanel
+          instrument={
+            <VisitorBadge
+              label={`Visitor badge for ${submittedName}`}
+              name={submittedName}
+              color={accentColor}
+              photoUrl={savedPhoto}
+              role={<><Lamp tone="ok" size="s" />Checked in at {formatTime(checkedInAt)}</>}
+              foot={[['Here since', formatTime(checkedInAt)], ['Pass until', formatDate(until)]]}
+            />
+          }
+          verdict={
+            <Verdict tone="ok" note="Your host can see that you’ve joined. Your pass ends by itself after 30 days.">
+              You’re in, {submittedName}.
+            </Verdict>
+          }
+        >
+          {photoFailed && (
+            <Notice tone="headsup" title="Your photo didn’t upload.">You’re checked in without it; your colour stands in.</Notice>
+          )}
+          <LinkButton to="/guest/home" variant="primary" size="lg" block icon="users">See who’s here</LinkButton>
+        </InstrumentPanel>
+      </DoorFrame>
     );
   }
 
+  const shownName = name.trim() || 'Your name';
+
   return (
-    <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft text-3xl">
-              🏠
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.04em] text-apptext">
-              Guest Access
-            </h1>
-            <p className="mt-2 text-sm text-apptext-soft leading-6">
-              Welcome! Enter your name, pick a color, and optionally add a photo to personalize your visit.
-            </p>
-          </div>
-
-          {/* Live avatar preview */}
-          <div className="mb-6 flex justify-center">
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="group relative"
-              disabled={uploading}
-            >
-              <Avatar
-                displayName={name || '?'}
-                avatarUrl={avatarUrl}
-                accentColor={accentColor}
-                size={80}
-              />
-              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                <span className="text-2xl text-white">📷</span>
-              </div>
-              {uploading && (
-                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50">
-                  <span className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                </div>
-              )}
-            </button>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              className="hidden"
+    <DoorFrame foot={foot}>
+      <form onSubmit={handleSubmit} noValidate>
+        <InstrumentPanel
+          instrument={
+            <VisitorBadge
+              label={`Visitor badge for ${name.trim() || 'a guest'}`}
+              name={shownName}
+              faceName={name.trim()}
+              color={accentColor}
+              photoUrl={preview}
+              role="Guest at the house"
+              foot={[['Pass', `${GUEST_DAYS} days`], ['Invite code', code.trim().toUpperCase() || '—']]}
+              faceKey={
+                <>
+                  {/* A small round key riveted to the face, with a 44px hit area (B-160: named). */}
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    aria-label={preview ? 'Change photo' : 'Add a photo'}
+                    className="absolute -bottom-1.5 -right-2 grid h-[30px] w-[30px] place-items-center rounded-full border border-[var(--appplate-edge)] bg-appplate text-appplate-ink after:absolute after:-inset-[7px] after:rounded-full after:content-[''] active:translate-y-px"
+                  >
+                    <Icon name="image" className="text-base" />
+                  </button>
+                  <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden" tabIndex={-1} aria-hidden="true" />
+                </>
+              }
             />
-          </div>
-          <p className="mb-6 -mt-2 text-center text-xs text-apptext-dim">
-            {avatarUrl ? 'Tap to change photo' : 'Tap avatar to add a photo'}
-            {avatarUrl && (
-              <button type="button" onClick={() => setAvatarUrl(null)} className="ml-1 text-apptext-danger hover:underline">(remove)</button>
-            )}
-          </p>
-
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="guestName" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Your Name
-              </label>
-              <input
-                id="guestName"
-                type="text"
+          }
+          verdict={
+            <Verdict tone="info" note="Your name, the code from your host, and a colour so the family can tell guests apart. A photo is optional.">
+              Welcome! Make yourself a visitor badge.
+            </Verdict>
+          }
+        >
+          <FormGrid>
+            <Field label="Your name">
+              <Input
                 value={name}
                 onChange={(e) => { setName(e.target.value); if (error) setError(''); }}
-                placeholder="e.g. Sarah or Mike"
+                placeholder="Sarah or Mike"
                 autoComplete="name"
+                maxLength={40}
                 autoFocus
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
               />
-            </div>
-
-            <div>
-              <label htmlFor="guestCode" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Invite Code
-              </label>
-              <input
-                id="guestCode"
-                type="text"
+            </Field>
+            <Field label="Invite code">
+              <Input
+                mono
                 value={code}
                 onChange={(e) => { setCode(e.target.value); if (error) setError(''); }}
-                placeholder="Provided by your host"
+                placeholder="From your host"
                 autoComplete="off"
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
+                autoCapitalize="characters"
+                spellCheck={false}
               />
-            </div>
+            </Field>
+          </FormGrid>
 
-            <div>
-              <label className="mb-3 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Your Color
-              </label>
-              <ColorPicker selected={accentColor} onChange={setAccentColor} />
-            </div>
-
-            {error && (
-              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading || uploading}
-              className="w-full rounded-2xl font-semibold text-white shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-appaccent focus-visible:ring-offset-2 disabled:opacity-60 px-4 py-3.5 text-sm"
-              style={{ background: accentColor }}
-            >
-              {loading ? 'Connecting...' : 'Connect as Guest'}
-            </button>
-          </form>
-
-          <p className="mt-6 text-center text-xs text-apptext-dim leading-5">
-            By connecting, you agree to the home&rsquo;s guest access policy.
-            <br />
-            Your session is temporary and expires after 30 days.
-          </p>
-
-          <div className="mt-6 flex items-center justify-center gap-2">
-            <span className="inline-flex h-2 w-2 rounded-full opacity-60" style={{ background: accentColor }} />
-            <span className="text-3xs uppercase tracking-[0.2em] text-apptext-dim">Secure Connection</span>
-            <span className="inline-flex h-2 w-2 rounded-full opacity-60" style={{ background: accentColor }} />
+          <div className="fp-field">
+            <span className="fp-label">Your colour</span>
+            <Swatches label="Your colour" value={accentColor} onChange={setAccentColor} options={SWATCHES} />
           </div>
 
-          {/* bryzncode trademark */}
-          <div className="mt-4 flex items-center justify-center gap-1.5">
-            <span className="text-3xs uppercase tracking-[0.2em] text-apptext-dim">
-              powered by
-            </span>
-            <span className="text-3xs font-semibold uppercase tracking-[0.22em] text-apptext-warning/90">
-              bryzncode
-            </span>
-          </div>
-        </div>
-      </div>
-    </div>
+          {photo && (
+            <p className="fp-small fp-muted flex flex-wrap items-center gap-x-2">
+              Photo picked. It goes up when you check in.
+              <Button variant="quiet" size="sm" onClick={removePhoto}>Remove photo</Button>
+            </p>
+          )}
+
+          {/* Announced the moment it appears (B-060). */}
+          {error && <Notice tone="problem" title={error} live="assertive" />}
+
+          <Stack gap="s">
+            <Button type="submit" variant="primary" size="lg" block icon="log-in" busy={loading} busyLabel="Checking in…">
+              Check in
+            </Button>
+            <p className="fp-small fp-muted">
+              Your pass lasts {GUEST_DAYS} days, then ends by itself. By checking in you agree to the home’s guest access policy.
+            </p>
+          </Stack>
+        </InstrumentPanel>
+      </form>
+    </DoorFrame>
   );
 }

@@ -1,11 +1,32 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import type { Thermostat } from '../types';
+import type { Thermostat, ThermostatChange } from '../types';
 import { useThermostatCommands, type Draft } from '../hooks/useThermostatCommands';
-import { FOCUS_RING, SetpointTile, Spinner, type Side } from './ThermostatControls';
+import { SetpointTile, Spinner, type Side } from './ThermostatControls';
 import ConfirmThermostatChangeModal from './ConfirmThermostatChangeModal';
 import {
+  Badge,
+  Button,
+  Dial,
+  DialCentre,
+  InstrumentPanel,
+  Lamp,
+  List,
+  Notice,
+  Num,
+  Panel,
+  Readout,
+  Readouts,
+  Row,
+  Seg,
+  Verdict,
+  toneTextClass,
+  type DialRing,
+  type IconName,
+} from './ui';
+import { formatRelative, formatStamp } from '../utils/format';
+import type { Tone } from '../utils/status';
+import {
   HEAT_COOL_MIN_GAP,
-  attributionText,
   clampSetpoint,
   currentSetpoint,
   formatTemp,
@@ -21,25 +42,7 @@ import {
   sortedModes,
   statusChip,
   unitSymbol,
-  updatedText,
-  type ChipTone,
 } from '../utils/thermostat';
-
-const CHIP_STYLES: Record<ChipTone, { chip: string; dot: string }> = {
-  heat: { chip: 'border-orange-300/25 bg-orange-300/10 text-orange-400', dot: 'bg-orange-400' },
-  cool: { chip: 'border-sky-300/25 bg-sky-300/10 text-sky-400', dot: 'bg-sky-400' },
-  fan: { chip: 'border-cyan-300/25 bg-cyan-300/10 text-cyan-400', dot: 'bg-cyan-400' },
-  warn: { chip: 'border-amber-300/25 bg-amber-300/10 text-amber-400', dot: 'bg-amber-400' },
-  neutral: { chip: 'border-appborder bg-appinset text-apptext-soft', dot: 'bg-apptext-muted' },
-};
-
-/** Active-mode colors: heat orange, cool sky, auto accent, off neutral. */
-const MODE_ACTIVE: Record<string, string> = {
-  heat: 'border-orange-300/40 bg-orange-300/15 text-orange-400',
-  cool: 'border-sky-300/40 bg-sky-300/15 text-sky-400',
-  heat_cool: 'border-appaccent-border bg-appaccent-soft text-apptext',
-  off: 'border-appborder-hover bg-appinset-strong text-apptext',
-};
 
 const HOLD_HINT_KEY = 'climate.holdHintSeen';
 function holdHintSeen(): boolean {
@@ -57,6 +60,90 @@ function markHoldHintSeen() {
   }
 }
 
+/** A "can't go further" hint clears itself after this long (B-104), so it never hides "Set by …" for the visit. */
+export const BLOCKED_HINT_MS = 4_000;
+
+/** The dial's printed scale: 60–85° unless a reading or setpoint falls outside it. */
+function dialScale(values: Array<number | null>): { lo: number; hi: number } {
+  const v = values.filter((x): x is number => x != null && Number.isFinite(x));
+  if (!v.length) return { lo: 60, hi: 85 };
+  return {
+    lo: Math.min(60, Math.floor((Math.min(...v) - 2) / 5) * 5),
+    hi: Math.max(85, Math.ceil((Math.max(...v) + 2) / 5) * 5),
+  };
+}
+
+/** "2 min ago", "yesterday", "Mon, Nov 9": formatRelative to sit mid-sentence. */
+function agoText(at: string | null): string {
+  const r = formatRelative(at);
+  return /^[A-Z][a-z]{2}, /.test(r) ? r : r.charAt(0).toLowerCase() + r.slice(1);
+}
+
+/** Who made the last change, as the row's title. */
+export function changeWho(change: ThermostatChange, currentUserId: number | null | undefined): string {
+  if (change.actor === 'ecobee') return 'Set at the thermostat';
+  if (change.actor === 'schedule') return 'Set by the schedule';
+  if (change.actor === 'home_assistant') return 'Set in Home Assistant';
+  if (currentUserId != null && change.byUserId === currentUserId) return 'Set by you';
+  return `Set by ${change.by}`;
+}
+
+const CHANGE_ICON: Record<ThermostatChange['actor'], IconName> = {
+  app: 'user',
+  schedule: 'calendar',
+  ecobee: 'thermometer',
+  home_assistant: 'home',
+};
+
+/** What the change did: "switched to Heat", "set to 68–75°". */
+function changeWhat(c: ThermostatChange): string | null {
+  const range = c.hvacMode === 'heat_cool' || c.hvacMode === 'auto';
+  const temp = range
+    ? c.heatSetpoint != null && c.coolSetpoint != null ? `${formatTemp(c.heatSetpoint)}–${formatTemp(c.coolSetpoint)}°` : null
+    : c.targetTemperature != null ? `${formatTemp(c.targetTemperature)}°` : null;
+  if (c.fields.includes('mode')) return c.hvacMode === 'off' ? 'turned off' : `switched to ${modeLabel(c.hvacMode)}`;
+  if (c.fields.includes('preset') && c.presetMode !== 'temp') return `switched to ${presetLabel(c.presetMode)}`;
+  return temp ? `set to ${temp}` : null;
+}
+
+/** The thermostat's answer: one sentence and why, from what it reports. */
+function verdictFor(t: Thermostat, stale: boolean): { tone: Tone; text: string; note: string } {
+  const now = formatTemp(t.temperature);
+  const hold = isHold(t.presetMode) ? ' The schedule is paused until someone resumes it.' : '';
+  if (!t.available) {
+    return { tone: 'headsup', text: `${t.name} isn't answering.`, note: `Showing its last reading, from ${agoText(t.updatedAt)}. Check its Wi-Fi if this lasts.` };
+  }
+  const staleNote = stale ? ` The last reading came in ${agoText(t.updatedAt)}.` : '';
+  const tone: Tone = stale ? 'headsup' : 'ok';
+  if (t.hvacMode === 'off') {
+    return { tone: stale ? 'headsup' : 'neutral', text: `${now}° with the system off.`, note: `Nothing heats or cools until someone picks a mode.${staleNote}` };
+  }
+  const sp = currentSetpoint(t);
+  if (t.hvacAction === 'heating') {
+    const to = sp.kind === 'range' ? sp.low : sp.kind === 'single' ? sp.value : null;
+    return { tone, text: `${now}° and warming up${to != null ? ` to ${formatTemp(to)}°` : ''}.`, note: `The heat stays on until it gets there.${hold}${staleNote}` };
+  }
+  if (t.hvacAction === 'cooling') {
+    const to = sp.kind === 'range' ? sp.high : sp.kind === 'single' ? sp.value : null;
+    return { tone, text: `${now}° and cooling down${to != null ? ` to ${formatTemp(to)}°` : ''}.`, note: `The air conditioning stays on until it gets there.${hold}${staleNote}` };
+  }
+  if (sp.kind === 'range' && sp.low != null && sp.high != null) {
+    return {
+      tone,
+      text: `${now}° and comfortable.`,
+      note: `Auto keeps it between ${formatTemp(sp.low)}° and ${formatTemp(sp.high)}°, so nothing is running right now.${hold}${staleNote}`,
+    };
+  }
+  if (sp.kind === 'single' && sp.value != null) {
+    return {
+      tone,
+      text: `${now}° and holding.`,
+      note: `${modeLabel(t.hvacMode)} is set to ${formatTemp(sp.value)}°, so nothing is running right now.${hold}${staleNote}`,
+    };
+  }
+  return { tone, text: `${now}° inside.`, note: `${statusChip(t).text}.${hold}${staleNote}` };
+}
+
 interface ThermostatCardProps {
   thermostat: Thermostat;
   /** USER/ADMIN can change settings; GUEST sees the card read-only. */
@@ -65,10 +152,16 @@ interface ThermostatCardProps {
   currentUserId?: number | null;
 }
 
+/**
+ * One thermostat as the page's answer: the dial (indoor temperature, the heat and cool
+ * setpoints as marks, − / + keys under it), the verdict, who changed it last, the mode keys,
+ * and below it the comfort settings and any hold.
+ */
 function ThermostatCard({ thermostat: t, canControl, currentUserId }: ThermostatCardProps) {
   const cmd = useThermostatCommands(t);
   const unit = unitSymbol(t.temperatureUnit);
   const [hint, setHint] = useState<string | null>(null);
+  const [blockedHint, setBlockedHint] = useState<string | null>(null);
   const [flash, setFlash] = useState<Side | null>(null);
   const [confirmOff, setConfirmOff] = useState(false);
   const [showHoldHint, setShowHoldHint] = useState(() => !holdHintSeen());
@@ -76,20 +169,25 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
   const [acknowledgedAt, setAcknowledgedAt] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const offTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const blockedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     () => () => {
       if (flashTimer.current) clearTimeout(flashTimer.current);
       if (offTimer.current) clearTimeout(offTimer.current);
+      if (blockedTimer.current) clearTimeout(blockedTimer.current);
     },
     [],
   );
-  // The gap/limit hint belongs to the draft it explains.
+  // The gap hint belongs to the draft it explains.
   useEffect(() => {
     if (!cmd.draft) setHint(null);
   }, [cmd.draft]);
 
   const disabled = !t.available || cmd.busy;
+  // B-107: a mode, comfort or resume tap while ± is still batching would be overtaken by the
+  // queued temperature a moment later, so those keys wait the ~1 s until it has gone out.
+  const settingsLocked = disabled || cmd.debouncing;
   const setpoint = currentSetpoint(t);
   const lim = limits(t);
   const draft = cmd.draft;
@@ -97,6 +195,16 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
   const shownSingle = draft?.kind === 'single' ? draft.value : setpoint.kind === 'single' ? setpoint.value : null;
   const shownLow = draft?.kind === 'range' ? draft.low : setpoint.kind === 'range' ? setpoint.low : null;
   const shownHigh = draft?.kind === 'range' ? draft.high : setpoint.kind === 'range' ? setpoint.high : null;
+
+  const showBlocked = (text: string) => {
+    setBlockedHint(text);
+    if (blockedTimer.current) clearTimeout(blockedTimer.current);
+    blockedTimer.current = setTimeout(() => setBlockedHint(null), BLOCKED_HINT_MS);
+  };
+  const clearBlocked = () => {
+    if (blockedTimer.current) clearTimeout(blockedTimer.current);
+    setBlockedHint(null);
+  };
 
   const queue = (d: Draft) => {
     if (showHoldHint) {
@@ -111,6 +219,7 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
     const next = clampSetpoint(shownSingle + delta, t);
     if (next === shownSingle) return;
     setHint(null);
+    clearBlocked();
     queue({ kind: 'single', value: next });
   };
 
@@ -118,13 +227,15 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
     if (shownLow == null || shownHigh == null) return;
     const r = normalizeRange(shownLow, shownHigh, field, delta, HEAT_COOL_MIN_GAP, lim);
     if (r.blocked) {
-      setHint(
-        field === 'low'
-          ? `Can't go higher — cool-to is at the ${lim.max}° limit.`
-          : `Can't go lower — heat-to is at the ${lim.min}° limit.`,
-      );
+      // B-105: name the side that was tapped when it is the one at its limit; only a push the
+      // other side can't make blames the other side.
+      if (field === 'low' && delta < 0) showBlocked(`Heat to can't go below ${lim.min}°.`);
+      else if (field === 'high' && delta > 0) showBlocked(`Cool to can't go above ${lim.max}°.`);
+      else if (field === 'low') showBlocked(`Can't go higher: cool to is at the ${lim.max}° limit.`);
+      else showBlocked(`Can't go lower: heat to is at the ${lim.min}° limit.`);
       return;
     }
+    clearBlocked();
     if (r.pushed) {
       const side: Side = r.pushed === 'high' ? 'cool' : 'heat';
       setHint(
@@ -160,9 +271,9 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
     run?.();
   };
 
-  /** `confirmed`: the user already said yes in the popup, so Off needs no second tap. */
+  /** `confirmed`: the person already said yes in the dialog, so Off needs no second tap. */
   const onMode = (m: string, confirmed = false) => {
-    if (m === t.hvacMode || disabled) return;
+    if (m === t.hvacMode || settingsLocked) return;
     if (m === 'off' && !confirmOff && !confirmed) {
       setConfirmOff(true);
       if (offTimer.current) clearTimeout(offTimer.current);
@@ -173,229 +284,246 @@ function ThermostatCard({ thermostat: t, canControl, currentUserId }: Thermostat
     cmd.changeMode(m);
   };
 
-  // One status slot, first match wins.
-  let status: { text: string; tone: 'error' | 'warn' | 'muted'; spinner?: boolean; retry?: () => void } | null = null;
-  if (cmd.error) status = { text: cmd.error.message, tone: 'error', retry: cmd.error.retry };
-  else if (hint && draft) status = { text: hint, tone: 'muted' };
-  else if (cmd.debouncing) status = { text: 'Sending in a moment…', tone: 'muted' };
-  else if (cmd.waiting) status = { text: 'Updating thermostat…', tone: 'muted', spinner: true };
-  else if (hint) status = { text: hint, tone: 'muted' };
-  else if (cmd.notice) status = { text: cmd.notice, tone: 'warn' };
-  else if (t.lastChange) status = { text: attributionText(t.lastChange, currentUserId), tone: 'muted' };
+  // One status line under the keys, first match wins.
+  let status: { text: string; tone: Tone; spinner?: boolean; retry?: () => void } | null = null;
+  if (cmd.error) status = { text: cmd.error.message, tone: 'problem', retry: cmd.error.retry };
+  else if (blockedHint) status = { text: blockedHint, tone: 'neutral' };
+  else if (hint && draft) status = { text: hint, tone: 'neutral' };
+  else if (cmd.debouncing) status = { text: 'Sending in a moment…', tone: 'neutral' };
+  else if (cmd.waiting) status = { text: 'Updating the thermostat…', tone: 'neutral', spinner: true };
+  else if (cmd.notice) status = { text: cmd.notice, tone: 'headsup' };
+  else if (canControl && showHoldHint && !isHold(t.presetMode) && setpoint.kind !== 'none') {
+    status = { text: 'Changing it pauses the schedule until you resume.', tone: 'neutral' };
+  }
 
-  const chip = statusChip(t);
-  const chipStyle = CHIP_STYLES[chip.tone];
   const presets = selectablePresets(t.presetModes);
   const stale = isStale(t.updatedAt);
-  const dim = t.available ? '' : 'opacity-50';
+  const hold = isHold(t.presetMode);
+  const verdict = verdictFor(t, stale);
 
-  return (
-    <section
-      id={`thermostat-${t.id}`}
-      aria-label={`${t.name} thermostat`}
-      className="flex scroll-mt-4 flex-col gap-4 rounded-[24px] border border-appborder bg-appsurface-raised p-4 shadow-[0_10px_28px_var(--appshadow)] sm:p-5"
-    >
-      <header className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-semibold text-apptext">{t.name}</h3>
-          {!canControl && (
-            <p className="mt-0.5 text-xs text-apptext-muted">
-              {modeLabel(t.hvacMode)}
-              {t.presetMode ? ` · ${presetLabel(t.presetMode)}` : ''}
-            </p>
-          )}
-        </div>
-        <span
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-2xs font-semibold ${chipStyle.chip}`}
-        >
-          <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${chipStyle.dot}`} />
-          {chip.text}
-        </span>
-      </header>
+  // The dial: the scale, the heat side from the bottom of the scale up to heat-to, the cool
+  // side from cool-to to the top, a mark on each setpoint and the pointer at the room.
+  const { lo, hi } = dialScale([t.temperature, shownLow, shownHigh, shownSingle]);
+  const ring: DialRing = {
+    r: 86, w: 10, min: lo, max: hi, ticks: hi - lo, major: 5, labels: [[lo, `${lo}°`], [hi, `${hi}°`]],
+    segments: [], marks: [],
+  };
+  if (setpoint.kind === 'range') {
+    if (shownLow != null) {
+      ring.segments!.push({ from: lo, to: shownLow, tone: 'heat' });
+      ring.marks!.push({ at: shownLow, tone: 'heat' });
+    }
+    if (shownHigh != null) {
+      ring.segments!.push({ from: shownHigh, to: hi, tone: 'cool' });
+      ring.marks!.push({ at: shownHigh, tone: 'cool' });
+    }
+  } else if (setpoint.kind === 'single' && shownSingle != null) {
+    const heat = t.hvacMode === 'heat';
+    ring.segments!.push(heat ? { from: lo, to: shownSingle, tone: 'heat' } : { from: shownSingle, to: hi, tone: 'cool' });
+    ring.marks!.push({ at: shownSingle, tone: heat ? 'heat' : 'cool' });
+  }
+  if (t.temperature != null) ring.needle = { at: t.temperature };
+  const dialSentence = `${t.name} is ${formatTemp(t.temperature, 1)} degrees. ${statusChip(t).text}.`;
 
-      <div className={`flex items-end justify-between gap-4 ${dim}`}>
-        <div>
-          <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Indoor</p>
-          <p className="mt-1 text-5xl font-semibold tracking-[-0.04em] tabular-nums text-apptext">
-            {formatTemp(t.temperature, 1)}
-            <span className="ml-1 text-xl font-medium text-apptext-muted">{unit}</span>
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Humidity</p>
-          <p className="mt-1 text-xl font-semibold tabular-nums text-apptext">
-            {formatTemp(t.humidity)}
-            <span className="text-sm text-apptext-muted">%</span>
-          </p>
-        </div>
-      </div>
+  const modeOptions = sortedModes(t.hvacModes).map((m) => ({
+    value: m,
+    disabled: settingsLocked,
+    label:
+      m === 'off' && confirmOff ? (
+        'Tap to turn off'
+      ) : cmd.pendingMode === m ? (
+        <>
+          <Spinner />
+          {modeLabel(m)}
+        </>
+      ) : (
+        modeLabel(m)
+      ),
+  }));
 
-      {!t.available && <p className="text-xs text-amber-400">Offline — showing the last reading.</p>}
-
-      <div className={dim}>
+  const instrument = (
+    <>
+      <Dial rings={[ring]} label={dialSentence} className="-mb-6">
+        <DialCentre label={t.name} note={statusChip(t).text}>
+          <Num size="xl" value={`${formatTemp(t.temperature)}°`} />
+        </DialCentre>
+      </Dial>
+      <div className="flex w-full max-w-[360px] flex-wrap justify-center gap-3">
         {setpoint.kind === 'none' ? (
-          <p className="rounded-2xl border border-appborder bg-appinset py-4 text-center text-sm text-apptext-muted">
-            {t.hvacMode === 'off' ? 'System is off' : 'No setpoint reported'}
+          <p className="w-full rounded-well bg-appinset px-3 py-3.5 text-center text-small text-apptext-muted">
+            {t.hvacMode === 'off' ? 'The system is off. Pick a mode to set a temperature.' : 'No setpoint reported.'}
           </p>
+        ) : setpoint.kind === 'range' ? (
+          <>
+            <SetpointTile
+              side="heat" label="Heat to" deviceName={t.name} value={shownLow} unit={unit}
+              pending={draft?.kind === 'range'} flash={flash === 'heat'} readOnly={!canControl}
+              disabled={disabled}
+              lowerDisabled={shownLow != null && shownLow <= lim.min}
+              onStep={(d) => guard(() => stepRange('low', d))}
+            />
+            <SetpointTile
+              side="cool" label="Cool to" deviceName={t.name} value={shownHigh} unit={unit}
+              pending={draft?.kind === 'range'} flash={flash === 'cool'} readOnly={!canControl}
+              disabled={disabled}
+              raiseDisabled={shownHigh != null && shownHigh >= lim.max}
+              onStep={(d) => guard(() => stepRange('high', d))}
+            />
+          </>
         ) : (
-          <div className="grid grid-cols-2 gap-3">
-            {setpoint.kind === 'range' ? (
-              <>
-                <SetpointTile
-                  side="heat" label="Heat to" deviceName={t.name} value={shownLow} unit={unit}
-                  pending={draft?.kind === 'range'} flash={flash === 'heat'} readOnly={!canControl}
-                  disabled={disabled} onStep={(d) => guard(() => stepRange('low', d))}
-                />
-                <SetpointTile
-                  side="cool" label="Cool to" deviceName={t.name} value={shownHigh} unit={unit}
-                  pending={draft?.kind === 'range'} flash={flash === 'cool'} readOnly={!canControl}
-                  disabled={disabled} onStep={(d) => guard(() => stepRange('high', d))}
-                />
-              </>
-            ) : (
-              <SetpointTile
-                side={t.hvacMode === 'heat' ? 'heat' : 'cool'}
-                label={t.hvacMode === 'heat' ? 'Heat to' : 'Cool to'}
-                deviceName={t.name} value={shownSingle} unit={unit} span
-                pending={draft?.kind === 'single'} flash={false} readOnly={!canControl}
-                disabled={disabled}
-                lowerDisabled={shownSingle != null && shownSingle <= lim.min}
-                raiseDisabled={shownSingle != null && shownSingle >= lim.max}
-                onStep={(d) => guard(() => stepSingle(d))}
-              />
-            )}
-          </div>
+          <SetpointTile
+            side={t.hvacMode === 'heat' ? 'heat' : 'cool'}
+            label={t.hvacMode === 'heat' ? 'Heat to' : 'Cool to'}
+            deviceName={t.name} value={shownSingle} unit={unit}
+            pending={draft?.kind === 'single'} flash={false} readOnly={!canControl}
+            disabled={disabled}
+            lowerDisabled={shownSingle != null && shownSingle <= lim.min}
+            raiseDisabled={shownSingle != null && shownSingle >= lim.max}
+            onStep={(d) => guard(() => stepSingle(d))}
+          />
         )}
-
-        <div className="mt-2 flex min-h-5 items-center gap-2 text-2xs" role="status">
+        <p className="flex min-h-5 w-full flex-wrap items-center justify-center gap-2 text-center text-small" role="status">
           {status && (
             <>
               {status.spinner && <Spinner className="text-apptext-muted" />}
-              <span
-                className={
-                  status.tone === 'error' ? 'text-rose-400' : status.tone === 'warn' ? 'text-amber-400' : 'text-apptext-muted'
-                }
-              >
-                {status.text}
-              </span>
+              <span className={toneTextClass(status.tone)}>{status.text}</span>
               {status.retry && (
-                <button
-                  type="button"
-                  onClick={status.retry}
-                  className={`font-semibold text-rose-400 underline underline-offset-2 ${FOCUS_RING}`}
-                >
+                <Button size="sm" variant="quiet" icon="refresh" onClick={status.retry}>
                   Retry
-                </button>
+                </Button>
               )}
             </>
           )}
-        </div>
-        <span className="sr-only" aria-live="polite">{cmd.announce}</span>
-        {canControl && showHoldHint && !isHold(t.presetMode) && setpoint.kind !== 'none' && (
-          <p className="mt-1 text-2xs text-apptext-dim">Changing the temperature pauses the schedule until you resume.</p>
+        </p>
+        <span className="fp-sr-only" aria-live="polite">{cmd.announce}</span>
+      </div>
+    </>
+  );
+
+  const last = t.lastChange;
+  const lastWhat = last ? changeWhat(last) : null;
+
+  return (
+    <>
+      <InstrumentPanel
+        instrument={instrument}
+        verdict={<Verdict tone={verdict.tone} note={verdict.note}>{verdict.text}</Verdict>}
+        readouts={
+          <Readouts count={2}>
+            <Readout label="Humidity" value={formatTemp(t.humidity)} unit="%" note="At the thermostat" />
+            <Readout
+              label="Schedule"
+              value={hold ? 'Paused' : 'Running'}
+              note={hold ? holdLabel(t.presetMode) : t.presetMode ? `${presetLabel(t.presetMode)} comfort` : 'Following the schedule'}
+            />
+          </Readouts>
+        }
+        foot={
+          <>
+            <span className="fp-cluster">
+              <Lamp tone={stale || !t.available ? 'headsup' : 'ok'} size="s" />
+              <span className="fp-mono">{t.updatedAt ? `Updated ${agoText(t.updatedAt)}` : 'No reading yet'}</span>
+            </span>
+            {!canControl && (
+              <Badge plain icon="eye">
+                View only
+              </Badge>
+            )}
+          </>
+        }
+      >
+        {last && (
+          <div className="fp-stack fp-stack--s">
+            <p className="fp-label">Last change</p>
+            <List inset>
+              <Row
+                compact
+                icon={CHANGE_ICON[last.actor] ?? 'user'}
+                title={changeWho(last, currentUserId)}
+                meta={
+                  <>
+                    <span className="fp-mono">{formatStamp(last.at)}</span>
+                    {lastWhat ? ` · ${lastWhat}` : ''}
+                  </>
+                }
+              />
+            </List>
+          </div>
         )}
-      </div>
-
-      {canControl && t.hvacModes.length > 0 && (
-        <div>
-          <p className="mb-2 text-3xs uppercase tracking-[0.18em] text-apptext-muted">Mode</p>
-          <div className="grid grid-cols-4 gap-2" role="radiogroup" aria-label={`${t.name} mode`}>
-            {sortedModes(t.hvacModes).map((m) => {
-              const active = t.hvacMode === m;
-              const pending = cmd.pendingMode === m;
-              const confirming = m === 'off' && confirmOff;
-              return (
-                <button
-                  key={m}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  aria-disabled={active || disabled}
-                  onClick={() => {
-                    if (!active) guard((confirmed) => onMode(m, confirmed));
-                  }}
-                  className={`flex h-11 items-center justify-center gap-1.5 rounded-xl border px-1 text-xs font-semibold transition-colors aria-disabled:cursor-default ${FOCUS_RING} ${
-                    active
-                      ? MODE_ACTIVE[m] ?? MODE_ACTIVE.heat_cool
-                      : pending
-                        ? `${MODE_ACTIVE[m] ?? MODE_ACTIVE.heat_cool} opacity-60`
-                        : confirming
-                          ? 'border-rose-300/40 bg-rose-300/10 text-rose-400'
-                          : 'border-appborder bg-appinset text-apptext-soft hover:border-appborder-hover hover:bg-appinset-strong'
-                  } ${!active && disabled ? 'opacity-40' : ''}`}
-                >
-                  {pending && <Spinner />}
-                  {confirming ? 'Tap to turn off' : modeLabel(m)}
-                </button>
-              );
-            })}
+        {canControl && t.hvacModes.length > 0 && (
+          <div className="fp-stack fp-stack--s">
+            <p className="fp-label" aria-hidden="true">Mode</p>
+            <Seg
+              kind="radio"
+              label={`${t.name} mode`}
+              value={t.hvacMode ?? ''}
+              onChange={(m) => guard((confirmed) => onMode(m, confirmed))}
+              options={modeOptions}
+            />
           </div>
-        </div>
-      )}
+        )}
+      </InstrumentPanel>
 
-      {canControl && (presets.length > 0 || isHold(t.presetMode)) && (
-        <div>
-          <p className="mb-2 text-3xs uppercase tracking-[0.18em] text-apptext-muted">Comfort</p>
-          <div className="flex flex-wrap gap-2">
-            {presets.map((p) => {
-              const active = t.presetMode === p;
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  aria-pressed={active}
-                  aria-disabled={active || disabled}
-                  onClick={() => {
-                    if (!active) guard(() => cmd.hold(p));
-                  }}
-                  className={`h-11 rounded-full border px-4 text-xs font-medium transition-colors aria-disabled:cursor-default ${FOCUS_RING} ${
-                    active
-                      ? 'border-appaccent-border bg-appaccent-soft text-apptext'
-                      : 'border-appborder bg-appinset text-apptext-soft hover:border-appborder-hover hover:bg-appinset-strong'
-                  } ${!active && disabled ? 'opacity-40' : ''}`}
-                >
-                  {presetLabel(p)}
-                </button>
-              );
-            })}
+      {(hold || (canControl && presets.length > 0)) && (
+        <Panel title="Comfort and schedule" subtitle="The thermostat switches between these through the day">
+          <div className="fp-stack">
+            {/* B-106: no Comfort row at all when the thermostat offers nothing to pick. */}
+            {canControl && presets.length > 0 && (
+              <div className="fp-chips" role="group" aria-label={`${t.name} comfort setting`}>
+                {presets.map((p) => {
+                  const active = t.presetMode === p;
+                  return (
+                    <button
+                      key={p}
+                      type="button"
+                      className="fp-chip aria-disabled:cursor-default aria-disabled:opacity-40"
+                      aria-pressed={active}
+                      aria-disabled={settingsLocked || undefined}
+                      onClick={() => {
+                        if (!active && !settingsLocked) guard(() => cmd.hold(p));
+                      }}
+                    >
+                      {presetLabel(p)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {hold && (
+              <Notice
+                tone="neutral"
+                icon="pause"
+                title={`${holdLabel(t.presetMode)} · schedule paused`}
+                action={
+                  canControl ? (
+                    <Button
+                      size="sm"
+                      aria-disabled={settingsLocked || undefined}
+                      onClick={() => {
+                        if (!settingsLocked) guard(() => cmd.resume());
+                      }}
+                    >
+                      Resume schedule
+                    </Button>
+                  ) : undefined
+                }
+              >
+                The schedule takes over again once someone resumes it.
+              </Notice>
+            )}
           </div>
-        </div>
+        </Panel>
       )}
 
-      {isHold(t.presetMode) && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-appborder bg-appinset px-3 py-2">
-          <span className="text-xs text-apptext-soft">
-            <span aria-hidden="true">⏸ </span>
-            {holdLabel(t.presetMode)} · schedule paused
-          </span>
-          {canControl && (
-            <button
-              type="button"
-              aria-disabled={disabled}
-              onClick={() => guard(() => cmd.resume())}
-              className={`h-11 shrink-0 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 text-xs font-semibold text-apptext transition-colors hover:bg-appaccent/20 aria-disabled:opacity-40 ${FOCUS_RING}`}
-            >
-              Resume schedule
-            </button>
-          )}
-        </div>
-      )}
-
-      <div className="mt-auto flex items-center justify-between gap-2 text-3xs">
-        <span className={stale ? 'text-amber-400' : 'text-apptext-dim'}>{updatedText(t.updatedAt)}</span>
-        {!canControl && <span className="text-apptext-dim">View only</span>}
-      </div>
-
-      {pendingAction && recentOther && (
-        <ConfirmThermostatChangeModal
-          deviceName={t.name}
-          changedBy={recentOther.name}
-          ago={recentOther.ago}
-          onConfirm={confirmPending}
-          onCancel={() => setPendingAction(null)}
-        />
-      )}
-    </section>
+      <ConfirmThermostatChangeModal
+        open={pendingAction != null && recentOther != null}
+        deviceName={t.name}
+        changedBy={recentOther?.name ?? ''}
+        ago={recentOther?.ago ?? ''}
+        onConfirm={confirmPending}
+        onCancel={() => setPendingAction(null)}
+      />
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../context/AuthContext';
 import * as authApi from '../api/auth';
 
@@ -41,7 +41,7 @@ describe('Login page', () => {
   it('should render login form', async () => {
     await renderLogin();
 
-    expect(screen.getByText('Welcome Back')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Welcome home.' })).toBeInTheDocument();
     expect(screen.getByLabelText('Username')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
@@ -49,12 +49,18 @@ describe('Login page', () => {
 
   it('should show link to register page', async () => {
     await renderLogin();
-    expect(screen.getByText('Create one')).toHaveAttribute('href', '/register');
+    expect(screen.getByRole('link', { name: /new to the house/i })).toHaveAttribute('href', '/register');
   });
 
   it('should show link to guest login', async () => {
     await renderLogin();
-    expect(screen.getByText(/sign in as a guest/i)).toHaveAttribute('href', '/guest');
+    expect(screen.getByRole('link', { name: /sign in as a guest/i })).toHaveAttribute('href', '/guest');
+  });
+
+  it("doesn't look pre-filled: no owner's handle or dots as placeholders (B-061)", async () => {
+    await renderLogin();
+    expect(screen.getByLabelText('Username')).toHaveAttribute('placeholder', 'Your username');
+    expect(screen.getByLabelText('Password')).not.toHaveAttribute('placeholder');
   });
 
   it('should call login API on form submit', async () => {
@@ -116,6 +122,29 @@ describe('Login page', () => {
     await waitFor(() => {
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
     });
+    // Announced to screen readers (B-060).
+    expect(screen.getByRole('alert')).toHaveTextContent('Invalid credentials');
+  });
+
+  it('returns to the page the guard sent you from (B-058)', async () => {
+    (authApi.login as any).mockResolvedValue({ token: 'jwt', userId: 1, username: 'test', displayName: 'Test', role: 'USER' });
+    const { default: Login } = await import('../pages/Login');
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: { pathname: '/notifications', search: '?id=4', hash: '' } } }]}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/notifications" element={<p>Alerts page</p>} />
+            <Route path="/" element={<p>Home page</p>} />
+          </Routes>
+        </MemoryRouter>
+      </AuthProvider>
+    );
+    await act(async () => { await Promise.resolve(); });
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'kim' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } });
+    fireEvent.click(screen.getByRole('button', { name: /sign in/i }));
+    expect(await screen.findByText('Alerts page')).toBeInTheDocument();
   });
 
   describe('Sign in with Home (SSO)', () => {
@@ -160,9 +189,9 @@ describe('Login page', () => {
       await renderLogin();
 
       expect(screen.queryByLabelText('Username')).not.toBeInTheDocument();
-      expect(screen.queryByText('Create one')).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /new to the house/i })).not.toBeInTheDocument();
       expect(screen.getByText('nuc.tailf10ac4.ts.net')).toHaveAttribute('href', 'https://nuc.tailf10ac4.ts.net/login');
-      expect(screen.getByText(/sign in as a guest/i)).toHaveAttribute('href', '/guest');
+      expect(screen.getByRole('link', { name: /sign in as a guest/i })).toHaveAttribute('href', '/guest');
     });
   });
 });

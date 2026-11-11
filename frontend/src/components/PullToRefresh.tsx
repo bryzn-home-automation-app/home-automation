@@ -13,10 +13,19 @@ export function pullDistance(dy: number): number {
   return Math.min(MAX_PULL, dy * 0.5 * (1 - Math.min(dy, 400) / 1200));
 }
 
-/** The touch is inside something scrolled down on its own (a list, the menu), or a dialog. */
+/** Anything drawn over the page: a dialog, the More sheet, or an old overlay not marked as one. */
+const OVERLAY = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], .fp-dialog, .modal-overlay';
+
+/**
+ * The touch is inside something scrolled down on its own (a list, the menu), or a
+ * dialog. While any overlay is open the page behind never refreshes: some forms
+ * (Edit Profile, Maintenance) aren't marked as dialogs, and a drag down inside them
+ * used to refetch the page underneath (B-043).
+ */
 function insideScrolled(target: EventTarget | null): boolean {
+  if (document.querySelector(OVERLAY)) return true;
   for (let el = target instanceof Element ? target : null; el && el !== document.body; el = el.parentElement) {
-    if (el.closest('[role="dialog"], [data-no-pull]')) return true;
+    if (el.closest('[data-no-pull]')) return true;
     if (el.scrollTop > 0) {
       const oy = getComputedStyle(el).overflowY;
       if (oy === 'auto' || oy === 'scroll') return true;
@@ -123,13 +132,14 @@ export default function PullToRefresh() {
           transition,
         }}
       >
-        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-appaccent-border bg-appsurface-raised text-appaccent-text shadow-[0_8px_24px_var(--appshadow-lg)]">
+        {/* A round key on the panel colour with an ink glyph, like the kit's keys. */}
+        <div className="flex h-10 w-10 items-center justify-center rounded-full border border-appborder-strong bg-appkey text-apptext">
           {phase === 'done' ? (
-            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M5 12.5l4.5 4.5L19 7.5" />
             </svg>
           ) : phase === 'refreshing' ? (
-            <svg viewBox="0 0 24 24" className="h-5 w-5 animate-spin motion-reduce:animate-none" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <svg viewBox="0 0 24 24" className="h-5 w-5 animate-spin motion-reduce:animate-none" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <path d="M12 3a9 9 0 1 1-9 9" />
             </svg>
           ) : (
@@ -138,7 +148,7 @@ export default function PullToRefresh() {
               className="h-5 w-5"
               fill="none"
               stroke="currentColor"
-              strokeWidth="2.5"
+              strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"
               style={{ transform: `rotate(${ready ? 180 : (pull / PULL_THRESHOLD) * 180}deg)`, transition: 'transform 120ms ease-out' }}

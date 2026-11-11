@@ -1,27 +1,172 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { expireGuestSessions, fetchGuestSessions, type GuestSession } from '../../api/auth';
+import { errorMessage } from '../../api/climate';
 import {
-  fetchGuestSessions,
-  expireGuestSessions,
-} from '../../api/auth';
+  Avatar,
+  Badge,
+  Button,
+  Chips,
+  Dial,
+  DialCentre,
+  Disclosure,
+  EmptyState,
+  InstrumentPanel,
+  KeyValue,
+  KV,
+  List,
+  Notice,
+  Num,
+  Panel,
+  QueryState,
+  Readout,
+  Readouts,
+  Ring,
+  Row,
+  Screen,
+  SkelInstrumentPanel,
+  SkelPanel,
+  Tag,
+  Verdict,
+  useConfirm,
+} from '../../components/ui';
+import { usePageMeta } from '../../components/shell/PageMeta';
 import { useJitteredInterval } from '../../hooks/useJitteredInterval';
+import { formatDate, formatDateTime, formatList, formatRelative, formatShortDate, formatTime, plural, toInstant } from '../../utils/format';
+import { guestSessionStatus } from '../../utils/status';
+import { deviceLabel } from './guestDevice';
 
-function timeAgo(iso: string): string {
-  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return `${Math.floor(s / 86400)}d ago`;
+/** Access lasts this long after a guest's last visit (UserService.GUEST_EXPIRY_DAYS). */
+const ACCESS_DAYS = 30;
+const DAY_MS = 86_400_000;
+
+/** Whole days of access left (0 on the last day, never negative). */
+function daysLeft(s: GuestSession, now = Date.now()): number {
+  const end = toInstant(s.expiresAt);
+  return end == null ? 0 : Math.max(0, Math.ceil((end - now) / DAY_MS));
 }
 
-function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-US', {
-    month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-  });
+type ListView = 'active' | 'ended';
+
+/** formatRelative mid-sentence: "just now", "yesterday", but a date keeps its capital. */
+const inSentence = (rel: string) => (rel === 'Just now' || rel === 'Yesterday' ? rel.toLowerCase() : rel);
+
+/** The result of the last "Clear inactive guests", said under the button. */
+type ClearResult = { kind: 'done'; cleared: string[] } | { kind: 'failed'; message: string };
+
+function Answer({ active }: { active: GuestSession[] }) {
+  // The guest whose access ends first is the one the dial is about.
+  const soonest = [...active].sort((a, b) => (toInstant(a.expiresAt) ?? 0) - (toInstant(b.expiresAt) ?? 0))[0];
+  const left = soonest ? daysLeft(soonest) : 0;
+  // One name per guest, even when they hold two sessions (two phones).
+  const names = [...new Set(active.map((s) => s.guestName))];
+  const visits = active.reduce((n, s) => n + (s.connectionCount ?? 0), 0);
+  return (
+    <InstrumentPanel
+      instrument={
+        <Dial
+          label={soonest ? `${soonest.guestName} has ${plural(left, 'day')} of access left.` : 'No guest has access.'}
+          rings={[{
+            r: 88, w: 10, min: 0, max: ACCESS_DAYS, ticks: 6, major: 3,
+            labels: [[0, '0'], [ACCESS_DAYS, `${ACCESS_DAYS} d`]],
+            segments: soonest ? [{ from: 0, to: left, tone: 'ink' }] : [],
+            needle: soonest ? { at: left } : undefined,
+          }]}
+        >
+          {soonest ? (
+            <DialCentre label={soonest.guestName} note={`left, until ${formatShortDate(soonest.expiresAt)}`}>
+              <Num size="xl" value={left} unit={left === 1 ? 'day' : 'days'} />
+            </DialCentre>
+          ) : (
+            <DialCentre label="Guests" note="with access">
+              <Num size="xl" value={0} />
+            </DialCentre>
+          )}
+        </Dial>
+      }
+      verdict={
+        active.length ? (
+          <Verdict tone="ok" note={`Access ends ${ACCESS_DAYS} days after a guest's last visit, so each visit keeps it open longer.`}>
+            {names.length === 1 ? `${names[0]} is the only guest with access.` : `${formatList(names)} have guest access.`}
+          </Verdict>
+        ) : (
+          <Verdict tone="neutral" note="Guests show up here once they sign in on the guest page.">
+            No guests have access right now.
+          </Verdict>
+        )
+      }
+      readouts={
+        <Readouts count={3}>
+          <Readout label="With access" value={names.length} unit={names.length === 1 ? 'guest' : 'guests'} note={names.length ? formatList(names) : 'Nobody'} />
+          <Readout
+            label="Access ends"
+            value={soonest ? formatShortDate(soonest.expiresAt) : '—'}
+            note={soonest ? `${soonest.guestName}, unless they visit again` : 'No guest has access'}
+          />
+          <Readout label="Visits" value={visits} note="By the guests with access" />
+        </Readouts>
+      }
+      foot={<span className="fp-mono">Refreshes every 30 s</span>}
+    />
+  );
+}
+
+function GuestRow({ s }: { s: GuestSession }) {
+  const status = guestSessionStatus(s.status);
+  const active = s.status === 'ACTIVE';
+  const left = daysLeft(s);
+  return (
+    <Row
+      lead={<Avatar name={s.guestName} size="sm" away={!active} decorative />}
+      title={<>{s.guestName} <Tag>Guest</Tag></>}
+      meta={
+        <>
+          {deviceLabel(s.userAgent)} · <span className="fp-mono">{s.ipAddress}</span> · seen {inSentence(formatRelative(s.lastSeenAt))}
+        </>
+      }
+      trail={
+        active ? (
+          <span className="inline-flex items-center gap-2.5">
+            <span className="fp-small fp-muted whitespace-nowrap max-sm:hidden">Until {formatDate(s.expiresAt)}</span>
+            <Ring value={left / ACCESS_DAYS} size={44} width={22} label={`${plural(left, 'day')} left, until ${formatShortDate(s.expiresAt)}`}>
+              <Num size="s" value={left} />
+            </Ring>
+          </span>
+        ) : (
+          <Badge status={status} className="whitespace-nowrap" />
+        )
+      }
+    />
+  );
+}
+
+/** Each guest's sign-in facts, for the curious: full times and the raw device string. */
+function GuestDetails({ sessions }: { sessions: GuestSession[] }) {
+  return (
+    <Disclosure variant="row" summary="Show details" openSummary="Hide details">
+      <div className="flex flex-col gap-5">
+        {sessions.map((s) => (
+          <KeyValue key={s.id}>
+            <KV kind="group" label={s.guestName} value={guestSessionStatus(s.status).label} />
+            <KV kind="sub" label="Joined" value={formatDateTime(s.connectedAt)} />
+            <KV kind="sub" label="Last seen" value={formatDateTime(s.lastSeenAt)} />
+            <KV kind="sub" label={s.status === 'ACTIVE' ? 'Access ends' : 'Access ended'} value={formatDateTime(s.expiresAt)} />
+            <KV kind="sub" label="Visits" value={s.connectionCount ?? '—'} />
+            <KV kind="sub" label="Address" value={s.ipAddress} mono />
+            <KV kind="sub" label="Device" value={<span className="break-all">{s.userAgent || 'Unknown'}</span>} />
+          </KeyValue>
+        ))}
+      </div>
+    </Disclosure>
+  );
 }
 
 export default function GuestManagement() {
   const queryClient = useQueryClient();
   const sessionsInterval = useJitteredInterval(30_000);
+  const [view, setView] = useState<ListView>('active');
+  const [result, setResult] = useState<ClearResult | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
 
   const sessions = useQuery({
     queryKey: ['admin-guest-sessions'],
@@ -29,128 +174,110 @@ export default function GuestManagement() {
     refetchInterval: sessionsInterval,
     refetchIntervalInBackground: false,
   });
+  usePageMeta({ subtitle: sessions.dataUpdatedAt ? `Updated ${formatTime(sessions.dataUpdatedAt)}` : undefined });
 
-  const expireMut = useMutation({
-    mutationFn: expireGuestSessions,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['admin-guest-sessions'] }),
+  /*
+   * The server's "expire" only ends guests who haven't been seen for 30 days (B-037); a guest
+   * here this week keeps their access. So the button says that, asks first, and then says
+   * what actually happened, worked out from the list before and after.
+   */
+  const clear = useMutation({
+    mutationFn: async () => {
+      const before = (sessions.data ?? []).filter((s) => s.status === 'ACTIVE');
+      await expireGuestSessions();
+      const after = await queryClient.fetchQuery({ queryKey: ['admin-guest-sessions'], queryFn: fetchGuestSessions, staleTime: 0 });
+      const stillActive = new Set(after.filter((s) => s.status === 'ACTIVE').map((s) => s.id));
+      return before.filter((s) => !stillActive.has(s.id)).map((s) => s.guestName);
+    },
+    onSuccess: (cleared) => setResult({ kind: 'done', cleared }),
+    onError: (e) => setResult({ kind: 'failed', message: errorMessage(e, "The home server didn't answer") }),
   });
 
-  const data = sessions.data ?? [];
-  const activeCount = data.filter((s) => s.status === 'ACTIVE').length;
+  const askToClear = async () => {
+    setResult(null);
+    const ok = await confirm({
+      title: 'Clear inactive guests?',
+      message: `Ends access for every guest who hasn't been seen for ${ACCESS_DAYS} days. Guests who visited more recently keep theirs.`,
+      confirmLabel: 'Clear inactive guests',
+      tone: 'danger',
+    });
+    if (ok) clear.mutate();
+  };
 
   return (
-    <div className="space-y-6 sm:space-y-7">
-      {/* Header */}
-      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
-              Admin
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-              Guest Management
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
-              Monitor all active guest sessions. Guests auto-expire after 30 days or can be manually expired.
-            </p>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-appborder bg-appinset p-4">
-              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-dim">Active Guests</p>
-              <p className="mt-2 text-lg font-semibold text-apptext-success">{activeCount}</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => expireMut.mutate()}
-              disabled={expireMut.isPending}
-              className="rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-left transition-colors hover:bg-amber-300/20"
-            >
-              <p className="text-2xs uppercase tracking-[0.16em] text-apptext-muted">Maintenance</p>
-              <p className="mt-2 text-sm font-semibold text-amber-200">
-                {expireMut.isPending ? 'Expiring...' : 'Expire All'}
-              </p>
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Session list */}
-      <section className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Sessions
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">
-              Active Guest Sessions
-            </h3>
-          </div>
-          <span className="text-xs text-apptext-muted">Refreshes every 30s</span>
-        </div>
-
-        {sessions.isLoading ? (
-          <div className="space-y-2 animate-pulse">
-            {[1, 2, 3].map((i) => <div key={i} className="h-14 rounded-2xl bg-appinset" />)}
-          </div>
-        ) : data.length === 0 ? (
-          <div className="flex h-40 items-center justify-center text-sm text-apptext-muted">
-            No guest sessions found. Guest sessions are created when visitors join via the guest login page.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <div className="text-sm">
-              {/* 3 cols mobile, 6 cols md+ */}
-              <div className="grid grid-cols-[1.5fr_0.8fr_0.8fr] md:grid-cols-[1fr_1fr_1fr_0.9fr_0.8fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
-                <div className="font-medium">Guest</div>
-                <div className="hidden font-medium md:block">IP / Device</div>
-                <div className="text-right font-medium">Connected</div>
-                <div className="hidden text-right font-medium md:block">Last Seen</div>
-                <div className="text-right font-medium">Expires</div>
-                <div className="hidden" />
-              </div>
-
-              {data.map((s) => (
-                <div
-                  key={s.id}
-                  className="grid grid-cols-[1.5fr_0.8fr_0.8fr] md:grid-cols-[1fr_1fr_1fr_0.9fr_0.8fr_0.8fr] items-center border-b border-appborder-light py-3 transition-colors hover:bg-appinset"
-                >
-                  <div className="flex items-center gap-3">
-                    {s.status === 'ACTIVE' && (
-                      <span className="inline-flex h-2 w-2 rounded-full bg-appsuccess shadow-[0_0_10px_var(--appsuccess)]" />
-                    )}
-                    <span className="font-medium text-apptext truncate">{s.guestName}</span>
-                  </div>
-                  <div className="hidden md:block">
-                    <div className="font-mono text-xs text-apptext-muted">{s.ipAddress}</div>
-                    <div className="text-apptext-soft text-xs truncate max-w-[10rem]" title={s.userAgent}>
-                      {s.userAgent || 'Unknown'}
-                    </div>
-                  </div>
-                  <div className="text-right tabular-nums text-apptext-soft text-xs">
-                    {formatDate(s.connectedAt)}
-                  </div>
-                  <div className="hidden text-right tabular-nums text-apptext-muted md:block">
-                    {timeAgo(s.lastSeenAt)}
-                  </div>
-                  <div className="text-right">
-                    <span className={`rounded-full border px-2 py-0.5 text-3xs font-semibold ${
-                      s.status === 'ACTIVE'
-                        ? 'border-emerald-300/20 bg-emerald-300/10 text-emerald-200'
-                        : 'border-appborder bg-appinset text-apptext-muted'
-                    }`}>
-                      {s.status === 'ACTIVE'
-                        ? formatDate(s.expiresAt)
-                        : s.status}
-                    </span>
-                  </div>
-                  <div className="hidden md:block" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-    </div>
+    <Screen>
+      <QueryState
+        query={sessions}
+        what="the guests"
+        loading={<><SkelInstrumentPanel readouts={3} /><SkelPanel rows={3} /></>}
+        isEmpty={() => false}
+      >
+        {(data) => {
+          const active = data.filter((s) => s.status === 'ACTIVE');
+          const ended = data.filter((s) => s.status !== 'ACTIVE');
+          const shown = view === 'active' ? active : ended;
+          return (
+            <>
+              <Answer active={active} />
+              <Panel
+                title="Door list"
+                subtitle={`Access ends ${ACCESS_DAYS} days after a guest's last visit`}
+                action={
+                  <Chips
+                    label="Guests"
+                    value={view}
+                    onChange={setView}
+                    options={[
+                      { value: 'active', label: 'Active', count: active.length },
+                      { value: 'ended', label: 'Ended', count: ended.length },
+                    ]}
+                  />
+                }
+                footer={
+                  <>
+                    <span className="fp-small fp-muted">Ends access for guests not seen for {ACCESS_DAYS} days</span>
+                    <Button size="sm" variant="danger-quiet" icon="lock" busy={clear.isPending} busyLabel="Clearing…" onClick={askToClear}>
+                      Clear inactive guests
+                    </Button>
+                  </>
+                }
+              >
+                {result && (
+                  <Notice
+                    live="polite"
+                    tone={result.kind === 'failed' ? 'problem' : result.cleared.length ? 'ok' : 'neutral'}
+                    title={
+                      result.kind === 'failed'
+                        ? "Couldn't clear inactive guests."
+                        : result.cleared.length
+                          ? `Ended access for ${formatList(result.cleared)}.`
+                          : 'Nothing to clear.'
+                    }
+                    className="mb-3"
+                  >
+                    {result.kind === 'failed'
+                      ? `${result.message}. Nobody's access changed.`
+                      : result.cleared.length
+                        ? null
+                        : `Every guest with access has been seen in the last ${ACCESS_DAYS} days.`}
+                  </Notice>
+                )}
+                {shown.length ? (
+                  <List>{shown.map((s) => <GuestRow key={s.id} s={s} />)}</List>
+                ) : view === 'active' ? (
+                  <EmptyState compact icon="id-card" title="No guests have access right now">
+                    Guests show up here once they sign in on the guest page. Access lasts {ACCESS_DAYS} days from their last visit.
+                  </EmptyState>
+                ) : (
+                  <EmptyState compact title="No ended visits yet">Guests move here once their access ends.</EmptyState>
+                )}
+                {shown.length > 0 && <GuestDetails sessions={shown} />}
+              </Panel>
+            </>
+          );
+        }}
+      </QueryState>
+      {confirmDialog}
+    </Screen>
   );
 }

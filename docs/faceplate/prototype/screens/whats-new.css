@@ -1,0 +1,95 @@
+/* What's new — only the page's unique pieces: the version counter plate (the instrument), the change list grouped
+   New / Improved / Fixed, and the release index rows. */
+
+/* the plate: a rating plate screwed to the faceplate, with an engraved inner line */
+.screen[data-route="whats-new"] .wn-plate {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 14px;
+  width: 100%; max-width: 330px; margin: 0; padding: 22px 24px 18px;
+  border: 1px solid var(--hairline-strong); border-radius: var(--r-well); background: var(--panel);
+  container-type: inline-size;   /* the wheels size themselves from the plate, so a narrow instrument column never crowds them */
+}
+.screen[data-route="whats-new"] .wn-plate::before {
+  content: ""; position: absolute; inset: 4px; border: 1px solid var(--hairline); border-radius: 5px; pointer-events: none;
+}
+.screen[data-route="whats-new"] .wn-screw {
+  position: absolute; width: 7px; height: 7px; border-radius: 50%;
+  background: var(--well); box-shadow: inset 0 0 0 1px var(--hairline-strong);
+}
+.screen[data-route="whats-new"] .wn-screw::after {
+  content: ""; position: absolute; left: 1px; right: 1px; top: 3px; height: 1px; background: var(--graphite-soft); transform: rotate(-35deg);
+}
+.screen[data-route="whats-new"] .wn-screw:nth-child(1) { top: 10px; left: 10px; }
+.screen[data-route="whats-new"] .wn-screw:nth-child(2) { top: 10px; right: 10px; }
+.screen[data-route="whats-new"] .wn-screw:nth-child(3) { bottom: 10px; left: 10px; }
+.screen[data-route="whats-new"] .wn-screw:nth-child(4) { bottom: 10px; right: 10px; }
+
+/* the counter: number wheels behind recessed windows (same wheel as Maintenance's odometer); the last one rolls up */
+.screen[data-route="whats-new"] .wn-counter { display: flex; align-items: flex-end; gap: 3px; }
+.screen[data-route="whats-new"] .wn-wheel {
+  --w: clamp(40px, 15.5cqi, 52px);
+  --h: calc(var(--w) * 1.46);
+  position: relative; display: block; width: var(--w); height: var(--h); overflow: hidden;
+  border-radius: var(--r-well); background: var(--well); box-shadow: var(--well-shadow);
+  font-size: calc(var(--h) * .76); font-weight: 500; font-stretch: var(--stretch-num); line-height: var(--h); text-align: center;
+  font-variant-numeric: tabular-nums lining-nums; color: var(--ink);
+}
+.screen[data-route="whats-new"] .wn-wheel::before {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(var(--well) 0, transparent 22%, transparent 78%, var(--well) 100%);
+}
+.screen[data-route="whats-new"] .wn-wheel::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; z-index: 2; height: 1px; background: var(--hairline);
+}
+.screen[data-route="whats-new"] .wn-wheel-strip {
+  display: flex; flex-direction: column;
+  transform: translateY(calc(-1 * var(--h)));
+  animation: wn-roll var(--t-sweep) var(--ease) 120ms both;
+}
+.screen[data-route="whats-new"] .wn-wheel-strip > span { display: block; height: var(--h); }
+@keyframes wn-roll { from { transform: translateY(0); } }
+.screen[data-route="whats-new"] .wn-point {
+  flex: none; width: 6px; height: 6px; margin: 0 7px 12px; border-radius: 50%; background: var(--ink);
+}
+
+/* the plate's stamped facts */
+.screen[data-route="whats-new"] .wn-specs {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-self: stretch;
+  margin: 2px 0 0; border-top: 1px solid var(--hairline);
+}
+.screen[data-route="whats-new"] .wn-specs > div {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; padding: 12px 4px 0;
+}
+.screen[data-route="whats-new"] .wn-specs > div + div { border-left: 1px solid var(--hairline); }
+.screen[data-route="whats-new"] .wn-specs dd { font-size: 12.5px; color: var(--ink); white-space: nowrap; }
+
+/* a release's changes, grouped by kind: the badge sits above the sentences on a phone, in its own column from 640px */
+.screen[data-route="whats-new"] .wn-changes { display: flex; flex-direction: column; }
+.screen[data-route="whats-new"] .wn-group { display: grid; grid-template-columns: minmax(0, 1fr); padding: 12px 0 4px; border-top: 1px solid var(--hairline); }
+.screen[data-route="whats-new"] .wn-group:first-child { padding-top: 0; border-top: 0; }
+.screen[data-route="whats-new"] .wn-group:last-child { padding-bottom: 0; }
+.screen[data-route="whats-new"] .wn-group-head { display: flex; align-items: center; gap: 8px; min-height: 28px; }
+.screen[data-route="whats-new"] .wn-group-head .mono { font-size: 12px; color: var(--graphite); }
+.screen[data-route="whats-new"] .wn-group .row-title { line-height: 1.45; text-wrap: pretty; }
+@media (min-width: 640px) {
+  .screen[data-route="whats-new"] .wn-group { grid-template-columns: 112px minmax(0, 1fr); column-gap: 16px; padding-bottom: 0; }
+  .screen[data-route="whats-new"] .wn-group-head { align-self: start; margin-top: 9px; }
+}
+
+/* "New, improved, fixed": the badge column lines up like the change list; on a phone the badge sits above the words */
+.screen[data-route="whats-new"] .wn-kind { flex: none; width: 116px; }
+@media (max-width: 639px) {
+  .screen[data-route="whats-new"] .wn-kind-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; align-items: center; }
+  .screen[data-route="whats-new"] .wn-kind-row > .wn-kind { width: auto; }
+  .screen[data-route="whats-new"] .wn-kind-row > .row-main { grid-column: 1 / -1; grid-row: 2; }
+}
+
+/* the index: older releases behind the disclosure start a little below its summary */
+.screen[data-route="whats-new"] .wn-older .disclosure-body > .timeline { padding-top: 16px; }
+
+/* below the two-column split, the release index follows the latest release (the key and build details come last) */
+@media (max-width: 1023.98px) {
+  .screen[data-route="whats-new"] .split > .stack { display: contents; }
+  .screen[data-route="whats-new"] [aria-labelledby="whats-new-all-title"] { order: 1; }
+  .screen[data-route="whats-new"] [aria-labelledby="whats-new-kinds-title"] { order: 2; }
+  .screen[data-route="whats-new"] .panel--flush[aria-label="For the curious"] { order: 3; }
+}

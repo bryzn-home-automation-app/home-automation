@@ -1,7 +1,12 @@
-import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { register as apiRegister } from '../api/auth';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { register as apiRegister, oidcConfig } from '../api/auth';
+import { Badge, Button, Field, FormGrid, Input, KeyValue, KV, LinkButton, Notice, Panel, Stack, Verdict } from '../components/ui';
+import DoorFrame from './door/DoorFrame';
 
+/*
+ * Create an account: a request the admin approves. It only exists while the server's password
+ * switch is on; otherwise the page says so up front instead of rejecting a filled-in form (B-059).
+ */
 export default function Register() {
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -11,6 +16,15 @@ export default function Register() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  // Whether the server takes new accounts this way: null until it answers. If it can't be asked,
+  // the form shows as it always did and the server has the last word.
+  const [open, setOpen] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    oidcConfig()
+      .then((c) => setOpen(c.passwordLogin))
+      .catch(() => setOpen(true));
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -44,166 +58,89 @@ export default function Register() {
 
   if (success) {
     return (
-      <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
-        <div className="w-full max-w-md text-center">
-          <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
-            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-amber-400/10 text-4xl">
-              ⏳
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.04em] text-apptext">
-              Registration Submitted
-            </h1>
-            <p className="mt-3 text-apptext-soft leading-6">
-              Your account has been created and is pending approval. The admin will review your request and assign a role before you can sign in.
-            </p>
-
-            <div className="mt-6 rounded-2xl border border-appborder bg-appinset p-4 text-left">
-              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Status</p>
-              <div className="mt-2 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-apptext-muted">Username</span>
-                  <span className="font-medium text-apptext-soft">{username}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-apptext-muted">Status</span>
-                  <span className="font-medium text-apptext-warning">Pending Approval</span>
-                </div>
-              </div>
-            </div>
-
-            <Link
-              to="/login"
-              className="mt-6 inline-flex w-full items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3.5 text-sm font-semibold text-appaccent-text transition-all hover:border-appaccent"
-            >
-              Return to Sign In
-            </Link>
-          </div>
-        </div>
-      </div>
+      <Plate eyebrow="Request sent" title="Waiting for approval">
+        <Verdict tone="headsup" note="The admin will look at it and choose your role. You can sign in as soon as it’s approved.">
+          Your account is waiting for approval.
+        </Verdict>
+        <KeyValue>
+          <KV label="Username" value={username} mono />
+          <KV label="Status" value={<Badge tone="headsup">Waiting</Badge>} />
+        </KeyValue>
+        <LinkButton to="/login" block>Back to sign in</LinkButton>
+      </Plate>
     );
   }
 
+  if (open === null) {
+    return (
+      <Plate eyebrow="Front door" title="Request an account">
+        <p className="fp-muted" role="status">Checking…</p>
+      </Plate>
+    );
+  }
+
+  if (!open) {
+    return (
+      <Plate eyebrow="Front door" title="Request an account">
+        <Notice tone="neutral" title="Accounts are added by the admin.">
+          New accounts aren’t made on this page any more. Ask the admin to add you, then use Sign in with Home.
+        </Notice>
+        <LinkButton to="/login" variant="primary" block icon="home">Go to sign in</LinkButton>
+      </Plate>
+    );
+  }
+
+  const clear = () => { if (error) setError(''); };
+
   return (
-    <div className="guest-bg flex min-h-dvh items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-8 shadow-[0_20px_60px_var(--appshadow-lg)]">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft text-3xl">
-              🏠
-            </div>
-            <h1 className="text-2xl font-semibold tracking-[-0.04em] text-apptext">
-              Create Account
-            </h1>
-            <p className="mt-2 text-sm text-apptext-soft leading-6">
-              Register for access to the home dashboard. All accounts require admin approval.
-            </p>
-          </div>
+    <Plate eyebrow="Front door" title="Request an account" lead="The admin approves every new account and picks its role.">
+      <form onSubmit={handleSubmit}>
+        <Stack>
+          <Field label="Email">
+            <Input type="email" value={email} onChange={(e) => { setEmail(e.target.value); clear(); }} placeholder="you@example.com" autoComplete="email" autoFocus required />
+          </Field>
+          <FormGrid>
+            <Field label="Username">
+              <Input value={username} onChange={(e) => { setUsername(e.target.value); clear(); }} placeholder="johndoe" autoComplete="username" autoCapitalize="none" spellCheck={false} required />
+            </Field>
+            <Field label="Name to show" optional>
+              <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="John Doe" autoComplete="name" />
+            </Field>
+            <Field label="Password" help="At least 6 characters">
+              <Input type="password" value={password} onChange={(e) => { setPassword(e.target.value); clear(); }} autoComplete="new-password" required minLength={6} />
+            </Field>
+            <Field label="Password again">
+              <Input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Type it once more" autoComplete="new-password" required />
+            </Field>
+          </FormGrid>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label htmlFor="email" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Email
-              </label>
-              <input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => { setEmail(e.target.value); if (error) setError(''); }}
-                placeholder="you@example.com"
-                autoComplete="email"
-                autoFocus
-                required
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-              />
-            </div>
+          {/* Announced the moment it appears (B-060). */}
+          {error && <Notice tone="problem" title={error} live="assertive" />}
 
-            <div>
-              <label htmlFor="regUsername" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Username
-              </label>
-              <input
-                id="regUsername"
-                type="text"
-                value={username}
-                onChange={(e) => { setUsername(e.target.value); if (error) setError(''); }}
-                placeholder="johndoe"
-                autoComplete="username"
-                required
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="displayName" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Display Name <span className="text-apptext-dim">(optional)</span>
-              </label>
-              <input
-                id="displayName"
-                type="text"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="John Doe"
-                autoComplete="name"
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="regPassword" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Password
-              </label>
-              <input
-                id="regPassword"
-                type="password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); if (error) setError(''); }}
-                placeholder="Min. 6 characters"
-                autoComplete="new-password"
-                required
-                minLength={6}
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="confirmPassword" className="mb-2 block text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Confirm Password
-              </label>
-              <input
-                id="confirmPassword"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Re-type your password"
-                autoComplete="new-password"
-                required
-                className="w-full rounded-2xl border border-appborder bg-appinset px-4 py-3.5 text-apptext placeholder:text-apptext-dim transition-colors focus:border-appaccent focus:outline-none focus:ring-2 focus:ring-appaccent/20"
-              />
-            </div>
-
-            {error && (
-              <div className="rounded-2xl border border-appdanger/30 bg-appdanger/10 px-4 py-3 text-sm text-apptext-danger">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-2xl bg-appaccent px-4 py-3.5 text-sm font-semibold text-appaccent-fg shadow-[0_8px_24px_var(--appaccent-soft)] transition-all hover:brightness-110 active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-appaccent focus-visible:ring-offset-2 disabled:opacity-60"
-            >
-              {loading ? 'Creating account...' : 'Create Account'}
-            </button>
-          </form>
-
-          <p className="mt-6 text-center text-sm text-apptext-muted">
-            Already have an account?{' '}
-            <Link to="/login" className="font-medium text-appaccent-text hover:text-appaccent">
-              Sign in
-            </Link>
+          <Button type="submit" variant="primary" size="lg" block busy={loading} busyLabel="Sending…">
+            Send request
+          </Button>
+          <p className="fp-small fp-muted fp-t-center">
+            Already have an account? <LinkButton to="/login" variant="quiet" size="sm">Sign in</LinkButton>
           </p>
+        </Stack>
+      </form>
+    </Plate>
+  );
+}
+
+/** The bare faceplate every state of this page sits on. */
+function Plate({ eyebrow, title, lead, children }: { eyebrow: string; title: string; lead?: string; children: ReactNode }) {
+  return (
+    <DoorFrame center>
+      <Panel className="flex w-[min(100%,520px)] flex-col gap-5 [--apppanel-pad:24px] lg:[--apppanel-pad:32px]">
+        <div className="flex flex-col gap-1.5">
+          <p className="fp-label">{eyebrow}</p>
+          <h1 className="text-title font-semibold leading-tight tracking-[-.01em] text-apptext lg:text-3xl">{title}</h1>
+          {lead && <p className="fp-muted">{lead}</p>}
         </div>
-      </div>
-    </div>
+        {children}
+      </Panel>
+    </DoorFrame>
   );
 }

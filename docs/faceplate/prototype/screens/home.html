@@ -1,0 +1,281 @@
+<section class="screen" data-route="home" data-title="Home" data-eyebrow="Everyday" data-subtitle="Updated 5:00 PM">
+
+  <!-- 1–3. The answer: the 24-hour ring (outside) + verdict, what needs a look, key readouts (inside) -->
+  <section class="ip" aria-labelledby="home-verdict">
+    <div class="ip-instrument">
+      <div class="dial home-dial" data-chart="dial" data-start="180" data-sweep="360"
+           data-rings='[{"r":84,"w":12,"min":0,"max":24,"edge":true,"ticks":24,"major":6,"labels":[[0,"12 AM"],[6,"6 AM"],[12,"Noon"],[18,"6 PM"]],"segments":[{"from":0,"to":6.87,"tone":"night","static":true},{"from":6.87,"to":17.52,"tone":"day","static":true},{"from":17.52,"to":24,"tone":"night","static":true}],"needle":{"at":17}},{"r":68,"w":5,"min":0,"max":24,"track":false,"segments":[{"from":1,"to":9,"tone":"cool"}]}]'>
+        <div class="dial-centre">
+          <svg class="icon home-dial-icon" aria-hidden="true"><use href="#i-cloud-sun"/></svg>
+          <span class="num num--xl">67<span class="unit">°F</span></span>
+          <span class="dial-note">Partly cloudy</span>
+        </div>
+      </div>
+      <p class="sr-only">Outside it is 67 degrees and partly cloudy. Daylight from 6:52 AM to 5:31 PM. Rain likely from 1 to 9 AM.</p>
+      <div class="dial-legend" aria-hidden="true">
+        <span class="lg-item"><span class="home-key home-key-day"></span>Daylight <b>6:52 AM – 5:31 PM</b></span>
+        <span class="lg-item"><span class="home-key home-key-rain"></span>Rain <b>1 – 9 AM</b></span>
+      </div>
+      <ul class="lamps" aria-label="Systems">
+        <li><a class="lamps-item" href="#utility" data-nav="utility"><span class="lamp lamp--ok"></span><span class="label">Power</span><span class="sr-only">OK</span></a></li>
+        <li><a class="lamps-item" href="#climate" data-nav="climate"><span class="lamp lamp--ok"></span><span class="label">Climate</span><span class="sr-only">OK</span></a></li>
+        <li data-role-only="member"><a class="lamps-item" href="#cameras" data-nav="cameras"><span class="lamp lamp--warn"></span><span class="label">Cameras</span><span class="sr-only">Heads-up</span></a></li>
+        <li><a class="lamps-item" href="#roomba" data-nav="roomba"><span class="lamp lamp--warn"></span><span class="label">Roomba</span><span class="sr-only">Heads-up</span></a></li>
+        <li data-role-only="admin"><a class="lamps-item" href="#admin-nuc" data-nav="admin-nuc"><span class="lamp lamp--problem"></span><span class="label">Server</span><span class="sr-only">Problem</span></a></li>
+      </ul>
+    </div>
+
+    <div class="ip-body">
+      <div class="verdict">
+        <span class="lamp lamp--warn"></span>
+        <p class="verdict-text" id="home-verdict">A few things need a look.</p>
+        <p class="verdict-note">Partly cloudy and 67° now. Rain is likely from 1 to 9 AM, so the sprinklers can skip tonight.</p>
+      </div>
+
+      <ul class="list list--inset home-attn" aria-label="Needs a look">
+        <li data-role-only="member">
+          <a class="row row--compact" href="#cameras" data-nav="cameras">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+            <span class="row-main"><span class="row-title">Two cameras need a look</span><span class="row-meta">Driveway battery 27%, Garage offline</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+          </a>
+        </li>
+        <li>
+          <a class="row row--compact" href="#roomba" data-nav="roomba">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+            <span class="row-main"><span class="row-title">Rosie's dock bag is full</span><span class="row-meta">Fit a new one before the next clean</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+          </a>
+        </li>
+        <li data-role-only="admin">
+          <a class="row row--compact" href="#admin-nuc" data-nav="admin-nuc">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--problem"></span><span class="sr-only">Problem</span></span>
+            <span class="row-main"><span class="row-title">Home server storage is 92% full</span><span class="row-meta">19 GB free of 237 GB</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+          </a>
+        </li>
+      </ul>
+
+      <div class="readouts">
+        <a class="readout" href="#climate" data-nav="climate">
+          <span class="label">Inside</span>
+          <span class="readout-value"><span class="num">71<span class="unit">°F</span></span></span>
+          <span class="readout-note">Downstairs. Upstairs 69°, heating to 70°</span>
+        </a>
+        <a class="readout" href="#utility" data-nav="utility">
+          <span class="label">Yesterday</span>
+          <span class="readout-value"><span class="num">35.5<span class="unit">kWh</span></span></span>
+          <span class="readout-note">About $4.15, 9% over the forecast</span>
+        </a>
+        <a class="readout" href="#utility" data-nav="utility">
+          <span class="label">Electric bill</span>
+          <span class="readout-value"><span class="num">$114</span></span>
+          <span class="readout-note">Predicted for Nov 5 – Dec 5</span>
+        </a>
+        <a class="readout" href="#people" data-nav="people">
+          <span class="label">Who's home</span>
+          <span class="readout-value"><span class="num">2<span class="unit">home</span></span></span>
+          <span class="readout-note">Bryan and Mai. Linh is away</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Detail -->
+  <div class="split">
+    <div class="stack stack--page">
+
+      <section class="panel" aria-labelledby="home-hours-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="home-hours-title">Next hours</h2>
+            <p class="panel-sub">Low of 47° tonight, high of 61° tomorrow</p>
+          </div>
+          <div class="panel-action">
+            <button class="btn btn--sm" type="button" data-open-modal="home-forecast"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>All 24 hours</button>
+          </div>
+        </header>
+        <ol class="hours" aria-label="Hourly forecast">
+          <li class="hour is-now"><span class="hour-time">Now</span><svg class="icon" aria-label="Partly cloudy"><use href="#i-cloud-sun"/></svg><span class="num num--m">67°</span><span class="hour-rain"><span class="hour-bar" style="--p: 15%"></span><span class="mono">15%</span></span></li>
+          <li class="hour"><span class="hour-time">6 PM</span><svg class="icon" aria-label="Partly cloudy"><use href="#i-cloud-moon"/></svg><span class="num num--m">66°</span><span class="hour-rain"><span class="hour-bar" style="--p: 20%"></span><span class="mono">20%</span></span></li>
+          <li class="hour"><span class="hour-time">7 PM</span><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg><span class="num num--m">64°</span><span class="hour-rain"><span class="hour-bar" style="--p: 25%"></span><span class="mono">25%</span></span></li>
+          <li class="hour"><span class="hour-time">8 PM</span><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg><span class="num num--m">63°</span><span class="hour-rain"><span class="hour-bar" style="--p: 31%"></span><span class="mono">31%</span></span></li>
+          <li class="hour"><span class="hour-time">9 PM</span><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg><span class="num num--m">60°</span><span class="hour-rain"><span class="hour-bar" style="--p: 37%"></span><span class="mono">37%</span></span></li>
+          <li class="hour"><span class="hour-time">10 PM</span><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg><span class="num num--m">58°</span><span class="hour-rain"><span class="hour-bar" style="--p: 43%"></span><span class="mono">43%</span></span></li>
+          <li class="hour hour--more"><span class="hour-time">11 PM</span><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg><span class="num num--m">56°</span><span class="hour-rain"><span class="hour-bar" style="--p: 49%"></span><span class="mono">49%</span></span></li>
+          <li class="hour hour--more"><span class="hour-time">12 AM</span><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg><span class="num num--m">49°</span><span class="hour-rain"><span class="hour-bar" style="--p: 55%"></span><span class="mono">55%</span></span></li>
+          <li class="hour hour--more hour--wide"><span class="hour-time">1 AM</span><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg><span class="num num--m">48°</span><span class="hour-rain"><span class="hour-bar" style="--p: 70%"></span><span class="mono">70%</span></span></li>
+          <li class="hour hour--more hour--wide"><span class="hour-time">2 AM</span><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg><span class="num num--m">47°</span><span class="hour-rain"><span class="hour-bar" style="--p: 75%"></span><span class="mono">75%</span></span></li>
+          <li class="hour hour--more hour--wide"><span class="hour-time">3 AM</span><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg><span class="num num--m">47°</span><span class="hour-rain"><span class="hour-bar" style="--p: 80%"></span><span class="mono">80%</span></span></li>
+          <li class="hour hour--more hour--wide"><span class="hour-time">4 AM</span><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg><span class="num num--m">47°</span><span class="hour-rain"><span class="hour-bar" style="--p: 85%"></span><span class="mono">85%</span></span></li>
+        </ol>
+      </section>
+
+      <section class="panel" aria-labelledby="home-house-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="home-house-title">Around the house</h2>
+          </div>
+        </header>
+        <ul class="list list--cols">
+          <li><a class="row" href="#utility" data-nav="utility">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg></span>
+            <span class="row-main"><span class="row-title">Utilities</span><span class="row-meta">35.5 kWh yesterday. Electric bill heading for about $114</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></a></li>
+          <li><a class="row" href="#climate" data-nav="climate">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg></span>
+            <span class="row-main"><span class="row-title">Climate</span><span class="row-meta">Downstairs 71°, idle. Upstairs 69°, heating to 70°</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></a></li>
+          <li data-role-only="member"><a class="row" href="#cameras" data-nav="cameras">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg></span>
+            <span class="row-main"><span class="row-title">Cameras</span><span class="row-meta">Person on the Driveway, 1 min ago</span></span>
+            <span class="row-trail"><span class="badge badge--warn">2 to check</span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></span></a></li>
+          <li><a class="row" href="#roomba" data-nav="roomba">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg></span>
+            <span class="row-main"><span class="row-title">Roomba</span><span class="row-meta">Docked and charged. Cleaned 1,124 sq ft yesterday</span></span>
+            <span class="row-trail"><span class="badge badge--warn">Dock bag full</span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></span></a></li>
+          <li data-role-only="member"><a class="row" href="#maintenance" data-nav="maintenance">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-wrench"/></svg></span>
+            <span class="row-main"><span class="row-title">Maintenance</span><span class="row-meta">Next: replace HVAC air filters, Sun, Nov 15</span></span>
+            <span class="row-trail"><span class="row-value">5<span class="unit">open</span></span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></span></a></li>
+          <li><a class="row" href="#wifi" data-nav="wifi">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg></span>
+            <span class="row-main"><span class="row-title">Guest Wi-Fi</span><span class="row-meta">Alex is on the guest network</span></span>
+            <span class="row-trail"><span class="row-value">1<span class="unit">online</span></span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></span></a></li>
+          <li><a class="row" href="#people" data-nav="people">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg></span>
+            <span class="row-main"><span class="row-title">People</span><span class="row-meta">Bryan, Mai and Linh, plus 1 guest</span></span>
+            <span class="row-trail"><span class="avatars" aria-hidden="true"><span class="avatar avatar--xs" style="--who: var(--person-bryan)">BR</span><span class="avatar avatar--xs" style="--who: var(--person-mai)">MA</span><span class="avatar avatar--xs" style="--who: var(--person-linh)">LI</span></span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></span></a></li>
+          <li><a class="row" href="#alerts" data-nav="alerts">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg></span>
+            <span class="row-main"><span class="row-title">Alerts</span><span class="row-meta">3 unread. Newest at 8:05 AM</span></span>
+            <span class="row-trail"><span class="count">3</span><svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></span></a></li>
+          <li><a class="row" href="#whats-new" data-nav="whats-new">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg></span>
+            <span class="row-main"><span class="row-title">What's new</span><span class="row-meta">Version 1.10.1: cameras start reliably on iPhone</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></a></li>
+          <li><a class="row" href="#profile" data-nav="profile">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg></span>
+            <span class="row-main"><span class="row-title">Profile</span><span class="row-meta">Appearance, phone alerts and this device</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></a></li>
+        </ul>
+      </section>
+    </div>
+
+    <div class="stack stack--page">
+      <section class="panel" aria-labelledby="home-who-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="home-who-title">Who's home</h2>
+            <p class="panel-sub">From the phones on the home Wi-Fi</p>
+          </div>
+        </header>
+        <ul class="list">
+          <li><div class="row row--compact">
+            <span class="avatar" style="--who: var(--person-bryan)">BR<span class="lamp lamp--ok avatar-lamp"></span></span>
+            <span class="row-main"><span class="row-title">Bryan</span><span class="row-meta">Home since Sun, 6:12 PM</span></span>
+            <span class="badge badge--ok">Home</span></div></li>
+          <li><div class="row row--compact">
+            <span class="avatar" style="--who: var(--person-mai)">MA<span class="lamp lamp--ok avatar-lamp"></span></span>
+            <span class="row-main"><span class="row-title">Mai</span><span class="row-meta">Home since 7:39 AM</span></span>
+            <span class="badge badge--ok">Home</span></div></li>
+          <li><div class="row row--compact">
+            <span class="avatar is-away" style="--who: var(--person-linh)">LI<span class="lamp avatar-lamp"></span></span>
+            <span class="row-main"><span class="row-title">Linh</span><span class="row-meta">Last seen at 3:02 PM</span></span>
+            <span class="badge">Away</span></div></li>
+          <li><div class="row row--compact">
+            <span class="avatar" style="--who: var(--person-alex)">AL<span class="lamp lamp--ok avatar-lamp"></span></span>
+            <span class="row-main"><span class="row-title">Alex <span class="tag">Guest</span></span><span class="row-meta">On the guest Wi-Fi since 1:42 PM</span></span>
+            </div></li>
+        </ul>
+      </section>
+
+      <section class="panel" aria-labelledby="home-alerts-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="home-alerts-title">Recent alerts</h2>
+            <p class="panel-sub">3 unread</p>
+          </div>
+          <div class="panel-action"><a class="btn btn--sm btn--quiet" href="#alerts" data-nav="alerts">See all<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+        </header>
+        <ul class="list">
+          <li><a class="row row--compact is-unread" href="#alerts" data-nav="alerts">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+            <span class="row-main"><span class="sr-only">Unread.</span><span class="row-title row-title--regular">Usage spike: 35.5 kWh on Sunday</span><span class="row-meta">Electric · 8:05 AM</span></span></a></li>
+          <li><a class="row row--compact is-unread" href="#alerts" data-nav="alerts">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--info"></span><span class="sr-only">Info</span></span>
+            <span class="row-main"><span class="sr-only">Unread.</span><span class="row-title row-title--regular">Rain likely overnight — skip the sprinklers</span><span class="row-meta">Weather · 7:00 AM</span></span></a></li>
+          <li><a class="row row--compact" href="#alerts" data-nav="alerts">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--info"></span><span class="sr-only">Info</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Daily report: 35.5 kWh on Sunday</span><span class="row-meta">Electric · 7:32 AM</span></span></a></li>
+          <li><a class="row row--compact is-unread" href="#alerts" data-nav="alerts">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="sr-only">Unread.</span><span class="row-title row-title--regular">Rosie finished cleaning 1,124 sq ft</span><span class="row-meta">Roomba · Yesterday, 3:44 PM</span></span></a></li>
+          <li data-role-only="admin"><a class="row row--compact" href="#alerts" data-nav="alerts">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--problem"></span><span class="sr-only">Problem</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Home server storage is 92% full</span><span class="row-meta">Server · Sat, 10:10 PM</span></span></a></li>
+          <li><a class="row row--compact" href="#alerts" data-nav="alerts">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--info"></span><span class="sr-only">Info</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">New water bill: $110.67 due Nov 24</span><span class="row-meta">Water · Fri, Oct 30</span></span></a></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <!-- Dialog: the next 24 hours -->
+  <div class="dialog" data-modal="home-forecast" hidden role="dialog" aria-modal="true" aria-labelledby="home-forecast-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">Forecast</p>
+          <h2 class="dialog-title" id="home-forecast-title">Next 24 hours</h2>
+          <p class="dialog-sub">Now 67°, feels like 66°, partly cloudy. About 0.6 in of rain overnight.</p>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack stack--l">
+        <figure class="chart" data-chart="line" data-height="132" data-readout="0" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-sync="home-fc" data-today="7" data-today-label="Tue"
+          data-labels='["Now","6 PM","7 PM","8 PM","9 PM","10 PM","11 PM","12 AM","1 AM","2 AM","3 AM","4 AM","5 AM","6 AM","7 AM","8 AM","9 AM","10 AM","11 AM","Noon","1 PM","2 PM","3 PM","4 PM"]'
+          data-short='["Now","","","","9 PM","","","","1 AM","","","","5 AM","","","","9 AM","","","","1 PM","","",""]'
+          data-series='[{"name":"Temperature","tone":"ink","area":true,"values":[67,66,64,63,60,58,56,49,48,47,47,47,48,49,50,52,54,56,57,59,60,61,61,61]}]'>
+          <figcaption class="sr-only">Temperature for the next 24 hours, falling from 67° now to 47° around 2 to 4 AM, then rising to 61° tomorrow afternoon.</figcaption>
+        </figure>
+        <figure class="chart" data-chart="bars" data-height="64" data-unit="%" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-tone="cool" data-thin="true" data-value-labels="none" data-sync="home-fc" data-readout="0"
+          data-labels='["Now","6 PM","7 PM","8 PM","9 PM","10 PM","11 PM","12 AM","1 AM","2 AM","3 AM","4 AM","5 AM","6 AM","7 AM","8 AM","9 AM","10 AM","11 AM","Noon","1 PM","2 PM","3 PM","4 PM"]'
+          data-short='["Now","","","","9 PM","","","","1 AM","","","","5 AM","","","","9 AM","","","","1 PM","","",""]'
+          data-values='[15,20,25,31,37,43,49,55,70,75,80,85,90,87,84,81,55,45,35,25,15,12,9,6]'>
+          <figcaption class="sr-only">Chance of rain each hour, highest at 90% around 5 AM.</figcaption>
+        </figure>
+
+        <div class="hourlist" role="table" aria-label="Hour by hour">
+          <div class="hl-row hl-head" role="row"><span role="columnheader">Time</span><span role="columnheader"><span class="sr-only">Sky</span></span><span role="columnheader">Temp</span><span role="columnheader" class="is-num">Chance</span><span role="columnheader" class="is-num">Rain</span><span role="columnheader" class="is-num hl-wide">Wind</span></div>
+          <div class="hl-row is-now" role="row"><span role="cell" class="hl-time">Now</span><span role="cell"><svg class="icon" aria-label="Partly cloudy"><use href="#i-cloud-sun"/></svg></span><span role="cell"><b>67°</b> <span class="muted">feels 66°</span></span><span role="cell" class="is-num">15%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">9 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">6 PM</span><span role="cell"><svg class="icon" aria-label="Partly cloudy"><use href="#i-cloud-moon"/></svg></span><span role="cell"><b>66°</b> <span class="muted">feels 65°</span></span><span role="cell" class="is-num">20%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">11 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">7 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>64°</b> <span class="muted">feels 63°</span></span><span role="cell" class="is-num">25%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">10 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">8 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>63°</b> <span class="muted">feels 62°</span></span><span role="cell" class="is-num">31%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">9 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">9 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>60°</b> <span class="muted">feels 60°</span></span><span role="cell" class="is-num">37%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">7 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">10 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>58°</b> <span class="muted">feels 58°</span></span><span role="cell" class="is-num">43%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">5 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">11 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>56°</b> <span class="muted">feels 56°</span></span><span role="cell" class="is-num">49%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">4 mph</span></div>
+          <div class="hl-day" role="row"><span role="cell" class="label">Tomorrow · Tue, Nov 10</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">12 AM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>49°</b> <span class="muted">feels 49°</span></span><span role="cell" class="is-num">55%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">3 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">1 AM</span><span role="cell"><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg></span><span role="cell"><b>48°</b> <span class="muted">feels 48°</span></span><span role="cell" class="is-num">70%</span><span role="cell" class="is-num">0.04 in</span><span role="cell" class="is-num hl-wide">7 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">2 AM</span><span role="cell"><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg></span><span role="cell"><b>47°</b> <span class="muted">feels 47°</span></span><span role="cell" class="is-num">75%</span><span role="cell" class="is-num">0.04 in</span><span role="cell" class="is-num hl-wide">8 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">3 AM</span><span role="cell"><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg></span><span role="cell"><b>47°</b> <span class="muted">feels 47°</span></span><span role="cell" class="is-num">80%</span><span role="cell" class="is-num">0.04 in</span><span role="cell" class="is-num hl-wide">7 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">4 AM</span><span role="cell"><svg class="icon" aria-label="Light rain"><use href="#i-rain"/></svg></span><span role="cell"><b>47°</b> <span class="muted">feels 47°</span></span><span role="cell" class="is-num">85%</span><span role="cell" class="is-num">0.05 in</span><span role="cell" class="is-num hl-wide">7 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">5 AM</span><span role="cell"><svg class="icon" aria-label="Rain"><use href="#i-rain"/></svg></span><span role="cell"><b>48°</b> <span class="muted">feels 48°</span></span><span role="cell" class="is-num">90%</span><span role="cell" class="is-num">0.08 in</span><span role="cell" class="is-num hl-wide">7 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">6 AM</span><span role="cell"><svg class="icon" aria-label="Rain"><use href="#i-rain"/></svg></span><span role="cell"><b>49°</b> <span class="muted">feels 49°</span></span><span role="cell" class="is-num">87%</span><span role="cell" class="is-num">0.11 in</span><span role="cell" class="is-num hl-wide">9 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">7 AM</span><span role="cell"><svg class="icon" aria-label="Rain"><use href="#i-rain"/></svg></span><span role="cell"><b>50°</b> <span class="muted">feels 50°</span></span><span role="cell" class="is-num">84%</span><span role="cell" class="is-num">0.07 in</span><span role="cell" class="is-num hl-wide">10 mph</span></div>
+          <div class="hl-row is-rain" role="row"><span role="cell" class="hl-time">8 AM</span><span role="cell"><svg class="icon" aria-label="Rain"><use href="#i-rain"/></svg></span><span role="cell"><b>52°</b> <span class="muted">feels 51°</span></span><span role="cell" class="is-num">81%</span><span role="cell" class="is-num">0.13 in</span><span role="cell" class="is-num hl-wide">12 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">9 AM</span><span role="cell"><svg class="icon" aria-label="Showers"><use href="#i-rain"/></svg></span><span role="cell"><b>54°</b> <span class="muted">feels 52°</span></span><span role="cell" class="is-num">55%</span><span role="cell" class="is-num">0.03 in</span><span role="cell" class="is-num hl-wide">12 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">10 AM</span><span role="cell"><svg class="icon" aria-label="Showers"><use href="#i-rain"/></svg></span><span role="cell"><b>56°</b> <span class="muted">feels 54°</span></span><span role="cell" class="is-num">45%</span><span role="cell" class="is-num">0.01 in</span><span role="cell" class="is-num hl-wide">13 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">11 AM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>57°</b> <span class="muted">feels 55°</span></span><span role="cell" class="is-num">35%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">14 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">Noon</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>59°</b> <span class="muted">feels 56°</span></span><span role="cell" class="is-num">25%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">16 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">1 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>60°</b> <span class="muted">feels 59°</span></span><span role="cell" class="is-num">15%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">11 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">2 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>61°</b> <span class="muted">feels 60°</span></span><span role="cell" class="is-num">12%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">12 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">3 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>61°</b> <span class="muted">feels 60°</span></span><span role="cell" class="is-num">9%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">12 mph</span></div>
+          <div class="hl-row" role="row"><span role="cell" class="hl-time">4 PM</span><span role="cell"><svg class="icon" aria-label="Cloudy"><use href="#i-cloud"/></svg></span><span role="cell"><b>61°</b> <span class="muted">feels 60°</span></span><span role="cell" class="is-num">6%</span><span role="cell" class="is-num muted">—</span><span role="cell" class="is-num hl-wide">12 mph</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>

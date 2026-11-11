@@ -1,347 +1,299 @@
 import { lazy, memo, Suspense, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
-import StatTile, { Icons } from '../components/StatTile';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LabelList } from 'recharts';
 import DeferredRender from '../components/DeferredRender';
 import type { WaterBill } from '../types';
 import { fetchWaterBills } from '../api/waterBills';
-import { useMediaQuery } from '../hooks/useMediaQuery';
-import { useTheme, DATA_SERIES } from '../context/ThemeContext';
+import { usePageMeta } from '../components/shell/PageMeta';
+import {
+  DASH,
+  daysBetween,
+  formatDate,
+  formatDateRange,
+  formatMoney,
+  formatMonthYear,
+  formatNumber,
+  formatTime,
+  homeToday,
+  plural,
+} from '../utils/format';
+import type { Tone } from '../utils/status';
+import { Button, ChartLegend, DataTable, Dial, DialCentre, DialLegend, EmptyState, InstrumentPanel, Num, Panel, QueryState, Readout, Readouts, ShowMore, SkelInstrumentPanel, Split, TooltipCard, TooltipLine, useChartTheme, Verdict, type ChartTone, type Column } from '../components/ui';
+import { DEFERRED_CHART, niceTicks } from './utility/parts';
 
 // BillPdfModal pulls in react-pdf + its ~1.3MB pdf.js worker. It's only
-// mounted when a user actually clicks "view bill", so keep that weight out
-// of the WaterUsage chunk entirely rather than paying for it on every visit
-// to the Water tab.
+// mounted when someone opens a bill, so keep that weight out of this chunk.
 const BillPdfModal = lazy(() => import('../components/BillPdfModal'));
 
-const SM_MEDIA_QUERY = '(min-width: 640px)'; // matches this component's own sm: breakpoint usage
-const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
-const TICK_PROPS = { fontSize: 11 } as const;
-const CHART_THEME = {
-  grid: 'var(--appchart-grid)',
-  tick: 'var(--appchart-tick)',
-} as const;
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: 'var(--appchart-bg)',
-  border: '1px solid var(--appchart-border)',
-  borderRadius: '16px',
-  fontSize: '13px',
-  color: 'var(--apptext)',
-  boxShadow: '0 20px 50px var(--appshadow-lg)',
-} as const;
-const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
-const LEGEND_STYLE = { fontSize: 12 } as const;
+const MARGIN = { top: 18, right: 8, left: 0, bottom: 0 } as const;
 
-// Colors come from DATA_SERIES per mode (the dark-tuned 400/500 shades were
-// 1.8-2.8:1 on the white light-mode chart).
-const CHARGE_SERIES = [
-  { key: 'water', label: 'Water' },
-  { key: 'sewer', label: 'Sewer' },
-  { key: 'refuse', label: 'Refuse' },
-  { key: 'tax', label: 'Tax' },
-  { key: 'stormwater', label: 'Stormwater' },
-] as const;
+const CHARGES = [
+  { key: 'water', field: 'waterCharge', label: 'Water', tone: 'water' },
+  { key: 'sewer', field: 'sewerCharge', label: 'Sewer', tone: 'ink' },
+  { key: 'refuse', field: 'refuseCharge', label: 'Refuse', tone: 'graphite' },
+  { key: 'stormwater', field: 'stormwaterCharge', label: 'Stormwater', tone: 'cool' },
+  { key: 'tax', field: 'taxCharge', label: 'Tax', tone: 'soft' },
+] as const satisfies ReadonlyArray<{ key: string; field: keyof WaterBill; label: string; tone: ChartTone }>;
 
-// Recharts colors legend labels with the series color by default; in light
-// mode even the deepened series colors are < 4.5:1 as 12px text, so the label
-// goes neutral there (the swatch keeps the series color).
-const lightLegendLabel = (value: string) => <span style={{ color: 'var(--apptext-soft)' }}>{value}</span>;
+/** Due within this many days: a heads-up. */
+const DUE_SOON_DAYS = 3;
 
-const money = (n?: number) => (n == null ? '—' : `$${n.toFixed(2)}`);
+/** A bill goes by the month its period ends, like the gas bills ("Aug ’26", B-098). */
+const billLabel = (b: WaterBill) => formatMonthYear(b.billingPeriodEnd);
+const gallons = (n: number | null | undefined) => formatNumber(n, { unit: 'gal' });
 
-function periodLabel(bill: WaterBill) {
-  return new Date(`${bill.billingPeriodStart}T12:00:00`).toLocaleDateString('en-US', {
-    month: 'short',
-    year: '2-digit',
-  });
+interface ChartRow {
+  id: number;
+  label: string;
+  bill: WaterBill;
+  gallons: number;
+  water: number;
+  sewer: number;
+  refuse: number;
+  stormwater: number;
+  tax: number;
 }
 
-function EmptyChart({ title, emptyText }: { title: string; emptyText: string }) {
+function WaterTooltip({ active, payload, money }: { active?: boolean; payload?: { payload: ChartRow }[]; money?: boolean }) {
+  const row = active ? payload?.[0]?.payload : undefined;
+  if (!row) return null;
   return (
-    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-      <h3 className="mb-4 text-xl font-semibold text-apptext">{title}</h3>
-      <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-        {emptyText}
-      </div>
-    </div>
+    <TooltipCard title={`${row.label} bill · ${formatDateRange(row.bill.billingPeriodStart, row.bill.billingPeriodEnd)}`}>
+      {money ? (
+        <>
+          {CHARGES.map((c) => <TooltipLine key={c.key} label={c.label} value={formatMoney(row.bill[c.field])} />)}
+          {row.bill.achDiscount != null && <TooltipLine label="Autopay discount" value={formatMoney(row.bill.achDiscount)} />}
+          <TooltipLine strong label="Total" value={formatMoney(row.bill.totalDue)} />
+        </>
+      ) : (
+        <TooltipLine label="Used" value={gallons(row.gallons)} />
+      )}
+    </TooltipCard>
+  );
+}
+
+/** The ring: the latest bill's five charges round the dial, the total in the centre. */
+function WaterDial({ bill }: { bill: WaterBill }) {
+  const parts = CHARGES.map((c) => ({ ...c, value: bill[c.field] ?? 0 })).filter((p) => p.value > 0);
+  const sum = parts.reduce((s, p) => s + p.value, 0);
+  let at = 0;
+  const segments = parts.map((p) => {
+    const from = at;
+    at += p.value;
+    return { from, to: at, tone: p.tone as ChartTone };
+  });
+  return (
+    <>
+      <Dial
+        start={0}
+        sweep={360}
+        label={`Latest water bill ${formatMoney(bill.totalDue)}: ${parts.map((p) => `${p.label} ${formatMoney(p.value)}`).join(', ')}.`}
+        rings={[{ r: 88, w: 16, min: 0, max: sum || 1, gap: 1.6, ticks: 40, major: 10, segments }]}
+      >
+        <DialCentre label="Latest bill" note={bill.dueDate ? `Due ${formatDate(bill.dueDate)}` : undefined} noteMono>
+          <Num size="xl" value={formatMoney(bill.totalDue)} />
+        </DialCentre>
+      </Dial>
+      <DialLegend items={parts.map((p) => ({ label: p.label, value: formatMoney(p.value), tone: p.tone, key: 'box' as const }))} />
+    </>
+  );
+}
+
+function WaterVerdict({ bill, average, count }: { bill: WaterBill; average: number; count: number }) {
+  const today = homeToday();
+  const left = bill.dueDate ? daysBetween(today, bill.dueDate) : null;
+  const tone: Tone = left == null ? 'info' : left < 0 ? 'neutral' : left <= DUE_SOON_DAYS ? 'headsup' : 'ok';
+  const sentence =
+    left == null
+      ? `The latest water bill is ${formatMoney(bill.totalDue)}.`
+      : left < 0
+        ? `${formatMoney(bill.totalDue)} was due ${formatDate(bill.dueDate)}.`
+        : left === 0
+          ? `${formatMoney(bill.totalDue)} is due today.`
+          : `${formatMoney(bill.totalDue)} is due ${formatDate(bill.dueDate)}.`;
+  const diff = bill.totalDue - average;
+  const compare =
+    count < 2
+      ? null
+      : Math.abs(diff) < 1
+        ? `That's about your ${formatMoney(average)} average.`
+        : `That's ${diff < 0 ? 'below' : 'above'} your ${formatMoney(average)} average.`;
+  const used =
+    bill.usageThousands != null
+      ? `You used ${gallons(bill.usageThousands)} from ${formatDateRange(bill.billingPeriodStart, bill.billingPeriodEnd)}.`
+      : null;
+  return (
+    <Verdict tone={tone} note={[compare, used].filter(Boolean).join(' ') || undefined}>
+      {sentence}
+    </Verdict>
   );
 }
 
 export default memo(function WaterUsage() {
-  const { theme, isLight } = useTheme();
-  const ds = DATA_SERIES[theme];
-  const waterBills = useQuery({
-    queryKey: ['water-bills'],
-    queryFn: fetchWaterBills,
-    staleTime: 30_000,
-  });
+  const t = useChartTheme();
+  const waterBills = useQuery({ queryKey: ['water-bills'], queryFn: fetchWaterBills, staleTime: 30_000 });
+  const [viewing, setViewing] = useState<WaterBill | null>(null);
 
+  usePageMeta({ subtitle: waterBills.dataUpdatedAt ? `Updated ${formatTime(waterBills.dataUpdatedAt)}` : undefined });
+
+  // Newest first for the table and the answer.
   const bills = useMemo(
-    () =>
-      [...(waterBills.data ?? [])].sort(
-        (a, b) => new Date(b.billingPeriodStart).getTime() - new Date(a.billingPeriodStart).getTime()
-      ),
+    () => [...(waterBills.data ?? [])].sort((a, b) => b.billingPeriodStart.localeCompare(a.billingPeriodStart)),
     [waterBills.data]
   );
-  const loading = waterBills.isLoading;
-  const hasData = bills.length > 0;
-  const [viewingUrl, setViewingUrl] = useState<string | null>(null);
-  // Renders one layout, not both hidden-via-CSS (same anti-pattern fixed in
-  // MaintenanceDashboard and CoservBillingHistory).
-  const isWideLayout = useMediaQuery(SM_MEDIA_QUERY);
+  const latest = bills[0];
+  const average = bills.length ? bills.reduce((s, b) => s + b.totalDue, 0) / bills.length : 0;
 
-  const latestBill = bills[0];
-  const avgMonthlyBill = hasData ? bills.reduce((s, b) => s + b.totalDue, 0) / bills.length : 0;
-
-  // Oldest -> newest for left-to-right chronological reading.
-  const chronological = useMemo(() => [...bills].reverse(), [bills]);
-
-  const usageChartData = useMemo(
+  // Oldest -> newest for left-to-right reading.
+  const chartRows = useMemo<ChartRow[]>(
     () =>
-      chronological.map((bill) => ({
-        period: periodLabel(bill),
-        gallons: bill.usageThousands ?? 0,
+      [...bills].reverse().map((b) => ({
+        id: b.id,
+        label: billLabel(b),
+        bill: b,
+        gallons: b.usageThousands ?? 0,
+        water: b.waterCharge ?? 0,
+        sewer: b.sewerCharge ?? 0,
+        refuse: b.refuseCharge ?? 0,
+        stormwater: b.stormwaterCharge ?? 0,
+        tax: b.taxCharge ?? 0,
       })),
-    [chronological]
+    [bills]
   );
 
-  const chargesChartData = useMemo(
-    () =>
-      chronological.map((bill) => ({
-        period: periodLabel(bill),
-        water: bill.waterCharge ?? 0,
-        sewer: bill.sewerCharge ?? 0,
-        refuse: bill.refuseCharge ?? 0,
-        tax: bill.taxCharge ?? 0,
-        stormwater: bill.stormwaterCharge ?? 0,
-      })),
-    [chronological]
+  const galTicks = useMemo(() => niceTicks(chartRows.map((r) => r.gallons * 1.08), { floorZero: true }), [chartRows]);
+
+  const columns: Column<WaterBill>[] = [
+    { key: 'period', header: 'Period', kind: 'title', cell: (b) => formatDateRange(b.billingPeriodStart, b.billingPeriodEnd) },
+    { key: 'used', header: 'Used', num: true, cell: (b) => (b.usageThousands == null ? DASH : <>{formatNumber(b.usageThousands)} <span className="fp-unit">gal</span></>) },
+    ...CHARGES.map((c): Column<WaterBill> => ({ key: c.key, header: c.label, num: true, cell: (b) => formatMoney(b[c.field]) })),
+    // A discount is negative and reads "−$1.50" (B-095).
+    { key: 'discount', header: 'Discount', num: true, cell: (b) => formatMoney(b.achDiscount) },
+    { key: 'total', header: 'Total', kind: 'key', num: true, strong: true, cell: (b) => formatMoney(b.totalDue) },
+    { key: 'due', header: 'Due', cell: (b) => formatDate(b.dueDate) },
+    {
+      key: 'bill',
+      header: 'Bill',
+      hideHeader: true,
+      kind: 'action',
+      cell: (b) =>
+        b.pdfPath ? (
+          <Button size="sm" icon="file" onClick={() => setViewing(b)}>View bill</Button>
+        ) : (
+          <span className="fp-small fp-muted">No PDF</span>
+        ),
+    },
+  ];
+
+  const empty = (
+    <EmptyState icon="droplet" title="No water bills yet">
+      Bills are read from the &ldquo;Water Bill&rdquo; label in Gmail once a day and show here the day after they arrive.
+    </EmptyState>
   );
 
   return (
-    <div className="space-y-6 sm:space-y-7">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:gap-4">
-        <StatTile
-          label="Latest Bill"
-          value={latestBill ? `$${latestBill.totalDue.toFixed(2)}` : '—'}
-          unit=""
-          loading={loading}
-          icon={Icons.Calendar}
-        />
-        <StatTile
-          label="Latest Usage"
-          value={latestBill?.usageThousands != null ? latestBill.usageThousands.toFixed(0) : '—'}
-          unit="gal"
-          loading={loading}
-          icon={Icons.Bolt}
-        />
-        <StatTile
-          label="Avg Monthly Bill"
-          value={hasData ? `$${avgMonthlyBill.toFixed(2)}` : '—'}
-          unit=""
-          loading={loading}
-          icon={Icons.Calendar}
-        />
-      </section>
-
-      <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <DeferredRender minHeight={360}>
-          {!hasData && !loading ? (
-            <EmptyChart
-              title="Usage by billing period"
-              emptyText='No water bills synced yet. Bills are pulled from the "Water Bill" Gmail label once a day.'
-            />
-          ) : (
-            <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-              <h3 className="mb-4 text-xl font-semibold text-apptext">Usage by billing period</h3>
-              <ResponsiveContainer width="100%" height={280} debounce={80}>
-                <BarChart data={usageChartData} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
-                  <XAxis dataKey="period" tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} />
-                  <YAxis tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} unit=" gal" />
-                  <Tooltip
-                    contentStyle={TOOLTIP_CONTENT_STYLE}
-                    labelStyle={TOOLTIP_LABEL_STYLE}
-                    formatter={(value: number) => [`${value.toFixed(0)} gal`, 'Usage']}
+    <>
+      <QueryState query={waterBills} what="the water bills" loading={<SkelInstrumentPanel readouts={3} />} empty={empty}>
+        {() => {
+          const left = latest.dueDate ? daysBetween(homeToday(), latest.dueDate) : null;
+          return (
+            <InstrumentPanel
+              instrument={<WaterDial bill={latest} />}
+              verdict={<WaterVerdict bill={latest} average={average} count={bills.length} />}
+              readouts={
+                <Readouts>
+                  <Readout
+                    label="Used"
+                    value={latest.usageThousands != null ? formatNumber(latest.usageThousands) : DASH}
+                    unit="gal"
+                    note={(() => {
+                      const days = daysBetween(latest.billingPeriodStart, latest.billingPeriodEnd);
+                      return latest.usageThousands != null && days ? `About ${formatNumber(latest.usageThousands / days)} a day` : undefined;
+                    })()}
                   />
-                  <Bar dataKey="gallons" fill={ds.water} radius={[10, 10, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+                  <Readout label="Average bill" value={formatMoney(average)} note={`Over the last ${plural(bills.length, 'bill')}`} />
+                  <Readout
+                    label={left != null && left < 0 ? 'Was due' : 'Due in'}
+                    value={left == null ? DASH : left < 0 ? formatNumber(-left) : formatNumber(left)}
+                    unit={left == null ? undefined : Math.abs(left) === 1 ? 'day' : 'days'}
+                    note={
+                      left != null && left < 0
+                        ? 'ago'
+                        : latest.achDiscount != null && latest.achDiscount < 0
+                          ? `Autopay takes off ${formatMoney(Math.abs(latest.achDiscount))}`
+                          : latest.dueDate
+                            ? formatDate(latest.dueDate)
+                            : undefined
+                    }
+                  />
+                </Readouts>
+              }
+            />
+          );
+        }}
+      </QueryState>
+
+      {latest && (
+        <Split ratio="even">
+          <DeferredRender placeholder={DEFERRED_CHART}>
+            <Panel title="Use per bill" subtitle="Gallons for each billing period, by the month it ended">
+              <ResponsiveContainer width="100%" height={220} debounce={80}>
+                <BarChart data={chartRows} margin={MARGIN}>
+                  <CartesianGrid {...t.grid} />
+                  <XAxis dataKey="label" {...t.axis} interval={0} />
+                  {/* A formatter, not Recharts' `unit`, so the axis reads "12k", not "12000 / gal" (B-097). */}
+                  <YAxis {...t.axis} width={40} ticks={galTicks} domain={galTicks ? [0, galTicks[galTicks.length - 1]] : undefined} tickFormatter={(v: number) => (v >= 1000 ? `${formatNumber(v / 1000)}k` : formatNumber(v))} />
+                  <Tooltip content={<WaterTooltip />} cursor={t.barCursor} wrapperStyle={t.tooltip.wrapperStyle} />
+                  <Bar dataKey="gallons" name="Used" fill={t.series.water} radius={[3, 3, 0, 0]} maxBarSize={48} isAnimationActive={false}>
+                    <LabelList dataKey="gallons" position="top" formatter={(v: number) => formatNumber(v)} style={{ fill: t.axis.tick.fill, fontSize: 11, fontFamily: t.axis.tick.fontFamily }} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
-            </div>
-          )}
-        </DeferredRender>
-        <DeferredRender minHeight={360}>
-          {!hasData && !loading ? (
-            <EmptyChart
-              title="Charges breakdown"
-              emptyText="Itemized Water/Sewer/Refuse/Tax/Stormwater charges will appear here once a bill has been synced."
-            />
-          ) : (
-            <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-              <h3 className="mb-4 text-xl font-semibold text-apptext">Charges breakdown</h3>
-              <ResponsiveContainer width="100%" height={280} debounce={80}>
-                <BarChart data={chargesChartData} margin={CHART_MARGIN}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_THEME.grid} />
-                  <XAxis dataKey="period" tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} />
-                  <YAxis tick={{ fill: CHART_THEME.tick, ...TICK_PROPS }} axisLine={{ stroke: CHART_THEME.grid }} tickLine={false} unit="$" />
-                  <Tooltip
-                    contentStyle={TOOLTIP_CONTENT_STYLE}
-                    labelStyle={TOOLTIP_LABEL_STYLE}
-                    formatter={(value: number, name: string) => [`$${value.toFixed(2)}`, name]}
-                  />
-                  <Legend wrapperStyle={LEGEND_STYLE} formatter={isLight ? lightLegendLabel : undefined} />
-                  {CHARGE_SERIES.map((s) => (
-                    <Bar key={s.key} dataKey={s.key} name={s.label} stackId="charges" fill={ds[s.key]} isAnimationActive={false} maxBarSize={48} />
-                  ))}
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </DeferredRender>
-      </section>
+            </Panel>
+          </DeferredRender>
+          <DeferredRender placeholder={DEFERRED_CHART}>
+            <Panel title="Charges per bill" subtitle="Before the autopay discount">
+              <div className="fp-stack fp-stack--s">
+                {/* Neutral legend words in both themes; the swatch carries the colour (B-096). */}
+                <ChartLegend items={CHARGES.map((c) => ({ label: c.label, tone: c.tone, key: 'box' as const }))} />
+                <ResponsiveContainer width="100%" height={220} debounce={80}>
+                  <BarChart data={chartRows} margin={MARGIN}>
+                    <CartesianGrid {...t.grid} />
+                    <XAxis dataKey="label" {...t.axis} interval={0} />
+                    <YAxis {...t.axis} width={44} tickFormatter={(v: number) => formatMoney(v, { cents: false })} />
+                    <Tooltip content={<WaterTooltip money />} cursor={t.barCursor} wrapperStyle={t.tooltip.wrapperStyle} />
+                    {CHARGES.map((c) => (
+                      <Bar key={c.key} dataKey={c.key} name={c.label} stackId="charges" fill={t.series[c.tone]} maxBarSize={48} isAnimationActive={false} />
+                    ))}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </Panel>
+          </DeferredRender>
+        </Split>
+      )}
 
-      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <h3 className="mb-2 text-xl font-semibold text-apptext">
-          Billing History
-        </h3>
-        {!hasData && !loading && (
-          <p className="text-sm leading-6 text-apptext-muted">
-            No water bills synced yet. Bills are pulled from the "Water Bill" Gmail
-            label once a day.
-          </p>
-        )}
-        {hasData && (
-          !isWideLayout ? (
-            <div className="divide-y divide-appborder/50">
-              {bills.map((bill) => (
-                <div key={bill.id} className="py-3 text-sm text-apptext">
-                  <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-medium">
-                      {bill.billingPeriodStart} → {bill.billingPeriodEnd}
-                    </span>
-                    <span className="font-semibold">{money(bill.totalDue)}</span>
-                  </div>
-                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-apptext-soft">
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Usage (gal)</dt>
-                      <dd>{bill.usageThousands?.toFixed(0) ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Due Date</dt>
-                      <dd>{bill.dueDate ?? '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Water</dt>
-                      <dd>{money(bill.waterCharge)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Sewer</dt>
-                      <dd>{money(bill.sewerCharge)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Refuse</dt>
-                      <dd>{money(bill.refuseCharge)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Tax</dt>
-                      <dd>{money(bill.taxCharge)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Stormwater</dt>
-                      <dd>{money(bill.stormwaterCharge)}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Discount</dt>
-                      <dd>{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-2xs uppercase tracking-[0.1em] text-apptext-muted">Bill</dt>
-                      <dd>
-                        {bill.pdfPath ? (
-                          <button
-                            type="button"
-                            onClick={() => setViewingUrl(bill.pdfPath ?? null)}
-                            className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
-                          >
-                            View Bill
-                          </button>
-                        ) : (
-                          '—'
-                        )}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-appborder text-left text-apptext-muted">
-                    <th className="py-2 pr-3 font-medium">Period</th>
-                    <th className="py-2 pr-3 font-medium">Usage (gal)</th>
-                    <th className="py-2 pr-3 font-medium">Water</th>
-                    <th className="py-2 pr-3 font-medium">Sewer</th>
-                    <th className="py-2 pr-3 font-medium">Refuse</th>
-                    <th className="py-2 pr-3 font-medium">Tax</th>
-                    <th className="py-2 pr-3 font-medium">Stormwater</th>
-                    <th className="py-2 pr-3 font-medium">Discount</th>
-                    <th className="py-2 pr-3 font-medium">Total Due</th>
-                    <th className="py-2 pr-3 font-medium">Due Date</th>
-                    <th className="py-2 font-medium">Bill</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bills.map((bill) => (
-                    <tr key={bill.id} className="border-b border-appborder/50 text-apptext">
-                      <td className="py-2 pr-3 whitespace-nowrap">
-                        {bill.billingPeriodStart} → {bill.billingPeriodEnd}
-                      </td>
-                      <td className="py-2 pr-3">{bill.usageThousands?.toFixed(0) ?? '—'}</td>
-                      <td className="py-2 pr-3">{money(bill.waterCharge)}</td>
-                      <td className="py-2 pr-3">{money(bill.sewerCharge)}</td>
-                      <td className="py-2 pr-3">{money(bill.refuseCharge)}</td>
-                      <td className="py-2 pr-3">{money(bill.taxCharge)}</td>
-                      <td className="py-2 pr-3">{money(bill.stormwaterCharge)}</td>
-                      <td className="py-2 pr-3">{bill.achDiscount != null ? money(bill.achDiscount) : '—'}</td>
-                      <td className="py-2 pr-3 font-semibold">{money(bill.totalDue)}</td>
-                      <td className="py-2 pr-3 whitespace-nowrap">{bill.dueDate ?? '—'}</td>
-                      <td className="py-2">
-                        {bill.pdfPath ? (
-                          <button
-                            type="button"
-                            onClick={() => setViewingUrl(bill.pdfPath ?? null)}
-                            className="text-appaccent-text underline decoration-appaccent-border underline-offset-2 hover:opacity-80"
-                          >
-                            View Bill
-                          </button>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )
-        )}
-      </section>
-      {viewingUrl && (
+      {latest && (
+        <Panel title="Bills" subtitle="From the “Water Bill” label in Gmail, checked once a day">
+          <ShowMore
+            items={bills}
+            first={6}
+            noun="bills"
+            render={(part) => <DataTable rowKey={(b) => b.id} rows={part} columns={columns} caption="Water bills" />}
+          />
+        </Panel>
+      )}
+
+      {viewing?.pdfPath && (
         <Suspense fallback={null}>
-          <BillPdfModal pdfPath={viewingUrl} onClose={() => setViewingUrl(null)} />
+          <BillPdfModal
+            pdfPath={viewing.pdfPath}
+            title={`Water bill, ${formatDateRange(viewing.billingPeriodStart, viewing.billingPeriodEnd)}`}
+            subtitle={viewing.dueDate ? `City utilities · due ${formatDate(viewing.dueDate)}` : 'City utilities'}
+            onClose={() => setViewing(null)}
+          />
         </Suspense>
       )}
-    </div>
+    </>
   );
 });

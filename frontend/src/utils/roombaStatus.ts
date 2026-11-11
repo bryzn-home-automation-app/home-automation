@@ -1,0 +1,393 @@
+import type { RoombaNativeSchedule, RoombaPart, RoombaStatus } from '../types';
+import { formatDayName, formatDuration, formatList, formatNumber, formatRelative, formatStamp, formatTime, homeClock, homeDayKey, plural } from './format';
+import { humanize, roombaPhaseStatus, type Tone } from './status';
+import { isRecharging } from './roomba';
+
+/*
+ * The robot's state in one place, for every screen that shows it (the Roomba page, Home's
+ * Roomba card). Before this, each screen worked it out on its own and they disagreed: Home and
+ * the page said "Cleaning" while the dock emptied the bin (B-140), kept a stale "Cleaning 64%"
+ * up for hours after the poller lost the robot (B-070, B-138), and the page called a mid-clean
+ * recharge's area "Last area" (B-130). Pure functions, no React, tested in roombaStatus.test.ts.
+ */
+
+/** The status fields this reads (a RoombaStatus fits). */
+export type RoombaStatusInput = Pick<
+  RoombaStatus,
+  'phase' | 'cycle' | 'error' | 'errorText' | 'running' | 'dockError' | 'dockText' | 'online' | 'updatedAt'
+>;
+
+export interface RoombaState {
+  /** A short word for a pill, a lamp or a card: "Cleaning", "Emptying the bin", "Docked", "Offline". */
+  label: string;
+  tone: Tone;
+  /** Out cleaning on a fresh reading: drives the live dot, the coverage layer and "This clean". */
+  cleaning: boolean;
+  /** Partway through a clean on a fresh reading: cleaning, emptying, heading back mid-clean or recharging to finish. */
+  inMission: boolean;
+  /** The last reading is too old to trust (the backend's `online` is false: no check-in for 10 minutes). */
+  offline: boolean;
+  /** Paused partway through a clean (Resume carries on). */
+  paused: boolean;
+  /** For an offline robot, what it was last seen doing and when ("Last seen cleaning, 3 hr ago"). */
+  lastSeen: string | null;
+}
+
+const NO_STATUS: RoombaState = {
+  label: 'No status yet', tone: 'neutral', cleaning: false, inMission: false, offline: false, paused: false, lastSeen: null,
+};
+
+/**
+ * What the robot is doing, trusting a reading only while it is fresh. Order: no reading, then
+ * offline (a frozen "Cleaning" from hours ago must not read as live), then the phase words from
+ * utils/status (an error first, the bin emptying before "Cleaning", a mid-clean recharge).
+ */
+export function roombaState(s: RoombaStatusInput | null | undefined, now: Date | number = Date.now()): RoombaState {
+  if (!s) return NO_STATUS;
+  const phase = (s.phase ?? '').toLowerCase();
+  const cycleOn = s.cycle != null && s.cycle !== '' && s.cycle !== 'none';
+  const recharging = isRecharging(s);
+  const paused = (phase === 'stop' || phase === 'pause') && cycleOn;
+  if (!s.online) {
+    const when = s.updatedAt ? formatRelative(s.updatedAt, now) : null;
+    const doing = s.running && phase !== 'evac' ? 'cleaning' : recharging ? 'recharging mid-clean' : null;
+    const lastSeen = when ? `Last seen ${doing ? `${doing}, ` : ''}${lowerFirst(when)}` : null;
+    return { label: 'Offline', tone: 'headsup', cleaning: false, inMission: false, offline: true, paused: false, lastSeen };
+  }
+  const st = roombaPhaseStatus(s);
+  const cleaning = s.running && phase !== 'evac';
+  const homing = phase === 'hmmidmsn';
+  return {
+    label: st.label,
+    tone: st.tone,
+    cleaning,
+    inMission: s.running || recharging || paused || homing,
+    offline: false,
+    paused,
+    lastSeen: null,
+  };
+}
+
+/** formatRelative for the middle of a sentence: "updated 2 hr ago", "yesterday", "Sat, Aug 22". */
+export function relativeInSentence(input: string | number | Date | null | undefined, now: Date | number = Date.now()): string {
+  return lowerFirst(formatRelative(input, now));
+}
+
+function lowerFirst(text: string): string {
+  // "Yesterday" reads "last seen yesterday"; "Mon, Nov 2" keeps its capital.
+  return /^(Just now|Yesterday|Tomorrow)$/.test(text) ? text.toLowerCase() : text;
+}
+
+// ─── Parts ──────────────────────────────────────────────────────────────
+
+export interface PartsSummary {
+  overdue: string[];
+  dueSoon: string[];
+  tone: Tone;
+}
+
+/** The parts that want attention, by label: overdue first. */
+export function partsSummary(parts: readonly Pick<RoombaPart, 'label' | 'status'>[] | null | undefined): PartsSummary {
+  const list = parts ?? [];
+  const overdue = list.filter((p) => p.status === 'overdue').map((p) => p.label);
+  const dueSoon = list.filter((p) => p.status === 'due_soon').map((p) => p.label);
+  return { overdue, dueSoon, tone: overdue.length ? 'headsup' : dueSoon.length ? 'info' : 'ok' };
+}
+
+// ─── The verdict ────────────────────────────────────────────────────────
+
+export interface RoombaVerdictInput {
+  status: (RoombaStatusInput & Partial<Pick<RoombaStatus, 'name' | 'sqft' | 'runtimeMinutes' | 'needsAttention' | 'attentionReasons' | 'batteryPct'>>) | null | undefined;
+  parts?: readonly Pick<RoombaPart, 'label' | 'status'>[] | null;
+  now?: Date | number;
+}
+
+export interface RoombaVerdict {
+  tone: Tone;
+  /** The sentence: what is going on. */
+  sentence: string;
+  /** What next, with numbers. */
+  note: string | null;
+  /** True when the note points at the parts (the page adds a "See parts" link). */
+  aboutParts: boolean;
+}
+
+/** The answer at the top of the Roomba page: what the robot is doing and whether anything needs doing. */
+export function roombaVerdict({ status, parts, now = Date.now() }: RoombaVerdictInput): RoombaVerdict {
+  if (!status) {
+    return {
+      tone: 'neutral',
+      sentence: "The Roomba hasn't checked in yet.",
+      note: 'Its status shows here once the home server reaches the robot.',
+      aboutParts: false,
+    };
+  }
+  const name = status.name?.trim() || 'The Roomba';
+  const state = roombaState(status, now);
+  const ps = partsSummary(parts);
+  const partsNote = ps.overdue.length
+    ? `${formatPartList(ps.overdue)} ${ps.overdue.length === 1 ? 'is' : 'are'} overdue.`
+    : ps.dueSoon.length
+      ? `${formatPartList(ps.dueSoon)} ${ps.dueSoon.length === 1 ? 'is' : 'are'} due soon.`
+      : null;
+  const join = (...bits: Array<string | null | undefined>) => bits.filter(Boolean).join(' ') || null;
+  const sqft = status.sqft != null ? formatNumber(status.sqft, { unit: 'sq ft' }) : null;
+
+  if (state.offline) {
+    return {
+      tone: 'headsup',
+      sentence: `${name} hasn't checked in since ${formatStamp(status.updatedAt, { now }).replace(/^Yesterday/, 'yesterday')}.`,
+      note: join(
+        status.running ? 'It was cleaning then.' : null,
+        'The page catches up as soon as it reconnects; check its Wi-Fi if this lasts.',
+      ),
+      aboutParts: false,
+    };
+  }
+  if (status.error) {
+    return {
+      tone: 'problem',
+      sentence: `${name} needs help${status.errorText ? `: ${lowerFirstWord(status.errorText)}` : ''}.`,
+      note: 'Sort it out at the robot, then start the clean again.',
+      aboutParts: false,
+    };
+  }
+  const phase = (status.phase ?? '').toLowerCase();
+  if (phase === 'evac') {
+    return { tone: 'info', sentence: `${name} is emptying its bin into the dock.`, note: join(sqft && `${sqft} cleaned so far.`, partsNote), aboutParts: !!partsNote };
+  }
+  if (state.cleaning) {
+    const so = [sqft, status.runtimeMinutes != null ? `${formatDuration(status.runtimeMinutes)} in` : null].filter(Boolean).join(', ');
+    return { tone: 'info', sentence: `${name} is cleaning.`, note: join(so ? `${so[0].toUpperCase()}${so.slice(1)}.` : null, partsNote), aboutParts: !!partsNote };
+  }
+  if (isRecharging(status)) {
+    return {
+      tone: 'info',
+      sentence: `${name} is recharging to finish the clean.`,
+      note: join(sqft && `${sqft} cleaned so far.`, 'It carries on once charged.'),
+      aboutParts: false,
+    };
+  }
+  if (state.paused) {
+    return { tone: 'headsup', sentence: `${name} is paused partway through a clean.`, note: 'Resume it, or send it home to the dock.', aboutParts: false };
+  }
+  if (phase === 'hmpostmsn' || phase === 'hmusrdock' || phase === 'hmmidmsn') {
+    return { tone: 'info', sentence: `${name} is heading back to the dock.`, note: partsNote, aboutParts: !!partsNote };
+  }
+  if (status.dockError) {
+    return {
+      tone: 'headsup',
+      sentence: `${name} is docked, but the dock needs a look.`,
+      note: join(status.dockText ? `The dock says: ${status.dockText}.` : null, partsNote),
+      aboutParts: !!partsNote,
+    };
+  }
+  if (ps.overdue.length) {
+    return { tone: 'headsup', sentence: `${name} is ready, but a part needs replacing.`, note: partsNote, aboutParts: true };
+  }
+  const otherReasons = (status.attentionReasons ?? []).filter((r) => !/^maintenance/i.test(r));
+  if (status.needsAttention && otherReasons.length) {
+    return { tone: 'headsup', sentence: `${name} needs a look.`, note: `${otherReasons.join('. ')}.`, aboutParts: false };
+  }
+  return {
+    tone: 'ok',
+    sentence: `${name} is docked and ready.`,
+    note: partsNote ?? (status.batteryPct != null ? `Battery at ${Math.round(status.batteryPct)}%.` : null),
+    aboutParts: !!partsNote,
+  };
+}
+
+function formatPartList(labels: string[]): string {
+  // "Dock bag" and "Filter" → "The dock bag and filter".
+  return `The ${formatList(labels.map((l) => l.charAt(0).toLowerCase() + l.slice(1)))}`;
+}
+
+function lowerFirstWord(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1).replace(/\.$/, '');
+}
+
+// ─── Runs ───────────────────────────────────────────────────────────────
+
+const RUN: Record<string, { tone: Tone; label: string }> = {
+  COMPLETED: { tone: 'ok', label: 'Finished' },
+  STUCK: { tone: 'problem', label: 'Stuck' },
+  CANCELLED: { tone: 'neutral', label: 'Stopped early' },
+};
+
+/** A finished run's outcome (RoombaRun.status). */
+export function runStatus(status: string | null | undefined): { tone: Tone; label: string } {
+  if (!status) return { tone: 'neutral', label: 'Unknown' };
+  return RUN[status.toUpperCase()] ?? { tone: 'neutral', label: humanize(status) };
+}
+
+const CYCLE: Record<string, string> = {
+  clean: 'Cleaning run',
+  quick: 'Quick clean',
+  spot: 'Spot clean',
+  dock: 'Returning to the dock',
+  evac: 'Emptying the bin',
+  train: 'Mapping run',
+  none: 'None',
+};
+
+/** The robot's cycle code in words ("clean" → "Cleaning run"; B-126). */
+export function cycleLabel(cycle: string | null | undefined): string {
+  if (!cycle) return '';
+  return CYCLE[cycle] ?? humanize(cycle);
+}
+
+const PAD: Record<string, string> = {
+  padPlate: 'Pad plate only (no pad)',
+  none: 'No pad',
+  invalid: 'Not recognised',
+  dispDry: 'Disposable dry pad',
+  dispWet: 'Disposable wet pad',
+  reusableDry: 'Reusable dry pad',
+  reusableWet: 'Reusable wet pad',
+};
+
+/** What the robot detects on its mop mount (status.detectedPad: "padPlate" → words; B-126). */
+export function padLabel(pad: string | null | undefined): string {
+  if (!pad) return '';
+  return PAD[pad] ?? humanize(pad);
+}
+
+const INITIATOR: Record<string, string> = {
+  rmtApp: 'The iRobot app',
+  localApp: 'The iRobot app',
+  schedule: 'A schedule',
+  manual: 'The button on the robot',
+  cloud: 'The home app',
+  voice: 'A voice assistant',
+};
+
+/** Who started a clean (status.initiator / run.initiator). */
+export function initiatorLabel(v: string | null | undefined): string {
+  if (!v) return '';
+  return INITIATOR[v] ?? humanize(v);
+}
+
+// ─── Commands ───────────────────────────────────────────────────────────
+
+const COMMAND: Record<string, string> = {
+  start: 'Clean',
+  clean_rooms: 'Clean rooms',
+  clean_room: 'Clean a room',
+  pause: 'Pause',
+  resume: 'Resume',
+  stop: 'Stop',
+  dock: 'Send home',
+  find: 'Find the robot',
+  rename_room: 'Rename a room',
+  split_room: 'Divide a room',
+  merge_rooms: 'Merge rooms',
+  list_schedules: 'Read schedules',
+};
+
+/** A queued command's name in words (B-120: never "clean_rooms"). */
+export function commandLabel(command: string | null | undefined): string {
+  if (!command) return '';
+  return COMMAND[command] ?? humanize(command);
+}
+
+const COMMAND_STATE: Record<string, { tone: Tone; label: string }> = {
+  PENDING: { tone: 'neutral', label: 'Queued' },
+  SENT: { tone: 'info', label: 'Sending' },
+  OK: { tone: 'ok', label: 'Accepted' },
+  FAILED: { tone: 'problem', label: 'Failed' },
+};
+
+/** A command's progress: Queued → Sending → Accepted (the robot took it) or Failed. */
+export function commandState(status: string | null | undefined): { tone: Tone; label: string } {
+  if (!status) return { tone: 'neutral', label: '' };
+  return COMMAND_STATE[status.toUpperCase()] ?? { tone: 'neutral', label: humanize(status) };
+}
+
+// ─── Schedules ──────────────────────────────────────────────────────────
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DAY_PLURAL = ['Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays', 'Sundays'];
+
+/** Schedule days (1 = Monday … 7 = Sunday) in words: "Every day", "Mon – Fri", "Weekends", "Sundays", "Mon, Wed and Fri". */
+export function scheduleDays(days: readonly number[]): string {
+  const set = [...new Set(days)].filter((d) => d >= 1 && d <= 7).sort((a, b) => a - b);
+  if (set.length === 0) return 'No days set';
+  if (set.length === 7) return 'Every day';
+  const key = set.join('');
+  if (key === '12345') return 'Mon – Fri';
+  if (key === '67') return 'Weekends';
+  if (set.length === 1) return DAY_PLURAL[set[0] - 1];
+  // A run of three or more days in a row reads as a range.
+  const contiguous = set.every((d, i) => i === 0 || d === set[i - 1] + 1);
+  if (contiguous && set.length >= 3) return `${DAY_NAMES[set[0] - 1]} – ${DAY_NAMES[set[set.length - 1] - 1]}`;
+  const names = set.map((d) => DAY_NAMES[d - 1]);
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
+const MODE: Record<number, string> = { 2: 'vacuum', 4: 'mop', 6: 'vacuum and mop' };
+
+/** The schedule's operating modes in words ("vacuum and mop"); vendor codes 2 / 4 / 6. */
+export function scheduleModes(modes: readonly number[]): string {
+  if (modes.length === 0) return '';
+  return modes.map((m) => MODE[m] ?? `mode ${m}`).join(', then ');
+}
+
+/** "Mon – Fri · 9:00 AM · vacuum · 3 rooms": a schedule in plain words. */
+export function scheduleLine(s: Pick<RoombaNativeSchedule, 'days' | 'hour' | 'minute' | 'operatingModes' | 'roomCount'>): string {
+  return [
+    scheduleDays(s.days),
+    s.hour != null && s.minute != null ? formatTime(wallClock(2026, 1, 5, s.hour, s.minute)) : null,
+    scheduleModes(s.operatingModes) || null,
+    s.roomCount > 0 ? plural(s.roomCount, 'room') : 'every room',
+  ].filter(Boolean).join(' · ');
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+function wallClock(y: number, m: number, d: number, hh: number, mm: number): string {
+  return `${y}-${pad2(m)}-${pad2(d)}T${pad2(hh)}:${pad2(mm)}`;
+}
+
+export interface NextClean {
+  /** Home wall-clock "YYYY-MM-DDTHH:MM" (format it with format.ts). */
+  at: string;
+  name: string | null;
+}
+
+/**
+ * The next time an enabled schedule fires, in the home's time (schedule hours are the robot's
+ * local time, which is the home's). Null when nothing is enabled.
+ */
+export function nextScheduledClean(
+  schedules: readonly Pick<RoombaNativeSchedule, 'days' | 'hour' | 'minute' | 'enabled' | 'name'>[] | null | undefined,
+  now: Date | number = Date.now(),
+): NextClean | null {
+  const today = homeClock(now);
+  const key = homeDayKey(now);
+  if (!today || !key || !schedules) return null;
+  const nowMinutes = today.hour * 60 + today.minute;
+  let best: { offset: number; minutes: number; s: (typeof schedules)[number] } | null = null;
+  for (const s of schedules) {
+    if (!s.enabled || s.hour == null || s.minute == null) continue;
+    const minutes = s.hour * 60 + s.minute;
+    for (let offset = 0; offset <= 7; offset++) {
+      // 0 = Sunday in HomeClock; schedules count 1 = Monday … 7 = Sunday.
+      const wd = (today.weekday + offset) % 7;
+      const iso = wd === 0 ? 7 : wd;
+      if (!s.days.includes(iso)) continue;
+      if (offset === 0 && minutes <= nowMinutes) continue;
+      if (!best || offset < best.offset || (offset === best.offset && minutes < best.minutes)) best = { offset, minutes, s };
+      break;
+    }
+  }
+  if (!best) return null;
+  const day = new Date(Date.UTC(today.year, today.month - 1, today.day + best.offset));
+  return {
+    at: wallClock(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), Math.floor(best.minutes / 60), best.minutes % 60),
+    name: best.s.name,
+  };
+}
+
+/** "Tomorrow" / "Today" / "Thu, Nov 12" for a NextClean. */
+export function nextCleanDay(next: NextClean, now: Date | number = Date.now()): string {
+  return formatDayName(next.at, now);
+}

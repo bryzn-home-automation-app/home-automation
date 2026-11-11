@@ -1,0 +1,15 @@
+/* Server health — only the page's unique element: the six-gauge cluster (and its small parts). */
+.screen[data-route="admin-nuc"] .nuc-gauges {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px 10px; width: 100%; max-width: 480px;
+}
+.screen[data-route="admin-nuc"] .nuc-gauge { display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; text-align: center; }
+.screen[data-route="admin-nuc"] .nuc-gauge .dial { width: 100%; max-width: 132px; margin-bottom: 2px; }
+.screen[data-route="admin-nuc"] .nuc-gauge .dial-centre { padding-top: 6%; }
+.screen[data-route="admin-nuc"] .nuc-gauge .num--m { font-size: 19px; white-space: nowrap; }
+.screen[data-route="admin-nuc"] .nuc-gauge .label { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; }
+.screen[data-route="admin-nuc"] .nuc-sub { font-size: 12px; line-height: 1.3; color: var(--graphite); }
+.screen[data-route="admin-nuc"] .meter-row > .nuc-meter-sub { grid-column: 1 / -1; }
+@media (min-width: 1024px) {
+  .screen[data-route="admin-nuc"] .nuc-gauges { gap: 22px 16px; }
+  .screen[data-route="admin-nuc"] .nuc-gauge .num--m { font-size: 22px; }
+}

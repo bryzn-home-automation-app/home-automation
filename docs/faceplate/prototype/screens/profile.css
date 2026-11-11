@@ -1,0 +1,65 @@
+/* Profile — only the page's unique pieces: the identity plate + appearance switchgear (the instrument),
+   the two-column switch matrix (Alerts / Phone), the weather-rule builder, and the photo key in Edit profile. */
+.screen[data-route="profile"] .pf-id { display: flex; align-items: center; gap: 18px; width: 100%; max-width: 380px; }
+.screen[data-route="profile"] .pf-id-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.screen[data-route="profile"] .pf-name { display: flex; align-items: center; gap: 8px; font-size: 22px; font-weight: 600; line-height: 1.2; margin-bottom: 4px; }
+.screen[data-route="profile"] .pf-id-line { font-size: 12.5px; color: var(--graphite); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.screen[data-route="profile"] .pf-gear {
+  display: flex; flex-direction: column; gap: 18px; width: 100%; max-width: 380px;
+  padding-top: 18px; border-top: 1px solid var(--hairline);
+}
+.screen[data-route="profile"] .pf-gear-row { display: flex; flex-direction: column; gap: 8px; }
+.screen[data-route="profile"] .pf-gear-row .swatches { margin-left: -7px; }
+.screen[data-route="profile"] .pf-gear-help { min-height: 1.4em; font-size: var(--t-small); line-height: 1.4; color: var(--graphite); }
+
+/* Phone alerts: the switch and the test key side by side from 640px */
+.screen[data-route="profile"] .pf-push { align-items: center; }
+/* content that sits above a panel's bottom disclosure row keeps a full step clear of its hairline */
+.screen[data-route="profile"] .pf-above-row { margin-bottom: 20px; }
+
+/* switch matrix: two switch columns under silk-screen captions; the alert types run in two matrices side by side on desktop */
+.screen[data-route="profile"] .pf-matrix-cols { display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 24px; }
+@media (min-width: 1024px) {
+  .screen[data-route="profile"] .pf-matrix-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 48px; align-items: start; }
+}
+.screen[data-route="profile"] .pf-matrix { display: flex; flex-direction: column; }
+.screen[data-route="profile"] .pf-cols { display: flex; justify-content: flex-end; gap: 4px; padding-bottom: 6px; border-bottom: 1px solid var(--hairline-strong); }
+.screen[data-route="profile"] .pf-col { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 58px; color: var(--graphite); }
+.screen[data-route="profile"] .pf-col .label { font-size: 10px; letter-spacing: .06em; }
+.screen[data-route="profile"] .pf-group { padding: 16px 0 2px; }
+.screen[data-route="profile"] .pf-type { gap: 8px; }
+.screen[data-route="profile"] .pf-type .row-title { display: flex; align-items: center; gap: 8px; }
+.screen[data-route="profile"] .pf-type .row-title .icon { color: var(--graphite); }
+.screen[data-route="profile"] .pf-pair { flex: none; display: flex; gap: 4px; }
+.screen[data-route="profile"] .pf-pair .switch--bare { justify-content: center; width: 58px; padding: 0; }
+.screen[data-route="profile"] .pf-pair .switch--bare.is-locked { opacity: .4; pointer-events: none; }
+
+/* weather rule builder */
+.screen[data-route="profile"] .pf-rule-edit {
+  display: flex; flex-direction: column; gap: 12px; margin: 0 0 16px; padding: 14px; border-radius: var(--r-well);
+  border: 1px solid var(--hairline);
+}
+.screen[data-route="profile"] .pf-rule-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.screen[data-route="profile"] .pf-rule-fields > .field:nth-child(3), .screen[data-route="profile"] .pf-rule-fields > .pf-wide { grid-column: 1 / -1; }
+@media (min-width: 640px) {
+  .screen[data-route="profile"] .pf-rule-fields { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .screen[data-route="profile"] .pf-rule-fields > .field:nth-child(3) { grid-column: auto; }
+  .screen[data-route="profile"] .pf-rule-fields > .pf-wide { grid-column: 1 / span 2; }
+}
+.screen[data-route="profile"] .pf-rule-when { font-size: var(--t-small); line-height: 1.45; color: var(--graphite); text-wrap: pretty; }
+/* the times read as part of the sentence: ink, semibold, tabular, never split from their AM/PM */
+.screen[data-route="profile"] .pf-rule-when b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.screen[data-route="profile"] .pf-preview .label { margin-bottom: 4px; }
+
+/* Edit profile: thirteen colours always break 7 + 6 (never a lonely pair), circles aligned with the label */
+.screen[data-route="profile"] [data-tabs="profile-colour"] { max-width: calc(7 * var(--tap) + 6 * 4px); margin-left: -7px; }
+
+/* Edit profile: the avatar is the photo key */
+.screen[data-route="profile"] .pf-photo { display: flex; align-items: center; gap: 16px; }
+.screen[data-route="profile"] .pf-photo-key { position: relative; flex: none; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.screen[data-route="profile"] .pf-photo-badge {
+  position: absolute; right: -2px; bottom: -2px; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%;
+  background: var(--key-face); border: 1px solid var(--hairline-strong); color: var(--ink);
+}
+.screen[data-route="profile"] .pf-photo-badge .icon { width: 16px; height: 16px; }

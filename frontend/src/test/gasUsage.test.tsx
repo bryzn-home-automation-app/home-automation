@@ -11,7 +11,7 @@ vi.mock('../components/DeferredRender', () => ({ default: ({ children }: { child
 
 import * as billsApi from '../api/coservBills';
 import * as weatherApi from '../api/weather';
-import GasUsage from '../pages/GasUsage';
+import GasUsage, { formatUnitRate } from '../pages/GasUsage';
 
 const lines = (fixed: [string, number][], ccf: number, taxes: [string, number][]): GasLineItem[] => [
   ...fixed.map(([label, amount]) => ({ label, amount, kind: 'fixed' as const })),
@@ -82,6 +82,16 @@ describe('gas bill math', () => {
   });
 });
 
+describe('gas unit rates (B-092)', () => {
+  it('print at least two decimals and keep longer tariffs', () => {
+    expect(formatUnitRate(1.33)).toBe('$1.33');
+    expect(formatUnitRate(1.3)).toBe('$1.30');
+    expect(formatUnitRate(0.5)).toBe('$0.50');
+    expect(formatUnitRate(1)).toBe('$1.00');
+    expect(formatUnitRate(0.1401)).toBe('$0.1401');
+  });
+});
+
 describe('Gas tab', () => {
   beforeEach(() => {
     // jsdom has no matchMedia; the billing history asks whether the screen is wide.
@@ -106,16 +116,20 @@ describe('Gas tab', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return render(<QueryClientProvider client={client}><GasUsage /></QueryClientProvider>);
   };
-  /** A stat tile, by its label. */
-  const tile = async (label: string) =>
-    (await screen.findAllByText(label)).map((el) => el.closest('[class*="rounded-[20px]"]')).find(Boolean);
+  /** Text with no-break spaces read as spaces (the formatters join figures and units with them). */
+  const text = (el: Element | null | undefined) => (el?.textContent ?? '').replace(/ /g, ' ');
+  /** A readout well in the answer panel, by its label. */
+  const readout = async (label: string) =>
+    text((await screen.findAllByText(label)).map((el) => el.closest('.fp-readout')).find((el) => el?.querySelector('.fp-readout-value')));
 
-  it('leads with the last bill, the gas used, the flat share, and when the next bill comes', async () => {
+  it('leads with the last bill on the dial, then the gas used, the flat share, and when the next bill comes', async () => {
     renderTab(BILLS);
-    expect(await tile('Last gas bill')).toHaveTextContent('$41.27Sep 8 – Oct 7');
-    expect(await tile('Gas used')).toHaveTextContent('12CCF0.41 CCF a day, up from 0.12');
-    expect(await tile('Flat charges')).toHaveTextContent('$20.1949% of that bill, however much gas you use');
-    expect(await tile('Next bill')).toHaveTextContent('Nov 12Meter read around Nov 7');
+    expect(text((await screen.findByText('Last gas bill')).closest('.fp-dial-centre'))).toBe('Last gas bill$41.27Sep 8 – Oct 7');
+    expect(await readout('Gas used')).toBe('Gas used12CCF0.41 a day, up from 0.12');
+    expect(await readout('Flat charges')).toBe('Flat charges49%$20.19, however much gas you use');
+    expect(await readout('Next bill')).toBe('Next billNov 12Meter read around Nov 7');
+    expect(screen.getByText('About 49% of the last gas bill was flat charges.')).toBeInTheDocument();
+    expect(screen.getByText(/only read once a month/i)).toBeInTheDocument();
   });
 
   it("lists the last bill's lines and what gas really costs", async () => {
@@ -124,21 +138,37 @@ describe('Gas tab', () => {
     expect(within(card).getByText('Customer Charge')).toBeInTheDocument();
     expect(within(card).getByText(/12 CCF × \$1\.33/)).toBeInTheDocument();
     expect(within(card).getByText('$15.96')).toBeInTheDocument();
-    expect(card).toHaveTextContent('would still have been about $22.03');
-    expect(card).toHaveTextContent('Each CCF added about $1.60, taxes included.');
+    expect(text(card)).toContain('would still have been about $22.03');
+    expect(text(card)).toContain('Each CCF added about $1.60, taxes included.');
   });
 
-  it('says the next bill is due any day once its usual date has passed', async () => {
+  it('says the next bill is due any day once its usual date has passed (B-093)', async () => {
     vi.setSystemTime(new Date('2026-11-14T16:00:00Z'));
     renderTab(BILLS);
-    expect(await tile('Next bill')).toHaveTextContent('Any dayUsually here by Nov 12');
+    expect(await readout('Next bill')).toBe('Next billAny dayUsually here by Nov 12');
+  });
+
+  it('waits until the expected day is over at home before saying "any day" (B-093)', async () => {
+    // 7 PM Central on Nov 12 is already Nov 13 in UTC.
+    vi.setSystemTime(new Date('2026-11-13T01:00:00Z'));
+    renderTab(BILLS);
+    expect(await readout('Next bill')).toBe('Next billNov 12Meter read around Nov 7');
   });
 
   it('still shows totals for bills synced before their lines were kept', async () => {
     renderTab(BILLS.map((b) => ({ ...b, gasLineItems: null })));
-    expect(await tile('Flat charges')).toHaveTextContent('—Itemized after the next bill sync');
-    expect(await tile('Last gas bill')).toHaveTextContent('$41.27');
+    expect(await readout('Flat charges')).toBe('Flat charges—Itemized after the next bill sync');
+    expect(screen.getByText(/The last gas bill was \$41\.27/)).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'What the last gas bill paid for' })).not.toBeInTheDocument();
+  });
+
+  it('says when the bills could not be loaded, with a way to try again (B-005)', async () => {
+    vi.mocked(billsApi.fetchCoservBills).mockRejectedValue(new Error('offline'));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><GasUsage /></QueryClientProvider>);
+    expect(await screen.findByText("Couldn't load the gas bills")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
+    expect(screen.queryByText('No gas bills yet')).not.toBeInTheDocument();
   });
 
   it('explains an empty tab', async () => {

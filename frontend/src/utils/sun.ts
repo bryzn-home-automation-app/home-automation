@@ -35,9 +35,22 @@ export interface SunWindow {
 
 /** Sunrise → sunset for the local calendar day containing `date`, or null (polar). */
 export function sunTimes(date: Date, lat: number, lon: number): SunWindow | null {
-  const y = date.getFullYear();
-  const m = date.getMonth();
-  const d = date.getDate();
+  return sunWindow(date.getFullYear(), date.getMonth(), date.getDate(), lat, lon);
+}
+
+/**
+ * Sunrise → sunset for a calendar day given as "YYYY-MM-DD" (the home's day, from
+ * utils/format homeDayKey), so the answer doesn't depend on the device's time zone.
+ */
+export function sunTimesOn(dayKey: string, lat: number | null, lon: number | null): SunWindow | null {
+  if (lat == null || lon == null || (lat === 0 && lon === 0)) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(dayKey);
+  if (!m) return null;
+  return sunWindow(+m[1], +m[2] - 1, +m[3], lat, lon);
+}
+
+/** `m` is 0-based, as in Date. */
+function sunWindow(y: number, m: number, d: number, lat: number, lon: number): SunWindow | null {
   const n = dayOfYear(y, m, d);
   const rise = utcHours(n, lat, lon, true);
   const set = utcHours(n, lat, lon, false);

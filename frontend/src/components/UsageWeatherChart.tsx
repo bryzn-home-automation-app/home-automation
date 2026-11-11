@@ -1,186 +1,63 @@
 import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import type { EnergyUsage } from '../types';
 import { fetchWeatherForRange } from '../api/weather';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { isHourlySource } from '../utils/usageSource';
-import { useTheme, CHART_SERIES, hexToRgba } from '../context/ThemeContext';
+import { formatDate, formatDateTime, formatHour, formatNumber, formatShortDate, formatTemp, homeToday } from '../utils/format';
+import { ChartLegend, Chips, EmptyState, Notice, Panel, QueryState, SkelBlock, useChartTheme, type QueryLike } from './ui';
+import { niceTicks } from '../pages/utility/parts';
 
 interface UsageWeatherChartProps {
-  usageData: EnergyUsage[];
-  loading?: boolean;
+  /** The hourly usage query, for its loading and error states. */
+  usage: QueryLike<EnergyUsage[]>;
   startDate: string;
   endDate: string;
 }
 
-const chartTheme = {
-  tooltipBg: 'var(--appchart-bg)',
-  tooltipBorder: 'var(--appchart-border)',
-  text: 'var(--apptext)',
-  muted: 'var(--apptext-muted)',
-  grid: 'var(--appchart-grid)',
-  tick: 'var(--appchart-tick)',
-};
-
-// Stable object references — avoid new literals every render
-const CHART_MARGIN = { top: 5, right: 20, left: 0, bottom: 5 } as const;
-const TICK_PROPS = { fontSize: 11 } as const;
-const TICK_LINE_FALSE = false;
-const CARTESIAN_GRID_DASH = '3 3';
-// Daily-view temperature extremes: conventional hot/cold hues, deliberately
-// theme-independent so red always reads "high" and blue always reads "low".
-const HIGH_TEMP_COLOR = '#ef4444';
-const LOW_TEMP_COLOR = '#3b82f6';
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: chartTheme.tooltipBg,
-  border: `1px solid ${chartTheme.tooltipBorder}`,
-  borderRadius: '16px',
-  fontSize: '13px',
-  color: chartTheme.text,
-  boxShadow: '0 20px 50px var(--appshadow-lg)',
-} as const;
-const TOOLTIP_LABEL_STYLE = { color: chartTheme.muted, marginBottom: 4 } as const;
-
-function tooltipValueFormatter(value: number, name: string) {
-  if (name === 'kWh') return [`${value.toFixed(2)} kWh`, 'Usage'];
-  if (name === 'avgTemp' || name === 'temp') return [`${Math.round(value)}°F`, 'Temp'];
-  if (name === 'highTemp') return [`${Math.round(value)}°F`, 'High'];
-  if (name === 'lowTemp') return [`${Math.round(value)}°F`, 'Low'];
-  return [value, name];
-}
-
-function formatDateLabel(iso: string): string {
-  const dateOnly = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-  if (dateOnly) {
-    const [, y, m, d] = dateOnly;
-    const localDate = new Date(Number(y), Number(m) - 1, Number(d));
-    return localDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function Skeleton() {
-  return (
-    <div className="animate-pulse rounded-[28px] border border-appborder bg-appsurface-raised p-5">
-      <div className="mb-4 h-5 w-48 rounded bg-appinset" />
-      <div className="h-72 rounded-2xl bg-appinset" />
-    </div>
-  );
-}
-
-function buildDynamicAxis(
-  values: Array<number | null | undefined>,
-  options?: {
-    points?: number;
-    padRatio?: number;
-    minPad?: number;
-    floorZero?: boolean;
-    integerTicks?: boolean;
-  }
-) {
-  const points = options?.points ?? 8;
-  const padRatio = options?.padRatio ?? 0.12;
-  const minPad = options?.minPad ?? 1;
-  const floorZero = options?.floorZero ?? false;
-  const integerTicks = options?.integerTicks ?? false;
-
-  const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
-  if (!nums.length || points < 2) {
-    return { domain: undefined, ticks: undefined };
-  }
-
-  let min = Math.min(...nums);
-  let max = Math.max(...nums);
-
-  if (min === max) {
-    const pad = Math.max(minPad, Math.abs(min) * padRatio, 1);
-    min -= pad;
-    max += pad;
-  } else {
-    const pad = Math.max(minPad, (max - min) * padRatio);
-    min -= pad;
-    max += pad;
-  }
-
-  if (floorZero) {
-    min = Math.max(0, min);
-  }
-
-  if (integerTicks) {
-    const step = Math.max(1, Math.ceil((max - min) / (points - 1)));
-    let lo = Math.floor(min);
-    let hi = Math.ceil(max);
-
-    // Guarantee enough room for the requested number of evenly spaced integer ticks.
-    while (hi - lo < step * (points - 1)) {
-      if (!floorZero || lo > 0) lo -= 1;
-      hi += 1;
-    }
-
-    const ticks = Array.from({ length: points }, (_, i) => lo + step * i);
-    return {
-      domain: [ticks[0], ticks[ticks.length - 1]] as [number, number],
-      ticks,
-    };
-  }
-
-  const step = (max - min) / (points - 1);
-  const decimals = step >= 10 ? 0 : step >= 1 ? 1 : step >= 0.1 ? 2 : 3;
-  const ticks = Array.from({ length: points }, (_, i) =>
-    Number((min + step * i).toFixed(decimals))
-  );
-
-  return {
-    domain: [ticks[0], ticks[ticks.length - 1]] as [number, number],
-    ticks,
-  };
-}
+const MARGIN = { top: 6, right: 8, left: 0, bottom: 0 } as const;
 
 const TIME_RANGES = [
-  { key: '24h',   label: '24h',      count: 24,        useHourly: true },
-  { key: '3d',    label: '3 Days',   count: 72,        useHourly: true },
-  { key: 'week',  label: '7 Days',   count: 168,       useHourly: true },
-  { key: 'month', label: 'Monthly',  count: 30,        useHourly: false },
-  { key: 'all',   label: 'All Time', count: Infinity,  useHourly: false },
+  { value: '24h', label: '24 hours', points: 24, hourly: true },
+  { value: '3d', label: '3 days', points: 72, hourly: true },
+  { value: 'week', label: '7 days', points: 168, hourly: true },
+  { value: 'month', label: '30 days', points: 30, hourly: false },
+  { value: 'all', label: 'All', points: Infinity, hourly: false },
 ] as const;
-type TimeRangeKey = typeof TIME_RANGES[number]['key'];
+type TimeRangeKey = (typeof TIME_RANGES)[number]['value'];
 
-function UsageWeatherChart({
-  usageData,
-  loading: usageLoading,
-  startDate,
-  endDate,
-}: UsageWeatherChartProps) {
+interface Point {
+  /** The x key: "YYYY-MM-DDTHH:00" for hours, "YYYY-MM-DD" for days. */
+  x: string;
+  kWh: number | null;
+  temp: number | null;
+  highTemp: number | null;
+  lowTemp: number | null;
+}
+
+/** Calendar date `days` before an ISO day. */
+function daysBefore(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
+}
+
+/**
+ * Use and temperature: electricity used over the outside temperature, as two charts stacked
+ * on one time axis (one scale each; scrubbing either shows the same moment in both). Hourly for
+ * the short ranges, daily highs and lows for the long ones.
+ */
+function UsageWeatherChart({ usage, startDate, endDate }: UsageWeatherChartProps) {
+  const t = useChartTheme();
   const [range, setRange] = useState<TimeRangeKey>('24h');
   const weatherInterval = useJitteredInterval(3_600_000, 60_000);
-
-  // Per-palette line colors: usage tracks the theme accent, temperature is a
-  // contrasting hue chosen per palette (see CHART_SERIES). Re-derives whenever
-  // the theme/palette context changes.
-  const { theme, palette } = useTheme();
-  const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
+  const usageData = usage.data;
 
   const dateStart = typeof startDate === 'string' ? startDate.slice(0, 10) : '';
   const dateEnd = typeof endDate === 'string' ? endDate.slice(0, 10) : '';
   const weatherEnabled = dateStart !== '' && dateEnd !== '';
 
-  const {
-    data: weather,
-    isLoading: weatherLoading,
-    isError: weatherError,
-  } = useQuery({
+  const { data: weather, isLoading: weatherLoading, isError: weatherError } = useQuery({
     queryKey: ['weather', dateStart, dateEnd],
     queryFn: () => fetchWeatherForRange(dateStart, dateEnd),
     enabled: weatherEnabled,
@@ -189,360 +66,203 @@ function UsageWeatherChart({
     refetchIntervalInBackground: false,
   });
 
-  // ── Weather lookup maps ──
   const weatherByDate = useMemo(() => {
     const map = new Map<string, { mean: number; high: number; low: number }>();
-    if (weather?.daily) {
-      for (const w of weather.daily) {
-        if (typeof w.date !== 'string' || !w.date) continue;
-        if (typeof w.meanTemperature !== 'number' || Number.isNaN(w.meanTemperature)) continue;
-        map.set(w.date, {
-          mean: w.meanTemperature,
-          high: typeof w.maxTemperature === 'number' ? w.maxTemperature : w.meanTemperature,
-          low: typeof w.minTemperature === 'number' ? w.minTemperature : w.meanTemperature,
-        });
-      }
+    for (const w of weather?.daily ?? []) {
+      if (typeof w.date !== 'string' || !w.date) continue;
+      if (typeof w.meanTemperature !== 'number' || Number.isNaN(w.meanTemperature)) continue;
+      map.set(w.date, {
+        mean: w.meanTemperature,
+        high: typeof w.maxTemperature === 'number' ? w.maxTemperature : w.meanTemperature,
+        low: typeof w.minTemperature === 'number' ? w.minTemperature : w.meanTemperature,
+      });
     }
     return map;
   }, [weather]);
 
-  // ── Electric usage aggregation maps ──
+  // ── Electric usage by day and by hour ──
   const { byDate, byHour } = useMemo(() => {
     const hourlyDateMap = new Map<string, number>();
     const dailyDateMap = new Map<string, number>();
     const hourMap = new Map<string, number>();
-    for (const d of usageData) {
+    for (const d of usageData ?? []) {
       if (typeof d.timestamp !== 'string' || d.timestamp.length < 10) continue;
-      const usage = Number(d.usageKwh);
-      if (Number.isNaN(usage)) continue;
+      const kwh = Number(d.usageKwh);
+      if (Number.isNaN(kwh)) continue;
       const date = d.timestamp.slice(0, 10);
       if (isHourlySource(d.source)) {
-        hourlyDateMap.set(date, (hourlyDateMap.get(date) ?? 0) + usage);
+        hourlyDateMap.set(date, (hourlyDateMap.get(date) ?? 0) + kwh);
         const normalized = d.timestamp.replace(' ', 'T');
         if (normalized.length >= 13) {
           const hourKey = normalized.substring(0, 13);
-          hourMap.set(hourKey, (hourMap.get(hourKey) ?? 0) + usage);
+          hourMap.set(hourKey, (hourMap.get(hourKey) ?? 0) + kwh);
         }
       } else {
-        dailyDateMap.set(date, (dailyDateMap.get(date) ?? 0) + usage);
+        dailyDateMap.set(date, (dailyDateMap.get(date) ?? 0) + kwh);
       }
     }
-    // Prefer hourly sum per date; fall back to daily record when no hourly data exists
+    // Prefer the hourly sum per date; fall back to a daily record when no hourly data exists.
     const dateMap = new Map<string, number>();
-    const allDates = new Set([...hourlyDateMap.keys(), ...dailyDateMap.keys()]);
-    for (const date of allDates) {
+    for (const date of new Set([...hourlyDateMap.keys(), ...dailyDateMap.keys()])) {
       dateMap.set(date, hourlyDateMap.get(date) ?? dailyDateMap.get(date) ?? 0);
     }
     return { byDate: dateMap, byHour: hourMap };
   }, [usageData]);
 
-  // ── Daily chart data ──
-  const chartData = useMemo(() => {
-    return Array.from(byDate.entries())
-      .map(([date, kWh]) => {
-        const w = weatherByDate.get(date);
-        return {
-          date,
-          label: formatDateLabel(date),
-          kWh: Math.round(kWh * 100) / 100,
-          avgTemp: w?.mean ?? null,
-          highTemp: w?.high ?? null,
-          lowTemp: w?.low ?? null,
-        };
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [byDate, weatherByDate]);
-
-  // ── Hourly data ──
-  const hourlyData = useMemo(() => {
-    if (!weather?.hourly) return [];
-    const now = new Date();
-    const cutoffDate = new Date(now.getTime() - 192 * 60 * 60 * 1000); // 8 days
-    const cutoffLocal = `${cutoffDate.getFullYear()}-${String(cutoffDate.getMonth() + 1).padStart(2, '0')}-${String(cutoffDate.getDate()).padStart(2, '0')}T00:00`;
-    return weather.hourly
-      .filter((h: any) => h.time >= cutoffLocal && h.temperature > 0)
-      .map((h: any) => {
-        const d = new Date(h.time);
-        const hour = d.getHours();
-        const ampm = hour >= 12 ? 'PM' : 'AM';
-        const h12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-        const dateLabel = hour === 0 ? formatDateLabel(h.time) : '';
-        const isMultiDay = range === '3d' || range === 'week';
-        return {
-          time: h.time,
-          label: isMultiDay && hour !== 0 ? '' : isMultiDay ? dateLabel : `${h12}${ampm}`,
-          date: h.time.slice(0, 10),
-          temp: h.temperature,
-          highTemp: h.temperature,
-          lowTemp: h.temperature,
-          avgTemp: h.temperature,
-          apparentTemp: h.apparentTemperature,
-          humidity: h.humidity,
-          kWh: byHour.get(h.time.substring(0, 13)) ?? null,
-        };
-      });
-  }, [weather, byDate, byHour, range]);
-
-  const rangeConfig = TIME_RANGES.find((r) => r.key === range);
-  const useHourly = (rangeConfig?.useHourly ?? false) && hourlyData.length >= 2;
-
-  // Client-side time-range filter
-  const filteredData = useMemo(() => {
-    const rangeConfig = TIME_RANGES.find((r) => r.key === range);
-    let result: any[];
-
-    if (useHourly) {
-      // Filter to only complete data points (both kWh + temp), then take
-      // the last N matching entries. Electric lags behind temperature because
-      // the meter updates once daily — incomplete points are silently dropped.
-      const complete = hourlyData.filter((row: any) => row.kWh != null && row.temp != null);
-      if (rangeConfig && isFinite(rangeConfig.count)) {
-        result = complete.slice(-rangeConfig.count);
-      } else {
-        result = complete.slice(-24);
-      }
-      return result;
-    }
-
-    // Daily data: take the last N entries directly. For unbounded ranges
-    // (all/month) cap the series with an even stride so the line never renders
-    // more than MAX_CHART_POINTS SVG segments as history grows.
-    if (!rangeConfig || !isFinite(rangeConfig.count)) {
-      const MAX_CHART_POINTS = 500;
-      if (chartData.length <= MAX_CHART_POINTS) return chartData;
-      const step = (chartData.length - 1) / (MAX_CHART_POINTS - 1);
-      return Array.from({ length: MAX_CHART_POINTS }, (_, i) => chartData[Math.round(i * step)]);
-    }
-    return chartData.slice(-rangeConfig.count);
-  }, [chartData, hourlyData, range, useHourly]);
-
-  const hasWeather = filteredData.some((row: any) => (row.avgTemp ?? row.temp) != null);
-  const showDots = filteredData.length <= 5;
-
-  // Compute dynamic, evenly spaced axis ticks
-  const { kwhDomain, kwhTicks } = useMemo(() => {
-    const axis = buildDynamicAxis(
-      filteredData.map((row) => row.kWh),
-      { points: 8, padRatio: 0.12, minPad: 1, floorZero: true, integerTicks: true }
-    );
-    return { kwhDomain: axis.domain, kwhTicks: axis.ticks };
-  }, [filteredData]);
-
-  // Depends on `useHourly` (whether to show the full hourly timestamp in the
-  // tooltip label vs. the pre-formatted daily label) — memoized so identity
-  // is stable across renders where the range/granularity hasn't changed.
-  const tooltipLabelFormatter = useMemo(() => {
-    return (label: string, payload: any) => {
-      if (useHourly && payload?.[0]?.payload?.time) {
-        const d = new Date(payload[0].payload.time);
-        return d.toLocaleString('en-US', {
-          month: 'short', day: 'numeric',
-          hour: 'numeric', minute: '2-digit',
-        });
-      }
-      return label;
-    };
-  }, [useHourly]);
-
-  const { tempDomain, tempTicks } = useMemo(() => {
-    const tempValues = useHourly
-      ? filteredData.map((row: any) => row.temp)
-      : filteredData.flatMap((row: any) => [row.avgTemp, row.highTemp, row.lowTemp]);
-
-    const axis = buildDynamicAxis(
-      tempValues,
-      { points: 8, padRatio: 0.1, minPad: 2, floorZero: false, integerTicks: true }
-    );
-    return { tempDomain: axis.domain, tempTicks: axis.ticks };
-  }, [filteredData, useHourly]);
-
-  if (usageLoading || (weatherEnabled && weatherLoading)) {
-    return <Skeleton />;
-  }
-
-  if (!usageData.length) {
-    return (
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4">
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">Usage vs Temperature</h3>
-        </div>
-        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-          No electric usage data yet.
-        </div>
-      </div>
-    );
-  }
-
-  if (weatherError && !hasWeather) {
-    return (
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4">
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">Electric Usage vs Temperature</h3>
-        </div>
-        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-          Weather data is unavailable right now. Usage chart data is still loading normally.
-        </div>
-      </div>
-    );
-  }
-
-  // Shared header + filters block
-  const header = (
-    <>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage vs weather</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">Electric Usage vs Temperature</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* Text is --appaccent-text, not series.usage: the dark Violet/Ocean
-              usage lines (#7c3aed / #0284c7) are only 3-4:1 as 11px chip text. */}
-          <span
-            className="rounded-full border px-2.5 py-1 text-3xs font-semibold"
-            style={{ color: 'var(--appaccent-text)', backgroundColor: hexToRgba(series.usage, 0.1), borderColor: hexToRgba(series.usage, 0.22) }}
-          >
-            kWh
-          </span>
-          {/* Light-mode temp lines are tuned for 3:1 as chart marks; as 11px text on
-              their own 10% tint they land at 4.3-4.5:1, so the label is pulled 30%
-              toward --apptext (same hue, >= 5:1). Dark keeps the raw series color. */}
-          {hasWeather && (
-            <span
-              className="rounded-full border px-2.5 py-1 text-3xs font-semibold"
-              style={{ color: theme === 'light' ? `color-mix(in srgb, ${series.temp} 70%, var(--apptext))` : series.temp, backgroundColor: hexToRgba(series.temp, 0.1), borderColor: hexToRgba(series.temp, 0.22) }}
-            >
-              °F
-            </span>
-          )}
-        </div>
-      </div>
-      {useHourly && (() => {
-        const dates = [...new Set(filteredData.map((row: any) => row.date).filter(Boolean))].sort();
-        const rangeText = dates.length === 1
-          ? dates[0]
-          : dates.length > 1
-          ? `${dates[0]} — ${dates[dates.length - 1]}`
-          : '';
-        return (
-          <div className="mb-3 rounded-2xl border border-amber-300/30 bg-amber-300/15 px-3 py-2 text-xs text-apptext-muted">
-            ⚡ Showing {filteredData.length} complete data points{rangeText && ` for ${rangeText}`}. Meter updates once daily — today's readings may not be available yet.
-          </div>
-        );
-      })()}
-      <div className="mb-4 flex gap-1.5">
-        {TIME_RANGES.map((r) => (
-          <button
-            key={r.key}
-            onClick={() => setRange(r.key)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-              range === r.key
-                ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-            }`}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-    </>
+  const dailyData = useMemo<Point[]>(
+    () =>
+      Array.from(byDate.entries())
+        .map(([date, kWh]) => {
+          const w = weatherByDate.get(date);
+          return { x: date, kWh: Math.round(kWh * 100) / 100, temp: w?.mean ?? null, highTemp: w?.high ?? null, lowTemp: w?.low ?? null };
+        })
+        .sort((a, b) => a.x.localeCompare(b.x)),
+    [byDate, weatherByDate]
   );
 
-  if (filteredData.length < 2) {
-    return (
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        {header}
-        <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-          Not enough data for {TIME_RANGES.find((r) => r.key === range)?.label ?? 'this range'}. Try a wider filter.
-        </div>
-      </div>
-    );
-  }
+  // Hours from the last eight home days that have both a reading and a temperature.
+  const hourlyData = useMemo<Point[]>(() => {
+    const cutoff = `${daysBefore(homeToday(), 8)}T00:00`;
+    return (weather?.hourly ?? [])
+      .filter((h) => typeof h.time === 'string' && h.time >= cutoff && h.temperature > 0)
+      .map((h) => {
+        const x = h.time.substring(0, 16);
+        return { x, kWh: byHour.get(h.time.substring(0, 13)) ?? null, temp: h.temperature, highTemp: null, lowTemp: null };
+      })
+      .filter((p) => p.kWh != null);
+  }, [weather, byHour]);
+
+  const rangeConfig = TIME_RANGES.find((r) => r.value === range) ?? TIME_RANGES[0];
+  const useHourly = rangeConfig.hourly && hourlyData.length >= 2;
+
+  const shown = useMemo<Point[]>(() => {
+    if (useHourly) return hourlyData.slice(-rangeConfig.points);
+    if (!Number.isFinite(rangeConfig.points)) {
+      // Cap the all-time line with an even stride so it never draws more than 500 segments.
+      const MAX = 500;
+      if (dailyData.length <= MAX) return dailyData;
+      const step = (dailyData.length - 1) / (MAX - 1);
+      return Array.from({ length: MAX }, (_, i) => dailyData[Math.round(i * step)]);
+    }
+    return dailyData.slice(-rangeConfig.points);
+  }, [useHourly, hourlyData, dailyData, rangeConfig]);
+
+  // Explicit ticks: midnights for the multi-day hourly views, every fourth hour for 24 hours,
+  // about six dates for the daily views. Keyed on the unique x, so a missing hour or a part-
+  // posted day can't knock the labels off (B-019).
+  const ticks = useMemo(() => {
+    if (useHourly && range === '24h') return shown.filter((_, i) => i % 4 === 0).map((p) => p.x);
+    if (useHourly) return shown.filter((p) => p.x.endsWith('T00:00')).map((p) => p.x);
+    const every = Math.max(1, Math.ceil(shown.length / 6));
+    return shown.filter((_, i) => i % every === 0).map((p) => p.x);
+  }, [shown, useHourly, range]);
+  const tickFormatter = (x: string) => (useHourly && range === '24h' ? formatHour(x) : formatShortDate(x.slice(0, 10)));
+  const labelFormatter = (x: string) => (useHourly ? formatDateTime(x) : formatDate(x));
+
+  const hasWeather = shown.some((p) => p.temp != null || p.highTemp != null);
+  const kwhTicks = useMemo(() => niceTicks(shown.map((p) => p.kWh), { floorZero: true }), [shown]);
+  const tempTicks = useMemo(
+    () => niceTicks(useHourly ? shown.map((p) => p.temp) : shown.flatMap((p) => [p.highTemp, p.lowTemp]), { pad: 1 }),
+    [shown, useHourly]
+  );
+  const lastDay = shown.length ? shown[shown.length - 1].x.slice(0, 10) : null;
+  const syncId = 'utility-uvt';
+  // preserveStartEnd lets Recharts drop a tick that would collide on a narrow phone.
+  const xAxis = { dataKey: 'x', ...t.axis, ticks, interval: 'preserveStartEnd' as const, minTickGap: 12, tickFormatter };
 
   return (
-    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-      {header}
-
-      {/* Legend: clarifies which line is which and which axis it reads against
-          (solid = usage on the left axis, dashed = temperature on the right). */}
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={series.usage} strokeWidth="2.5" /></svg>
-          Usage (kWh, left)
-        </span>
-        {hasWeather && useHourly && (
-          <span className="inline-flex items-center gap-1.5">
-            <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={series.temp} strokeWidth="2" strokeDasharray="5 3" /></svg>
-            Temp (°F, right)
-          </span>
-        )}
-        {hasWeather && !useHourly && (
-          <>
-            <span className="inline-flex items-center gap-1.5">
-              <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={HIGH_TEMP_COLOR} strokeWidth="2" strokeDasharray="5 3" /></svg>
-              High (°F, right)
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <svg width="18" height="6" aria-hidden="true"><line x1="0" y1="3" x2="18" y2="3" stroke={LOW_TEMP_COLOR} strokeWidth="2" strokeDasharray="5 3" /></svg>
-              Low (°F, right)
-            </span>
-          </>
-        )}
+    <Panel title="Use and temperature" subtitle="Cold nights and hot afternoons drive the bill. Scrub either chart to compare the same moment">
+      <div className="fp-stack">
+        <Chips label="Range" value={range} onChange={setRange} options={TIME_RANGES} />
+        <QueryState
+          query={usage}
+          what="the readings"
+          loading={<SkelBlock height={300} />}
+          empty={
+            <EmptyState icon="bar-chart" title="No electric use yet" compact>
+              Readings sync each evening once CoServ posts the day.
+            </EmptyState>
+          }
+        >
+          {() =>
+            weatherEnabled && weatherLoading ? (
+              <SkelBlock height={300} />
+            ) : shown.length < 2 ? (
+              <EmptyState icon="bar-chart" title={`Not enough readings for ${rangeConfig.label.toLowerCase()}`} compact>
+                Try a longer range.
+              </EmptyState>
+            ) : (
+              <div className="fp-stack fp-stack--m">
+                {weatherError && !hasWeather && (
+                  // The usage still draws; only the temperature is missing (B-090).
+                  <Notice tone="headsup">Temperature is unavailable right now, so this shows use only.</Notice>
+                )}
+                {useHourly && lastDay && (
+                  <Notice tone="neutral">
+                    {formatDate(lastDay)} is the latest day with readings. The meter reports once a day, so today isn&rsquo;t in yet.
+                  </Notice>
+                )}
+                <p className="fp-label">Electricity used</p>
+                <ResponsiveContainer width="100%" height={170} debounce={80}>
+                  <LineChart data={shown} margin={MARGIN} syncId={syncId}>
+                    <CartesianGrid {...t.grid} />
+                    <XAxis {...xAxis} />
+                    <YAxis {...t.axis} width={36} ticks={kwhTicks} domain={kwhTicks ? [kwhTicks[0], kwhTicks[kwhTicks.length - 1]] : undefined} />
+                    <Tooltip
+                      {...t.tooltip}
+                      labelFormatter={labelFormatter}
+                      formatter={(v: number) => [formatNumber(v, { decimals: 2, fixed: true, unit: 'kWh' }), 'Used']}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="kWh"
+                      stroke={t.series.ink}
+                      strokeWidth={useHourly ? 1.5 : 2.5}
+                      dot={shown.length <= 5 ? { fill: t.series.ink, r: 3 } : false}
+                      isAnimationActive={false}
+                      connectNulls
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+                {hasWeather && (
+                  <>
+                    <div className="fp-spread">
+                      <p className="fp-label">Temperature outside</p>
+                      {!useHourly && (
+                        <ChartLegend items={[{ label: 'High', tone: 'heat', key: 'line' }, { label: 'Low', tone: 'cool', key: 'line' }]} />
+                      )}
+                    </div>
+                    <ResponsiveContainer width="100%" height={120} debounce={80}>
+                      <LineChart data={shown} margin={MARGIN} syncId={syncId}>
+                        <CartesianGrid {...t.grid} />
+                        <XAxis {...xAxis} />
+                        <YAxis {...t.axis} width={36} ticks={tempTicks} domain={tempTicks ? [tempTicks[0], tempTicks[tempTicks.length - 1]] : undefined} tickFormatter={(v: number) => formatTemp(v)} />
+                        <Tooltip
+                          {...t.tooltip}
+                          labelFormatter={labelFormatter}
+                          formatter={(v: number, name: string) => [
+                            formatTemp(v),
+                            name === 'highTemp' ? 'High' : name === 'lowTemp' ? 'Low' : 'Outside',
+                          ]}
+                        />
+                        {useHourly ? (
+                          <Line type="monotone" dataKey="temp" stroke={t.series.heat} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
+                        ) : (
+                          <>
+                            <Line type="monotone" dataKey="highTemp" stroke={t.series.heat} strokeWidth={1.75} dot={false} isAnimationActive={false} connectNulls />
+                            <Line type="monotone" dataKey="lowTemp" stroke={t.series.cool} strokeWidth={1.75} dot={false} isAnimationActive={false} connectNulls />
+                          </>
+                        )}
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </>
+                )}
+              </div>
+            )
+          }
+        </QueryState>
       </div>
-
-      <ResponsiveContainer width="100%" height={320} debounce={80}>
-        <LineChart data={filteredData} margin={CHART_MARGIN}>
-          <CartesianGrid strokeDasharray={CARTESIAN_GRID_DASH} stroke={chartTheme.grid} />
-          <XAxis
-            dataKey="label"
-            tick={{ fill: chartTheme.tick, ...TICK_PROPS }}
-            axisLine={{ stroke: chartTheme.grid }}
-            tickLine={TICK_LINE_FALSE}
-            // Daily views auto-thin their date labels to the available width
-            // (interval 0 forced EVERY label to render, which turned the
-            // Monthly/All-Time x-axis into an overlapping smear on mobile).
-            interval={useHourly ? (range === '24h' ? 3 : range === '3d' ? 11 : range === 'week' ? 23 : 0) : 'preserveStartEnd'}
-            minTickGap={useHourly ? undefined : 28}
-            angle={useHourly ? 0 : -35}
-            textAnchor={useHourly ? 'middle' : 'end'}
-            height={useHourly ? 30 : 50}
-          />
-
-          <YAxis yAxisId="left" tick={{ fill: chartTheme.tick, ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit=" kWh" domain={kwhDomain as [number, number]} ticks={kwhTicks} />
-          {hasWeather && <YAxis yAxisId="right" orientation="right" tick={{ fill: series.temp, ...TICK_PROPS }} axisLine={{ stroke: chartTheme.grid }} tickLine={TICK_LINE_FALSE} unit="°" domain={tempDomain as [number, number]} ticks={tempTicks} tickFormatter={(value) => `${Math.round(Number(value))}`} />}
-
-          <Tooltip
-            contentStyle={TOOLTIP_CONTENT_STYLE}
-            formatter={tooltipValueFormatter}
-            labelFormatter={tooltipLabelFormatter}
-            labelStyle={TOOLTIP_LABEL_STYLE}
-          />
-
-          {/* Electric usage — theme accent; tight line for hourly, bolder for daily */}
-          {useHourly ? (
-            <Line yAxisId="left" type="monotone" dataKey="kWh" stroke={series.usage} strokeWidth={1.5} dot={false} isAnimationActive={false} connectNulls />
-          ) : (
-            <Line yAxisId="left" type="monotone" dataKey="kWh" stroke={series.usage} strokeWidth={2.5} dot={showDots ? { fill: series.usage, r: 4 } : false} isAnimationActive={false} connectNulls />
-          )}
-
-          {/* Temperature. Hourly views: single contrasting dashed line (the
-              hourly series IS the temperature curve). Daily views (Monthly /
-              All Time): the day's average is nearly flat at that zoom and
-              shows little, so plot the daily HIGH (red) and LOW (blue) dashed
-              lines instead — the spread carries the real signal. */}
-          {hasWeather && useHourly && (
-            <Line yAxisId="right" type="monotone" dataKey="temp" stroke={series.temp} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls strokeDasharray="8 3" />
-          )}
-          {hasWeather && !useHourly && (
-            <>
-              <Line yAxisId="right" type="monotone" dataKey="highTemp" name="highTemp" stroke={HIGH_TEMP_COLOR} strokeWidth={1.75} dot={showDots ? { fill: HIGH_TEMP_COLOR, r: 3.5 } : false} isAnimationActive={false} connectNulls strokeDasharray="8 3" />
-              <Line yAxisId="right" type="monotone" dataKey="lowTemp" name="lowTemp" stroke={LOW_TEMP_COLOR} strokeWidth={1.75} dot={showDots ? { fill: LOW_TEMP_COLOR, r: 3.5 } : false} isAnimationActive={false} connectNulls strokeDasharray="8 3" />
-            </>
-          )}
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
+    </Panel>
   );
 }
 

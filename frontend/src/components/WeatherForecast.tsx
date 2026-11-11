@@ -1,69 +1,61 @@
-import { useMemo } from 'react';
+import { Icon, cx, knobs } from './ui';
 import type { WeatherHour } from '../types';
-import { getWeatherEmojiForHour } from '../utils/weather';
+import { formatHour, formatPercent, formatTemp } from '../utils/format';
+import { getWeatherCodeDescription, isNightAt, isWet, weatherIcon, type SunPlace } from '../utils/weather';
 
-/** Open-Meteo hourly `time` is naive-local ISO ("YYYY-MM-DDTHH:00"). */
-function nowLocalKey(): string {
-  const n = new Date();
-  const p = (x: number) => String(x).padStart(2, '0');
-  return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}T${p(n.getHours())}:00`;
-}
+/*
+ * Home's "Next hours" strip: six hours on a phone, eight from 640px, twelve from lg. Each
+ * hour shows its time, the sky, the temperature and the chance of rain as a short bar plus
+ * the figure (the figure carries it; the bar is only a glance).
+ *
+ * Every slot is labelled with its own hour (B-071: the first slot used to say "Now" while
+ * showing the forecast for the hour, not the reading above it); the current hour sits in a
+ * well instead.
+ */
 
-/** The next `count` hours from now (inclusive of the current hour). */
-export function nextHours(hourly: WeatherHour[] | undefined, count: number): WeatherHour[] {
-  if (!hourly?.length) return [];
-  const key = nowLocalKey();
-  return hourly.filter((h) => typeof h.time === 'string' && h.time >= key).slice(0, count);
-}
-
-export function hourOf(iso: string): number {
-  const m = iso.match(/T(\d{2}):/);
-  return m ? Number(m[1]) : 0;
-}
-
-export function hourLabel(iso: string): string {
-  const h = hourOf(iso);
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return `${h12} ${ampm}`;
-}
-
-/** "Today"/"Tomorrow" + weekday/date label for a YYYY-MM-DD key. */
-export function dayLabel(dateKey: string): string {
-  const [y, m, d] = dateKey.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.round((date.getTime() - today.getTime()) / 86_400_000);
-  const rel = diffDays === 0 ? 'Today' : diffDays === 1 ? 'Tomorrow' : null;
-  const fmt = date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  return rel ? `${rel} · ${fmt}` : fmt;
-}
-
-// ── Inline strip: next few hours, shown on the Home weather bar ──
-export function ForecastStrip({ hourly }: { hourly: WeatherHour[] | undefined }) {
-  const hours = useMemo(() => nextHours(hourly, 6), [hourly]);
+export function ForecastStrip({ hours, place }: { hours: WeatherHour[]; place?: SunPlace | null }) {
   if (hours.length < 2) return null;
-
   return (
-    <div className="flex items-stretch gap-1.5 sm:gap-2">
-      {hours.map((h, i) => {
-        const emoji = getWeatherEmojiForHour(h.weatherCode, hourOf(h.time));
+    <ol className="grid grid-cols-6 gap-1 sm:grid-cols-8 lg:grid-cols-12" aria-label="Hourly forecast">
+      {hours.slice(0, 12).map((h, i) => {
         const pop = Math.round(h.precipitationProbability);
+        const night = isNightAt(h.time, place);
+        const sky = getWeatherCodeDescription(h.weatherCode);
         return (
-          <div
+          <li
             key={h.time}
-            className="flex min-w-0 flex-1 flex-col items-center gap-1 rounded-2xl border border-appborder bg-appinset px-1.5 py-2.5 sm:px-2"
+            className={cx(
+              'flex min-w-0 flex-col items-center gap-[7px] rounded-well px-0.5 py-2.5',
+              i === 0 && 'bg-appinset shadow-[var(--appwell-shadow)]',
+              i >= 6 && i < 8 && 'hidden sm:flex',
+              i >= 8 && 'hidden lg:flex',
+            )}
+            aria-current={i === 0 ? 'time' : undefined}
           >
-            <span className="text-3xs font-medium text-apptext-muted">{i === 0 ? 'Now' : hourLabel(h.time)}</span>
-            <span className="text-xl leading-none">{emoji}</span>
-            <span className="text-sm font-semibold text-apptext">{Math.round(h.temperature)}°</span>
-            <span className={`text-3xs font-medium tabular-nums ${pop > 0 ? 'text-sky-300' : 'text-apptext-dim'}`}>
-              {pop > 0 ? `${pop}%` : '—'}
+            <span className={cx('whitespace-nowrap font-mono text-3xs', i === 0 ? 'font-medium text-apptext' : 'text-apptext-muted')}>
+              {formatHour(h.time)}
             </span>
-          </div>
+            <Icon
+              name={weatherIcon(h.weatherCode, night)}
+              title={sky}
+              className={cx('text-[24px]', isWet(h.weatherCode) ? 'text-appchart-cool' : 'text-apptext')}
+            />
+            <span className="fp-num fp-num--m">{formatTemp(h.temperature)}</span>
+            <span className="flex w-full flex-col items-center gap-1">
+              <span className="relative block h-1 w-[70%] max-w-10 overflow-hidden rounded-sm bg-appinset" aria-hidden="true">
+                <span
+                  className="absolute inset-y-0 left-0 w-[var(--fp-p)] rounded-sm bg-appchart-cool"
+                  style={knobs({ '--fp-p': `${Math.min(100, Math.max(0, pop))}%` })}
+                />
+              </span>
+              <span className="font-mono text-[11px] text-apptext-muted">
+                <span className="fp-sr-only">Chance of rain </span>
+                {formatPercent(pop)}
+              </span>
+            </span>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }

@@ -1,61 +1,95 @@
 import { memo, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
-import StatTile, { Icons } from '../components/StatTile';
 import TrendOutlookChart from '../components/TrendOutlookChart';
 import MonthlyComparison from '../components/MonthlyComparison';
 import DeferredRender from '../components/DeferredRender';
-import VirtualizedList from '../components/VirtualizedList';
 import UsageSummaryGrid from '../components/UsageSummaryGrid';
+import UsageWeatherChart from '../components/UsageWeatherChart';
+import ForecastChart, { ForecastModelFacts } from '../components/ForecastChart';
+import CoservBillingHistory from '../components/CoservBillingHistory';
 import { fetchBatchSummaries } from '../api/energy';
 import { fetchForecast } from '../api/forecast';
 import { fetchWeatherForRange } from '../api/weather';
-import { useJitteredInterval } from '../hooks/useJitteredInterval';
-import { buildUsagePeriods, createEmptyUsageSummary, dailyTrendSeries, averageCompleteDailyKwh } from '../utils/usageSummary';
-import { isHourlySource } from '../utils/usageSource';
-import UsageWeatherChart from '../components/UsageWeatherChart';
-import ForecastChart from '../components/ForecastChart';
-import { useTheme, CHART_SERIES } from '../context/ThemeContext';
-import CoservBillingHistory from '../components/CoservBillingHistory';
 import { fetchCoservBills } from '../api/coservBills';
-import { localTodayIso } from '../utils/localDate';
-import { parseServerTs } from '../utils/serverTime';
+import { useJitteredInterval } from '../hooks/useJitteredInterval';
+import { usePageMeta } from '../components/shell/PageMeta';
 import {
-  currentBillingCycle,
-  daysBetween,
-  describeBillProjection,
-  formatCycleRange,
-  projectElectricBill,
-} from '../utils/billProjection';
+  buildUsagePeriods,
+  createEmptyUsageSummary,
+  dailyTrendSeries,
+  averageCompleteDailyKwh,
+  COMPLETE_DAY_MIN_HOURS,
+} from '../utils/usageSummary';
+import { isHourlySource } from '../utils/usageSource';
+import { addDays, currentBillingCycle, daysBetween, projectElectricBill, type BillProjection } from '../utils/billProjection';
+import {
+  DASH,
+  formatAbout,
+  formatDate,
+  formatDateRange,
+  formatDateTime,
+  formatDayName,
+  formatMoney,
+  formatNumber,
+  formatShortDate,
+  formatTemp,
+  formatTime,
+  homeToday,
+  plural,
+} from '../utils/format';
+import type { Tone } from '../utils/status';
+import type { EnergyUsage } from '../types';
+import { Badge, Button, Chips, DataTable, Dial, DialCentre, DialLegend, Disclosure, EmptyState, InstrumentPanel, KeyValue, KV, Lamp, Loading, Num, Panel, QueryState, Readout, Readouts, Seg, SegPanel, ShowMore, SkelInstrumentPanel, Split, useSearchParamState, Verdict, type Column } from '../components/ui';
+import { DEFERRED_CHART, meterGated } from './utility/parts';
 
 type LogFilter = 'daily' | 'hourly';
-type ElectricTab = 'usage' | 'forecast';
 
-/** Keep a phrase on one line, so a narrow tile wraps its subtitle at the " · " separators only. */
-const nb = (s: string) => s.replace(/ /g, ' ');
+const TABS = ['usage', 'forecast'] as const;
+const TAB_OPTIONS = [
+  { value: 'usage', label: 'Usage & bills' },
+  { value: 'forecast', label: 'Forecast & stats' },
+] as const;
+const LOG_OPTIONS = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'hourly', label: 'Hourly' },
+] as const;
 
-const ELECTRIC_TABS: { key: ElectricTab; label: string; icon: string }[] = [
-  { key: 'usage', label: 'Usage & Bills', icon: '📊' },
-  { key: 'forecast', label: 'Forecast & Stats', icon: '🔮' },
-];
+/** A projected bill this far over the last one turns the verdict to a heads-up. */
+const HEADSUP_OVER_LAST = 0.15;
+
+const kwh = (n: number | null | undefined, decimals = 1) => formatNumber(n, { decimals, fixed: true });
+
+interface DayTotal {
+  date: string;
+  total: number;
+}
 
 export default memo(function ElectricalUsage() {
-  const { electricUsage, electricTotal, electricMeter, config, electricDaily } = useUsageData();
+  const { meters, electricUsage, electricTotal, electricMeter, config, electricDaily } = useUsageData();
   const [logFilter, setLogFilter] = useState<LogFilter>('daily');
-  const [tab, setTab] = useState<ElectricTab>('usage');
+  // The sub-view is in the URL too (?tab=forecast), like the utility view (B-075).
+  const [tab, setTab] = useSearchParamState('tab', TABS, 'usage');
   const weatherInterval = useJitteredInterval(3_600_000, 60_000);
 
-  // Usage visuals (trend line + monthly bars) follow the theme accent so they
-  // match the palette instead of a hardcoded green (see CHART_SERIES).
-  const { theme, palette } = useTheme();
-  const usageColor = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme].usage;
+  const hasMeter = !!electricMeter;
+  const usageQ = meterGated(meters, hasMeter, electricUsage);
+  const dailyQ = meterGated(meters, hasMeter, electricDaily);
 
-  const data = electricUsage.data ?? [];
-  const loading = electricUsage.isLoading;
-  const monthKwh = electricTotal.data?.totalKwh ?? 0;
-  const kwhRate = config.data?.kwhRate ?? 0.1171;
+  const lastSync = config.data?.lastSyncCheck as string | undefined;
+  const lastReading = config.data?.lastElectricReading as string | undefined;
+  usePageMeta({
+    subtitle: lastSync
+      ? `Checked ${formatTime(lastSync)}`
+      : electricDaily.dataUpdatedAt
+        ? `Updated ${formatTime(electricDaily.dataUpdatedAt)}`
+        : undefined,
+  });
 
-  const today = localTodayIso();
+  const data = useMemo(() => electricUsage.data ?? [], [electricUsage.data]);
+  const kwhRate: number = config.data?.kwhRate ?? 0.1171;
+  const today = homeToday();
+
   const realData = useMemo(
     () =>
       data.filter((d) => {
@@ -66,84 +100,60 @@ export default memo(function ElectricalUsage() {
     [data]
   );
 
-  const timestampMs = (timestamp: string): number => {
-    const ms = new Date(timestamp).getTime();
-    return Number.isNaN(ms) ? 0 : ms;
-  };
-
   // Daily trend line is driven by the server's pre-aggregated per-day totals
   // (a single GROUP BY on the backend), NOT a client-side sum of point-capped
   // hourly rows — the latter downsampled ~1,440 hourly rows to 500 before summing,
   // so each day showed only ~1/3 of its real kWh (see git history / ISSUES).
-  const trendPoints = useMemo(
-    () => dailyTrendSeries(electricDaily.data ?? []),
-    [electricDaily.data]
-  );
+  const trendPoints = useMemo(() => dailyTrendSeries(electricDaily.data ?? []), [electricDaily.data]);
 
-  // ── Daily aggregates from hourly data ──────────────────────────
-  const dailyFromHourly = useMemo(() => {
-    const byDate = new Map<string, number>();
+  // ── Daily totals and hour counts from the hourly rows ──────────
+  const { dailyFromHourly, hourlyCountByDate } = useMemo(() => {
+    const totals = new Map<string, number>();
+    const counts = new Map<string, number>();
     for (const d of realData) {
       if (!isHourlySource(d.source)) continue;
       const date = d.timestamp.slice(0, 10);
-      byDate.set(date, (byDate.get(date) ?? 0) + Number(d.usageKwh));
-    }
-    return Array.from(byDate.entries())
-      .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }))
-      .sort((a, b) => b.date.localeCompare(a.date)); // newest first
-  }, [realData]);
-
-  // ── Hourly record counts per date (single scan, reused by latestDaily + dailyLogData) ──
-  const hourlyCountByDate = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const r of realData) {
-      if (!isHourlySource(r.source)) continue;
-      const date = r.timestamp.slice(0, 10);
+      totals.set(date, (totals.get(date) ?? 0) + Number(d.usageKwh));
       counts.set(date, (counts.get(date) ?? 0) + 1);
     }
-    return counts;
+    const days: DayTotal[] = Array.from(totals.entries())
+      .map(([date, total]) => ({ date, total: Math.round(total * 100) / 100 }))
+      .sort((a, b) => b.date.localeCompare(a.date)); // newest first
+    return { dailyFromHourly: days, hourlyCountByDate: counts };
   }, [realData]);
 
-  // Last reading = most recent day that has 24 complete hourly records
-  const latestDaily = useMemo(() => {
-    for (const d of dailyFromHourly) {
-      if ((hourlyCountByDate.get(d.date) ?? 0) >= 20) return d;
-    }
-    return dailyFromHourly.length > 0 ? dailyFromHourly[0] : null;
-  }, [dailyFromHourly, hourlyCountByDate]);
-
-  // CoServ bills — same query key as the Billing History section below, so the
-  // page fetches them once. They anchor the bill projection's cycle + pricing.
-  const coservBills = useQuery({
-    queryKey: ['coserv-bills'],
-    queryFn: fetchCoservBills,
-    staleTime: 30_000,
-  });
-  const billCycle = useMemo(
-    () => currentBillingCycle(coservBills.data ?? [], today),
-    [coservBills.data, today]
+  // The last reading is the newest COMPLETE day, by the same rule Home and the
+  // averages use (COMPLETE_DAY_MIN_HOURS hourly rows), so the three agree (B-081).
+  const latestDaily = useMemo(
+    () => dailyFromHourly.find((d) => (hourlyCountByDate.get(d.date) ?? 0) >= COMPLETE_DAY_MIN_HOURS) ?? null,
+    [dailyFromHourly, hourlyCountByDate]
   );
 
-  // One forecast fetch serves both the Last Reading tile and the bill
+  // CoServ bills — same query key as the Bills panel, so the page fetches them
+  // once. They anchor the bill projection's cycle + pricing.
+  const coservBills = useQuery({ queryKey: ['coserv-bills'], queryFn: fetchCoservBills, staleTime: 30_000 });
+  const billCycle = useMemo(() => currentBillingCycle(coservBills.data ?? [], today), [coservBills.data, today]);
+
+  // One forecast fetch serves both the last-reading readout and the bill
   // projection: it must reach the end of the billing cycle (the endpoint pads
   // past the weather horizon), and it always carries the trailing 14 days of
   // snapshots (see ForecastController), which cover latestDaily's date. At the
   // usual 14-day horizon this shares one cached request with the trend chart.
   const forecastDays = Math.min(90, Math.max(14, daysBetween(today, billCycle.end)));
-  const { data: latestForecast, isLoading: forecastLoading } = useQuery({
+  const forecastQ = useQuery({
     queryKey: ['forecast', forecastDays],
     queryFn: () => fetchForecast(forecastDays),
     staleTime: 600_000,
     refetchInterval: weatherInterval,
     refetchIntervalInBackground: false,
   });
+  const latestForecast = forecastQ.data;
   const latestPredicted = useMemo(() => {
     if (!latestDaily || latestForecast?.status !== 'ok') return null;
     const snap = latestForecast.snapshots?.find((s) => s.targetDate === latestDaily.date);
     return snap?.predictedKwh ?? null;
   }, [latestDaily, latestForecast]);
 
-  // Predicted electric charge for the current billing cycle (see billProjection).
   const billProjection = useMemo(
     () =>
       projectElectricBill({
@@ -156,35 +166,23 @@ export default memo(function ElectricalUsage() {
       }),
     [today, coservBills.data, electricDaily.data, latestForecast, kwhRate]
   );
-  const billTrendPct = billProjection?.lastBill
-    ? Math.round((Math.abs(billProjection.projectedCost - billProjection.lastBill.charge) / billProjection.lastBill.charge) * 100)
-    : 0;
 
-  // ── 7-day and 30-day averages ──────────────────────────────────
-  // Count only COMPLETE days (>= COMPLETE_DAY_MIN_HOURS hourly rows) from the
-  // server's daily aggregates, so the still-syncing current day and any
-  // under-posted day don't get averaged in as if they were full days.
+  // ── 7-day and 30-day averages (complete days only) ─────────────
+  const hasDaily = electricDaily.data !== undefined;
   const avg7 = useMemo(() => averageCompleteDailyKwh(electricDaily.data ?? [], 7), [electricDaily.data]);
   const avg30 = useMemo(() => averageCompleteDailyKwh(electricDaily.data ?? [], 30), [electricDaily.data]);
 
-  // ── Date periods for summaries ─────────────────────────────────
-  const todayDate = localTodayIso();
+  // ── Periods and weather for the summaries and the log ──────────
   const periodDefinitions = useMemo(
     () => buildUsagePeriods(config.data?.dataStartDate),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [config.data?.dataStartDate, todayDate]
+    [config.data?.dataStartDate, today]
   );
-
-  // ── Weather query ──────────────────────────────────────────────
-  const weatherStart = periodDefinitions.length > 0
-    ? periodDefinitions[periodDefinitions.length - 1].start.slice(0, 10)
-    : '';
-  const weatherEnd = today;
-
+  const weatherStart = periodDefinitions.length > 0 ? periodDefinitions[periodDefinitions.length - 1].start.slice(0, 10) : '';
   const { data: weather } = useQuery({
-    queryKey: ['weather', weatherStart, weatherEnd],
-    queryFn: () => fetchWeatherForRange(weatherStart, weatherEnd),
-    enabled: weatherStart !== '' && weatherEnd !== '',
+    queryKey: ['weather', weatherStart, today],
+    queryFn: () => fetchWeatherForRange(weatherStart, today),
+    enabled: weatherStart !== '',
     staleTime: 3_600_000,
     refetchInterval: weatherInterval,
     refetchIntervalInBackground: false,
@@ -192,34 +190,22 @@ export default memo(function ElectricalUsage() {
 
   const weatherByDate = useMemo(() => {
     const map = new Map<string, { mean: number; high: number; low: number }>();
-    if (weather?.daily) {
-      for (const w of weather.daily) {
-        if (typeof w.date !== 'string' || !w.date) continue;
-        map.set(w.date, {
-          mean: w.meanTemperature,
-          high: w.maxTemperature,
-          low: w.minTemperature,
-        });
-      }
+    for (const w of weather?.daily ?? []) {
+      if (typeof w.date !== 'string' || !w.date) continue;
+      map.set(w.date, { mean: w.meanTemperature, high: w.maxTemperature, low: w.minTemperature });
     }
     return map;
   }, [weather]);
 
   const weatherByHour = useMemo(() => {
     const map = new Map<string, number>();
-    if (weather?.hourly) {
-      for (const h of weather.hourly) {
-        if (h.time && h.time.length >= 13) {
-          map.set(h.time.substring(0, 13), h.temperature);
-        }
-      }
+    for (const h of weather?.hourly ?? []) {
+      if (h.time && h.time.length >= 13) map.set(h.time.substring(0, 13), h.temperature);
     }
     return map;
   }, [weather]);
 
-  // ── Summary query ───────────────────────────────────────────────
-  // One batched HTTP call for all periods instead of N parallel ones —
-  // same data, same shape, fewer round-trips.
+  // One batched HTTP call for all periods instead of N parallel ones.
   const periodsKey = periodDefinitions.map((p) => `${p.start}:${p.end}`).join('|');
   const batchSummary = useQuery({
     queryKey: ['usage-summaries', electricMeter?.id, periodsKey],
@@ -227,414 +213,441 @@ export default memo(function ElectricalUsage() {
       electricMeter
         ? fetchBatchSummaries(electricMeter.id, periodDefinitions.map((p) => ({ start: p.start, end: p.end })))
         : Promise.resolve(periodDefinitions.map((p) => createEmptyUsageSummary(0, p.start, p.end))),
-    enabled: !!electricMeter && periodDefinitions.length > 0,
+    enabled: hasMeter && periodDefinitions.length > 0,
     staleTime: 30_000,
   });
+  const summaryQ = meterGated(meters, hasMeter, batchSummary);
 
   // Memoized — the per-period weather reductions (O(periods × weatherDays))
-  // otherwise re-run on every render (60s usage poll, theme change, daily/hourly
-  // toggle) and hand a fresh array to the un-memoized UsageSummaryGrid.
+  // otherwise re-run on every render (usage poll, theme change, log toggle).
   const summaryCards = useMemo(() => periodDefinitions.map((period, index) => {
-    const s = batchSummary.data?.[index] ??
-      createEmptyUsageSummary(electricMeter?.id ?? 0, period.start, period.end);
+    const s = batchSummary.data?.[index] ?? createEmptyUsageSummary(electricMeter?.id ?? 0, period.start, period.end);
     const periodWx = Array.from(weatherByDate.entries())
       .filter(([date]) => date >= period.start.slice(0, 10) && date <= period.end.slice(0, 10));
     const temps = periodWx.flatMap(([, w]) => [w.high, w.low, w.mean]).filter((t) => t > 0);
-    const wxAvg = temps.length ? Math.round(temps.reduce((s, t) => s + t, 0) / temps.length) : null;
-    const wxHigh = periodWx.length ? Math.round(Math.max(...periodWx.map(([, w]) => w.high))) : null;
-    const wxLow = periodWx.length ? Math.round(Math.min(...periodWx.map(([, w]) => w.low))) : null;
     return {
+      key: period.key,
       label: period.label,
       rangeStart: period.displayStart,
       rangeEnd: period.displayEnd,
       summary: s,
-      wxAvg,
-      wxHigh,
-      wxLow,
+      wxAvg: temps.length ? temps.reduce((sum, t) => sum + t, 0) / temps.length : null,
+      wxHigh: periodWx.length ? Math.max(...periodWx.map(([, w]) => w.high)) : null,
+      wxLow: periodWx.length ? Math.min(...periodWx.map(([, w]) => w.low)) : null,
     };
   }), [periodDefinitions, batchSummary.data, weatherByDate, electricMeter?.id]);
 
-  const summaryLoading = batchSummary.isLoading;
+  // ── Readings log ───────────────────────────────────────────────
+  const dailyLogData = useMemo(
+    () => dailyFromHourly.filter((d) => (hourlyCountByDate.get(d.date) ?? 0) >= COMPLETE_DAY_MIN_HOURS).slice(0, 30),
+    [dailyFromHourly, hourlyCountByDate]
+  );
+  const hourlyLogData = useMemo(
+    () =>
+      realData
+        .filter((d) => isHourlySource(d.source))
+        .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+        .slice(0, 48),
+    [realData]
+  );
 
-  // ── Usage log table ────────────────────────────────────────────
-  // Daily filter: one row per date (sum of hourly), newest first
-  const dailyLogData = useMemo(() => {
-    return dailyFromHourly
-      .filter((d) => (hourlyCountByDate.get(d.date) ?? 0) >= 18)
-      .slice(0, 30);
-  }, [dailyFromHourly, hourlyCountByDate]);
+  // ── The answer ────────────────────────────────────────────────
+  const answerLoading =
+    (coservBills.data === undefined && !coservBills.isError) ||
+    (dailyQ.data === undefined && !dailyQ.isError) ||
+    (latestForecast === undefined && forecastQ.isLoading);
+  const failed = [
+    coservBills.isError && !coservBills.data ? coservBills : null,
+    dailyQ.isError && dailyQ.data === undefined ? dailyQ : null,
+    forecastQ.isError && !forecastQ.data ? forecastQ : null,
+  ].filter((q): q is NonNullable<typeof q> => q != null);
 
-  // Hourly filter: raw records, newest first
-  const hourlyLogData = useMemo(() => {
-    return realData
-      .filter((d) => isHourlySource(d.source))
-      .sort((a, b) => timestampMs(b.timestamp) - timestampMs(a.timestamp))
-      .slice(0, 48);
-  }, [realData]);
-
-  // Hourly color bands: green < 2, yellow 2-4, red 5+
-  const getHourlyLevel = (kwh: number) => {
-    if (kwh >= 5) return { badgeClass: 'border border-rose-300/20 bg-rose-300/10 text-rose-300' };
-    if (kwh >= 2) return { badgeClass: 'border border-amber-300/20 bg-amber-300/10 text-amber-300' };
-    return { badgeClass: 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
-  };
+  const rate = billProjection?.pricing.energyRate ?? kwhRate;
+  const latestIsYesterday = latestDaily != null && formatDayName(latestDaily.date) === 'Yesterday';
+  const vsPredicted =
+    latestDaily && latestPredicted != null && latestPredicted > 0
+      ? (latestDaily.total - latestPredicted) / latestPredicted
+      : null;
 
   return (
-    <div className="space-y-6 sm:space-y-7">
-      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
-              Electric Module
-            </p>
-            <h2 className="mt-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-              Daily electricity usage with quick cost context.
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
-              Compare recent consumption patterns, track short-term averages, and scan the latest readings without leaving the dashboard workflow.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim sm:text-2xs">Rate</p>
-              <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
-                ${kwhRate.toFixed(4)}<span className="text-sm text-apptext-muted">/kWh</span>
-              </p>
-            </div>
-            <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim sm:text-2xs">60-Day Spend</p>
-              <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">
-                ${(monthKwh * kwhRate).toFixed(2)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-appborder bg-appinset p-3 sm:p-4">
-              <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim sm:text-2xs">Active Readings</p>
-              <p className="mt-2 text-base font-semibold text-apptext sm:text-lg">{realData.length}</p>
-            </div>
-            {(config.data?.lastSyncCheck || config.data?.lastElectricReading) && (
-              <div className="rounded-2xl border border-sky-300/30 bg-sky-300/15 p-3 sm:p-4">
-                <p className="text-3xs uppercase tracking-[0.16em] text-apptext-muted sm:text-2xs">Last Updated</p>
-                {config.data?.lastElectricReading && (
-                  <p className="mt-1 text-xs text-apptext-dim">
-                    Data: {parseServerTs(config.data.lastElectricReading).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                  </p>
-                )}
-                {config.data?.lastSyncCheck && (
-                  <p className="text-xs text-apptext-dim">
-                    Checked: {parseServerTs(config.data.lastSyncCheck).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Five tiles in one row from 1440px (90rem — in rem so Tailwind sorts
-          it after the sm/lg breakpoints; a px value is emitted first and loses
-          the cascade). Measured with a real scrollbar, that's where the
-          longest label ("Predicted Bill", 98px) still fits beside its icon;
-          narrower, the two headline tiles share the first row and the three
-          averages the second (6-col grid); phones: pairs, with the last tile
-          spanning the row. */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-6 lg:gap-4 min-[90rem]:grid-cols-5">
-        <StatTile
-          className="sm:col-span-3 min-[90rem]:col-span-1"
-          label="Last Reading"
-          value={latestDaily ? latestDaily.total.toFixed(1) : '—'}
-          unit="kWh"
-          loading={loading}
-          icon={Icons.Bolt}
-          subtitle={latestDaily
-            ? `${nb(new Date(latestDaily.date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }))}${
-                latestPredicted != null ? ` · ${nb(`Predicted ${latestPredicted.toFixed(1)} kWh`)}` : ''
-              }`
-            : undefined}
-          trendLabel="vs predicted"
-          trend={
-            latestDaily && latestPredicted != null && latestPredicted > 0
-              ? {
-                  direction: latestDaily.total > latestPredicted ? 'up' : 'down',
-                  pct: Math.round(Math.abs((latestDaily.total - latestPredicted) / latestPredicted) * 100),
+    <>
+      {answerLoading ? (
+        <Loading label="Loading the bill prediction"><SkelInstrumentPanel readouts={4} /></Loading>
+      ) : (
+        <InstrumentPanel
+          instrument={<CycleDial p={billProjection} />}
+          verdict={<BillVerdict p={billProjection} failed={failed.length > 0} />}
+          readouts={
+            <Readouts>
+              <Readout
+                label={latestIsYesterday ? 'Yesterday' : 'Last full day'}
+                value={latestDaily ? kwh(latestDaily.total) : DASH}
+                unit="kWh"
+                noteIcon={vsPredicted == null ? undefined : vsPredicted >= 0 ? 'arrow-up' : 'arrow-down'}
+                note={
+                  latestDaily
+                    ? [
+                        latestIsYesterday ? null : formatDate(latestDaily.date),
+                        vsPredicted != null
+                          ? `${formatNumber(Math.abs(vsPredicted) * 100)}% ${vsPredicted >= 0 ? 'over' : 'under'} the ${kwh(latestPredicted)} forecast`
+                          : null,
+                      ].filter(Boolean).join(' · ') || undefined
+                    : usageQ.isError ? "Couldn't load the readings" : 'No complete day yet'
                 }
-              : undefined
-          }
-        />
-        <StatTile
-          className="sm:col-span-3 min-[90rem]:col-span-1"
-          label="Predicted Bill"
-          value={billProjection ? `$${Math.round(billProjection.projectedCost)}` : '—'}
-          unit=""
-          loading={loading || coservBills.isLoading || forecastLoading}
-          icon={Icons.Dollar}
-          subtitle={billProjection
-            ? `${nb(formatCycleRange(billProjection.cycle))} · ${nb(
-                billProjection.daysLeft > 0
-                  ? `${billProjection.daysLeft} day${billProjection.daysLeft === 1 ? '' : 's'} left`
-                  : 'bill pending'
-              )}`
-            : undefined}
-          title={billProjection ? describeBillProjection(billProjection) : undefined}
-          trendLabel="vs last bill"
-          trend={
-            billProjection?.lastBill && billTrendPct > 0
-              ? {
-                  direction: billProjection.projectedCost > billProjection.lastBill.charge ? 'up' : 'down',
-                  pct: billTrendPct,
+              />
+              <Readout
+                label="So far"
+                value={billProjection ? formatNumber(billProjection.meteredKwh) : DASH}
+                unit="kWh"
+                note={
+                  billProjection
+                    ? `Since ${formatShortDate(billProjection.cycle.start)}, ${formatAbout(soFarCost(billProjection))}${
+                        billProjection.pricing.method === 'calibrated' ? ' with the fixed charge' : ''
+                      }`
+                    : undefined
                 }
-              : undefined
+              />
+              <Readout
+                label="Daily average"
+                value={hasDaily && avg7 > 0 ? kwh(avg7) : DASH}
+                unit="kWh"
+                note={hasDaily && avg7 > 0 ? `Last 7 days. 30-day average ${kwh(avg30)}` : undefined}
+              />
+              <Readout
+                label="Rate"
+                value={`$${formatNumber(rate, { decimals: 4, fixed: true })}`}
+                unit="/kWh"
+                note={
+                  billProjection?.pricing.method === 'calibrated'
+                    ? `Plus ${formatMoney(billProjection.pricing.fixedCharge)} a month, fixed`
+                    : billProjection?.pricing.method === 'effective-rate'
+                      ? 'Your recent bills’ average, fixed charges included'
+                      : 'Energy only, before fixed charges'
+                }
+              />
+            </Readouts>
           }
-        />
-        <StatTile
-          className="sm:col-span-2 min-[90rem]:col-span-1"
-          label="60-Day Total"
-          value={monthKwh.toFixed(0)}
-          unit="kWh"
-          loading={loading}
-          icon={Icons.Calendar}
-        />
-        <StatTile
-          className="sm:col-span-2 min-[90rem]:col-span-1"
-          label="7-Day Avg"
-          value={avg7.toFixed(1)}
-          unit="kWh/day"
-          loading={loading}
-          icon={Icons.Bolt}
-        />
-        <StatTile
-          className="col-span-2 sm:col-span-2 min-[90rem]:col-span-1"
-          label="30-Day Avg"
-          value={avg30.toFixed(1)}
-          unit="kWh/day"
-          loading={loading}
-          icon={Icons.Bolt}
-        />
-      </section>
-
-      {/* Sub-tabs: keeps the two heaviest chart clusters off-screen until
-          picked, instead of stacking all 8 sections on one scroll — the
-          mobile complaint this addresses. */}
-      <div
-        role="tablist"
-        aria-label="Electric view"
-        className="inline-flex rounded-xl border border-appborder bg-appinset p-1"
-      >
-        {ELECTRIC_TABS.map((t) => {
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-appaccent-soft text-appaccent-text shadow-[0_1px_3px_var(--appshadow)]'
-                  : 'text-apptext-soft hover:text-apptext'
-              }`}
-            >
-              <span aria-hidden="true">{t.icon}</span>
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === 'usage' && (
-        <>
-          <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <DeferredRender minHeight={360}>
-              <TrendOutlookChart
-                dailyPoints={trendPoints}
-                loading={loading}
-                title="Electric usage trend"
-                emptyText="No electric usage data yet — readings sync automatically each evening once your utility posts the day's data."
-              />
-            </DeferredRender>
-            <DeferredRender minHeight={360}>
-              <MonthlyComparison
-                data={realData}
-                loading={loading}
-                title="Monthly electric comparison"
-                description="Hourly readings from the last 60 days, totaled by calendar month; the oldest and current months are partial."
-                emptyText="Not enough electric history for a monthly comparison yet."
-                unitLabel="kWh"
-                barColor={usageColor}
-              />
-            </DeferredRender>
-          </section>
-
-          <CoservBillingHistory service="electric" />
-
-          {/* Usage Log with Daily/Hourly filter */}
-          <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-            <div className="mb-4 flex items-center justify-between gap-4 flex-wrap">
-              <div>
-                <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Usage Log</p>
-                <h3 className="mt-2 text-xl font-semibold text-apptext">Recent electric readings</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                {(['daily', 'hourly'] as LogFilter[]).map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setLogFilter(f)}
-                    className={`rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                      logFilter === f
-                        ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                        : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {/* Legend for the hourly threshold color bands (daily rows are single-color) */}
-            {logFilter === 'hourly' && (
-              <div className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
-                <span className="uppercase tracking-[0.14em] text-apptext-dim">Per hour:</span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-emerald-300" /> Low · under 2 kWh
+          foot={
+            <>
+              <span className="fp-mono">{lastReading ? `Meter data through ${formatDateTime(lastReading)}` : 'No meter data yet'}</span>
+              {lastSync && (
+                <span className="fp-cluster">
+                  <Lamp tone="ok" size="s" />
+                  <span className="fp-mono">Checked {formatTime(lastSync)}</span>
                 </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-amber-300" /> Moderate · 2–4 kWh
-                </span>
-                <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-full bg-rose-300" /> High · 5 kWh and up
-                </span>
-              </div>
-            )}
-            {loading ? (
-              <div className="space-y-2 animate-pulse">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-10 rounded-2xl bg-appinset" />
-                ))}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <div className="text-sm">
-                  {/* Table header: 3 cols on mobile, 5 cols on md+ */}
-                  <div className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] border-b border-appborder pb-2 text-left text-apptext-dim">
-                    <div className="font-medium">Date</div>
-                    <div className="text-right font-medium">kWh</div>
-                    <div className="hidden text-right font-medium md:block">Est. Cost</div>
-                    <div className="hidden text-right font-medium md:block">Temp</div>
-                    <div className="text-right font-medium">Source</div>
-                  </div>
-                  {logFilter === 'daily' ? (
-                    <VirtualizedList
-                      items={dailyLogData}
-                      height={432}
-                      itemHeight={58}
-                      overscan={4}
-                      className="mt-1"
-                      renderItem={(d) => {
-                        const wx = weatherByDate.get(d.date);
-                        const label = new Date(d.date + 'T12:00:00').toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric',
-                        });
-                        return (
-                          <div
-                            key={d.date}
-                            className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
-                          >
-                            <div className="py-3 text-apptext-soft">{label}</div>
-                            <div className="py-3 text-right tabular-nums">
-                              <span className="inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold bg-emerald-300/10 border-emerald-300/20 text-emerald-300">
-                                {d.total.toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
-                              ${(d.total * kwhRate).toFixed(2)}
-                            </div>
-                            <div className="hidden py-3 text-right tabular-nums text-2xs leading-tight text-apptext-muted md:block">
-                              {wx ? (
-                                <span>
-                                  <span className="text-sky-300/70">{Math.round(wx.low)}°</span>{' '}
-                                  <span className="text-amber-300/70">{Math.round(wx.mean)}°</span>{' '}
-                                  <span className="text-rose-300/70">{Math.round(wx.high)}°</span>
-                                </span>
-                              ) : '—'}
-                            </div>
-                            <div className="py-3 text-right text-apptext-dim">coserv</div>
-                          </div>
-                        );
-                      }}
-                    />
-                  ) : (
-                    <VirtualizedList
-                      items={hourlyLogData}
-                      height={432}
-                      itemHeight={58}
-                      overscan={6}
-                      className="mt-1"
-                      renderItem={(d) => {
-                        const level = getHourlyLevel(Number(d.usageKwh));
-                        const temp = weatherByHour.get(d.timestamp.replace(' ', 'T').substring(0, 13));
-                        const parsed = new Date(d.timestamp);
-                        const label = Number.isNaN(parsed.getTime())
-                          ? 'Unknown'
-                          : parsed.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-
-                        return (
-                          <div
-                            key={d.id}
-                            className="grid grid-cols-[1.5fr_1fr_0.8fr] md:grid-cols-[1.5fr_1fr_1fr_1fr_0.8fr] items-center border-b border-appborder-light pr-1 transition-colors hover:bg-appinset"
-                          >
-                            <div className="py-3 text-apptext-soft truncate">{label}</div>
-                            <div className="py-3 text-right tabular-nums">
-                              <span className={`inline-flex items-center justify-end rounded-full border px-2 py-1 text-sm font-semibold ${level.badgeClass}`}>
-                                {Number(d.usageKwh).toFixed(2)}
-                              </span>
-                            </div>
-                            <div className="hidden py-3 text-right tabular-nums text-apptext-soft md:block">
-                              ${(Number(d.usageKwh) * kwhRate).toFixed(2)}
-                            </div>
-                            <div className="hidden py-3 text-right text-2xs text-apptext-muted md:block">
-                              {temp != null ? `${Math.round(temp)}°` : '—'}
-                            </div>
-                            <div className="py-3 text-right text-apptext-dim">
-                              {d.sourceProvider}
-                            </div>
-                          </div>
-                        );
-                      }}
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </section>
-        </>
-      )}
-
-      {tab === 'forecast' && (
-        <>
-          {periodDefinitions.length > 0 && (
-            <DeferredRender minHeight={380}>
-              <UsageWeatherChart
-                usageData={realData}
-                loading={loading}
-                startDate={periodDefinitions[periodDefinitions.length - 1].start}
-                endDate={periodDefinitions[periodDefinitions.length - 1].end}
-              />
-            </DeferredRender>
+              )}
+            </>
+          }
+        >
+          {failed.length > 0 && (
+            <Button size="sm" icon="refresh" onClick={() => failed.forEach((q) => void q.refetch())}>Try again</Button>
           )}
-
-          <DeferredRender minHeight={400}>
-            <ForecastChart />
-          </DeferredRender>
-
-          <UsageSummaryGrid
-            title="Electric highs, lows, and rolling period totals"
-            unitLabel="kWh"
-            summaries={summaryCards}
-            loading={summaryLoading}
-          />
-        </>
+          {billProjection && <BillWorking p={billProjection} />}
+        </InstrumentPanel>
       )}
-    </div>
+
+      <Seg id="utility-electric" label="Electric view" value={tab} onChange={setTab} options={TAB_OPTIONS} />
+      <SegPanel id="utility-electric" value={tab}>
+        {tab === 'usage' ? (
+          <>
+            <Split ratio="wide">
+              <DeferredRender placeholder={DEFERRED_CHART}>
+                <TrendOutlookChart daily={dailyQ} points={trendPoints} />
+              </DeferredRender>
+              <DeferredRender placeholder={DEFERRED_CHART}>
+                <MonthlyComparison usage={usageQ} />
+              </DeferredRender>
+            </Split>
+
+            <CoservBillingHistory service="electric" />
+
+            <Panel
+              title="Readings"
+              subtitle="From the CoServ meter, once a day"
+              action={<Chips label="Readings" value={logFilter} onChange={setLogFilter} options={LOG_OPTIONS} />}
+            >
+              <QueryState query={usageQ} what="the readings" loading={<SkelRowsBlock />}>
+                {() =>
+                  logFilter === 'daily' ? (
+                    <DailyLog rows={dailyLogData} rate={kwhRate} weatherByDate={weatherByDate} />
+                  ) : (
+                    <HourlyLog rows={hourlyLogData} rate={kwhRate} weatherByHour={weatherByHour} />
+                  )
+                }
+              </QueryState>
+            </Panel>
+          </>
+        ) : (
+          <>
+            {periodDefinitions.length > 0 && (
+              <DeferredRender placeholder={DEFERRED_CHART}>
+                <UsageWeatherChart
+                  usage={usageQ}
+                  startDate={periodDefinitions[periodDefinitions.length - 1].start}
+                  endDate={periodDefinitions[periodDefinitions.length - 1].end}
+                />
+              </DeferredRender>
+            )}
+
+            <DeferredRender placeholder={DEFERRED_CHART}>
+              <ForecastChart />
+            </DeferredRender>
+
+            <UsageSummaryGrid unitLabel="kWh" summaries={summaryCards} query={summaryQ} />
+
+            <ForecastModelFacts>
+              <KV label="Hourly readings, last 60 days" value={usageQ.data ? formatNumber(realData.length) : DASH} />
+              <KV label="Use, last 60 days" value={electricTotal.data ? formatNumber(electricTotal.data.totalKwh, { unit: 'kWh' }) : DASH} />
+              <KV
+                label="Energy cost, last 60 days"
+                value={electricTotal.data ? formatMoney(electricTotal.data.totalKwh * kwhRate) : DASH}
+              />
+            </ForecastModelFacts>
+          </>
+        )}
+      </SegPanel>
+    </>
   );
 });
+
+// ─── The billing-cycle dial and its words ───────────────────────────────
+
+/** Metered so far, priced: the fixed charge plus the energy used. */
+function soFarCost(p: BillProjection): number {
+  return p.pricing.fixedCharge + p.pricing.energyRate * p.meteredKwh;
+}
+
+/** The cycle's last day as people read it: the meter read, or a calendar month's last day. */
+function cycleEnd(p: BillProjection): string {
+  return p.cycle.basis === 'calendar-month' ? addDays(p.cycle.end, -1) : p.cycle.end;
+}
+
+/** A round top for the money scale, clear of the bill and the last bill. */
+function moneyScale(...values: number[]): number {
+  const top = Math.max(1, ...values) * 1.25;
+  const step = top > 200 ? 50 : top > 60 ? 25 : 10;
+  return Math.ceil(top / step) * step;
+}
+
+/**
+ * Two rings: the outer one is the cycle's days with a pointer at today; the inner one is the
+ * money, solid for what has been metered and hatched for the forecast, with a tick at the
+ * last bill. Open at the bottom, where the two dates sit.
+ */
+function CycleDial({ p }: { p: BillProjection | null }) {
+  if (!p) {
+    return (
+      <Dial start={-150} sweep={300} rings={[{ r: 98, w: 3, min: 0, max: 30, ticks: 30, major: 5 }, { r: 78, w: 14 }]}>
+        <DialCentre label="Predicted bill" note="Not yet"><Num size="xl" value={DASH} /></DialCentre>
+      </Dial>
+    );
+  }
+  const soFar = soFarCost(p);
+  const last = p.lastBill?.charge;
+  const top = moneyScale(p.projectedCost, last ?? 0);
+  const end = cycleEnd(p);
+  const label =
+    `Day ${p.daysElapsed} of the ${formatDateRange(p.cycle.start, end)} billing cycle. ` +
+    `${formatMoney(soFar, { cents: false })} metered so far, ${formatAbout(p.projectedCost - soFar)} more forecast, ` +
+    `${formatMoney(p.projectedCost, { cents: false })} in all.` +
+    (last != null ? ` Last bill was ${formatMoney(last, { cents: false })}.` : '');
+  return (
+    <>
+      <Dial
+        start={-150}
+        sweep={300}
+        label={label}
+        className="[&_.fp-dial-centre]:pt-[7%]"
+        rings={[
+          {
+            r: 98, w: 3, min: 0, max: p.daysTotal, ticks: p.daysTotal, major: 5,
+            labels: [[0, formatShortDate(p.cycle.start)], [p.daysTotal, formatShortDate(end)]],
+            segments: [{ from: 0, to: p.daysElapsed, tone: 'ink' }],
+            needle: { at: p.daysElapsed },
+          },
+          {
+            r: 78, w: 14, min: 0, max: top, ticks: 15, major: 5, tickSide: 'in',
+            segments: [
+              { from: 0, to: soFar, tone: 'ink' },
+              { from: soFar, to: p.projectedCost, tone: 'graphite', dash: true },
+            ],
+            marks: last != null ? [{ at: last, inset: 2, out: 4 }] : [],
+          },
+        ]}
+      >
+        <DialCentre label="Predicted bill" note={p.daysLeft > 0 ? `${plural(p.daysLeft, 'day')} left` : 'Bill pending'} noteMono>
+          <Num size="xl" value={formatMoney(p.projectedCost, { cents: false })} />
+        </DialCentre>
+      </Dial>
+      <DialLegend
+        items={[
+          { label: 'So far', value: formatMoney(soFar, { cents: false }), tone: 'ink', key: 'box' },
+          { label: 'Forecast', value: formatMoney(p.projectedCost - soFar, { cents: false }), tone: 'graphite', key: 'seg' },
+          ...(last != null ? [{ label: 'Last bill', value: formatMoney(last, { cents: false }), tone: 'ink' as const, key: 'mark' as const }] : []),
+          { label: 'Day', value: `${p.daysElapsed} of ${p.daysTotal}`, tone: 'ink', key: 'line' },
+        ]}
+      />
+    </>
+  );
+}
+
+function BillVerdict({ p, failed }: { p: BillProjection | null; failed: boolean }) {
+  if (!p) {
+    return failed ? (
+      <Verdict tone="problem" note="The home server didn't answer for the bills or the meter readings. Nothing was lost.">
+        Couldn&rsquo;t work out this cycle&rsquo;s bill.
+      </Verdict>
+    ) : (
+      <Verdict tone="info" note="The prediction starts once the meter has posted a day of this billing cycle.">
+        No bill to predict yet.
+      </Verdict>
+    );
+  }
+  const last = p.lastBill?.charge;
+  const change = last ? (p.projectedCost - last) / last : null;
+  const tone: Tone = change != null && change > HEADSUP_OVER_LAST ? 'headsup' : 'ok';
+  const range = formatDateRange(p.cycle.start, cycleEnd(p));
+  const compare =
+    change == null || last == null
+      ? null
+      : Math.round(Math.abs(change) * 100) === 0
+        ? `About the same as the last electric charge of ${formatMoney(last)}`
+        : `That's ${formatNumber(Math.abs(change) * 100)}% ${change > 0 ? 'more' : 'less'} than the last electric charge of ${formatMoney(last)}`;
+  const note =
+    p.daysLeft > 0
+      ? compare
+        ? `${compare}, with ${plural(p.daysLeft, 'day')} to go (${range}).`
+        : `${plural(p.daysLeft, 'day')} to go (${range}).`
+      : `${compare ? `${compare}. ` : ''}The cycle ended ${formatDate(cycleEnd(p))}; its bill usually arrives within a few days.`;
+  return (
+    <Verdict tone={tone} note={note}>
+      {p.daysLeft > 0 ? `Heading for ${formatAbout(p.projectedCost)} this cycle.` : `This cycle's bill should be ${formatAbout(p.projectedCost)}.`}
+    </Verdict>
+  );
+}
+
+/** How the prediction was built, in a disclosure that works by tap and keyboard (B-082). */
+function BillWorking({ p }: { p: BillProjection }) {
+  const usd = (n: number) => formatMoney(n);
+  const pricing =
+    p.pricing.method === 'calibrated'
+      ? 'Priced like your last full bill.'
+      : p.pricing.method === 'effective-rate'
+        ? "Priced at your recent bills' average per kWh, fixed charges included."
+        : "No bill has synced yet, so this is the energy charge alone, before fixed charges.";
+  return (
+    <Disclosure
+      summary={`How the ${formatMoney(p.projectedCost, { cents: false })} is worked out`}
+      openSummary="Hide the working"
+    >
+      <div className="fp-stack fp-stack--s">
+        <KeyValue>
+          <KV label={`Metered so far, from ${formatShortDate(p.cycle.start)}`} value={formatNumber(p.meteredKwh, { unit: 'kWh' })} />
+          <KV
+            label={p.daysLeft > 0 ? `Forecast for the ${plural(p.daysLeft, 'day')} left` : 'Estimated for days not posted yet'}
+            value={formatNumber(p.forecastKwh, { unit: 'kWh' })}
+          />
+          <KV label="Whole cycle" value={formatNumber(p.projectedKwh, { unit: 'kWh' })} />
+          <KV
+            label={`Energy at $${formatNumber(p.pricing.energyRate, { decimals: 4, fixed: true })} a kWh`}
+            value={usd(p.pricing.energyRate * p.projectedKwh)}
+          />
+          {p.pricing.method === 'calibrated' && <KV label="Fixed monthly charge" value={usd(p.pricing.fixedCharge)} />}
+          <KV kind="total" label="Predicted electric charge" value={usd(p.projectedCost)} />
+        </KeyValue>
+        <p className="fp-small fp-muted">{pricing} Gas is billed separately on the same CoServ statement.</p>
+      </div>
+    </Disclosure>
+  );
+}
+
+// ─── The readings log ───────────────────────────────────────────────────
+
+function SkelRowsBlock() {
+  return <div className="fp-stack fp-stack--s"><span className="fp-skel fp-skel-block" style={{ height: 220 }} /></div>;
+}
+
+function DailyLog({ rows, rate, weatherByDate }: {
+  rows: DayTotal[];
+  rate: number;
+  weatherByDate: Map<string, { mean: number; high: number; low: number }>;
+}) {
+  if (!rows.length) {
+    return (
+      <EmptyState icon="list" title="No full days of readings yet" compact>
+        A day shows here the morning after, once CoServ has posted all of it.
+      </EmptyState>
+    );
+  }
+  const columns: Column<DayTotal>[] = [
+    { key: 'day', header: 'Day', kind: 'title', cell: (d) => formatDate(d.date) },
+    { key: 'used', header: 'Used', kind: 'key', num: true, strong: true, cell: (d) => <>{kwh(d.total, 2)} <span className="fp-unit">kWh</span></> },
+    { key: 'cost', header: 'Cost', num: true, cell: (d) => formatMoney(d.total * rate) },
+    {
+      key: 'temp',
+      header: 'Low / avg / high',
+      num: true,
+      cell: (d) => {
+        const wx = weatherByDate.get(d.date);
+        return <span className="fp-mono">{wx ? `${formatTemp(wx.low)} / ${formatTemp(wx.mean)} / ${formatTemp(wx.high)}` : DASH}</span>;
+      },
+    },
+  ];
+  return (
+    <ShowMore
+      items={rows}
+      first={7}
+      noun="days"
+      render={(part) => <DataTable rowKey={(d) => d.date} rows={part} columns={columns} caption="Daily readings" />}
+    />
+  );
+}
+
+/** Per-hour levels: under 2 kWh low, 2 to under 5 moderate, 5 and up high (B-087). */
+function hourLevel(kwhUsed: number): { tone: Tone; word: string } {
+  if (kwhUsed >= 5) return { tone: 'problem', word: 'High' };
+  if (kwhUsed >= 2) return { tone: 'headsup', word: 'Moderate' };
+  return { tone: 'neutral', word: 'Low' };
+}
+
+function HourlyLog({ rows, rate, weatherByHour }: { rows: EnergyUsage[]; rate: number; weatherByHour: Map<string, number> }) {
+  if (!rows.length) {
+    return (
+      <EmptyState icon="list" title="No hourly readings yet" compact>
+        Hours show here the morning after, once CoServ posts the day.
+      </EmptyState>
+    );
+  }
+  const columns: Column<EnergyUsage>[] = [
+    { key: 'hour', header: 'Hour', kind: 'title', cell: (d) => formatDateTime(d.timestamp.replace(' ', 'T')) },
+    { key: 'used', header: 'Used', kind: 'key', num: true, strong: true, cell: (d) => <>{kwh(Number(d.usageKwh), 2)} <span className="fp-unit">kWh</span></> },
+    {
+      key: 'level',
+      header: 'Level',
+      cell: (d) => {
+        const l = hourLevel(Number(d.usageKwh));
+        return <Badge tone={l.tone}>{l.word}</Badge>;
+      },
+    },
+    { key: 'cost', header: 'Cost', num: true, cell: (d) => formatMoney(Number(d.usageKwh) * rate) },
+    {
+      key: 'outside',
+      header: 'Outside',
+      num: true,
+      cell: (d) => <span className="fp-mono">{formatTemp(weatherByHour.get(d.timestamp.replace(' ', 'T').substring(0, 13)))}</span>,
+    },
+  ];
+  return (
+    <div className="fp-stack fp-stack--m">
+      <p className="fp-small fp-muted fp-cluster">
+        <Badge>Low</Badge> under 2 kWh <Badge tone="headsup">Moderate</Badge> 2 to under 5 <Badge tone="problem">High</Badge> 5 and up
+      </p>
+      <ShowMore
+        items={rows}
+        first={8}
+        noun="hours"
+        render={(part) => <DataTable rowKey={(d) => d.id} rows={part} columns={columns} caption="Hourly readings" />}
+      />
+    </div>
+  );
+}

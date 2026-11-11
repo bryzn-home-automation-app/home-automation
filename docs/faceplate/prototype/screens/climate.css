@@ -1,0 +1,60 @@
+/* Climate — only the thermostat faceplate: the floor temperatures on the subject keys, the dial with its setpoint
+   keys side by side underneath, the draft / nudge states while a change is on its way, and a settled dial. */
+.screen[data-route="climate"] .clim-keyval {
+  margin-left: 8px; font-weight: 500; font-stretch: var(--stretch-num); font-variant-numeric: tabular-nums;
+}
+
+/* the 270° gauge leaves its bottom corner empty: tuck the setpoint keys up into it */
+.screen[data-route="climate"] .clim-dial { margin-bottom: calc(min(100%, var(--dial-max)) * -0.13); }
+
+/* setpoint keys: label over a − value + key, two side by side (one, centred, in Heat or Cool) */
+.screen[data-route="climate"] .clim-sets {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; width: 100%; max-width: 360px;
+}
+.screen[data-route="climate"] .clim-set {
+  flex: 1 1 0; min-width: 0; max-width: 176px; display: flex; flex-direction: column; align-items: center; gap: 8px;
+  border-radius: calc(var(--r-key) + 3px);
+}
+.screen[data-route="climate"] .clim-set[hidden] { display: none; }
+.screen[data-route="climate"] .clim-set .stepper { width: 100%; justify-content: space-between; }
+.screen[data-route="climate"] .clim-set .stepper-value { min-width: 0; flex: 1; }
+.screen[data-route="climate"] .clim-set.is-nudged .stepper { animation: clim-nudge 600ms var(--ease); }
+@keyframes clim-nudge { 0%, 60% { box-shadow: var(--well-shadow), 0 0 0 2px var(--ink); } 100% { box-shadow: var(--well-shadow); } }
+.screen[data-route="climate"] .stepper-value.is-draft { text-decoration: underline dotted 2px; text-underline-offset: 5px; text-decoration-color: var(--graphite); }
+.screen[data-route="climate"] .clim-off {
+  flex-basis: 100%; padding: 14px 12px; border-radius: var(--r-well); background: var(--well); box-shadow: var(--well-shadow);
+  font-size: var(--t-small); color: var(--graphite); text-align: center;
+}
+.screen[data-route="climate"] .clim-status { flex-basis: 100%; min-height: 18px; text-align: center; text-wrap: balance; }
+.screen[data-route="climate"] .clim-armed { box-shadow: inset 0 0 0 1.5px var(--text-problem); color: var(--text-problem); }
+
+/* a dial redrawn after a change keeps still: only the first view of the page sweeps */
+.screen[data-route="climate"] .clim-dial.is-settled .dl-needle-g,
+.screen[data-route="climate"] .clim-dial.is-settled .dl-sweep { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .screen[data-route="climate"] .clim-set.is-nudged .stepper { animation: none; }
+}
+
+/* today's schedule as a 24-hour strip under the comfort keys: the running comfort is ink, a hold is outlined */
+.screen[data-route="climate"] .clim-day { display: flex; flex-direction: column; gap: 6px; padding-top: 2px; }
+.screen[data-route="climate"] .clim-day-track {
+  position: relative; height: 32px; border-radius: var(--r-well); background: var(--well); box-shadow: var(--well-shadow);
+}
+.screen[data-route="climate"] .clim-day-seg {
+  position: absolute; top: 3px; bottom: 3px; left: calc(var(--from) / 24 * 100% + 1px); width: calc((var(--to) - var(--from)) / 24 * 100% - 2px);
+  display: flex; align-items: center; justify-content: center; overflow: hidden; border-radius: 5px;
+  font-size: 10.5px; font-weight: 600; font-stretch: var(--stretch-label); text-transform: uppercase; letter-spacing: .08em;
+  color: var(--graphite); white-space: nowrap;
+}
+.screen[data-route="climate"] .clim-day-seg[hidden] { display: none; }
+.screen[data-route="climate"] .clim-day-seg.is-on { background: var(--ink); color: var(--on-ink); }
+.screen[data-route="climate"] .clim-day-seg.is-hold { background: var(--panel); color: var(--ink); box-shadow: inset 0 0 0 1.5px var(--ink); }
+.screen[data-route="climate"] .clim-day-now {
+  position: absolute; top: -5px; bottom: -5px; left: calc(var(--at) / 24 * 100%); width: 2px; margin-left: -1px;
+  border-radius: 1px; background: var(--ink); box-shadow: 0 0 0 2px var(--panel);
+}
+.screen[data-route="climate"] .clim-day-ticks { position: relative; height: 14px; font-family: var(--mono); font-size: 11px; color: var(--graphite); }
+.screen[data-route="climate"] .clim-day-ticks > span { position: absolute; top: 0; left: calc(var(--at) / 24 * 100%); transform: translateX(-50%); white-space: nowrap; }
+.screen[data-route="climate"] .clim-day-ticks > span:first-child { transform: none; }
+.screen[data-route="climate"] .clim-day-ticks > span:last-child { transform: translateX(-100%); }
+.screen[data-route="climate"] .clim-day-ticks > span:nth-child(4) { color: var(--ink); font-weight: 500; }

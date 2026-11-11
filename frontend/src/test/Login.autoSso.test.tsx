@@ -75,4 +75,26 @@ describe('Login page: straight to Sign in with Home', () => {
     expect(screen.getByRole('status')).toHaveTextContent("You’re signed out.");
     expect(screen.getByText('Sign in with Home')).toBeInTheDocument();
   });
+
+  it("doesn't jump to home SSO while the server isn't answering, and says so (B-014)", async () => {
+    (authApi.oidcConfig as any).mockRejectedValueOnce(new Error('502'));
+    await renderLogin();
+    expect(authApi.startHomeSso).not.toHaveBeenCalled();
+    expect(screen.getByText('Can’t reach the home server right now.')).toBeInTheDocument();
+    expect(screen.getByText('Sign in with Home')).toHaveAttribute('href', '/api/auth/oidc/start');
+  });
+
+  it('remembers the page to return to across the SSO round trip (B-058)', async () => {
+    const { default: Login } = await import('../pages/Login');
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={[{ pathname: '/login', state: { from: { pathname: '/cameras', search: '', hash: '' } } }]}>
+          <Login />
+        </MemoryRouter>
+      </AuthProvider>
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(authApi.startHomeSso).toHaveBeenCalledTimes(1);
+    expect(sessionStorage.getItem('sso_return_to')).toBe('/cameras');
+  });
 });

@@ -1,157 +1,176 @@
-import { useMemo, useEffect, Fragment } from 'react';
+import { Fragment, useMemo } from 'react';
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid,
+  ResponsiveContainer, AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
 import type { WeatherHour, WeatherCurrent } from '../types';
-import { getWeatherEmojiForHour, getWeatherCodeDescription } from '../utils/weather';
-import { nextHours, hourOf, hourLabel, dayLabel } from './WeatherForecast';
-import { useScrollLock } from '../hooks/useScrollLock';
+import { Dialog, Icon, cx, useChartTheme } from './ui';
+import {
+  formatDate, formatDateTime, formatDayName, formatHour, formatNumber, formatPercent, formatTemp, homeDayKey,
+} from '../utils/format';
+import {
+  getWeatherCodeDescription, isNightAt, isWet, nextHours, weatherIcon, type SunPlace,
+} from '../utils/weather';
 
-// The 24-hour forecast modal, split from WeatherForecast so recharts (~110 KB gz)
-// loads only when someone opens it, not with the Home page's forecast strip.
+// The 24-hour forecast dialog, split from Home so recharts (~110 KB gz) loads only when
+// someone opens it. The kit Dialog gives it focus, Escape, the back gesture, the scroll lock
+// and an opaque panel (B-043, B-008); the page renders it only while it is open.
 
-// ── Full 24-hour forecast modal ──
-const CHART_MARGIN = { top: 8, right: 12, left: -8, bottom: 0 } as const;
+const CHART_MARGIN = { top: 6, right: 8, left: 0, bottom: 0 } as const;
+const COLS = 'grid grid-cols-[52px_28px_minmax(0,1fr)_52px_60px] items-center gap-2 sm:grid-cols-[60px_32px_minmax(0,1fr)_72px_72px_64px]';
+
+/** "Tomorrow · Tue, Nov 10": a relative name alone doesn't say which day it is. */
+function dayHeading(day: string): string {
+  const name = formatDayName(day);
+  const date = formatDate(day);
+  return name === date ? date : `${name} · ${date}`;
+}
+
+/** Every 4th hour gets a tick label; the rest stay blank so a phone axis doesn't crowd. */
+function tickEvery4(time: string, i: number): string {
+  return i % 4 === 0 ? formatHour(time) : '';
+}
 
 export default function ForecastModal({
   hourly,
   current,
+  place,
   onClose,
 }: {
   hourly: WeatherHour[] | undefined;
   current: WeatherCurrent | null;
+  place?: SunPlace | null;
   onClose: () => void;
 }) {
-  useScrollLock(true);
+  const t = useChartTheme();
   const hours = useMemo(() => nextHours(hourly, 24), [hourly]);
 
   const chartData = useMemo(
     () => hours.map((h) => ({
-      label: hourLabel(h.time),
+      time: h.time,
       temp: Math.round(h.temperature),
       pop: Math.round(h.precipitationProbability),
     })),
     [hours],
   );
+  // Fit the axis to the day's range, on whole 5° steps (B-062: from 0° the curve was a flat line).
+  const tempAxis = useMemo(() => {
+    if (!chartData.length) return { domain: [0, 100] as [number, number], ticks: [0, 50, 100] };
+    const temps = chartData.map((d) => d.temp);
+    const lo = Math.floor((Math.min(...temps) - 2) / 5) * 5;
+    const hi = Math.ceil((Math.max(...temps) + 2) / 5) * 5;
+    const mid = Math.round((lo + hi) / 2 / 5) * 5;
+    return { domain: [lo, hi] as [number, number], ticks: mid > lo && mid < hi ? [lo, mid, hi] : [lo, hi] };
+  }, [chartData]);
+  const totalRain = useMemo(() => hours.reduce((s, h) => s + (h.precipitation > 0 ? h.precipitation : 0), 0), [hours]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const subtitle = current
+    ? `Now ${formatTemp(current.temperature)}, feels like ${formatTemp(current.apparentTemperature)}, ${getWeatherCodeDescription(current.weatherCode).toLowerCase()}.${
+      totalRain >= 0.01 ? ` About ${formatNumber(totalRain, { decimals: 2, unit: 'in' })} of rain in the next 24 hours.` : ''}`
+    : undefined;
 
   return (
-    // NOTE: no backdrop-blur here. On a large desktop viewport the blur has to
-    // recomposite the entire (tall, gradient-heavy) page behind it on every
-    // scroll frame, which made scrolling the hourly list janky. A solid-ish
-    // dark overlay is effectively free. Also a single flex-column layout with
-    // ONE inner scroll region (the list) instead of nested scroll containers.
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 modal-overlay"
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      aria-label="24-hour weather forecast"
-    >
-      <div
-        className="flex max-h-[92vh] w-full max-w-2xl flex-col rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_24px_60px_var(--appshadow-lg)] sm:p-6"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="mb-4 flex shrink-0 items-start justify-between gap-4">
-          <div>
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Forecast</p>
-            <h3 className="mt-1 text-xl font-semibold text-apptext">Next 24 hours</h3>
-            {current && (
-              <p className="mt-1 text-sm text-apptext-soft">
-                Now {Math.round(current.temperature)}° · feels {Math.round(current.apparentTemperature)}° ·
-                {' '}{getWeatherCodeDescription(current.weatherCode)}
-              </p>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-appborder bg-appinset text-apptext-muted transition-colors hover:border-appborder-hover hover:text-apptext"
-          >
-            ✕
-          </button>
-        </div>
+    <Dialog open onClose={onClose} eyebrow="Forecast" title="Next 24 hours" subtitle={subtitle}>
+      {hours.length === 0 ? (
+        <p className="text-apptext-muted">The hourly forecast hasn't come in yet. It refreshes every hour.</p>
+      ) : (
+        <div className="flex flex-col gap-6">
+          {chartData.length >= 2 && (
+            <figure>
+              <figcaption className="fp-label mb-2">Temperature</figcaption>
+              <ResponsiveContainer width="100%" height={132} debounce={80}>
+                <AreaChart data={chartData} margin={CHART_MARGIN} syncId="home-forecast">
+                  <CartesianGrid {...t.grid} />
+                  <XAxis dataKey="time" {...t.axis} tickFormatter={tickEvery4} interval={0} />
+                  <YAxis {...t.axis} width={44} unit="°" domain={tempAxis.domain} ticks={tempAxis.ticks} />
+                  <Tooltip
+                    {...t.tooltip}
+                    labelFormatter={(v) => formatDateTime(String(v))}
+                    formatter={(v: number) => [formatTemp(v), 'Temperature']}
+                  />
+                  <Area type="monotone" dataKey="temp" stroke={t.series.ink} strokeWidth={2} fill={t.series.band} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </figure>
+          )}
+          {chartData.length >= 2 && (
+            <figure>
+              <figcaption className="fp-label mb-2">Chance of rain</figcaption>
+              <ResponsiveContainer width="100%" height={72} debounce={80}>
+                <BarChart data={chartData} margin={CHART_MARGIN} syncId="home-forecast">
+                  <CartesianGrid {...t.grid} />
+                  <XAxis dataKey="time" {...t.axis} tickFormatter={tickEvery4} interval={0} hide />
+                  <YAxis {...t.axis} width={44} unit="%" domain={[0, 100]} ticks={[0, 50, 100]} />
+                  <Tooltip
+                    {...t.tooltip}
+                    cursor={t.barCursor}
+                    labelFormatter={(v) => formatDateTime(String(v))}
+                    formatter={(v: number) => [formatPercent(v), 'Chance of rain']}
+                  />
+                  <Bar dataKey="pop" fill={t.series.cool} radius={[2, 2, 0, 0]} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </figure>
+          )}
 
-        {/* Temperature curve */}
-        {chartData.length >= 2 && (
-          <div className="mb-5 shrink-0 rounded-2xl border border-appborder bg-appinset p-3">
-            <p className="mb-2 text-3xs font-bold uppercase tracking-[0.14em] text-apptext-soft">Temperature (°F)</p>
-            <ResponsiveContainer width="100%" height={140} debounce={80}>
-              <AreaChart data={chartData} margin={CHART_MARGIN}>
-                <defs>
-                  <linearGradient id="tempFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--appaccent)" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="var(--appaccent)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--appchart-grid)" />
-                <XAxis dataKey="label" tick={{ fill: 'var(--appchart-tick)', fontSize: 10 }} interval={3} axisLine={{ stroke: 'var(--appchart-grid)' }} tickLine={false} />
-                <YAxis tick={{ fill: 'var(--appchart-tick)', fontSize: 10 }} width={32} axisLine={{ stroke: 'var(--appchart-grid)' }} tickLine={false} unit="°" />
-                <Tooltip
-                  contentStyle={{ backgroundColor: 'var(--appchart-bg)', border: '1px solid var(--appchart-border)', borderRadius: '14px', fontSize: '12px', color: 'var(--apptext)' }}
-                  formatter={(v: number, name: string) => name === 'temp' ? [`${v}°F`, 'Temp'] : [`${v}%`, 'Precip']}
-                  labelStyle={{ color: 'var(--apptext-muted)', marginBottom: 2 }}
-                />
-                <Area type="monotone" dataKey="temp" stroke="var(--appaccent)" strokeWidth={2.5} fill="url(#tempFill)" isAnimationActive={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-
-        {/* Hourly detail list — the single scroll region */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pr-1">
-          {/* Header row */}
-          <div className="mb-1 grid grid-cols-[3.5rem_2rem_1fr_auto] items-center gap-2 px-2 pb-1 text-3xs font-bold uppercase tracking-[0.12em] text-apptext-soft sm:grid-cols-[4rem_2.5rem_1fr_4rem_4rem_4rem]">
-            <span>Time</span>
-            <span></span>
-            <span>Temp</span>
-            <span className="hidden text-right sm:block">Precip</span>
-            <span className="text-right">Rain</span>
-            <span className="hidden text-right sm:block">Wind</span>
-          </div>
-          <div className="space-y-1">
+          {/* Hour by hour. On a phone the chance of rain stays and the amount sits beside it
+              (B-015: the phone used to show only the amount, "—" all evening). Wind joins from 640px. */}
+          <div role="table" aria-label="Hour by hour" className="-mx-1 flex flex-col tabular-nums">
+            <div role="row" className={cx(COLS, 'min-h-[30px] border-b border-appborder-strong px-1')}>
+              <span role="columnheader" className="fp-label">Time</span>
+              <span role="columnheader"><span className="fp-sr-only">Sky</span></span>
+              <span role="columnheader" className="fp-label">Temp</span>
+              <span role="columnheader" className="fp-label text-right">Chance</span>
+              <span role="columnheader" className="fp-label text-right">Rain</span>
+              <span role="columnheader" className="fp-label hidden text-right sm:block">Wind</span>
+            </div>
             {hours.map((h, i) => {
-              const emoji = getWeatherEmojiForHour(h.weatherCode, hourOf(h.time));
-              const pop = Math.round(h.precipitationProbability);
-              const dateKey = h.time.slice(0, 10);
-              const newDay = i > 0 && dateKey !== hours[i - 1].time.slice(0, 10);
+              const day = homeDayKey(h.time) ?? '';
+              const newDay = i > 0 && day !== homeDayKey(hours[i - 1].time);
+              const wet = isWet(h.weatherCode);
               return (
                 <Fragment key={h.time}>
-                {newDay && (
-                  <div className="flex items-center gap-2 px-1 pt-2.5 pb-0.5">
-                    <span className="h-px flex-1 bg-appborder" />
-                    <span className="text-3xs font-bold uppercase tracking-[0.14em] text-apptext-muted">{dayLabel(dateKey)}</span>
-                    <span className="h-px flex-1 bg-appborder" />
+                  {newDay && (
+                    <div role="row" className="border-b border-appborder-strong px-1 pb-1.5 pt-4">
+                      <span role="cell" className="fp-label">{dayHeading(day)}</span>
+                    </div>
+                  )}
+                  <div
+                    role="row"
+                    className={cx(
+                      COLS,
+                      'min-h-10 px-1 text-[14px]',
+                      i === 0 ? 'rounded-well bg-appinset' : 'border-b border-appborder',
+                    )}
+                    aria-current={i === 0 ? 'time' : undefined}
+                  >
+                    <span role="cell" className={cx('font-mono text-2xs', i === 0 ? 'font-medium text-apptext' : 'text-apptext-muted')}>
+                      {formatHour(h.time)}
+                    </span>
+                    <span role="cell">
+                      <Icon
+                        name={weatherIcon(h.weatherCode, isNightAt(h.time, place))}
+                        title={getWeatherCodeDescription(h.weatherCode)}
+                        className={cx('text-[20px]', wet && 'text-appchart-cool')}
+                      />
+                    </span>
+                    <span role="cell" className="min-w-0 truncate">
+                      <b className="font-semibold">{formatTemp(h.temperature)}</b>{' '}
+                      <span className="text-[12.5px] text-apptext-muted">feels {formatTemp(h.apparentTemperature)}</span>
+                    </span>
+                    <span role="cell" className="whitespace-nowrap text-right">{formatPercent(h.precipitationProbability)}</span>
+                    <span role="cell" className={cx('whitespace-nowrap text-right', h.precipitation > 0 ? 'text-apptext' : 'text-apptext-muted')}>
+                      {h.precipitation > 0 ? formatNumber(h.precipitation, { decimals: 2, fixed: true, unit: 'in' }) : '—'}
+                    </span>
+                    <span role="cell" className="hidden whitespace-nowrap text-right sm:block">
+                      {formatNumber(h.windSpeed, { unit: 'mph' })}
+                    </span>
                   </div>
-                )}
-                <div
-                  className="grid grid-cols-[3.5rem_2rem_1fr_auto] items-center gap-2 rounded-xl border border-appborder-light bg-appinset px-2 py-2 text-sm sm:grid-cols-[4rem_2.5rem_1fr_4rem_4rem_4rem]"
-                >
-                  <span className="text-xs font-medium text-apptext-soft">{i === 0 ? 'Now' : hourLabel(h.time)}</span>
-                  <span className="text-lg leading-none" title={getWeatherCodeDescription(h.weatherCode)}>{emoji}</span>
-                  <span className="font-semibold text-apptext">
-                    {Math.round(h.temperature)}°
-                    <span className="ml-1 text-xs font-normal text-apptext-muted">feels {Math.round(h.apparentTemperature)}°</span>
-                  </span>
-                  <span className={`hidden text-right text-xs font-medium tabular-nums sm:block ${pop > 0 ? 'text-sky-300' : 'text-apptext-dim'}`}>{pop}%</span>
-                  <span className="text-right text-xs tabular-nums text-apptext-soft">
-                    {h.precipitation > 0 ? `${h.precipitation.toFixed(2)}"` : '—'}
-                  </span>
-                  <span className="hidden text-right text-xs tabular-nums text-apptext-soft sm:block">{Math.round(h.windSpeed)} mph</span>
-                </div>
                 </Fragment>
               );
             })}
           </div>
         </div>
-      </div>
-    </div>
+      )}
+    </Dialog>
   );
 }

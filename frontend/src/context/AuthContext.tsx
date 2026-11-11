@@ -13,10 +13,22 @@ import { fetchMe, heartbeat as sendHeartbeat } from '../api/auth';
 import api, { setUnauthorizedHandler } from '../api/client';
 import { queryClient } from '../queryClient';
 
+/**
+ * Whether the start-up session check got an answer. 'unreachable': a token is stored but the
+ * server didn't answer /auth/me (network down, a 502 mid-deploy, a timeout). The person is still
+ * signed in; ProtectedRoute shows "Can't reach the home server" and the check retries (B-014).
+ */
+export type SessionCheck = 'ok' | 'unreachable';
+
 interface AuthContextValue {
   user: LoginResponse | null;
   token: string | null;
   isLoading: boolean;
+  sessionCheck: SessionCheck;
+  /** A retry of the session check is in flight (for the Try again key). */
+  retryingSession: boolean;
+  /** Ask the server again now (Try again). */
+  retrySession: () => void;
   isAdmin: boolean;
   isUser: boolean;
   isGuest: boolean;
@@ -29,6 +41,9 @@ const AuthContext = createContext<AuthContextValue>({
   user: null,
   token: null,
   isLoading: true,
+  sessionCheck: 'ok',
+  retryingSession: false,
+  retrySession: () => {},
   isAdmin: false,
   isUser: false,
   isGuest: false,
@@ -44,6 +59,11 @@ const TOKEN_KEY = 'auth_token';
  */
 export const SIGNED_OUT_KEY = 'signed_out';
 
+/** The pause (ms) before the next automatic retry while the server can't be reached: 2 s, 4, 8, 16, then every 30 s. */
+export function sessionRetryDelay(failures: number): number {
+  return Math.min(30_000, 2_000 * 2 ** Math.max(0, failures - 1));
+}
+
 function readStoredToken(): string | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -57,7 +77,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<LoginResponse | null>(null);
   const [token, setToken] = useState<string | null>(readStoredToken);
   const [isLoading, setIsLoading] = useState(!!readStoredToken());
+  const [sessionCheck, setSessionCheck] = useState<SessionCheck>('ok');
+  const [failures, setFailures] = useState(0);
+  const [retryingSession, setRetryingSession] = useState(false);
   const loggedInViaForm = useRef(false);
+  const checking = useRef(false);
 
   // Set up axios interceptor for the token — always keep it current
   useEffect(() => {
@@ -88,38 +112,88 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       loggedInViaForm.current = false;
       setToken(null);
       setUser(null);
+      setSessionCheck('ok');
+      setFailures(0);
     });
     return () => setUnauthorizedHandler(null);
   }, []);
 
-  // On mount: validate stored token
+  /**
+   * Ask the server who the stored token belongs to. Only a rejected token (401/403) ends the
+   * session. Anything else (no network, a 502 while the backend restarts, a timeout) keeps the
+   * token and marks the check 'unreachable', so a signed-in person is never sent to the sign-in
+   * page (or on to SSO and nginx's bare 502) by a hiccup (B-014).
+   */
+  const checkSession = useCallback(async () => {
+    const stored = readStoredToken();
+    if (!stored) {
+      setSessionCheck('ok');
+      setFailures(0);
+      setIsLoading(false);
+      setRetryingSession(false);
+      return;
+    }
+    if (checking.current) return;
+    checking.current = true;
+    try {
+      const u = await fetchMe();
+      // A sign-out or a new sign-in while the request was out wins.
+      if (readStoredToken() !== stored) return;
+      setUser(u);
+      setSessionCheck('ok');
+      setFailures(0);
+    } catch (err) {
+      if (readStoredToken() !== stored) return;
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        try { localStorage.removeItem(TOKEN_KEY); } catch { /* */ }
+        setToken(null);
+        setUser(null);
+        setSessionCheck('ok');
+        setFailures(0);
+        return;
+      }
+      setSessionCheck('unreachable');
+      setFailures((n) => n + 1);
+    } finally {
+      checking.current = false;
+      setIsLoading(false);
+      setRetryingSession(false);
+    }
+  }, []);
+
+  // On mount: validate the stored token.
   useEffect(() => {
     const stored = readStoredToken();
     if (!stored) {
       setIsLoading(false);
       return;
     }
-
-    // Set token in state from storage
     setToken(stored);
+    void checkSession();
+  }, [checkSession]); // only on mount (checkSession is stable)
 
-    fetchMe()
-      .then((u) => {
-        setUser(u);
-      })
-      .catch((err) => {
-        // Only a rejected token ends the session; a 502 mid-deploy or flaky network must not.
-        const status = (err as { response?: { status?: number } })?.response?.status;
-        if (status !== 401 && status !== 403) {
-          setUser(null);
-          return;
-        }
-        try { localStorage.removeItem(TOKEN_KEY); } catch { /* */ }
-        setToken(null);
-        setUser(null);
-      })
-      .finally(() => setIsLoading(false));
-  }, []); // only on mount
+  // While the server can't be reached: retry with a growing pause, and at once when the device
+  // comes back online or the app comes back to the front.
+  useEffect(() => {
+    if (sessionCheck !== 'unreachable' || !token) return;
+    const timer = window.setTimeout(() => void checkSession(), sessionRetryDelay(failures));
+    const again = () => {
+      if (document.visibilityState === 'visible') void checkSession();
+    };
+    window.addEventListener('online', again);
+    document.addEventListener('visibilitychange', again);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('online', again);
+      document.removeEventListener('visibilitychange', again);
+    };
+  }, [sessionCheck, token, failures, checkSession]);
+
+  const retrySession = useCallback(() => {
+    setRetryingSession(true);
+    void checkSession();
+  }, [checkSession]);
 
   // Heartbeat every 60 seconds when logged in
   useEffect(() => {
@@ -142,6 +216,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(newToken);
     setUser(newUser);
     setIsLoading(false);
+    setSessionCheck('ok');
+    setFailures(0);
   }, []);
 
   const logout = useCallback(() => {
@@ -149,6 +225,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     queryClient.clear();
     setToken(null);
     setUser(null);
+    setSessionCheck('ok');
+    setFailures(0);
     try {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.setItem(SIGNED_OUT_KEY, '1');
@@ -171,6 +249,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       user,
       token,
       isLoading,
+      sessionCheck,
+      retryingSession,
+      retrySession,
       isAdmin: user?.role === 'ADMIN',
       isUser: user?.role === 'USER',
       isGuest: user?.role === 'GUEST',
@@ -178,7 +259,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout,
       refreshUser,
     }),
-    [user, token, isLoading, login, logout, refreshUser],
+    [user, token, isLoading, sessionCheck, retryingSession, retrySession, login, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

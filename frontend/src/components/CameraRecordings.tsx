@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { fetchCameraRecordings, fetchRecordingThumbnail, fetchRecordingVideo } from '../api/cameras';
 import { errorMessage, errorStatus } from '../api/climate';
-import { FOCUS_RING } from './ThermostatControls';
-import { useBackToClose } from '../hooks/useBackToClose';
-import { useScrollLock } from '../hooks/useScrollLock';
 import {
   RECORDING_DAY_STEPS,
   canPlayHevc,
@@ -13,10 +9,41 @@ import {
   formatDuration,
   groupByDay,
   recordingFileName,
+  type RecordingDay,
 } from '../utils/recordings';
+import { formatDate, formatDateTime } from '../utils/format';
+import {
+  Button,
+  Chips,
+  Dialog,
+  Disclosure,
+  EmptyState,
+  ErrorState,
+  Icon,
+  List,
+  Panel,
+  QueryState,
+  Row,
+  SkelRows,
+  buttonClass,
+} from './ui';
 import type { CameraRecording } from '../types';
 
-/** True once the element has scrolled into view (and stays true), so stills load as you scroll. */
+/**
+ * The element whose scrolling brings a node into view: below lg the page scrolls inside the
+ * shell's [data-page-scroller] box, not the window (B-116: observed against the window, every
+ * thumbnail on a phone only started loading once it was already on screen).
+ */
+export function scrollRoot(node: Element): Element | null {
+  const box = node.closest('[data-page-scroller]');
+  if (box instanceof HTMLElement && typeof getComputedStyle === 'function') {
+    const y = getComputedStyle(box).overflowY;
+    if (y === 'auto' || y === 'scroll') return box;
+  }
+  return null;
+}
+
+/** True once the element has scrolled near the view (and stays true), so stills load just ahead of the scroll. */
 function useSeen(ref: React.RefObject<Element | null>): boolean {
   const [seen, setSeen] = useState(false);
   useEffect(() => {
@@ -27,6 +54,7 @@ function useSeen(ref: React.RefObject<Element | null>): boolean {
       return;
     }
     const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setSeen(true), {
+      root: scrollRoot(node),
       rootMargin: '200px',
     });
     io.observe(node);
@@ -36,7 +64,7 @@ function useSeen(ref: React.RefObject<Element | null>): boolean {
 }
 
 function Thumbnail({ rec }: { rec: CameraRecording }) {
-  const ref = useRef<HTMLDivElement | null>(null);
+  const ref = useRef<HTMLSpanElement | null>(null);
   const seen = useSeen(ref);
   const { data } = useQuery({
     queryKey: ['recording-thumb', rec.id],
@@ -51,24 +79,21 @@ function Thumbnail({ rec }: { rec: CameraRecording }) {
     if (url) URL.revokeObjectURL(url);
   }, [url]);
   return (
-    <div ref={ref} className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-xl bg-appinset sm:w-36">
-      {url ? (
-        <img src={url} alt="" className="h-full w-full object-cover" />
-      ) : (
-        <div className="flex h-full items-center justify-center text-lg text-apptext-muted" aria-hidden>
-          ▶
-        </div>
-      )}
+    <span
+      ref={ref}
+      className="relative grid aspect-video w-[104px] flex-none place-items-center overflow-hidden rounded-tag bg-appmedia-bg text-appmedia-ink lg:w-32"
+    >
+      {url ? <img src={url} alt="" className="absolute inset-0 h-full w-full object-cover" /> : <Icon name="play" />}
       {rec.durationMs != null && (
-        <span className="absolute bottom-1 right-1 rounded bg-black/60 px-1 text-2xs font-semibold tabular-nums text-white">
+        <span className="absolute bottom-1 right-1 rounded-[4px] bg-[var(--appmedia-scrim)] px-1.5 font-mono text-[11px] leading-[1.4] tabular-nums">
           {formatDuration(rec.durationMs)}
         </span>
       )}
-    </div>
+    </span>
   );
 }
 
-/** Full-screen player. Fetches the MP4 (with the session) and plays it from a local blob. */
+/** The player: fetches the MP4 (with the session) and plays it from a local blob, in the kit Dialog (full screen on a phone). */
 function Player({
   rec,
   onClose,
@@ -85,8 +110,6 @@ function Player({
   const [url, setUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  useBackToClose(onClose);
-  useScrollLock(true);
 
   useEffect(() => {
     setUrl(null);
@@ -107,15 +130,19 @@ function Player({
     };
   }, [rec.id, attempt]);
 
+  // ← / → step between clips, except while the video (or another control) has the keys:
+  // there an arrow seeks inside the clip (B-118). Escape is the Dialog's.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowLeft' && hasOlder) onStep('older');
+      if (e.defaultPrevented) return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('video, input, textarea, select, [role="slider"]')) return;
+      if (e.key === 'ArrowLeft' && hasOlder) onStep('older');
       else if (e.key === 'ArrowRight' && hasNewer) onStep('newer');
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, onStep, hasNewer, hasOlder]);
+  }, [onStep, hasNewer, hasOlder]);
 
   const onVideoError = () => {
     setError(
@@ -125,105 +152,89 @@ function Player({
     );
   };
 
-  const when = new Date(rec.startedAt).toLocaleString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-  const stepButton = (dir: 'newer' | 'older', enabled: boolean, label: string, text: string) => (
-    <button
-      type="button"
-      onClick={() => onStep(dir)}
-      disabled={!enabled}
-      aria-label={label}
-      className={`h-10 rounded-xl px-3 text-sm font-semibold text-apptext-soft transition-colors hover:bg-appinset disabled:opacity-30 ${FOCUS_RING}`}
-    >
-      {text}
-    </button>
-  );
-
-  // On a phone the player fills the screen, so its bars clear the notch and the home
-  // indicator (the Home Screen app draws under the status bar). Older/newer sit in the
-  // bottom bar, away from the close button, so neither is mistaken for "back".
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${rec.cameraName} recording`}
-      onClick={onClose}
-    >
-      <div
-        className="flex h-full w-full flex-col overflow-hidden border-appborder bg-appsurface sm:h-auto sm:max-w-5xl sm:rounded-[24px] sm:border"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between gap-2 border-b border-appborder px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-3">
-          <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold text-apptext">{rec.cameraName}</h3>
-            <p className="text-xs text-apptext-muted">{when}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className={`h-11 w-11 shrink-0 rounded-full text-2xl text-apptext-soft transition-colors hover:bg-appinset ${FOCUS_RING}`}
-          >
-            ×
-          </button>
-        </div>
-        <div className="flex flex-1 items-center justify-center bg-black sm:aspect-video sm:flex-none">
-          {error ? (
-            <div className="max-w-sm p-6 text-center text-sm text-white/80" role="alert">
-              <p>{error}</p>
-              <button
-                type="button"
-                onClick={() => setAttempt((n) => n + 1)}
-                className={`mt-4 h-10 rounded-xl border border-white/30 px-4 text-sm font-semibold text-white hover:bg-white/10 ${FOCUS_RING}`}
-              >
-                Try again
-              </button>
-            </div>
-          ) : url ? (
-            <video
-              key={url}
-              src={url}
-              controls
-              autoPlay
-              playsInline
-              onError={onVideoError}
-              className="max-h-full w-full"
-            />
-          ) : (
-            <p className="p-6 text-sm text-white/70" role="status">
-              Getting the recording from the HomeBase…
-            </p>
-          )}
-        </div>
-        <div className="flex items-center justify-between gap-2 border-t border-appborder px-2 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] sm:pb-2">
-          {stepButton('older', hasOlder, 'Older recording', '‹ Older')}
-          {url && (
-            <a
-              href={url}
-              download={recordingFileName(rec)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium text-appaccent-text transition-colors hover:bg-appinset ${FOCUS_RING}`}
-            >
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      eyebrow="Recording"
+      title={rec.cameraName}
+      subtitle={formatDateTime(rec.startedAt)}
+      size="wide"
+      fullOnPhone
+      wellBody
+      bodyClassName="max-sm:flex max-sm:flex-col max-sm:justify-center"
+      footerSplit
+      footer={
+        <>
+          <Button variant="quiet" icon="chevron-left" onClick={() => onStep('older')} disabled={!hasOlder} aria-label="Older recording">
+            Older
+          </Button>
+          {url ? (
+            <a href={url} download={recordingFileName(rec)} className={buttonClass({ variant: 'quiet', size: 'sm' })}>
+              <Icon name="download" />
               Download
             </a>
+          ) : (
+            <span />
           )}
-          {stepButton('newer', hasNewer, 'Newer recording', 'Newer ›')}
-        </div>
+          <Button variant="quiet" iconEnd="chevron-right" onClick={() => onStep('newer')} disabled={!hasNewer} aria-label="Newer recording">
+            Newer
+          </Button>
+        </>
+      }
+    >
+      <div className="fp-media-frame grid place-items-center">
+        {error ? (
+          <div className="flex max-w-sm flex-col items-center gap-3 p-6 text-center text-small" role="alert">
+            <p>{error}</p>
+            <Button size="sm" icon="refresh" onClick={() => setAttempt((n) => n + 1)}>
+              Try again
+            </Button>
+          </div>
+        ) : url ? (
+          <video key={url} src={url} controls autoPlay playsInline onError={onVideoError} className="absolute inset-0 h-full w-full" />
+        ) : (
+          <p className="p-6 text-small" role="status">
+            Getting the recording from the HomeBase…
+          </p>
+        )}
       </div>
-    </div>,
-    document.body,
+    </Dialog>
   );
 }
 
+/** One day: its head (the day, its date, how many clips) and its clips in two columns from lg. */
+function Day({ day, onOpen }: { day: RecordingDay; onOpen: (id: string) => void }) {
+  const first = day.items[0];
+  const date = first ? formatDate(first.startedAt) : '';
+  return (
+    <section className="flex flex-col gap-1" aria-label={day.label}>
+      <h3 className="fp-tl-day">
+        <span className="fp-label">{day.label}</span>
+        {date !== day.label && <span className="fp-mono">{date}</span>}
+        <span className="fp-mono ml-auto">{day.items.length === 1 ? '1 clip' : `${day.items.length} clips`}</span>
+      </h3>
+      <List cols>
+        {day.items.map((r) => (
+          <Row
+            key={r.id}
+            onClick={() => onOpen(r.id)}
+            lead={<Thumbnail rec={r} />}
+            title={<span className="tabular-nums">{formatClock(r.startedAt)}</span>}
+            meta={r.cameraName}
+          />
+        ))}
+      </List>
+    </section>
+  );
+}
+
+/** Days shown before "Show more days" (the rest sit behind a disclosure, not a scroll box). */
+const DAYS_SHOWN = 2;
+
 export default function CameraRecordings() {
   const [step, setStep] = useState(0);
-  const [cameraFilter, setCameraFilter] = useState<string | null>(null);
+  const [cameraFilter, setCameraFilter] = useState<string>('all');
   const [openId, setOpenId] = useState<string | null>(null);
   const days = RECORDING_DAY_STEPS[step];
 
@@ -236,13 +247,29 @@ export default function CameraRecordings() {
     placeholderData: (prev) => prev,
     retry: (count, err) => errorStatus(err) !== 503 && count < 1,
   });
+  // The reach the list actually covers (B-115): while "Show older" loads, the last list stays
+  // up and still means 7 days, not 14.
+  const loadedDays = useRef<number>(days);
+  if (query.data !== undefined && !query.isPlaceholderData) loadedDays.current = days;
+  const coveredDays = loadedDays.current;
+  // Only a "Show older" load counts, not the minute's background refresh (B-113).
+  const loadingOlder = query.isFetching && query.isPlaceholderData;
+
   const all = useMemo(() => query.data ?? [], [query.data]);
   const cameras = useMemo(() => {
-    const seen = new Map<string, string>();
-    for (const r of all) if (!seen.has(r.cameraId)) seen.set(r.cameraId, r.cameraName);
-    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+    const seen = new Map<string, { name: string; count: number }>();
+    for (const r of all) {
+      const c = seen.get(r.cameraId);
+      if (c) c.count++;
+      else seen.set(r.cameraId, { name: r.cameraName, count: 1 });
+    }
+    return [...seen.entries()].sort((a, b) => a[1].name.localeCompare(b[1].name));
   }, [all]);
-  const shown = useMemo(() => (cameraFilter ? all.filter((r) => r.cameraId === cameraFilter) : all), [all, cameraFilter]);
+  // B-114: a camera whose last clip aged out takes its filter with it.
+  useEffect(() => {
+    if (cameraFilter !== 'all' && query.data !== undefined && !cameras.some(([id]) => id === cameraFilter)) setCameraFilter('all');
+  }, [cameras, cameraFilter, query.data]);
+  const shown = useMemo(() => (cameraFilter !== 'all' ? all.filter((r) => r.cameraId === cameraFilter) : all), [all, cameraFilter]);
   const groups = useMemo(() => groupByDay(shown), [shown]);
 
   const openIndex = openId ? shown.findIndex((r) => r.id === openId) : -1;
@@ -256,113 +283,88 @@ export default function CameraRecordings() {
     [shown, openIndex],
   );
 
-  if (query.isLoading) {
-    return (
-      <div className="flex flex-col gap-2" aria-busy="true">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-20 animate-pulse rounded-2xl bg-appinset" />
-        ))}
-      </div>
-    );
-  }
+  const filterName = cameras.find(([id]) => id === cameraFilter)?.[1].name;
+  const more = groups.slice(DAYS_SHOWN);
+  const moreClips = more.reduce((n, g) => n + g.items.length, 0);
 
-  if (query.isError && !query.data) {
-    return (
-      <div className="rounded-[24px] border border-dashed border-appborder bg-appsurface-raised p-8 text-center">
-        <h3 className="text-lg font-semibold text-apptext">Couldn't load recordings</h3>
-        <p className="mt-2 text-sm text-apptext-muted">{errorMessage(query.error)}</p>
-        <button
-          type="button"
-          onClick={() => query.refetch()}
-          disabled={query.isFetching}
-          className={`mt-4 h-11 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 text-sm font-semibold text-apptext transition-colors hover:bg-appaccent/20 disabled:opacity-50 ${FOCUS_RING}`}
-        >
-          {query.isFetching ? 'Retrying…' : 'Retry'}
-        </button>
-      </div>
-    );
-  }
-
-  const chip = (id: string | null, label: string) => (
-    <button
-      key={id ?? 'all'}
-      type="button"
-      onClick={() => setCameraFilter(id)}
-      aria-pressed={cameraFilter === id}
-      className={`h-9 rounded-full border px-3 text-xs font-semibold transition-colors ${FOCUS_RING} ${
-        cameraFilter === id
-          ? 'border-appaccent-border bg-appaccent-soft text-apptext'
-          : 'border-appborder bg-appinset text-apptext-soft hover:border-appborder-hover hover:text-apptext'
-      }`}
-    >
-      {label}
-    </button>
-  );
+  const olderKey =
+    step < RECORDING_DAY_STEPS.length - 1 ? (
+      <Button size="sm" icon="history" onClick={() => setStep((s) => s + 1)} busy={loadingOlder} busyLabel="Loading…">
+        Show {RECORDING_DAY_STEPS[step + 1]} days
+      </Button>
+    ) : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Camera">
-        {chip(null, 'All cameras')}
-        {cameras.map(([id, name]) => chip(id, name))}
-        <span className="ml-auto text-2xs text-apptext-muted">
-          {shown.length} in the last {days} days
-        </span>
-      </div>
-
-      {groups.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-appborder p-8 text-center text-sm text-apptext-muted">
-          No recordings in the last {days} days.
-        </p>
-      ) : (
-        groups.map((g) => (
-          <section key={g.key} aria-label={g.label}>
-            <h3 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-apptext-muted">
-              {g.label} <span className="font-normal normal-case">· {g.items.length}</span>
-            </h3>
-            <ul className="flex flex-col gap-2">
-              {g.items.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenId(r.id)}
-                    className={`flex w-full items-center gap-3 rounded-2xl border border-appborder bg-appsurface-raised p-2 text-left transition-colors hover:border-appborder-hover ${FOCUS_RING}`}
+    <Panel
+      title="Recordings"
+      subtitle={
+        query.data === undefined
+          ? 'Newest first'
+          : `${shown.length === 1 ? '1 clip' : `${shown.length} clips`} in the last ${coveredDays} days, newest first`
+      }
+    >
+      <QueryState
+        query={query}
+        what="the recordings"
+        loading={<SkelRows count={4} />}
+        isEmpty={() => false}
+        error={
+          <ErrorState title="Couldn't load the recordings" onRetry={() => void query.refetch()} retrying={query.isFetching}>
+            {errorMessage(query.error)}
+          </ErrorState>
+        }
+      >
+        {() => (
+          <div className="fp-stack fp-stack--l">
+            {cameras.length > 0 && (
+              <Chips
+                label="Camera"
+                value={cameraFilter}
+                onChange={setCameraFilter}
+                options={[
+                  { value: 'all', label: 'All cameras', count: all.length },
+                  ...cameras.map(([id, c]) => ({ value: id, label: c.name, count: c.count })),
+                ]}
+              />
+            )}
+            {groups.length === 0 ? (
+              <EmptyState compact icon="video" title={`No recordings in the last ${coveredDays} days.`} action={olderKey}>
+                Clips appear here a minute after a camera records motion or a person.
+              </EmptyState>
+            ) : (
+              <>
+                {groups.slice(0, DAYS_SHOWN).map((g) => (
+                  <Day key={g.key} day={g} onOpen={setOpenId} />
+                ))}
+                {more.length > 0 && (
+                  <Disclosure
+                    variant="row"
+                    summary={`Show ${more.length === 1 ? '1 more day' : `${more.length} more days`} (${moreClips === 1 ? '1 clip' : `${moreClips} clips`})`}
+                    openSummary="Show fewer days"
                   >
-                    <Thumbnail rec={r} />
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold tabular-nums text-apptext">{formatClock(r.startedAt)}</p>
-                      <p className="truncate text-xs text-apptext-muted">
-                        {r.cameraName}
-                        {r.durationMs != null && ` · ${formatDuration(r.durationMs)}`}
-                      </p>
+                    <div className="fp-stack fp-stack--l pt-4">
+                      {more.map((g) => (
+                        <Day key={g.key} day={g} onOpen={setOpenId} />
+                      ))}
                     </div>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ))
-      )}
-
-      {step < RECORDING_DAY_STEPS.length - 1 && (
-        <button
-          type="button"
-          onClick={() => setStep((s) => s + 1)}
-          disabled={query.isFetching}
-          className={`h-11 self-center rounded-xl border border-appborder px-4 text-sm font-semibold text-apptext-soft transition-colors hover:text-apptext disabled:opacity-50 ${FOCUS_RING}`}
-        >
-          {query.isFetching ? 'Loading…' : `Show older (last ${RECORDING_DAY_STEPS[step + 1]} days)`}
-        </button>
-      )}
-
-      {open && (
-        <Player
-          rec={open}
-          onClose={close}
-          onStep={stepTo}
-          hasNewer={openIndex > 0}
-          hasOlder={openIndex < shown.length - 1}
-        />
-      )}
-    </div>
+                  </Disclosure>
+                )}
+                {olderKey && (
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <span className="fp-mono text-apptext-muted">
+                      That’s the last {coveredDays} days{filterName ? ` for ${filterName}` : ''}
+                    </span>
+                    {olderKey}
+                  </div>
+                )}
+              </>
+            )}
+            {open && (
+              <Player rec={open} onClose={close} onStep={stepTo} hasNewer={openIndex > 0} hasOlder={openIndex < shown.length - 1} />
+            )}
+          </div>
+        )}
+      </QueryState>
+    </Panel>
   );
 }

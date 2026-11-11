@@ -26,7 +26,12 @@ describe('push support', () => {
 describe('PushSettings', () => {
   it('on the plain http address, points to the secure one', async () => {
     const { default: PushSettings, SECURE_APP_URL } = await import('../components/PushSettings');
-    render(<PushSettings />); // jsdom is not a secure context
+    const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PushSettings />
+      </QueryClientProvider>,
+    ); // jsdom is not a secure context
     expect(screen.getByText('Phone alerts')).toBeInTheDocument();
     expect(screen.getByRole('link').getAttribute('href')).toBe(SECURE_APP_URL);
   });

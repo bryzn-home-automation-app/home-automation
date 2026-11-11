@@ -1,200 +1,186 @@
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 
 /**
- * PageSkeleton — shape-matched placeholder pages shown while a lazy chunk
- * is downloading. The visual language matches the existing loading states
- * in `StatTile.tsx` and the chart cards (e.g. `MonthlyComparison.tsx`):
- * rounded-[20-28px] cards, `bg-appinset` placeholder blocks, `animate-pulse`,
- * `border-appborder` / `bg-appsurface-raised` surfaces.
+ * PageSkeleton: the placeholder shown while a page's code downloads, drawn with
+ * the kit's fp-skel pieces in the shape of the page to come.
+ *
+ * Inside the shell (the default) it is only the page body: no screen-tall slab,
+ * no padding of its own, no second title. The shell already draws the header, and
+ * a full page squeezed under it used to flash a flat block and a fake title before
+ * every first visit (B-051). The public pages (sign-in, guest welcome), which have
+ * no shell, pass `fullPage` and get the enamel page around it.
  */
 
 export type PageSkeletonVariant =
+  /** An instrument panel (dial + verdict + readouts), then a chart panel. */
   | 'stats-charts'
+  /** One panel of rows. */
   | 'list'
+  /** A stack of setting panels (Profile). */
+  | 'cards'
+  /** A sign-in style card of fields. */
   | 'form'
+  /** A welcome plate with cards under it (guest pages). */
   | 'hero'
+  /** One short panel. */
   | 'default';
 
 interface PageSkeletonProps {
   variant: PageSkeletonVariant;
+  /** Outside the shell: paint the page background and centre the shape. */
+  fullPage?: boolean;
 }
 
-/** A small bar that renders as a placeholder line. */
-function SkeletonBar({
-  className = '',
-}: {
-  className?: string;
-}) {
+function Lines({ widths }: { widths: Array<'s' | 'm' | 'l'> }) {
   return (
-    <div
-      className={`animate-pulse rounded bg-appinset ${className}`}
-      aria-hidden
-    />
-  );
-}
-
-/** A "page header" — title block + small subtitle line. */
-function PageHeaderSkeleton() {
-  return (
-    <div className="mb-6">
-      <SkeletonBar className="h-7 w-48 sm:h-8" />
-      <SkeletonBar className="mt-3 h-4 w-72" />
+    <div className="fp-stack fp-stack--s">
+      {widths.map((w, i) => (
+        <span key={i} className={`fp-skel fp-skel-line${w === 'l' ? '' : ` fp-skel-line--${w}`}`} />
+      ))}
     </div>
   );
 }
 
-function StatsChartsSkeleton() {
+function Readouts({ n }: { n: number }) {
   return (
-    <div className="min-h-screen bg-appbg text-apptext">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <PageHeaderSkeleton />
-
-        {/* 4 stat-tile grid — mirrors `StatTile` loading layout (icon + label + value + subtitle). */}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="animate-pulse rounded-[20px] border border-appborder bg-appsurface-raised p-4 sm:rounded-[24px] sm:p-5"
-            >
-              <div className="mb-4 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-appinset sm:h-11 sm:w-11 sm:rounded-2xl" />
-                <div className="h-4 w-24 rounded bg-appinset" />
-              </div>
-              <div className="mb-2 h-8 w-28 rounded bg-appinset" />
-              <div className="h-3 w-16 rounded bg-appinset" />
-            </div>
-          ))}
+    <div className="fp-readouts">
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="fp-skel-readout">
+          <span className="fp-skel fp-skel-line fp-skel-line--s" />
+          <span className="fp-skel fp-skel-num" />
         </div>
-
-        {/* Chart panel — mirrors a chart card's loading state. */}
-        <div className="mt-6 animate-pulse rounded-[28px] border border-appborder bg-appsurface-raised p-5">
-          <div className="mb-4 h-5 w-40 rounded bg-appinset" />
-          <div className="h-72 rounded-2xl bg-appinset" />
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
 
-function ListSkeleton() {
+function Rows({ n }: { n: number }) {
   return (
-    <div className="min-h-screen bg-appbg text-apptext">
-      <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <PageHeaderSkeleton />
-
-        {/* 6 row placeholders — mimics a list/table card. */}
-        <div className="animate-pulse rounded-[24px] border border-appborder bg-appsurface-raised p-2 sm:p-3">
-          {[0, 1, 2, 3, 4, 5].map((i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 border-b border-appborder px-3 py-3 last:border-b-0"
-            >
-              <div className="h-9 w-9 shrink-0 rounded-xl bg-appinset" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3.5 w-2/3 rounded bg-appinset" />
-                <div className="h-3 w-1/3 rounded bg-appinset" />
-              </div>
-              <div className="h-6 w-16 rounded-full bg-appinset" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FormSkeleton() {
-  return (
-    <div className="min-h-screen bg-appbg text-apptext">
-      <div className="mx-auto flex min-h-screen max-w-md items-center justify-center px-4 py-12">
-        <div className="w-full animate-pulse rounded-[28px] border border-appborder bg-appsurface-raised p-6 shadow-[0_10px_30px_var(--appshadow)] sm:p-8">
-          {/* Card title */}
-          <div className="mx-auto mb-6 h-6 w-40 rounded bg-appinset" />
-          <div className="mx-auto mb-8 h-3 w-56 rounded bg-appinset" />
-
-          {/* 2 stacked input fields */}
-          <div className="space-y-4">
-            <div>
-              <div className="mb-2 h-3 w-20 rounded bg-appinset" />
-              <div className="h-11 w-full rounded-xl bg-appinset" />
-            </div>
-            <div>
-              <div className="mb-2 h-3 w-24 rounded bg-appinset" />
-              <div className="h-11 w-full rounded-xl bg-appinset" />
-            </div>
-          </div>
-
-          {/* Submit button */}
-          <div className="mt-6 h-11 w-full rounded-xl bg-appinset" />
-
-          {/* Footer link */}
-          <div className="mx-auto mt-6 h-3 w-44 rounded bg-appinset" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function HeroSkeleton() {
-  return (
-    <div className="min-h-screen bg-appbg text-apptext">
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6 lg:px-8">
-        {/* Hero banner */}
-        <div className="animate-pulse rounded-[28px] border border-appborder bg-appsurface-raised p-8 sm:p-12">
-          <div className="mx-auto max-w-2xl space-y-5 text-center">
-            <div className="mx-auto h-12 w-12 rounded-2xl bg-appinset" />
-            <div className="mx-auto h-8 w-72 rounded bg-appinset" />
-            <div className="mx-auto h-4 w-96 rounded bg-appinset" />
-            <div className="mx-auto h-4 w-80 rounded bg-appinset" />
-            <div className="mx-auto mt-4 h-11 w-44 rounded-xl bg-appinset" />
+    <div className="fp-stack fp-stack--xs">
+      {Array.from({ length: n }, (_, i) => (
+        <div key={i} className="fp-skel-row">
+          <span className="fp-skel" />
+          <div>
+            <span className="fp-skel fp-skel-line fp-skel-line--m" />
+            <span className="fp-skel fp-skel-line fp-skel-line--s" />
           </div>
         </div>
-
-        {/* Sub-cards under the hero */}
-        <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {[0, 1, 2].map((i) => (
-            <div
-              key={i}
-              className="animate-pulse rounded-[24px] border border-appborder bg-appsurface-raised p-5"
-            >
-              <div className="mb-3 h-9 w-9 rounded-xl bg-appinset" />
-              <div className="mb-2 h-4 w-3/4 rounded bg-appinset" />
-              <div className="h-3 w-full rounded bg-appinset" />
-              <div className="mt-2 h-3 w-5/6 rounded bg-appinset" />
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
 
-function DefaultSkeleton() {
+function StatsCharts() {
   return (
-    <div className="min-h-screen bg-appbg text-apptext">
-      <div className="mx-auto flex min-h-screen max-w-7xl items-center justify-center px-4">
-        <div className="rounded-[28px] border border-appborder bg-appsurface-raised px-6 py-5 text-sm text-apptext-soft shadow-[0_10px_30px_var(--appshadow)]">
-          Loading...
+    <>
+      <div className="fp-ip">
+        <div className="fp-ip-instrument">
+          <span className="fp-skel fp-skel-circle aspect-square w-full max-w-[200px]" />
+        </div>
+        <div className="fp-ip-body">
+          <Lines widths={['m', 'l']} />
+          <Readouts n={4} />
         </div>
       </div>
+      <div className="fp-panel fp-stack">
+        <span className="fp-skel fp-skel-line fp-skel-line--s" />
+        <span className="fp-skel fp-skel-block h-64" />
+      </div>
+    </>
+  );
+}
+
+function List() {
+  return (
+    <div className="fp-panel fp-stack">
+      <span className="fp-skel fp-skel-line fp-skel-line--s" />
+      <Rows n={6} />
     </div>
   );
 }
 
-function PageSkeleton({ variant }: PageSkeletonProps) {
-  switch (variant) {
-    case 'stats-charts':
-      return <StatsChartsSkeleton />;
-    case 'list':
-      return <ListSkeleton />;
-    case 'form':
-      return <FormSkeleton />;
-    case 'hero':
-      return <HeroSkeleton />;
-    case 'default':
-    default:
-      return <DefaultSkeleton />;
-  }
+function Cards() {
+  return (
+    <>
+      {[3, 2, 2].map((n, i) => (
+        <div key={i} className="fp-panel fp-stack">
+          <span className="fp-skel fp-skel-line fp-skel-line--s" />
+          <Rows n={n} />
+        </div>
+      ))}
+    </>
+  );
+}
+
+function Form() {
+  return (
+    <div className="fp-panel fp-stack fp-stack--l">
+      <Lines widths={['s', 'm']} />
+      {[0, 1].map((i) => (
+        <div key={i} className="fp-stack fp-stack--s">
+          <span className="fp-skel fp-skel-line fp-skel-line--s" />
+          <span className="fp-skel h-11 w-full" />
+        </div>
+      ))}
+      <span className="fp-skel h-11 w-full" />
+    </div>
+  );
+}
+
+function Hero() {
+  return (
+    <>
+      <div className="fp-panel fp-stack fp-stack--m items-center py-10">
+        <span className="fp-skel fp-skel-circle h-14 w-14" />
+        <span className="fp-skel fp-skel-line w-64 max-w-full" />
+        <span className="fp-skel fp-skel-line fp-skel-line--m" />
+        <span className="fp-skel h-11 w-44" />
+      </div>
+      <div className="fp-grid-3">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="fp-panel">
+            <Lines widths={['s', 'l', 'm']} />
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+function Default() {
+  return (
+    <div className="fp-panel">
+      <Lines widths={['s', 'l', 'm']} />
+    </div>
+  );
+}
+
+const SHAPES: Record<PageSkeletonVariant, () => ReactNode> = {
+  'stats-charts': StatsCharts,
+  list: List,
+  cards: Cards,
+  form: Form,
+  hero: Hero,
+  default: Default,
+};
+
+function PageSkeleton({ variant, fullPage = false }: PageSkeletonProps) {
+  const Shape = SHAPES[variant] ?? Default;
+  const body = (
+    <div role="status" className="fp-stack fp-stack--page" aria-busy="true">
+      <span className="fp-sr-only">Loading</span>
+      <div aria-hidden="true" className="contents">
+        <Shape />
+      </div>
+    </div>
+  );
+  if (!fullPage) return body;
+  const width = variant === 'form' ? 'max-w-md' : 'max-w-5xl';
+  return (
+    <div className="flex min-h-[100dvh] justify-center bg-appbg px-4 pt-[max(2.5rem,env(safe-area-inset-top))] pb-10">
+      <div className={`w-full ${width}`}>{body}</div>
+    </div>
+  );
 }
 
 export default memo(PageSkeleton);

@@ -3,6 +3,9 @@ import { render, screen } from '@testing-library/react';
 import RoombaMaintenance, { remainingText, usedText } from '../components/RoombaMaintenance';
 import type { RoombaPart } from '../types';
 
+// plural() joins a count to its word with a no-break space; compare as plain text.
+const norm = (t: string | null) => (t ?? '').replace(/\u00a0/g, ' ');
+
 const base = {
   hint: null,
   countType: 'minutes',
@@ -41,25 +44,25 @@ const bag: RoombaPart = {
 };
 
 describe('RoombaMaintenance', () => {
-  it('renders one tile per part with its status, remaining life and a summary', () => {
+  it('renders one row per part with its status, remaining life and a summary', () => {
     render(<RoombaMaintenance parts={[filter, bag]} loading={false} />);
     expect(screen.getByText('Filter')).toBeTruthy();
     expect(screen.getByText('40 hr left')).toBeTruthy();
     expect(screen.getByText('77%')).toBeTruthy();
     expect(screen.getByText('Dock bag')).toBeTruthy();
     expect(screen.getByText('Overdue')).toBeTruthy();
-    expect(screen.getByText('1 part overdue')).toBeTruthy();
+    expect(screen.getByText(/^1\s+part overdue\. Life left in each part, worst first$/)).toBeTruthy();
   });
 
   it('formats remaining and used life per unit', () => {
-    expect(remainingText({ ...filter, countRemaining: 30 })).toBe('Under 1 hr left');
-    expect(remainingText({ ...filter, countRemaining: 0 })).toBe('Replace now');
-    expect(remainingText({ ...filter, unit: 'missions', countRemaining: 1 })).toBe('1 mission left');
-    expect(remainingText({ ...filter, unit: 'missions', countRemaining: 27 })).toBe('27 missions left');
-    expect(remainingText(bag)).toBe('Bag full');
-    expect(remainingText({ ...filter, countRemaining: null })).toBe('No counter');
-    expect(usedText(filter)).toBe('12 hr used');
-    expect(usedText({ ...bag, countUsed: 1 })).toBe('1 empty used');
+    expect(norm(remainingText({ ...filter, countRemaining: 30 }))).toBe('Under 1 hr left');
+    expect(norm(remainingText({ ...filter, countRemaining: 0 }))).toBe('Replace now');
+    expect(norm(remainingText({ ...filter, unit: 'missions', countRemaining: 1 }))).toBe('1 mission left');
+    expect(norm(remainingText({ ...filter, unit: 'missions', countRemaining: 27 }))).toBe('27 missions left');
+    expect(norm(remainingText(bag))).toBe('Bag full');
+    expect(norm(remainingText({ ...filter, countRemaining: null }))).toBe('No counter');
+    expect(norm(usedText(filter))).toBe('12 hr used');
+    expect(norm(usedText({ ...bag, countUsed: 1 }))).toBe('1 empty used');
   });
 
   it('shows an empty state before the first parts sync', () => {

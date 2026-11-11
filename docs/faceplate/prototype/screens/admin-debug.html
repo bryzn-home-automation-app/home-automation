@@ -1,0 +1,878 @@
+<section class="screen" data-route="admin-debug" data-title="Diagnostics" data-eyebrow="Admin" data-subtitle="Updated 5:00&nbsp;PM">
+
+  <!-- 1–3. The answer: did last night's data arrive, is anything erroring -->
+  <section class="ip" aria-labelledby="admin-debug-verdict">
+    <div class="ip-instrument dbg-instrument">
+      <div class="dbg-matrix-head">
+        <p class="label">Electric data · 14 days</p>
+        <span class="num num--m">12<span class="unit">of 13 complete</span></span>
+      </div>
+      <div class="chart dbg-matrix" data-chart="heat" data-cell-height="96" data-readout="12"
+        data-labels='["Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8","Mon, Nov 9 (today)"]' data-short='["Oct 27","","","","","","Nov 2","","","","","","","Today"]'
+        data-states='["ok","warn","ok","ok","ok","ok","ok","ok","ok","ok","ok","ok","ok","off"]' data-notes='["24 of 24 hours · daily 21.1 kWh · weather","9 of 24 hours · daily 22.9 kWh · weather","24 of 24 hours · daily 20.9 kWh · weather","24 of 24 hours · daily 23.2 kWh · weather","22 of 24 hours · daily 24.9 kWh · weather","24 of 24 hours · daily 18.8 kWh · weather","24 of 24 hours · daily 20.5 kWh · weather","24 of 24 hours · daily 18.4 kWh · weather","24 of 24 hours · daily 21.7 kWh · weather","24 of 24 hours · daily 25.4 kWh · weather","24 of 24 hours · daily 21.6 kWh · weather","24 of 24 hours · daily 34.8 kWh · weather","24 of 24 hours · daily 35.5 kWh · weather","nothing until CoServ posts it tomorrow morning"]' data-hours='[24,9,24,24,22,24,24,24,24,24,24,24,24,0]'
+        data-state-words='{"ok":"Complete","warn":"Partial day","problem":"Missing","off":"Not yet"}'></div>
+      <p class="sr-only">Electric readings for the last 14 days, oldest first, one light per hour: every day from Tue, Oct 27 to Sun, Nov 8 is complete except Wed, Oct 28, which has 9 of 24 hours, and Sat, Oct 31, with 22. Today's readings arrive tomorrow morning.</p>
+      <ul class="lamps dbg-pipe" aria-label="Data pipeline">
+        <li><span class="lamps-item"><span class="lamp lamp--ok"></span><span class="label">CoServ</span><span class="sr-only">OK</span></span></li>
+        <li><span class="lamps-item"><span class="lamp lamp--ok"></span><span class="label">Sync</span><span class="sr-only">OK</span></span></li>
+        <li><span class="lamps-item"><span class="lamp lamp--ok"></span><span class="label">Forecast</span><span class="sr-only">OK</span></span></li>
+        <li class="dbg-pipe-side"><span class="lamps-item"><span class="lamp lamp--ok"></span><span class="label">Weather</span><span class="sr-only">OK</span></span></li>
+        <li><span class="lamps-item"><span class="lamp lamp--problem"></span><span class="label">Bills</span><span class="sr-only">Problem</span></span></li>
+      </ul>
+    </div>
+
+    <div class="ip-body">
+      <div class="verdict">
+        <span class="lamp lamp--warn"></span>
+        <p class="verdict-text" id="admin-debug-verdict">Electric data is up to date; two things need a look.</p>
+        <p class="verdict-note">All 24 hours and the daily reading for Sunday were in by 9:15&nbsp;AM, and the forecast retrained on them.</p>
+      </div>
+
+      <ul class="list list--inset" aria-label="Needs a look">
+        <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="ERROR" data-ev-cat="Sync" data-ev-source="WaterBillSyncScheduler" data-ev-when="Sun, Nov 8, 11:11:44&nbsp;AM" data-ev-msg="Gmail refused the saved sign-in (invalid_grant). The water bill check is paused until it is re-authorized" data-ev-details="google oauth: invalid_grant — Token has been expired or revoked.&#10;hint: the OAuth app must be Published (not Testing), then re-authorize from Utility → Water.">
+          <span class="row-lead row-lead--lamp"><span class="lamp lamp--problem"></span><span class="sr-only">Problem</span></span>
+          <span class="row-main"><span class="row-title">The water bill check can't sign in to Gmail</span><span class="row-meta">Paused since Sun, 11:11&nbsp;AM. Sign in again from Utilities → Water</span></span>
+          <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+        <li><button class="row row--compact" type="button" data-debug-rerun>
+          <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+          <span class="row-main"><span class="row-title">Wed, Oct 28 has only 9 of 24 hours</span><span class="row-meta">Run it again before CoServ drops it, around Nov 11</span></span>
+          <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+      </ul>
+
+      <div class="readouts">
+        <div class="readout">
+          <span class="label">Hourly</span>
+          <span class="readout-value"><span class="num">24<span class="unit">of 24 h</span></span></span>
+          <span class="readout-note">Sunday, in by 9:15&nbsp;AM</span>
+        </div>
+        <div class="readout">
+          <span class="label">Daily</span>
+          <span class="readout-value"><span class="num">35.5<span class="unit">kWh</span></span></span>
+          <span class="readout-note">Sunday, in at 9:00&nbsp;AM</span>
+        </div>
+        <a class="readout" href="#admin-debug" data-debug-goto="events" data-debug-level="error">
+          <span class="label"><span class="lamp lamp--problem lamp--s"></span>Errors</span>
+          <span class="readout-value"><span class="num">2</span></span>
+          <span class="readout-note">Since Fri. 1 still open</span>
+        </a>
+        <a class="readout" href="#admin-debug" data-debug-goto="events" data-debug-level="warn">
+          <span class="label"><span class="lamp lamp--warn lamp--s"></span>Heads-ups</span>
+          <span class="readout-value"><span class="num">14</span></span>
+          <span class="readout-note">Mostly CoServ posting late</span>
+        </a>
+      </div>
+
+      <div class="ip-foot">
+        <span class="cluster"><span class="lamp lamp--ok lamp--s"></span><span class="mono">Last sync check 9:45&nbsp;AM</span></span>
+        <span class="mono">Build 1a6d07a · v1.10.1</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. View switch: same subject, deeper detail -->
+  <div class="seg dbg-tabs" data-tabs="admin-debug-tab" role="tablist" aria-label="Diagnostics">
+    <button class="seg-key is-active" type="button" role="tab" data-tab="overview">Overview</button>
+    <button class="seg-key" type="button" role="tab" data-tab="sync">Sync</button>
+    <button class="seg-key" type="button" role="tab" data-tab="events">Events<span class="count" aria-label="2 errors since Friday">2</span></button>
+    <button class="seg-key" type="button" role="tab" data-tab="forecast">Forecast</button>
+    <button class="seg-key" type="button" role="tab" data-tab="tools">Tools</button>
+  </div>
+
+  <!-- ===================== OVERVIEW ===================== -->
+  <div class="stack stack--page" data-tab-panel="admin-debug-tab:overview" role="tabpanel" aria-label="Overview">
+    <div class="split">
+      <div class="stack stack--page">
+        <section class="panel" aria-labelledby="admin-debug-fresh-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-fresh-title">Freshness</h2><p class="panel-sub">Yesterday is the newest day CoServ posts, so this is as fresh as it gets</p></div>
+          </header>
+          <ul class="list">
+            <li><div class="row">
+              <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg></span>
+              <span class="row-main"><span class="row-title">Hourly readings</span><span class="row-meta">Through Sun, 11:00&nbsp;PM · last success <span class="mono">9:45&nbsp;AM</span></span></span>
+              <span class="row-trail"><span class="badge badge--ok">Fresh</span></span></div></li>
+            <li><div class="row">
+              <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span>
+              <span class="row-main"><span class="row-title">Daily readings</span><span class="row-meta">Through Sun, Nov 8 · last success <span class="mono">9:30&nbsp;AM</span></span></span>
+              <span class="row-trail"><span class="badge badge--ok">Fresh</span></span></div></li>
+            <li><div class="row">
+              <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-cloud-sun"/></svg></span>
+              <span class="row-main"><span class="row-title">Weather</span><span class="row-meta">Observed through Sat, Nov 7 · forecast refreshed <span class="mono">8:15&nbsp;AM</span></span></span>
+              <span class="row-trail"><span class="badge badge--ok">Fresh</span></span></div></li>
+          </ul>
+          <footer class="panel-foot dbg-lastcheck">
+            <span class="stack stack--xs"><span class="label">Last sync check · 9:45&nbsp;AM</span><span class="mono small">Yesterday (Sun, Nov 8) already complete: 24 of 24 hours, 24 non-zero — skipping</span></span>
+          </footer>
+        </section>
+
+        <section class="panel" aria-labelledby="admin-debug-feeds-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-feeds-title">Bills</h2><p class="panel-sub">Checked once a day, early in the morning</p></div>
+          </header>
+          <div class="stack">
+            <div class="notice notice--problem"><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg>
+              <div><p class="notice-title">Water bills are paused.</p><p class="notice-text">Gmail refused the saved sign-in on Sun, 11:11&nbsp;AM. The last water bill, $110.67 due Nov 24, came in on Oct 30.</p></div>
+              <div class="notice-action"><button class="btn btn--sm" type="button" data-toast="Gmail still refuses: sign in again first"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Try again</button><a class="btn btn--sm btn--quiet" href="#utility" data-nav="utility" data-nav-tab="utility-view:water">Open Water<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+            </div>
+            <ul class="list list--inset">
+              <li><div class="row row--compact">
+                <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+                <span class="row-main"><span class="row-title row-title--regular">CoServ statement</span><span class="row-meta">No new bill. Latest is Nov 5, $145.62</span></span>
+                <span class="row-trail"><span class="mono small">6:00&nbsp;AM</span></span></div></li>
+              <li><div class="row row--compact">
+                <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+                <span class="row-main"><span class="row-title row-title--regular">Gas line items</span><span class="row-meta">Read from the Nov 5 bill: 9 CCF, $37.23</span></span>
+                <span class="row-trail"><span class="mono small">5:00&nbsp;AM</span></span></div></li>
+            </ul>
+          </div>
+        </section>
+      </div>
+
+      <div class="stack stack--page">
+        <section class="panel" aria-labelledby="admin-debug-app-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-app-title">App server</h2><p class="panel-sub">The backend inside Docker on the home server</p></div>
+            <div class="panel-action"><a class="btn btn--sm btn--quiet" href="#admin-nuc" data-nav="admin-nuc">Server health<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+          </header>
+          <div class="readouts readouts--2x2">
+            <div class="readout"><span class="label">Up for</span><span class="readout-value"><span class="num">3<span class="unit">d</span> 12<span class="unit">h</span></span></span><span class="readout-note">Since Fri, 4:57&nbsp;AM</span></div>
+            <div class="readout"><span class="label">Memory</span><span class="readout-value"><span class="num">412<span class="unit">MB</span></span></span><span class="readout-note">Of 1,024 MB allowed</span></div>
+            <div class="readout"><span class="label">Threads</span><span class="readout-value"><span class="num">64</span></span><span class="readout-note">Steady</span></div>
+            <div class="readout"><span class="label">Database pool</span><span class="readout-value"><span class="num">1<span class="unit">of 4 busy</span></span></span><span class="readout-note">3 idle, none waiting</span></div>
+          </div>
+          <dl class="kv mt-m">
+            <div class="kv-row"><dt><span class="cluster"><span class="lamp lamp--ok lamp--s"></span>Database</span></dt><dd>Up</dd></div>
+            <div class="kv-row"><dt>Address</dt><dd class="mono dbg-wrap">postgres:5432/homeplatform</dd></div>
+          </dl>
+        </section>
+
+        <section class="panel" aria-labelledby="admin-debug-cfg-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-cfg-title">Settings checks</h2><p class="panel-sub">4 of 5 look right</p></div>
+          </header>
+          <ul class="list">
+            <li><div class="row row--compact">
+              <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+              <span class="row-main"><span class="row-title row-title--regular">CoServ sign-in</span><span class="row-meta">Username set, password missing. Syncs run on the saved session for now</span></span></div></li>
+            <li><div class="row row--compact">
+              <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+              <span class="row-main"><span class="row-title row-title--regular">Fallback electric rate</span><span class="row-meta">Used only before a bill is on file. Bills now say $0.1171</span></span>
+              <span class="row-trail"><span class="mono small">$0.1185/kWh</span></span></div></li>
+            <li><div class="row row--compact">
+              <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+              <span class="row-main"><span class="row-title row-title--regular">Gas rate</span></span>
+              <span class="row-trail"><span class="mono small">$1.60/CCF</span></span></div></li>
+            <li><div class="row row--compact">
+              <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+              <span class="row-main"><span class="row-title row-title--regular">House location, for weather</span></span>
+              <span class="row-trail"><span class="mono small">33.1507, −96.8236</span></span></div></li>
+            <li><div class="row row--compact">
+              <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+              <span class="row-main"><span class="row-title row-title--regular">Data starts</span></span>
+              <span class="row-trail"><span class="mono small">Jul 24</span></span></div></li>
+          </ul>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SYNC ===================== -->
+  <div class="stack stack--page" data-tab-panel="admin-debug-tab:sync" role="tabpanel" aria-label="Sync" hidden>
+    <div class="split">
+      <div class="stack stack--page">
+        <section class="panel" aria-labelledby="admin-debug-run-title" id="admin-debug-run">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-run-title">Run a sync</h2><p class="panel-sub">Fetch from CoServ now instead of waiting for the next 30-minute check</p></div>
+          </header>
+          <div class="stack">
+            <div class="form-grid">
+              <div class="field"><span class="label" id="admin-debug-what-label">Readings</span>
+                <div class="seg seg--inline" data-tabs="admin-debug-what" role="tablist" aria-labelledby="admin-debug-what-label">
+                  <button class="seg-key is-active" type="button" role="tab" data-tab="both">Both</button>
+                  <button class="seg-key" type="button" role="tab" data-tab="hourly">Hourly</button>
+                  <button class="seg-key" type="button" role="tab" data-tab="daily">Daily</button>
+                </div>
+              </div>
+              <div class="field"><span class="label" id="admin-debug-days-label">Days</span>
+                <div class="chips" data-tabs="admin-debug-days" role="tablist" aria-labelledby="admin-debug-days-label">
+                  <button class="chip is-active" type="button" role="tab" data-tab="yesterday">Yesterday</button>
+                  <button class="chip" type="button" role="tab" data-tab="custom">Pick days</button>
+                </div>
+              </div>
+            </div>
+            <p class="small muted" data-tab-panel="admin-debug-days:yesterday">Sun, Nov 8. It's already complete, so this only confirms nothing changed.</p>
+            <div class="stack stack--s" data-tab-panel="admin-debug-days:custom" hidden>
+              <div class="form-grid">
+                <label class="field"><span class="label">From</span><input class="input input--mono" type="date" value="2026-10-28" min="2026-10-26" max="2026-11-09" data-debug-from></label>
+                <label class="field"><span class="label">To</span><input class="input input--mono" type="date" value="2026-10-28" min="2026-10-26" max="2026-11-09" data-debug-to></label>
+              </div>
+              <p class="field-help" data-debug-range-help>CoServ keeps about two weeks, so Oct 26 is the earliest day.</p>
+              <p class="field-error" data-debug-range-error hidden><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg><span></span></p>
+            </div>
+            <div class="btn-row">
+              <button class="btn btn--primary" type="button" data-debug-run><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Run sync</button>
+            </div>
+            <div class="stack stack--s">
+              <p class="label">Runs you started</p>
+              <ul class="list list--inset" data-debug-results hidden></ul>
+              <p class="small muted" data-debug-results-empty>Nothing yet. Each run shows here when it starts and again when it finishes.</p>
+            </div>
+          </div>
+          <footer class="panel-foot">
+            <span class="small muted">Other jobs</span>
+            <span class="btn-row">
+              <button class="btn btn--sm" type="button" data-debug-job="alerts"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg>Check for alerts</button>
+              <button class="btn btn--sm" type="button" data-debug-job="forecast"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg>Retrain forecast</button>
+            </span>
+          </footer>
+        </section>
+
+        <section class="panel" aria-labelledby="admin-debug-rel-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-rel-title">How often each job works first time</h2><p class="panel-sub">Last 30 days. Retries are normal: CoServ often posts late, so jobs try again every 30 minutes</p></div>
+          </header>
+          <ul class="list">
+          <li><div class="row">
+            <span class="row-main"><span class="row-title">Hourly electric</span><span class="row-meta">402 runs: 268 first time, 121 retried, 13 failed · last <span class="mono">9:45&nbsp;AM</span></span><span class="row-meta mono">HourlySyncScheduler</span>
+              <span class="progress progress--thin mt-s" role="progressbar" aria-label="Hourly electric success" aria-valuenow="66.7" aria-valuemin="0" aria-valuemax="100"><span style="--p: 66.7%"></span></span></span>
+            <span class="row-trail"><span class="row-value">66.7<span class="unit">%</span></span></span></div></li>
+          <li><div class="row">
+            <span class="row-main"><span class="row-title">Daily electric</span><span class="row-meta">214 runs: 171 first time, 39 retried, 4 failed · last <span class="mono">9:30&nbsp;AM</span></span><span class="row-meta mono">DailySyncScheduler</span>
+              <span class="progress progress--thin mt-s" role="progressbar" aria-label="Daily electric success" aria-valuenow="79.9" aria-valuemin="0" aria-valuemax="100"><span style="--p: 79.9%"></span></span></span>
+            <span class="row-trail"><span class="row-value">79.9<span class="unit">%</span></span></span></div></li>
+          <li><div class="row">
+            <span class="row-main"><span class="row-title">Water bills</span><span class="row-meta">30 runs: 27 first time, 2 retried, 1 failed · last <span class="mono">6:04&nbsp;AM</span></span><span class="row-meta mono">WaterBillSyncScheduler</span>
+              <span class="progress progress--thin mt-s" role="progressbar" aria-label="Water bills success" aria-valuenow="90" aria-valuemin="0" aria-valuemax="100"><span style="--p: 90%"></span></span></span>
+            <span class="row-trail"><span class="row-value">90.0<span class="unit">%</span></span></span></div></li>
+          <li><div class="row">
+            <span class="row-main"><span class="row-title">CoServ bills</span><span class="row-meta">31 runs: 30 first time, 1 retried, 0 failed · last <span class="mono">6:00&nbsp;AM</span></span><span class="row-meta mono">CoservBillSyncScheduler</span>
+              <span class="progress progress--thin mt-s" role="progressbar" aria-label="CoServ bills success" aria-valuenow="96.8" aria-valuemin="0" aria-valuemax="100"><span style="--p: 96.8%"></span></span></span>
+            <span class="row-trail"><span class="row-value">96.8<span class="unit">%</span></span></span></div></li>
+          <li><div class="row">
+            <span class="row-main"><span class="row-title">Gas from bills</span><span class="row-meta">30 runs: 30 first time, 0 retried, 0 failed · last <span class="mono">5:01&nbsp;AM</span></span><span class="row-meta mono">GasSyncScheduler</span>
+              <span class="progress progress--thin mt-s" role="progressbar" aria-label="Gas from bills success" aria-valuenow="100" aria-valuemin="0" aria-valuemax="100"><span style="--p: 100%"></span></span></span>
+            <span class="row-trail"><span class="row-value">100.0<span class="unit">%</span></span></span></div></li>
+          </ul>
+        </section>
+      </div>
+      <div class="stack stack--page">
+        <section class="panel" aria-labelledby="admin-debug-runs-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-runs-title">Recent runs</h2><p class="panel-sub">The six newest sync events</p></div>
+            <div class="panel-action"><a class="btn btn--sm btn--quiet" href="#admin-debug" data-debug-goto="events" data-debug-cat="sync">All sync events<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+          </header>
+          <ul class="list">
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 9:44:36&nbsp;AM" data-ev-msg="Yesterday (Sun, Nov 8) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Yesterday (Sun, Nov 8) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="row-meta"><span class="mono">9:44&nbsp;AM</span> · <span class="mono">HourlySyncScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 9:29:52&nbsp;AM" data-ev-msg="Yesterday (Sun, Nov 8) already has a daily reading (35.5 kWh) that matches its hourly total — skipping" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Yesterday (Sun, Nov 8) already has a daily reading (35.5 kWh) that matches its hourly total — skipping</span><span class="row-meta"><span class="mono">9:29&nbsp;AM</span> · <span class="mono">DailySyncScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 9:14:45&nbsp;AM" data-ev-msg="Hourly sync complete for Sun, Nov 8: 24 hours stored (24 non-zero), batch 7c1f0c1e" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Hourly sync complete for Sun, Nov 8: 24 hours stored (24 non-zero), batch 7c1f0c1e</span><span class="row-meta"><span class="mono">9:14&nbsp;AM</span> · <span class="mono">HourlySyncScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 8:59:59&nbsp;AM" data-ev-msg="Daily sync complete for Sun, Nov 8: 35.5 kWh stored, batch 2b9d44aa" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Daily sync complete for Sun, Nov 8: 35.5 kWh stored, batch 2b9d44aa</span><span class="row-meta"><span class="mono">8:59&nbsp;AM</span> · <span class="mono">DailySyncScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 8:44:28&nbsp;AM" data-ev-msg="Hourly data for Sun, Nov 8 is partial (21 of 24 hours) — CoServ usually posts the last 3-hour block within the hour; will retry" data-ev-details="missing hours: 21, 22, 23&#10;source: utility-usage/poll timeFrame=HOURLY&#10;next attempt: 9:15&nbsp;AM">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Hourly data for Sun, Nov 8 is partial (21 of 24 hours) — CoServ usually posts the last 3-hour block within the hour; will retry</span><span class="row-meta"><span class="mono">8:44&nbsp;AM</span> · <span class="mono">HourlySyncScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 8:29:27&nbsp;AM" data-ev-msg="No daily reading for Sun, Nov 8 yet — CoServ has not posted it; will retry at 9:00&nbsp;AM" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">No daily reading for Sun, Nov 8 yet — CoServ has not posted it; will retry at 9:00&nbsp;AM</span><span class="row-meta"><span class="mono">8:29&nbsp;AM</span> · <span class="mono">DailySyncScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          </ul>
+        </section>
+
+        <section class="panel" aria-labelledby="admin-debug-cov-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-cov-title">Day by day</h2><p class="panel-sub">Complete at 20 or more of 24 hours. Weather was stored every day</p></div>
+          </header>
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th scope="col">Day</th><th scope="col" class="is-num">Hours</th><th scope="col" class="is-num">Daily reading</th><th scope="col">State</th></tr></thead>
+              <tbody>
+                <tr><td class="cell-title" data-label="Day">Mon, Nov 9</td><td class="cell-key is-num" data-label="Hours"><span class="muted">Not yet</span></td><td class="is-num" data-label="Daily reading"><span class="muted">—</span></td><td data-label="State"><span class="badge">Not yet</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Sun, Nov 8</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">35.5 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Sat, Nov 7</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">34.8 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Fri, Nov 6</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">21.6 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Thu, Nov 5</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">25.4 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Wed, Nov 4</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">21.7 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Tue, Nov 3</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">18.4 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <details class="disclosure disclosure--row">
+            <summary><span class="when-closed">Show 7 more days</span><span class="when-open">Show fewer days</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="disclosure-body">
+              <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th scope="col">Day</th><th scope="col" class="is-num">Hours</th><th scope="col" class="is-num">Daily reading</th><th scope="col">State</th></tr></thead>
+              <tbody>
+                <tr><td class="cell-title" data-label="Day">Mon, Nov 2</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">20.5 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Sun, Nov 1</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">18.8 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Sat, Oct 31</td><td class="cell-key is-num" data-label="Hours">22 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">24.9 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Fri, Oct 30</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">23.2 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Thu, Oct 29</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">20.9 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Wed, Oct 28</td><td class="cell-key is-num" data-label="Hours">9 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">22.9 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--warn">Partial</span></td></tr>
+                <tr><td class="cell-title" data-label="Day">Tue, Oct 27</td><td class="cell-key is-num" data-label="Hours">24 <span class="unit">of 24</span></td><td class="is-num" data-label="Daily reading">21.1 <span class="unit">kWh</span></td><td data-label="State"><span class="badge badge--ok">Complete</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+            </div>
+          </details>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== EVENTS ===================== -->
+  <div class="stack stack--page" data-tab-panel="admin-debug-tab:events" role="tabpanel" aria-label="Events" hidden>
+    <section class="panel" aria-labelledby="admin-debug-log-title">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-debug-log-title">Event log</h2><p class="panel-sub">Since Fri, Nov 6, newest first. Tap an event for its details</p></div>
+      </header>
+      <div class="stack stack--s">
+        <div class="form-grid dbg-filters">
+          <label class="field"><span class="label">Category</span><span class="select"><select data-debug-catsel aria-label="Category">
+            <option value="all">All categories</option><option value="sync">Sync</option><option value="forecast">Forecast</option><option value="weather">Weather</option><option value="camera">Cameras</option><option value="system">System</option><option value="db">Database</option><option value="api">API</option>
+          </select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+          <div class="field"><span class="label" id="admin-debug-level-label">Level</span>
+            <div class="chips" data-tabs="admin-debug-level" role="tablist" aria-labelledby="admin-debug-level-label">
+              <button class="chip is-active" type="button" role="tab" data-tab="all">All</button>
+              <button class="chip" type="button" role="tab" data-tab="error">Problems</button>
+              <button class="chip" type="button" role="tab" data-tab="warn">Heads-ups</button>
+              <button class="chip" type="button" role="tab" data-tab="info">Info</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="timeline dbg-timeline mt-m">
+        <section class="dbg-day">
+              <h3 class="tl-day"><span class="label">Today</span><span class="mono">Mon, Nov 9</span></h3>
+              <ol class="tl-list">
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 9:44:36&nbsp;AM" data-ev-msg="Yesterday (Sun, Nov 8) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details=""><span class="tl-time">9:44&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Sun, Nov 8) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 9:29:52&nbsp;AM" data-ev-msg="Yesterday (Sun, Nov 8) already has a daily reading (35.5 kWh) that matches its hourly total — skipping" data-ev-details=""><span class="tl-time">9:29&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Sun, Nov 8) already has a daily reading (35.5 kWh) that matches its hourly total — skipping</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Mon, Nov 9, 9:20:22&nbsp;AM" data-ev-msg="Usage ingested, but no new actual reading since Nov 8 — nothing to grade" data-ev-details=""><span class="tl-time">9:20&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Usage ingested, but no new actual reading since Nov 8 — nothing to grade</span><span class="tl-meta">Forecast · <span class="mono">ForecastScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 9:14:45&nbsp;AM" data-ev-msg="Hourly sync complete for Sun, Nov 8: 24 hours stored (24 non-zero), batch 7c1f0c1e" data-ev-details=""><span class="tl-time">9:14&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Hourly sync complete for Sun, Nov 8: 24 hours stored (24 non-zero), batch 7c1f0c1e</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Mon, Nov 9, 9:13:16&nbsp;AM" data-ev-msg="New actual for Nov 8: 35.5 kWh vs 32.6 predicted (residual +2.9). Model retrained on 108 days; 7-day outlook refreshed" data-ev-details=""><span class="tl-time">9:13&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">New actual for Nov 8: 35.5 kWh vs 32.6 predicted (residual +2.9). Model retrained on 108 days; 7-day outlook refreshed</span><span class="tl-meta">Forecast · <span class="mono">ForecastScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 8:59:59&nbsp;AM" data-ev-msg="Daily sync complete for Sun, Nov 8: 35.5 kWh stored, batch 2b9d44aa" data-ev-details=""><span class="tl-time">8:59&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Daily sync complete for Sun, Nov 8: 35.5 kWh stored, batch 2b9d44aa</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 8:44:28&nbsp;AM" data-ev-msg="Hourly data for Sun, Nov 8 is partial (21 of 24 hours) — CoServ usually posts the last 3-hour block within the hour; will retry" data-ev-details="missing hours: 21, 22, 23&#10;source: utility-usage/poll timeFrame=HOURLY&#10;next attempt: 9:15&nbsp;AM"><span class="tl-time">8:44&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Hourly data for Sun, Nov 8 is partial (21 of 24 hours) — CoServ usually posts the last 3-hour block within the hour; will retry</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span> · details</span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 8:29:27&nbsp;AM" data-ev-msg="No daily reading for Sun, Nov 8 yet — CoServ has not posted it; will retry at 9:00&nbsp;AM" data-ev-details=""><span class="tl-time">8:29&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">No daily reading for Sun, Nov 8 yet — CoServ has not posted it; will retry at 9:00&nbsp;AM</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 8:14:46&nbsp;AM" data-ev-msg="Hourly data for Sun, Nov 8 is partial (5 of 24 hours) — will retry" data-ev-details="missing hours: 5-23&#10;source: utility-usage/poll timeFrame=HOURLY"><span class="tl-time">8:14&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Hourly data for Sun, Nov 8 is partial (5 of 24 hours) — will retry</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span> · details</span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="weather" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Weather" data-ev-source="WeatherService" data-ev-when="Mon, Nov 9, 7:59:21&nbsp;AM" data-ev-msg="Open-Meteo forecast request timed out after 10 s — serving the cached forecast from 6:02&nbsp;AM" data-ev-details=""><span class="tl-time">7:59&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Open-Meteo forecast request timed out after 10 s — serving the cached forecast from 6:02&nbsp;AM</span><span class="tl-meta">Weather · <span class="mono">WeatherService</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 7:44:29&nbsp;AM" data-ev-msg="CoServ poll still PENDING after 6 attempts for Sun, Nov 8 — will retry at 8:15&nbsp;AM" data-ev-details=""><span class="tl-time">7:44&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">CoServ poll still PENDING after 6 attempts for Sun, Nov 8 — will retry at 8:15&nbsp;AM</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 7:29:22&nbsp;AM" data-ev-msg="No daily reading for Sun, Nov 8 yet — CoServ has not posted it; will retry at 8:00&nbsp;AM" data-ev-details=""><span class="tl-time">7:29&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">No daily reading for Sun, Nov 8 yet — CoServ has not posted it; will retry at 8:00&nbsp;AM</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Mon, Nov 9, 7:14:28&nbsp;AM" data-ev-msg="Scheduler window opened (7:15&nbsp;AM–11:45&nbsp;PM CT). Scanning the last 14 days for gaps: 1 day incomplete (Oct 28)" data-ev-details=""><span class="tl-time">7:14&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Scheduler window opened (7:15&nbsp;AM–11:45&nbsp;PM CT). Scanning the last 14 days for gaps: 1 day incomplete (Oct 28)</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Mon, Nov 9, 6:59:35&nbsp;AM" data-ev-msg="Scheduler window opened (7:00&nbsp;AM–11:30&nbsp;PM CT). Scanning the last 14 days for gaps: no days missing" data-ev-details=""><span class="tl-time">6:59&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Scheduler window opened (7:00&nbsp;AM–11:30&nbsp;PM CT). Scanning the last 14 days for gaps: no days missing</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="WaterBillSyncScheduler" data-ev-when="Mon, Nov 9, 6:03:27&nbsp;AM" data-ev-msg="Skipped the water bill check — Gmail still needs to be signed in again" data-ev-details="last good check: 10/30/2026, 6:02&nbsp;AM (new bill: $110.67 due 11/24/2026)&#10;fix: Utilities → Water → Sign in to Gmail"><span class="tl-time">6:03&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Skipped the water bill check — Gmail still needs to be signed in again</span><span class="tl-meta">Sync · <span class="mono">WaterBillSyncScheduler</span> · details</span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="CoservBillSyncScheduler" data-ev-when="Mon, Nov 9, 5:59:22&nbsp;AM" data-ev-msg="No new CoServ bill — latest on file is the Nov 5 statement ($145.62)" data-ev-details=""><span class="tl-time">5:59&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">No new CoServ bill — latest on file is the Nov 5 statement ($145.62)</span><span class="tl-meta">Sync · <span class="mono">CoservBillSyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="GasSyncScheduler" data-ev-when="Mon, Nov 9, 5:00:15&nbsp;AM" data-ev-msg="Gas line items parsed from the Nov 5 bill: 9 CCF, $37.23" data-ev-details=""><span class="tl-time">5:00&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Gas line items parsed from the Nov 5 bill: 9 CCF, $37.23</span><span class="tl-meta">Sync · <span class="mono">GasSyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="camera" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Cameras" data-ev-source="CameraVideoWatchdog" data-ev-when="Mon, Nov 9, 2:51:35&nbsp;AM" data-ev-msg="Live video is back — go2rtc answering again after 42 s" data-ev-details=""><span class="tl-time">2:51&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Live video is back — go2rtc answering again after 42 s</span><span class="tl-meta">Cameras · <span class="mono">CameraVideoWatchdog</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="camera" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Cameras" data-ev-source="CameraVideoWatchdog" data-ev-when="Mon, Nov 9, 2:50:26&nbsp;AM" data-ev-msg="Live video stopped answering (go2rtc: connection refused). Restarting the eufy bridge session" data-ev-details="camera: Driveway&#10;last frame: 2:50:07&nbsp;AM&#10;bridge: homeplatform-eufy-bridge"><span class="tl-time">2:50&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Live video stopped answering (go2rtc: connection refused). Restarting the eufy bridge session</span><span class="tl-meta">Cameras · <span class="mono">CameraVideoWatchdog</span> · details</span></span></button></li>
+              </ol>
+            </section>
+        <details class="disclosure dbg-earlier">
+          <summary><span class="when-closed">Show 32 earlier</span><span class="when-open">Hide earlier events</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body timeline">
+            <section class="dbg-day">
+              <h3 class="tl-day"><span class="label">Yesterday</span><span class="mono">Sun, Nov 8</span></h3>
+              <ol class="tl-list">
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 10:56:28&nbsp;PM" data-ev-msg="Yesterday (Sat, Nov 7) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details=""><span class="tl-time">10:56&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Sat, Nov 7) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Sun, Nov 8, 10:41:47&nbsp;PM" data-ev-msg="Yesterday (Sat, Nov 7) already has a daily reading (34.8 kWh) that matches its hourly total — skipping" data-ev-details=""><span class="tl-time">10:41&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Sat, Nov 7) already has a daily reading (34.8 kWh) that matches its hourly total — skipping</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 7:49:11&nbsp;PM" data-ev-msg="Yesterday (Sat, Nov 7) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details=""><span class="tl-time">7:49&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Sat, Nov 7) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastService" data-ev-when="Sun, Nov 8, 6:21:58&nbsp;PM" data-ev-msg="Tomorrow (Nov 9) forecast: 25.5 kWh · high 68°F / low 49°F (observed-weather model, weekend term off)" data-ev-details=""><span class="tl-time">6:21&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Tomorrow (Nov 9) forecast: 25.5 kWh · high 68°F / low 49°F (observed-weather model, weekend term off)</span><span class="tl-meta">Forecast · <span class="mono">ForecastService</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 4:58:31&nbsp;PM" data-ev-msg="Yesterday (Sat, Nov 7) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details=""><span class="tl-time">4:58&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Sat, Nov 7) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="camera" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Cameras" data-ev-source="CameraVideoWatchdog" data-ev-when="Sun, Nov 8, 4:12:41&nbsp;PM" data-ev-msg="Garage camera went offline — no frames since 4:12&nbsp;PM. Will keep trying every 5 min" data-ev-details="camera: Garage (T8423)&#10;last frame: 4:12:03&nbsp;PM&#10;battery at last report: 64%&#10;bridge: homeplatform-eufy-bridge"><span class="tl-time">4:12&nbsp;PM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Garage camera went offline — no frames since 4:12&nbsp;PM. Will keep trying every 5 min</span><span class="tl-meta">Cameras · <span class="mono">CameraVideoWatchdog</span> · details</span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="weather" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Weather" data-ev-source="WeatherService" data-ev-when="Sun, Nov 8, 2:30:58&nbsp;PM" data-ev-msg="Stored the observed weather for Nov 7: high 71°F, low 52°F, 0.00 in rain" data-ev-details=""><span class="tl-time">2:30&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Stored the observed weather for Nov 7: high 71°F, low 52°F, 0.00 in rain</span><span class="tl-meta">Weather · <span class="mono">WeatherService</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 12:47:17&nbsp;PM" data-ev-msg="Hourly sync complete for Sat, Nov 7: 24 hours stored (24 non-zero), batch a40e77d2" data-ev-details=""><span class="tl-time">12:47&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Hourly sync complete for Sat, Nov 7: 24 hours stored (24 non-zero), batch a40e77d2</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Sun, Nov 8, 12:45:31&nbsp;PM" data-ev-msg="New actual for Nov 7: 34.8 kWh vs 34.5 predicted (residual +0.3). Model retrained on 107 days; 7-day outlook refreshed" data-ev-details=""><span class="tl-time">12:45&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">New actual for Nov 7: 34.8 kWh vs 34.5 predicted (residual +0.3). Model retrained on 107 days; 7-day outlook refreshed</span><span class="tl-meta">Forecast · <span class="mono">ForecastScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Sun, Nov 8, 12:32:40&nbsp;PM" data-ev-msg="Daily sync complete for Sat, Nov 7: 34.8 kWh stored, batch 0d1c9e53" data-ev-details=""><span class="tl-time">12:32&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Daily sync complete for Sat, Nov 7: 34.8 kWh stored, batch 0d1c9e53</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="error" data-open-modal="admin-debug-event" data-ev-level="ERROR" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 12:17:10&nbsp;PM" data-ev-msg="Hourly sync failed for Sat, Nov 7: SmartHub login timed out waiting for the Bearer token" data-ev-details="Error: page.waitForResponse: Timeout 30000ms exceeded while waiting for event &quot;response&quot;&#10;    at capturePollAuth (/scripts/sync.js:212:31)&#10;    at async login (/scripts/sync.js:188:5)&#10;    at async main (/scripts/sync.js:640:18)&#10;exit code: 1 · granularity=hourly · date=11/07/2026"><span class="tl-time">12:17&nbsp;PM</span><span class="lamp lamp--problem"></span>
+                <span class="tl-body"><span class="sr-only">Problem.</span><span class="tl-title">Hourly sync failed for Sat, Nov 7: SmartHub login timed out waiting for the Bearer token</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span> · details</span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Sun, Nov 8, 12:02:16&nbsp;PM" data-ev-msg="No daily reading for Sat, Nov 7 yet — CoServ has not posted it; will retry at 12:30&nbsp;PM" data-ev-details=""><span class="tl-time">12:02&nbsp;PM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">No daily reading for Sat, Nov 7 yet — CoServ has not posted it; will retry at 12:30&nbsp;PM</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 11:47:47&nbsp;AM" data-ev-msg="Hourly data for Sat, Nov 7 is partial (20 of 24 hours) — will retry" data-ev-details=""><span class="tl-time">11:47&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Hourly data for Sat, Nov 7 is partial (20 of 24 hours) — will retry</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Sun, Nov 8, 11:32:57&nbsp;AM" data-ev-msg="Usage ingested, but no new actual reading since Nov 6 — nothing to grade" data-ev-details=""><span class="tl-time">11:32&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Usage ingested, but no new actual reading since Nov 6 — nothing to grade</span><span class="tl-meta">Forecast · <span class="mono">ForecastScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="error" data-open-modal="admin-debug-event" data-ev-level="ERROR" data-ev-cat="Sync" data-ev-source="WaterBillSyncScheduler" data-ev-when="Sun, Nov 8, 11:11:44&nbsp;AM" data-ev-msg="Gmail refused the saved sign-in (invalid_grant). The water bill check is paused until it is re-authorized" data-ev-details="google oauth: invalid_grant — Token has been expired or revoked.&#10;hint: the OAuth app must be Published (not Testing), then re-authorize from Utility → Water."><span class="tl-time">11:11&nbsp;AM</span><span class="lamp lamp--problem"></span>
+                <span class="tl-body"><span class="sr-only">Problem.</span><span class="tl-title">Gmail refused the saved sign-in (invalid_grant). The water bill check is paused until it is re-authorized</span><span class="tl-meta">Sync · <span class="mono">WaterBillSyncScheduler</span> · details</span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 10:17:12&nbsp;AM" data-ev-msg="Hourly data for Sat, Nov 7 is partial (5 of 24 hours) — will retry" data-ev-details=""><span class="tl-time">10:17&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Hourly data for Sat, Nov 7 is partial (5 of 24 hours) — will retry</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="CoservBillSyncScheduler" data-ev-when="Sun, Nov 8, 9:31:35&nbsp;AM" data-ev-msg="No new CoServ bill — latest on file is the Nov 5 statement ($145.62)" data-ev-details=""><span class="tl-time">9:31&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">No new CoServ bill — latest on file is the Nov 5 statement ($145.62)</span><span class="tl-meta">Sync · <span class="mono">CoservBillSyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sun, Nov 8, 1:01:28&nbsp;AM" data-ev-msg="Yesterday (Fri, Nov 6) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details=""><span class="tl-time">1:01&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Fri, Nov 6) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+              </ol>
+            </section>
+            <section class="dbg-day">
+              <h3 class="tl-day"><span class="label">Saturday</span><span class="mono">Sat, Nov 7</span></h3>
+              <ol class="tl-list">
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastService" data-ev-when="Sat, Nov 7, 8:01:29&nbsp;PM" data-ev-msg="Tomorrow (Nov 8) forecast: 32.6 kWh · high 66°F / low 47°F (observed-weather model, weekend term on)" data-ev-details=""><span class="tl-time">8:01&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Tomorrow (Nov 8) forecast: 32.6 kWh · high 66°F / low 47°F (observed-weather model, weekend term on)</span><span class="tl-meta">Forecast · <span class="mono">ForecastService</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sat, Nov 7, 2:01:42&nbsp;PM" data-ev-msg="Hourly sync complete for Fri, Nov 6: 24 hours stored (24 non-zero), batch 51f3b0a9" data-ev-details=""><span class="tl-time">2:01&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Hourly sync complete for Fri, Nov 6: 24 hours stored (24 non-zero), batch 51f3b0a9</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Sat, Nov 7, 1:58:41&nbsp;PM" data-ev-msg="New actual for Nov 6: 21.6 kWh vs 19.9 predicted (residual +1.7). Model retrained on 106 days; 7-day outlook refreshed" data-ev-details=""><span class="tl-time">1:58&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">New actual for Nov 6: 21.6 kWh vs 19.9 predicted (residual +1.7). Model retrained on 106 days; 7-day outlook refreshed</span><span class="tl-meta">Forecast · <span class="mono">ForecastScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Sat, Nov 7, 1:41:18&nbsp;PM" data-ev-msg="Daily sync complete for Fri, Nov 6: 21.6 kWh stored, batch 93be10c4" data-ev-details=""><span class="tl-time">1:41&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Daily sync complete for Fri, Nov 6: 21.6 kWh stored, batch 93be10c4</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sat, Nov 7, 1:01:15&nbsp;PM" data-ev-msg="Hourly data for Fri, Nov 6 is partial (21 of 24 hours) — will retry" data-ev-details=""><span class="tl-time">1:01&nbsp;PM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Hourly data for Fri, Nov 6 is partial (21 of 24 hours) — will retry</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="weather" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Weather" data-ev-source="WeatherService" data-ev-when="Sat, Nov 7, 12:01:49&nbsp;PM" data-ev-msg="Stored the observed weather for Nov 6: high 58°F, low 41°F, 0.12 in rain" data-ev-details=""><span class="tl-time">12:01&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Stored the observed weather for Nov 6: high 58°F, low 41°F, 0.12 in rain</span><span class="tl-meta">Weather · <span class="mono">WeatherService</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="camera" data-level="warn" data-open-modal="admin-debug-event" data-ev-level="WARN" data-ev-cat="Cameras" data-ev-source="CameraVideoWatchdog" data-ev-when="Sat, Nov 7, 6:01:51&nbsp;AM" data-ev-msg="Backyard camera has not sent a frame for 3 min (battery camera asleep?) — leaving the stream closed" data-ev-details=""><span class="tl-time">6:01&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <span class="tl-body"><span class="sr-only">Heads-up.</span><span class="tl-title">Backyard camera has not sent a frame for 3 min (battery camera asleep?) — leaving the stream closed</span><span class="tl-meta">Cameras · <span class="mono">CameraVideoWatchdog</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Sat, Nov 7, 1:01:10&nbsp;AM" data-ev-msg="Yesterday (Thu, Nov 5) already complete: 24 of 24 hours, 24 non-zero — skipping" data-ev-details=""><span class="tl-time">1:01&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Yesterday (Thu, Nov 5) already complete: 24 of 24 hours, 24 non-zero — skipping</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+              </ol>
+            </section>
+            <section class="dbg-day">
+              <h3 class="tl-day"><span class="label">Friday</span><span class="mono">Fri, Nov 6</span></h3>
+              <ol class="tl-list">
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastService" data-ev-when="Fri, Nov 6, 8:01:49&nbsp;PM" data-ev-msg="Tomorrow (Nov 7) forecast: 34.5 kWh · high 55°F / low 39°F (observed-weather model, weekend term on)" data-ev-details=""><span class="tl-time">8:01&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Tomorrow (Nov 7) forecast: 34.5 kWh · high 55°F / low 39°F (observed-weather model, weekend term on)</span><span class="tl-meta">Forecast · <span class="mono">ForecastService</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="HourlySyncScheduler" data-ev-when="Fri, Nov 6, 2:01:45&nbsp;PM" data-ev-msg="Hourly sync complete for Thu, Nov 5: 24 hours stored (24 non-zero), batch e2a7c6f0" data-ev-details=""><span class="tl-time">2:01&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Hourly sync complete for Thu, Nov 5: 24 hours stored (24 non-zero), batch e2a7c6f0</span><span class="tl-meta">Sync · <span class="mono">HourlySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="forecast" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Fri, Nov 6, 1:57:53&nbsp;PM" data-ev-msg="New actual for Nov 5: 25.4 kWh vs 22.1 predicted (residual +3.3). Model retrained on 105 days; 7-day outlook refreshed" data-ev-details=""><span class="tl-time">1:57&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">New actual for Nov 5: 25.4 kWh vs 22.1 predicted (residual +3.3). Model retrained on 105 days; 7-day outlook refreshed</span><span class="tl-meta">Forecast · <span class="mono">ForecastScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="sync" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Sync" data-ev-source="DailySyncScheduler" data-ev-when="Fri, Nov 6, 1:36:56&nbsp;PM" data-ev-msg="Daily sync complete for Thu, Nov 5: 25.4 kWh stored, batch 6a08d2bb" data-ev-details=""><span class="tl-time">1:36&nbsp;PM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Daily sync complete for Thu, Nov 5: 25.4 kWh stored, batch 6a08d2bb</span><span class="tl-meta">Sync · <span class="mono">DailySyncScheduler</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="system" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="System" data-ev-source="DataSeeder" data-ev-when="Fri, Nov 6, 4:57:48&nbsp;AM" data-ev-msg="Backend startup complete (commit=1a6d07a)" data-ev-details=""><span class="tl-time">4:57&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Backend startup complete (commit=1a6d07a)</span><span class="tl-meta">System · <span class="mono">DataSeeder</span></span></span></button></li>
+                <li><button class="tl-item" type="button" data-cat="system" data-level="info" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="System" data-ev-source="DataSeeder" data-ev-when="Fri, Nov 6, 4:57:02&nbsp;AM" data-ev-msg="Schema check passed: 47 tables present, 0 migrations pending" data-ev-details=""><span class="tl-time">4:57&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <span class="tl-body"><span class="sr-only">Info.</span><span class="tl-title">Schema check passed: 47 tables present, 0 migrations pending</span><span class="tl-meta">System · <span class="mono">DataSeeder</span></span></span></button></li>
+              </ol>
+            </section>
+          </div>
+        </details>
+      </div>
+      <div class="empty mt-m" data-debug-empty hidden><svg class="icon" aria-hidden="true"><use href="#i-list"/></svg><p class="empty-title">Nothing matches these filters</p><p class="empty-text">Database and API events only appear when a query or a request fails. Try another category or level.</p></div>
+    </section>
+  </div>
+
+  <!-- ===================== FORECAST ===================== -->
+  <div class="stack stack--page" data-tab-panel="admin-debug-tab:forecast" role="tabpanel" aria-label="Forecast" hidden>
+    <section class="panel" aria-labelledby="admin-debug-drift-title">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-debug-drift-title">Accuracy and drift</h2><p class="panel-sub">Whether misses look like one odd day or a model going wrong</p></div>
+        <div class="panel-action"><span class="badge badge--ok">Normal</span></div>
+      </header>
+      <div class="readouts">
+        <div class="readout"><span class="label">Usual miss</span><span class="readout-value"><span class="num">2.5<span class="unit">kWh</span></span></span><span class="readout-note">A day, over 30 days</span></div>
+        <div class="readout"><span class="label">Recent miss</span><span class="readout-value"><span class="num">2.7<span class="unit">kWh</span></span></span><span class="readout-note">A day, over the last 7</span></div>
+        <div class="readout"><span class="label">Ratio</span><span class="readout-value"><span class="num">1.09<span class="unit">×</span></span></span><span class="readout-note">Drift is flagged past 1.5×</span></div>
+        <div class="readout"><span class="label">Lean</span><span class="readout-value"><span class="num">+0.6<span class="unit">kWh</span></span></span><span class="readout-note">Running above, 3 days in a row</span></div>
+      </div>
+      <p class="small muted mt-m">30 graded days. One unusual day, Tue, Oct 20, used 8.1 kWh less than forecast.</p>
+    </section>
+
+    <div class="split">
+      <section class="panel" aria-labelledby="admin-debug-grade-title">
+        <header class="panel-head">
+          <div><h2 class="panel-title" id="admin-debug-grade-title">Each day, graded</h2><p class="panel-sub">Miss = actual minus forecast. Score = the miss against a typical day</p></div>
+        </header>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Day</th><th scope="col" class="is-num">Actual</th><th scope="col" class="is-num">Forecast</th><th scope="col" class="is-num">Miss</th><th scope="col" class="is-num">Score</th><th scope="col">Day type</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title" data-label="Day">Sun, Nov 8</td><td class="is-num" data-label="Actual">35.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">32.6 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+2.9 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.98</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sat, Nov 7</td><td class="is-num" data-label="Actual">34.8 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">34.5 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+0.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.10</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Fri, Nov 6</td><td class="is-num" data-label="Actual">21.6 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">19.9 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+1.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.57</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Thu, Nov 5</td><td class="is-num" data-label="Actual">25.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">22.1 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+3.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+1.11</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Wed, Nov 4</td><td class="is-num" data-label="Actual">21.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">25.4 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−3.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−1.25</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Tue, Nov 3</td><td class="is-num" data-label="Actual">18.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">15.1 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+3.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+1.11</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Mon, Nov 2</td><td class="is-num" data-label="Actual">20.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">24.0 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−3.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−1.18</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <details class="disclosure disclosure--row">
+          <summary><span class="when-closed">Show 23 more days</span><span class="when-open">Show fewer days</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Day</th><th scope="col" class="is-num">Actual</th><th scope="col" class="is-num">Forecast</th><th scope="col" class="is-num">Miss</th><th scope="col" class="is-num">Score</th><th scope="col">Day type</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title" data-label="Day">Sun, Nov 1</td><td class="is-num" data-label="Actual">18.8 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">16.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+2.6 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.88</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sat, Oct 31</td><td class="is-num" data-label="Actual">24.8 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">27.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−2.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.81</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Fri, Oct 30</td><td class="is-num" data-label="Actual">23.2 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">21.8 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+1.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.47</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Thu, Oct 29</td><td class="is-num" data-label="Actual">20.9 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">22.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−1.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.44</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Wed, Oct 28</td><td class="is-num" data-label="Actual">22.9 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">19.6 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+3.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+1.11</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Tue, Oct 27</td><td class="is-num" data-label="Actual">21.1 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">19.5 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+1.6 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.54</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Mon, Oct 26</td><td class="is-num" data-label="Actual">18.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">23.9 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−5.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−1.82</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sun, Oct 25</td><td class="is-num" data-label="Actual">28.0 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">27.9 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+0.1 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.03</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sat, Oct 24</td><td class="is-num" data-label="Actual">26.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">26.9 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−0.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.13</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Fri, Oct 23</td><td class="is-num" data-label="Actual">19.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">22.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−2.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.91</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Thu, Oct 22</td><td class="is-num" data-label="Actual">18.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">18.9 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−0.6 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.20</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Wed, Oct 21</td><td class="is-num" data-label="Actual">24.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">28.0 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−3.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−1.18</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Tue, Oct 20</td><td class="is-num" data-label="Actual">24.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">32.8 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−8.1 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−2.73</td><td data-label="Day type"><span class="badge badge--warn">Unusual</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Mon, Oct 19</td><td class="is-num" data-label="Actual">27.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">30.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−2.8 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.94</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sun, Oct 18</td><td class="is-num" data-label="Actual">27.1 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">25.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+1.9 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.64</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sat, Oct 17</td><td class="is-num" data-label="Actual">23.3 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">20.3 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+3.0 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+1.01</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Fri, Oct 16</td><td class="is-num" data-label="Actual">19.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">23.2 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−3.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−1.25</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Thu, Oct 15</td><td class="is-num" data-label="Actual">21.6 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">22.0 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−0.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.13</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Wed, Oct 14</td><td class="is-num" data-label="Actual">17.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">18.9 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−1.5 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.51</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Tue, Oct 13</td><td class="is-num" data-label="Actual">24.9 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">26.6 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−1.7 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.57</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Mon, Oct 12</td><td class="is-num" data-label="Actual">23.2 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">21.6 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">+1.6 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">+0.54</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sun, Oct 11</td><td class="is-num" data-label="Actual">30.0 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">31.0 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−1.0 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−0.34</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+              <tr><td class="cell-title" data-label="Day">Sat, Oct 10</td><td class="is-num" data-label="Actual">40.1 <span class="unit">kWh</span></td><td class="is-num" data-label="Forecast">44.5 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Miss">−4.4 <span class="unit">kWh</span></td><td class="is-num" data-label="Score">−1.48</td><td data-label="Day type"><span class="badge">Normal</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+          </div>
+        </details>
+      </section>
+
+      <div class="stack stack--page">
+        <section class="panel" aria-labelledby="admin-debug-fcev-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="admin-debug-fcev-title">What the forecast heard</h2><p class="panel-sub">Each time new usage landed, including times there was nothing new to learn</p></div>
+          </header>
+          <ul class="list">
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Mon, Nov 9, 9:20:22&nbsp;AM" data-ev-msg="Usage ingested, but no new actual reading since Nov 8 — nothing to grade" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Usage ingested, but no new actual reading since Nov 8 — nothing to grade</span><span class="row-meta"><span class="mono">9:20&nbsp;AM</span> · <span class="mono">ForecastScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Mon, Nov 9, 9:13:16&nbsp;AM" data-ev-msg="New actual for Nov 8: 35.5 kWh vs 32.6 predicted (residual +2.9). Model retrained on 108 days; 7-day outlook refreshed" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">New actual for Nov 8: 35.5 kWh vs 32.6 predicted (residual +2.9). Model retrained on 108 days; 7-day outlook refreshed</span><span class="row-meta"><span class="mono">9:13&nbsp;AM</span> · <span class="mono">ForecastScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastService" data-ev-when="Sun, Nov 8, 6:21:58&nbsp;PM" data-ev-msg="Tomorrow (Nov 9) forecast: 25.5 kWh · high 68°F / low 49°F (observed-weather model, weekend term off)" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Tomorrow (Nov 9) forecast: 25.5 kWh · high 68°F / low 49°F (observed-weather model, weekend term off)</span><span class="row-meta"><span class="mono">Sun, 6:21&nbsp;PM</span> · <span class="mono">ForecastService</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Sun, Nov 8, 12:45:31&nbsp;PM" data-ev-msg="New actual for Nov 7: 34.8 kWh vs 34.5 predicted (residual +0.3). Model retrained on 107 days; 7-day outlook refreshed" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">New actual for Nov 7: 34.8 kWh vs 34.5 predicted (residual +0.3). Model retrained on 107 days; 7-day outlook refreshed</span><span class="row-meta"><span class="mono">Sun, 12:45&nbsp;PM</span> · <span class="mono">ForecastScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastScheduler" data-ev-when="Sun, Nov 8, 11:32:57&nbsp;AM" data-ev-msg="Usage ingested, but no new actual reading since Nov 6 — nothing to grade" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Usage ingested, but no new actual reading since Nov 6 — nothing to grade</span><span class="row-meta"><span class="mono">Sun, 11:32&nbsp;AM</span> · <span class="mono">ForecastScheduler</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+            <li><button class="row row--compact" type="button" data-open-modal="admin-debug-event" data-ev-level="INFO" data-ev-cat="Forecast" data-ev-source="ForecastService" data-ev-when="Sat, Nov 7, 8:01:29&nbsp;PM" data-ev-msg="Tomorrow (Nov 8) forecast: 32.6 kWh · high 66°F / low 47°F (observed-weather model, weekend term on)" data-ev-details="">
+            <span class="row-lead row-lead--lamp"><span class="lamp lamp--ok"></span><span class="sr-only">OK</span></span>
+            <span class="row-main"><span class="row-title row-title--regular">Tomorrow (Nov 8) forecast: 32.6 kWh · high 66°F / low 47°F (observed-weather model, weekend term on)</span><span class="row-meta"><span class="mono">Sat, 8:01&nbsp;PM</span> · <span class="mono">ForecastService</span></span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          </ul>
+        </section>
+        <section class="panel panel--flush" aria-label="What the day types mean">
+          <details class="disclosure disclosure--row">
+            <summary><span class="when-closed">What the states mean</span><span class="when-open">Hide the states</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="disclosure-body">
+              <dl class="kv">
+                <div class="kv-row"><dt>Normal</dt><dd class="dbg-dd">Misses look like everyday noise</dd></div>
+                <div class="kv-row"><dt>Unusual</dt><dd class="dbg-dd">One day far off: a score past ±2.5</dd></div>
+                <div class="kv-row"><dt>Severe</dt><dd class="dbg-dd">A score past ±3.5</dd></div>
+                <div class="kv-row"><dt>Drift suspected</dt><dd class="dbg-dd">Recent misses run 1.5× the usual</dd></div>
+                <div class="kv-row"><dt>Regime change</dt><dd class="dbg-dd">The house uses energy differently now</dd></div>
+              </dl>
+            </div>
+          </details>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== TOOLS ===================== -->
+  <div class="stack stack--page" data-tab-panel="admin-debug-tab:tools" role="tabpanel" aria-label="Tools" hidden>
+    <section class="panel" aria-labelledby="admin-debug-sql-title">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-debug-sql-title">Query console</h2><p class="panel-sub">Read-only: SELECT, WITH, EXPLAIN and SHOW. Secrets come back redacted</p></div>
+      </header>
+      <div class="stack">
+        <details class="disclosure disclosure--key">
+          <summary><span class="when-closed">Show tables · 40</span><span class="when-open">Hide tables</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <ul class="list list--inset list--cols">
+              <li><button class="row row--compact" type="button" data-sql-table="hourly_electric_usage">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">hourly_electric_usage</span><span class="row-meta">4.1 MB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="host_metrics">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">host_metrics</span><span class="row-meta">3.8 MB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="app_events">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">app_events</span><span class="row-meta">2.9 MB · 7 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="thermostat_readings">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">thermostat_readings</span><span class="row-meta">2.3 MB · 12 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="camera_battery_readings">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">camera_battery_readings</span><span class="row-meta">1.5 MB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="tab_activity">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">tab_activity</span><span class="row-meta">1.1 MB · 5 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="network_devices">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">network_devices</span><span class="row-meta">176 KB · 12 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="electric_usage">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">electric_usage</span><span class="row-meta">168 KB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_runs">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_runs</span><span class="row-meta">152 KB · 23 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="weather_observations">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">weather_observations</span><span class="row-meta">144 KB · 13 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="notifications">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">notifications</span><span class="row-meta">136 KB · 8 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="forecast_snapshot">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">forecast_snapshot</span><span class="row-meta">128 KB · 17 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="thermostat_changes">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">thermostat_changes</span><span class="row-meta">112 KB · 12 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="maintenance_records">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">maintenance_records</span><span class="row-meta">96 KB · 24 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="coserv_bills">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">coserv_bills</span><span class="row-meta">88 KB · 14 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_coverage">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_coverage</span><span class="row-meta">80 KB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="gas_usage">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">gas_usage</span><span class="row-meta">72 KB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="water_bills">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">water_bills</span><span class="row-meta">64 KB · 15 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="app_releases">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">app_releases</span><span class="row-meta">64 KB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="users">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">users</span><span class="row-meta">48 KB · 16 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="guest_sessions">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">guest_sessions</span><span class="row-meta">48 KB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="smart_devices">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">smart_devices</span><span class="row-meta">48 KB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="thermostat_status">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">thermostat_status</span><span class="row-meta">40 KB · 18 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="camera_status">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">camera_status</span><span class="row-meta">40 KB · 17 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="push_subscriptions">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">push_subscriptions</span><span class="row-meta">32 KB · 7 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_status">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_status</span><span class="row-meta">32 KB · 21 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_parts">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_parts</span><span class="row-meta">32 KB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="forecast_model">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">forecast_model</span><span class="row-meta">32 KB · 15 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="notification_preferences">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">notification_preferences</span><span class="row-meta">24 KB · 5 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="weather_alert_settings">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">weather_alert_settings</span><span class="row-meta">24 KB · 7 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="weather_alert_log">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">weather_alert_log</span><span class="row-meta">24 KB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_map">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_map</span><span class="row-meta">24 KB · 5 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_commands">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_commands</span><span class="row-meta">24 KB · 8 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_device">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_device</span><span class="row-meta">16 KB · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="roomba_position">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">roomba_position</span><span class="row-meta">16 KB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="meters">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">meters</span><span class="row-meta">16 KB · 7 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="utility_accounts">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">utility_accounts</span><span class="row-meta">16 KB · 6 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="utility_providers">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">utility_providers</span><span class="row-meta">16 KB · 5 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="push_vapid_keys">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">push_vapid_keys</span><span class="row-meta">16 KB · 4 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+              <li><button class="row row--compact" type="button" data-sql-table="energy_usage">
+              <span class="row-main"><span class="row-title row-title--regular mono dbg-tname">energy_usage</span><span class="row-meta">empty view · 9 columns</span></span>
+              <svg class="icon chev" aria-hidden="true"><use href="#i-arrow-right"/></svg></button></li>
+            </ul>
+          </div>
+        </details>
+        <label class="field"><span class="label">Query</span><textarea class="textarea input--mono dbg-sql" rows="6" spellcheck="false" data-debug-sql>-- Click a table below, or write your own SQL
+SELECT timestamp, level, source, message
+FROM app_events
+WHERE timestamp &gt;= CURRENT_DATE - INTERVAL '1 day'
+ORDER BY timestamp DESC LIMIT 50</textarea><span class="field-help">Ctrl + Enter runs it too</span></label>
+        <div class="btn-row">
+          <button class="btn btn--primary" type="button" data-debug-query><svg class="icon" aria-hidden="true"><use href="#i-play"/></svg>Run query</button>
+        </div>
+        <div class="notice notice--problem" data-debug-sql-error hidden><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg>
+          <div><p class="notice-title">That query can change data, so it didn't run.</p><p class="notice-text">Only SELECT, WITH, EXPLAIN and SHOW work here.</p></div>
+        </div>
+        <div class="spread" data-debug-sql-meta><p class="label">Result</p><span class="mono small muted">37 rows · 38 ms · 4:58&nbsp;PM</span></div>
+      </div>
+      <div class="dbg-result-wrap mt-m" data-debug-sql-result>
+        <div class="table-wrap">
+          <table class="table dbg-result">
+            <thead><tr><th scope="col">timestamp</th><th scope="col">level</th><th scope="col">source</th><th scope="col">message</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 09:44:36</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/08/2026) already complete: 24/24 hours, 24 non-zero — skipping</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 09:29:52</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/08/2026) already has a daily reading (35.5 kWh) that matches its hourly total — skipping</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 09:20:22</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">ForecastScheduler</span></td><td class="cell-wide" data-label="message">Usage ingested, but no new actual reading since 11/08 — nothing to grade</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 09:14:45</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly sync complete for 11/08/2026: 24 hours stored (24 non-zero), batch 7c1f0c1e</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 09:13:16</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">ForecastScheduler</span></td><td class="cell-wide" data-label="message">New actual for 11/08: 35.5 kWh vs 32.6 predicted (residual +2.9). Model retrained on 108 days; 7-day outlook refreshed</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <details class="disclosure disclosure--row">
+          <summary><span class="when-closed">Show 32 more rows</span><span class="when-open">Show fewer rows</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <div class="table-wrap">
+          <table class="table dbg-result">
+            <thead><tr><th scope="col">timestamp</th><th scope="col">level</th><th scope="col">source</th><th scope="col">message</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 08:59:59</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">Daily sync complete for 11/08/2026: 35.5 kWh stored, batch 2b9d44aa</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 08:44:28</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly data for 11/08/2026 is partial (21/24 hours) — CoServ usually posts the last 3-hour block within the hour; will retry</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 08:29:27</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">No daily reading for 11/08/2026 yet — CoServ has not posted it; will retry at 9:00&nbsp;AM</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 08:14:46</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly data for 11/08/2026 is partial (5/24 hours) — will retry</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 07:59:21</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">WeatherService</span></td><td class="cell-wide" data-label="message">Open-Meteo forecast request timed out after 10 s — serving the cached forecast from 6:02&nbsp;AM</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 07:44:29</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">CoServ poll still PENDING after 6 attempts for 11/08/2026 — will retry at 8:15&nbsp;AM</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 07:29:22</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">No daily reading for 11/08/2026 yet — CoServ has not posted it; will retry at 8:00&nbsp;AM</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 07:14:28</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Scheduler window opened (7:15&nbsp;AM–11:45&nbsp;PM CT). Scanning the last 14 days for gaps: 1 day incomplete (10/28)</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 06:59:35</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">Scheduler window opened (7:00&nbsp;AM–11:30&nbsp;PM CT). Scanning the last 14 days for gaps: no days missing</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 06:03:27</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">WaterBillSyncScheduler</span></td><td class="cell-wide" data-label="message">Skipped the water bill check — Gmail still needs to be signed in again</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 05:59:22</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">CoservBillSyncScheduler</span></td><td class="cell-wide" data-label="message">No new CoServ bill — latest on file is the Nov 5 statement ($145.62)</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 05:00:15</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">GasSyncScheduler</span></td><td class="cell-wide" data-label="message">Gas line items parsed from the Nov 5 bill: 9 CCF, $37.23</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 02:51:35</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">CameraVideoWatchdog</span></td><td class="cell-wide" data-label="message">Live video is back — go2rtc answering again after 42 s</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-09 02:50:26</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">CameraVideoWatchdog</span></td><td class="cell-wide" data-label="message">Live video stopped answering (go2rtc: connection refused). Restarting the eufy bridge session</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 22:56:28</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/07/2026) already complete: 24/24 hours, 24 non-zero — skipping</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 22:41:47</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/07/2026) already has a daily reading (34.8 kWh) that matches its hourly total — skipping</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 19:49:11</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/07/2026) already complete: 24/24 hours, 24 non-zero — skipping</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 18:21:58</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">ForecastService</span></td><td class="cell-wide" data-label="message">Tomorrow (11/09) forecast: 25.5 kWh · high 68°F / low 49°F (observed-weather model, weekend term off)</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 16:58:31</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/07/2026) already complete: 24/24 hours, 24 non-zero — skipping</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 16:12:41</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">CameraVideoWatchdog</span></td><td class="cell-wide" data-label="message">Garage camera went offline — no frames since 4:12&nbsp;PM. Will keep trying every 5 min</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 14:30:58</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">WeatherService</span></td><td class="cell-wide" data-label="message">Stored the observed weather for 11/07: high 71°F, low 52°F, 0.00 in rain</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 12:47:17</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly sync complete for 11/07/2026: 24 hours stored (24 non-zero), batch a40e77d2</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 12:45:31</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">ForecastScheduler</span></td><td class="cell-wide" data-label="message">New actual for 11/07: 34.8 kWh vs 34.5 predicted (residual +0.3). Model retrained on 107 days; 7-day outlook refreshed</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 12:32:40</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">Daily sync complete for 11/07/2026: 34.8 kWh stored, batch 0d1c9e53</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 12:17:10</span></td><td class="cell-key" data-label="level"><span class="mono">ERROR</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly sync failed for 11/07/2026: SmartHub login timed out waiting for the Bearer token</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 12:02:16</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">DailySyncScheduler</span></td><td class="cell-wide" data-label="message">No daily reading for 11/07/2026 yet — CoServ has not posted it; will retry at 12:30&nbsp;PM</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 11:47:47</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly data for 11/07/2026 is partial (20/24 hours) — will retry</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 11:32:57</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">ForecastScheduler</span></td><td class="cell-wide" data-label="message">Usage ingested, but no new actual reading since 11/06 — nothing to grade</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 11:11:44</span></td><td class="cell-key" data-label="level"><span class="mono">ERROR</span></td><td data-label="source"><span class="mono">WaterBillSyncScheduler</span></td><td class="cell-wide" data-label="message">Gmail refused the saved sign-in (invalid_grant). The water bill check is paused until it is re-authorized</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 10:17:12</span></td><td class="cell-key" data-label="level"><span class="mono">WARN</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Hourly data for 11/07/2026 is partial (5/24 hours) — will retry</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 09:31:35</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">CoservBillSyncScheduler</span></td><td class="cell-wide" data-label="message">No new CoServ bill — latest on file is the Nov 5 statement ($145.62)</td></tr>
+              <tr><td class="cell-title dbg-ts" data-label="timestamp"><span class="mono">2026-11-08 01:01:28</span></td><td class="cell-key" data-label="level"><span class="mono">INFO</span></td><td data-label="source"><span class="mono">HourlySyncScheduler</span></td><td class="cell-wide" data-label="message">Yesterday (11/06/2026) already complete: 24/24 hours, 24 non-zero — skipping</td></tr>
+            </tbody>
+          </table>
+        </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <div class="split split--even">
+      <section class="panel" aria-labelledby="admin-debug-db-title">
+        <header class="panel-head">
+          <div><h2 class="panel-title" id="admin-debug-db-title">Database</h2><p class="panel-sub">53 MB in all. Rows in the tables that matter most</p></div>
+        </header>
+        <dl class="kv kv--cols">
+          <div class="kv-row"><dt class="mono dbg-wrap">electric_usage</dt><dd>108</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">hourly_electric_usage</dt><dd>2,592</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">gas_usage</dt><dd>4</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">weather_observations</dt><dd>131</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">app_events</dt><dd>6,214</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">users</dt><dd>5</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">guest_sessions</dt><dd>9</dd></div>
+          <div class="kv-row"><dt class="mono dbg-wrap">notifications</dt><dd>187</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel" aria-labelledby="admin-debug-sleep-title">
+        <header class="panel-head">
+          <div><h2 class="panel-title" id="admin-debug-sleep-title">Sleep screen test</h2><p class="panel-sub">Check the sleep screen without waiting 10 minutes</p></div>
+        </header>
+        <div class="stack">
+          <p class="small" data-debug-sleep-text>Makes the next sleep come after 30 s of no activity instead of 10 minutes, once. On a phone, open any page with <span class="code">?sleepTest</span> on the address instead.</p>
+          <div class="btn-row"><button class="btn" type="button" data-debug-sleep><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg><span>Start 30 s test</span></button></div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Dialog: one event, in full -->
+  <div class="dialog" data-modal="admin-debug-event" hidden role="dialog" aria-modal="true" aria-labelledby="admin-debug-event-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label" data-ev="cat">Sync</p>
+          <h2 class="dialog-title" id="admin-debug-event-title" data-ev="title">Hourly sync failed for Sat, Nov 7: SmartHub login timed out waiting for the Bearer token</h2>
+          <p class="dialog-sub mono" data-ev="when">Sun, Nov 8, 12:17:10&nbsp;PM</p>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack">
+        <dl class="kv">
+          <div class="kv-row"><dt>Level</dt><dd><span class="badge badge--problem" data-ev="level">Problem</span></dd></div>
+          <div class="kv-row"><dt>From</dt><dd class="mono" data-ev="source">HourlySyncScheduler</dd></div>
+        </dl>
+        <div class="stack stack--s">
+          <p class="label">Details</p>
+          <pre class="dbg-pre" data-ev="details">Error: page.waitForResponse: Timeout 30000ms exceeded while waiting for event &quot;response&quot;
+    at capturePollAuth (/scripts/sync.js:212:31)
+    at async login (/scripts/sync.js:188:5)
+    at async main (/scripts/sync.js:640:18)
+exit code: 1 · granularity=hourly · date=11/07/2026</pre>
+          <p class="small muted" data-ev="nodetails" hidden>No more details for this event.</p>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal>Close</button>
+        <button class="btn" type="button" data-toast="Event copied"><svg class="icon" aria-hidden="true"><use href="#i-copy"/></svg>Copy event</button>
+      </footer>
+    </div>
+  </div>
+</section>

@@ -1,6 +1,7 @@
-import { memo, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRoombaPosition, fetchRoombaCoverage } from '../api/roomba';
+import { EmptyState, ErrorState, Icon, Loading, SkelBlock } from './ui';
 import type {
   GeoFeatureCollection,
   GeoPosition,
@@ -23,6 +24,14 @@ export interface SplitLine {
 interface RoombaMapProps {
   map: RoombaMapData | null;
   loading?: boolean;
+  /** The first load failed (B-005): say so with a Try again, never "No map yet". */
+  error?: boolean;
+  onRetry?: () => void;
+  retrying?: boolean;
+  /** The robot's name, for the legend's dot ("Rosie"). */
+  robotName?: string | null;
+  /** Drawn under the plan, beside the legend (the battery ring). */
+  aside?: ReactNode;
   className?: string;
   /** When true, poll the live position (~1.5s) and draw the moving robot dot. */
   running?: boolean;
@@ -87,6 +96,63 @@ function pointInRing(px: number, py: number, ring: [number, number][]): boolean 
   return inside;
 }
 
+/**
+ * Where a room's name goes: the area-weighted (shoelace) centroid of its outer ring, and when
+ * that falls outside the room (an L shape), the middle of the widest horizontal run through the
+ * room at the centroid's height, or failing that at the box's middle (B-122). The plain average
+ * of the vertices it replaced counted the ring's repeated closing point and drifted toward it.
+ */
+export function labelPoint(ring: [number, number][]): [number, number] {
+  const closed = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1];
+  const pts = closed ? ring.slice(0, -1) : ring;
+  if (pts.length === 0) return [0, 0];
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const [x0, y0] = pts[i];
+    const [x1, y1] = pts[(i + 1) % pts.length];
+    const cross = x0 * y1 - x1 * y0;
+    a += cross;
+    cx += (x0 + x1) * cross;
+    cy += (y0 + y1) * cross;
+  }
+  const c: [number, number] = Math.abs(a) < 1e-9
+    // Degenerate (a line): the mean of the distinct points.
+    ? [pts.reduce((t, p) => t + p[0], 0) / pts.length, pts.reduce((t, p) => t + p[1], 0) / pts.length]
+    : [cx / (3 * a), cy / (3 * a)];
+  if (pointInRing(c[0], c[1], pts)) return c;
+  const ys = pts.map((p) => p[1]);
+  const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
+  for (const y of [c[1], midY]) {
+    const span = widestSpan(pts, y);
+    if (span) return [(span[0] + span[1]) / 2, y];
+  }
+  return c;
+}
+
+/** The widest stretch of a horizontal line at `y` that lies inside the ring. */
+function widestSpan(ring: [number, number][], y: number): [number, number] | null {
+  const xs: number[] = [];
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+  }
+  xs.sort((p, q) => p - q);
+  let best: [number, number] | null = null;
+  for (let k = 0; k + 1 < xs.length; k += 2) {
+    if (!best || xs[k + 1] - xs[k] > best[1] - best[0]) best = [xs[k], xs[k + 1]];
+  }
+  return best;
+}
+
+/** True for a key press that belongs to a control (a button, a field), not to the map's shortcuts. */
+export function isFromControl(target: EventTarget | null): boolean {
+  const el = target as { closest?: (sel: string) => unknown } | null;
+  return !!el?.closest?.('button, a, input, select, textarea, summary, [role="button"]');
+}
+
 interface Bounds {
   minX: number;
   minY: number;
@@ -123,6 +189,8 @@ function extendBounds(fc: GeoFeatureCollection | null | undefined, b: Bounds): v
 // regardless of the real-world size of the map in meters.
 const VIEW_EXTENT = 1000;
 const PAD_RATIO = 0.06; // 6% breathing room around the plan
+// Room names never draw smaller than this on screen (B-123: about 8px on a phone before).
+const MIN_LABEL_PX = 11;
 
 export default memo(function RoombaMap({
   map,
@@ -142,6 +210,11 @@ export default memo(function RoombaMap({
   onToggleMergeRoom,
   cleanMode,
   onSelectCleanRoom,
+  error,
+  onRetry,
+  retrying,
+  robotName,
+  aside,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   // Room hover highlight is driven purely by CSS `:hover` on the hit-area group
@@ -157,11 +230,31 @@ export default memo(function RoombaMap({
     if (!splitMode) setCursor(null);
   }, [splitMode]);
 
+  // How wide the plan is drawn on screen, in CSS px, so labels keep a readable minimum size.
+  // Rounded to 20px steps so a resize doesn't redraw the static layers every frame; it never
+  // changes on a position or coverage poll.
+  const [drawnWidth, setDrawnWidth] = useState(0);
+  const observerRef = useRef<ResizeObserver | null>(null);
+  const measureRef = useCallback((el: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? 0;
+      setDrawnWidth(Math.round(w / 20) * 20);
+    });
+    ro.observe(el);
+    observerRef.current = ro;
+  }, []);
+  useEffect(() => () => observerRef.current?.disconnect(), []);
+
   // Keyboard shortcuts while dividing: Enter finishes (≥2 corners), Backspace
-  // removes the last corner.
+  // removes the last corner. Not when the key belongs to a focused control: Enter on
+  // "Cancel divide" must cancel, not finish (B-124).
   useEffect(() => {
     if (!splitMode) return;
     const onKey = (e: KeyboardEvent) => {
+      if (isFromControl(e.target)) return;
       const n = splitDraft?.length ?? 0;
       if (e.key === 'Enter' && n >= 2) {
         e.preventDefault();
@@ -314,14 +407,7 @@ export default memo(function RoombaMap({
         if (rings.length === 0 || !outer || outer.length === 0) continue;
 
         const outerPts = outer.map((p) => project(p));
-        let sx = 0;
-        let sy = 0;
-        for (const [px, py] of outerPts) {
-          sx += px;
-          sy += py;
-        }
-        const cx = sx / outerPts.length;
-        const cy = sy / outerPts.length;
+        const [cx, cy] = labelPoint(outerPts);
 
         const rawName = (f.properties?.name ?? f.properties?.room_name) as unknown;
         const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : null;
@@ -436,14 +522,14 @@ export default memo(function RoombaMap({
           <polygon
             key={`floor-${i}`}
             points={pts}
-            fill="var(--appsurface-raised)"
-            stroke="var(--appborder)"
-            strokeWidth={Math.max(width, height) * 0.004}
+            fill="var(--appsurface)"
+            stroke="var(--appborder-strong)"
+            strokeWidth={Math.max(width, height) * 0.003}
             strokeLinejoin="round"
           />
         ))}
 
-        {/* Rooms — accent-tinted regions (decorative; interaction layer is below).
+        {/* Rooms — a faint ink wash (decorative; interaction layer is below).
             The hover highlight lives on the hit-area layer via CSS, so these fills
             depend only on merge selection. */}
         {rooms.map((room, ri) => {
@@ -452,9 +538,9 @@ export default memo(function RoombaMap({
             <polygon
               key={`room-${ri}-${i}`}
               points={pts}
-              fill={mergeSelected ? 'var(--appaccent)' : 'var(--appaccent-soft)'}
-              fillOpacity={mergeSelected ? 0.34 : 1}
-              stroke={mergeSelected ? 'var(--appaccent)' : 'var(--appaccent-border)'}
+              fill={mergeSelected ? 'var(--apptext)' : 'var(--appmap-room)'}
+              fillOpacity={mergeSelected ? 0.22 : 1}
+              stroke={mergeSelected ? 'var(--apptext)' : 'var(--appborder)'}
               strokeWidth={maxDim * (mergeSelected ? 0.005 : 0.003)}
               strokeLinejoin="round"
               style={{ pointerEvents: 'none' }}
@@ -471,20 +557,22 @@ export default memo(function RoombaMap({
     const maxDim = Math.max(width, height);
     const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
     const interactive = canEdit || isMerging || isCleaning;
+    // viewBox units per CSS px; labels and glyphs keep a readable on-screen minimum (B-123).
+    const unitsPerPx = drawnWidth > 0 ? width / drawnWidth : 0;
+    const labelSize = Math.max(maxDim * 0.024, MIN_LABEL_PX * unitsPerPx);
+    const promptSize = Math.max(maxDim * 0.022, MIN_LABEL_PX * unitsPerPx);
+    const glyphSize = Math.max(maxDim * 0.03, 16 * unitsPerPx);
     return (
       <>
         {/* Keep-out / no-mop zones — hatched, distinct per category */}
         {zonePolys.map((z, i) => {
-          const noMop = z.category.includes('NO_MOP') || z.category.includes('MOP');
-          const color = noMop ? 'var(--appwarning)' : 'var(--appdanger)';
+          const noMop = isNoMop(z.category);
           return (
             <polygon
               key={`zone-${i}`}
               points={z.points}
-              fill={color}
-              fillOpacity={0.14}
-              stroke={color}
-              strokeOpacity={0.85}
+              fill={noMop ? 'var(--apptint-warn)' : 'var(--apptint-problem)'}
+              stroke={noMop ? 'var(--apptext-warning)' : 'var(--apptext-danger)'}
               strokeWidth={maxDim * 0.004}
               strokeDasharray={`${maxDim * 0.012} ${maxDim * 0.008}`}
               strokeLinejoin="round"
@@ -498,20 +586,20 @@ export default memo(function RoombaMap({
             key={`border-${i}`}
             points={pts}
             fill="none"
-            stroke="var(--apptext-muted)"
+            stroke="var(--appmap-wall)"
             strokeWidth={maxDim * 0.006}
             strokeLinejoin="round"
             strokeLinecap="round"
           />
         ))}
 
-        {/* Virtual walls — LineString policy zones, dashed danger-colored */}
+        {/* Virtual walls — LineString policy zones, dashed problem-coloured */}
         {wallLines.map((pts, i) => (
           <polyline
             key={`vwall-${i}`}
             points={pts}
             fill="none"
-            stroke="var(--appdanger)"
+            stroke="var(--apptext-danger)"
             strokeWidth={maxDim * 0.007}
             strokeDasharray={`${maxDim * 0.016} ${maxDim * 0.01}`}
             strokeLinejoin="round"
@@ -519,20 +607,36 @@ export default memo(function RoombaMap({
           />
         ))}
 
-        {/* Dock marker */}
-        {dockMarkers.map(([cx, cy], i) => (
-          <g key={`dock-${i}`}>
-            <circle cx={cx} cy={cy} r={dockR * 2.2} fill="var(--appaccent-soft)" />
-            <circle
-              cx={cx}
-              cy={cy}
-              r={dockR}
-              fill="var(--appaccent)"
-              stroke="var(--appsurface-raised)"
-              strokeWidth={dockR * 0.35}
-            />
-          </g>
-        ))}
+        {/* Dock marker: a small plate with the dock icon, like the legend's key */}
+        {dockMarkers.map(([cx, cy], i) => {
+          const s = Math.max(dockR * 2.6, 24 * unitsPerPx);
+          return (
+            <g key={`dock-${i}`}>
+              <rect
+                x={cx - s / 2}
+                y={cy - s / 2}
+                width={s}
+                height={s}
+                rx={s * 0.25}
+                fill="var(--appsurface)"
+                stroke="var(--appborder-strong)"
+                strokeWidth={s * 0.04}
+              />
+              <use
+                href="#fp-i-dock"
+                x={cx - s * 0.32}
+                y={cy - s * 0.32}
+                width={s * 0.64}
+                height={s * 0.64}
+                fill="none"
+                stroke="var(--apptext)"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </g>
+          );
+        })}
 
         {/* Room name labels — centered on each named room's centroid. In edit
             mode, unnamed rooms show a "Name this room" prompt instead. */}
@@ -546,14 +650,16 @@ export default memo(function RoombaMap({
               x={room.cx}
               y={room.cy}
               fill={isPrompt ? 'var(--apptext-muted)' : 'var(--apptext-soft)'}
-              fontSize={maxDim * (isPrompt ? 0.022 : 0.026)}
+              fontSize={isPrompt ? promptSize : labelSize}
               fontWeight={isPrompt ? 500 : 600}
               fontStyle={isPrompt ? 'italic' : 'normal'}
               textAnchor="middle"
               dominantBaseline="middle"
+              // Names as written (not silk-screen caps, which are too wide for small rooms on a
+              // phone); a halo in the floor colour keeps a name readable where it crosses a wall.
               style={{ paintOrder: 'stroke', pointerEvents: 'none' }}
-              stroke="var(--appsurface-raised)"
-              strokeWidth={maxDim * 0.006}
+              stroke="var(--appsurface)"
+              strokeWidth={labelSize * 0.28}
               strokeLinejoin="round"
             >
               {label}
@@ -610,70 +716,67 @@ export default memo(function RoombaMap({
                       strokeLinejoin="round"
                     />
                   ))}
-                  {/* Affordance glyph: ✓ for a selected merge room, 🧹 in clean mode,
-                      ✏️ for a named room in rename mode */}
-                  {isMerging ? (
-                    mergeSelected && (
-                      <text
-                        x={room.cx}
-                        y={room.cy + maxDim * 0.03}
-                        fill="var(--appaccent-text)"
-                        fontSize={maxDim * 0.024}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        ✓
-                      </text>
-                    )
-                  ) : (isCleaning || room.name) && (
-                    <text
-                      x={room.cx}
-                      y={room.cy + maxDim * 0.03}
-                      fill="var(--apptext-muted)"
-                      fontSize={maxDim * 0.02}
-                      textAnchor="middle"
-                      dominantBaseline="middle"
+                  {/* Affordance glyph from the icon sprite: a check on a selected merge
+                      room, play in clean mode, a pencil on a named room in rename mode */}
+                  {(isMerging ? mergeSelected : isCleaning || !!room.name) && (
+                    <use
+                      href={`#fp-i-${isMerging ? 'check' : isCleaning ? 'play' : 'edit'}`}
+                      x={room.cx - glyphSize / 2}
+                      y={room.cy + labelSize * 0.8}
+                      width={glyphSize}
+                      height={glyphSize}
+                      fill="none"
+                      stroke={isMerging ? 'var(--apptext)' : 'var(--apptext-muted)'}
+                      strokeWidth={isMerging ? 2.2 : 1.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                       style={{ pointerEvents: 'none' }}
-                    >
-                      {isCleaning ? '🧹' : '✏️'}
-                    </text>
+                    />
                   )}
                 </g>
               );
             })}
       </>
     );
-  }, [model, isMerging, isCleaning, canEdit, mergeSelection, onToggleMergeRoom, onSelectCleanRoom, onSelectRoom]);
+  }, [model, isMerging, isCleaning, canEdit, mergeSelection, onToggleMergeRoom, onSelectCleanRoom, onSelectRoom, drawnWidth]);
 
+  // The legend names only the marks this plan actually has.
+  const legend = useMemo(() => {
+    if (!model) return null;
+    return {
+      keepOut: model.zonePolys.some((z) => !isNoMop(z.category)),
+      noMop: model.zonePolys.some((z) => isNoMop(z.category)),
+      wall: model.wallLines.length > 0,
+      dock: model.dockMarkers.length > 0,
+    };
+  }, [model]);
+
+  // Loading, failed or no map yet: the state in the map's place, the aside (the battery) kept.
+  const holder = (body: ReactNode) => (
+    <div className={className}>
+      {body}
+      {aside != null && <div className="mt-3 flex justify-end">{aside}</div>}
+    </div>
+  );
   if (loading) {
-    return (
-      <div
-        className={`animate-pulse rounded-[24px] border border-appborder bg-appinset ${className ?? ''}`}
-        style={{ minHeight: 320 }}
-        aria-hidden
-      />
+    return holder(
+      <Loading label="Loading the floor plan">
+        <SkelBlock height={240} />
+      </Loading>,
     );
+  }
+
+  // The first load failed: say so (B-005), with a way to try again.
+  if (error && !map) {
+    return holder(<ErrorState compact title="Couldn't load the floor plan" onRetry={onRetry} retrying={retrying} />);
   }
 
   // 204 / no map yet, or a map row with no drawable geometry.
   if (!model || !model.hasGeometry) {
-    return (
-      <div
-        className={`flex flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-appborder bg-appinset p-8 text-center ${className ?? ''}`}
-        style={{ minHeight: 320 }}
-      >
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft">
-          <svg className="h-6 w-6 text-appaccent-text" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
-          </svg>
-        </div>
-        <p className="text-sm font-medium text-apptext-soft">No map yet</p>
-        <p className="max-w-xs text-xs leading-5 text-apptext-muted">
-          Your Roomba builds its floor map over the first few cleaning runs. Once it
-          has mapped a room, the layout will appear here.
-        </p>
-      </div>
+    return holder(
+      <EmptyState compact icon="map" title="No map yet">
+        The robot builds its floor map over its first few cleans. The rooms appear here once it has mapped one.
+      </EmptyState>,
     );
   }
 
@@ -738,11 +841,12 @@ export default memo(function RoombaMap({
   // The heading is drawn in SVG space where y grows downward, so the meter-space
   // angle theta maps to (cos θ, −sin θ). theta is provisional (may point out the
   // robot's back — see maps.md #1); still useful as a facing hint.
+  const unitsPerPx = drawnWidth > 0 ? width / drawnWidth : 0;
   const robot =
     position && Number.isFinite(position.x) && Number.isFinite(position.y)
       ? (() => {
           const [cx, cy] = project([position.x, position.y]);
-          const r = maxDim * 0.02;
+          const r = Math.max(maxDim * 0.016, 7 * unitsPerPx);
           const theta = typeof position.theta === 'number' ? position.theta : null;
           const L = r * 2.4;
           const head =
@@ -753,16 +857,20 @@ export default memo(function RoombaMap({
         })()
       : null;
 
+  const interactive = canEdit || isMerging || isCleaning;
+  const name = robotName?.trim() || 'Robot';
+
   return (
-    <div
-      className={`overflow-hidden rounded-[24px] border border-appborder bg-appinset p-3 ${className ?? ''}`}
-    >
+    <div className={className}>
+      <div ref={measureRef} className="overflow-hidden rounded-well border border-appborder bg-appmap-floor p-2 sm:p-3">
       <svg
         ref={svgRef}
         viewBox={`0 0 ${width.toFixed(1)} ${height.toFixed(1)}`}
-        className="h-auto w-full"
-        role="img"
-        aria-label={`Roomba floor plan${map?.name ? `: ${map.name}` : ''}`}
+        className="block h-auto w-full"
+        // An image while it is only a picture; a group while its rooms are keys, because an
+        // image's children are hidden from screen readers (B-121).
+        role={interactive ? 'group' : 'img'}
+        aria-label={`Floor plan${map?.name ? `: ${map.name}` : ''}`}
         preserveAspectRatio="xMidYMid meet"
         style={isSplitting ? { cursor: 'crosshair' } : undefined}
         onClick={isSplitting ? handleSplitClick : undefined}
@@ -781,8 +889,8 @@ export default memo(function RoombaMap({
             key={`cov-${i}`}
             d={c.d}
             fillRule="evenodd"
-            fill="var(--appaccent)"
-            fillOpacity={c.mode === 'cleaned' ? 0.5 : 0.2}
+            fill="var(--apptext)"
+            fillOpacity={c.mode === 'cleaned' ? 0.16 : 0.06}
             stroke="none"
             style={{ pointerEvents: 'none' }}
           />
@@ -794,15 +902,15 @@ export default memo(function RoombaMap({
 
         {/* Live robot dot + heading — same project() space, hidden when stale */}
         {robot && (
-          <g aria-label="Robot position">
+          <g aria-label={`${name}'s position`}>
             {robot.head && (
               <line
                 x1={robot.cx}
                 y1={robot.cy}
                 x2={robot.head.hx}
                 y2={robot.head.hy}
-                stroke="var(--appsuccess)"
-                strokeWidth={robot.r * 0.55}
+                stroke="var(--apptext)"
+                strokeWidth={robot.r * 0.45}
                 strokeLinecap="round"
               />
             )}
@@ -814,15 +922,15 @@ export default memo(function RoombaMap({
               cx={robot.cx}
               cy={robot.cy}
               r={robot.r * 2.4}
-              fill="var(--appsuccess)"
+              fill="var(--apptext)"
               fillOpacity={0.18}
             />
             <circle
               cx={robot.cx}
               cy={robot.cy}
               r={robot.r}
-              fill="var(--appsuccess)"
-              stroke="var(--appsurface-raised)"
+              fill="var(--apptext)"
+              stroke="var(--appmap-floor)"
               strokeWidth={robot.r * 0.4}
             />
           </g>
@@ -844,9 +952,9 @@ export default memo(function RoombaMap({
                     <polygon
                       key={`split-room-${ri}-${i}`}
                       points={pts}
-                      fill="var(--appaccent)"
-                      fillOpacity={0.16}
-                      stroke="var(--appaccent)"
+                      fill="var(--apptext)"
+                      fillOpacity={0.12}
+                      stroke="var(--apptext)"
                       strokeWidth={maxDim * 0.004}
                       strokeLinejoin="round"
                     />
@@ -857,7 +965,7 @@ export default memo(function RoombaMap({
                 <polyline
                   points={polyPts}
                   fill="none"
-                  stroke="var(--appdanger)"
+                  stroke="var(--apptext-danger)"
                   strokeWidth={maxDim * 0.006}
                   strokeLinejoin="round"
                   strokeLinecap="round"
@@ -870,7 +978,7 @@ export default memo(function RoombaMap({
                   y1={last[1]}
                   x2={cursor.vx}
                   y2={cursor.vy}
-                  stroke="var(--appdanger)"
+                  stroke="var(--apptext-danger)"
                   strokeOpacity={0.6}
                   strokeWidth={maxDim * 0.006}
                   strokeDasharray={`${maxDim * 0.014} ${maxDim * 0.009}`}
@@ -884,8 +992,8 @@ export default memo(function RoombaMap({
                   cx={x}
                   cy={y}
                   r={maxDim * (i === 0 ? 0.013 : 0.01)}
-                  fill="var(--appdanger)"
-                  stroke="var(--appsurface-raised)"
+                  fill="var(--apptext-danger)"
+                  stroke="var(--appsurface)"
                   strokeWidth={maxDim * 0.004}
                 />
               ))}
@@ -893,6 +1001,41 @@ export default memo(function RoombaMap({
           );
         })()}
       </svg>
+      </div>
+      {(aside != null || legend) && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <ul className="fp-dial-legend justify-start" aria-label="Map key">
+            {coverageLayer.length > 0 && <MapKey kind="cleaned">Cleaned this run</MapKey>}
+            {legend?.keepOut && <MapKey kind="keepout">Off-limits</MapKey>}
+            {legend?.noMop && <MapKey kind="nomop">No mopping</MapKey>}
+            {legend?.wall && <MapKey kind="wall">Virtual wall</MapKey>}
+            {robot && <MapKey kind="dot">{name}</MapKey>}
+            {legend?.dock && <MapKey kind="dock">Dock</MapKey>}
+          </ul>
+          {aside}
+        </div>
+      )}
     </div>
   );
 });
+
+function isNoMop(category: string): boolean {
+  return category.includes('NO_MOP') || category.includes('MOP');
+}
+
+/** One legend entry, its key drawn like the mark it explains. */
+function MapKey({ kind, children }: { kind: 'cleaned' | 'keepout' | 'nomop' | 'wall' | 'dot' | 'dock'; children: ReactNode }) {
+  const key =
+    kind === 'dock' ? <Icon name="dock" className="fp-icon--s" />
+      : kind === 'dot' ? <span className="inline-block h-2.5 w-2.5 rounded-full bg-apptext" />
+        : kind === 'wall' ? <span className="inline-block w-4 border-t-2 border-dashed border-apptext-danger" />
+          : kind === 'keepout' ? <span className="inline-block h-2.5 w-3.5 rounded-[2px] border border-dashed border-apptext-danger bg-apptint-problem" />
+            : kind === 'nomop' ? <span className="inline-block h-2.5 w-3.5 rounded-[2px] border border-dashed border-apptext-warning bg-apptint-warn" />
+              : <span className="inline-block h-2.5 w-3.5 rounded-[2px] border border-appborder bg-[color-mix(in_srgb,var(--apptext)_16%,transparent)]" />;
+  return (
+    <li className="fp-lg-item">
+      <span aria-hidden="true" className="inline-flex">{key}</span>
+      {children}
+    </li>
+  );
+}

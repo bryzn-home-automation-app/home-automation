@@ -37,6 +37,18 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("2.0.0", "stable", LocalDate.of(2026, 11, 10),
+                    "A new look",
+                    "Every tab except Maintenance has a new design: one dial, a plain answer and a few numbers at the top of each page.",
+                    List.of(
+                            change("new", "A new look across the app, in light and dark. Each page opens with the answer to what you came for."),
+                            change("new", "Alerts are always one tap away, at the top of every page."),
+                            change("improved", "Pages are named in plain words: Utilities, Climate, People, Alerts, Server health."),
+                            change("improved", "The four colour palettes are now four finishes for the background. The theme can also follow your phone."),
+                            change("improved", "When something fails to load, the page says so and offers Try again instead of looking empty."),
+                            change("fixed", "A brief server hiccup no longer signs you out."),
+                            change("fixed", "The guest Wi-Fi code now scans in the dark theme."),
+                            change("fixed", "Dates, money and numbers read the same way on every page."))),
             define("1.10.1", "stable", LocalDate.of(2026, 11, 8),
                     "Cameras start more reliably",
                     "Live view on an iPhone no longer gets stuck on \"Waking camera…\".",

@@ -1,4 +1,15 @@
-/** Avatar with role-colored border. Pure presentational. */
+import { useState, type CSSProperties } from 'react';
+import { avatarInk, initials } from '../ui';
+
+/**
+ * A person's avatar at any pixel size: their photo, or their initials on their own colour.
+ *
+ * The kit's <Avatar> (components/ui/People) has five fixed sizes; this keeps the old
+ * numeric `size` prop for the pages that still pass one (guest sign-in, Edit profile) and
+ * draws the same fp-avatar: an opaque disc with ink or white initials, whichever reads
+ * better on the person's colour (B-158: white on a translucent pastel measured 1.2–2:1),
+ * and the same initials rule as the shell and the kit (B-183).
+ */
 export default function Avatar({
   displayName,
   avatarUrl,
@@ -12,37 +23,29 @@ export default function Avatar({
   size?: number;
   className?: string;
 }) {
-  const initials = (displayName || '?')
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+  const [broken, setBroken] = useState<string | null>(null);
+  const showPhoto = !!avatarUrl && broken !== avatarUrl;
+  const ink = avatarInk(accentColor);
+  const style = {
+    '--fp-who': accentColor,
+    '--fp-size': `${size}px`,
+    fontSize: Math.round(size * 0.38),
+    ...(ink && !showPhoto ? { color: ink } : {}),
+    ...(showPhoto ? { overflow: 'hidden' } : {}),
+  } as CSSProperties;
 
   return (
-    <div
-      className={`relative shrink-0 overflow-hidden rounded-full ${className}`}
-      style={{
-        width: size,
-        height: size,
-        border: `3px solid ${accentColor}`,
-        boxShadow: `0 0 24px ${accentColor}30`,
-      }}
-    >
-      {avatarUrl ? (
+    <span className={`fp-avatar ${className}`} style={style} role="img" aria-label={displayName || 'Avatar'}>
+      {showPhoto ? (
         <img
-          src={avatarUrl}
-          alt={displayName}
-          className="h-full w-full object-cover"
+          src={avatarUrl!}
+          alt=""
+          onError={() => setBroken(avatarUrl!)}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }}
         />
       ) : (
-        <div
-          className="flex h-full w-full items-center justify-center text-white font-semibold"
-          style={{ background: `linear-gradient(135deg, ${accentColor}CC, ${accentColor}44)` }}
-        >
-          <span style={{ fontSize: size * 0.38 }}>{initials}</span>
-        </div>
+        <span aria-hidden="true">{initials(displayName)}</span>
       )}
-    </div>
+    </span>
   );
 }

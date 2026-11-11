@@ -2,9 +2,9 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { checkDeviceLink, startDeviceLink, type LinkStart, type LinkStatus } from '../api/presence';
 import { errorMessage } from '../api/climate';
-import { FOCUS_RING } from './ThermostatControls';
+import { Button, ButtonRow, Disclosure, ExternalButton, Notice, Panel, Stack } from './ui';
 
-const BUTTON = `inline-flex h-11 items-center rounded-xl px-4 text-sm font-semibold transition-colors disabled:opacity-50 ${FOCUS_RING}`;
+// A short confirmation loop while a link is waiting (minutes at most), not a page poll.
 const POLL_MS = 2_000;
 
 const TYPE_LABEL: Record<string, string> = {
@@ -64,52 +64,49 @@ export default function LinkDeviceCard() {
   };
 
   return (
-    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
-      <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Who's home</p>
-      <h3 className="mt-2 text-xl font-semibold text-apptext">This device</h3>
-      <p className="mt-1 mb-4 text-xs text-apptext-muted">
-        Link the phone you're holding to your account, so the house knows you're home while it's on the Wi-Fi. Connect
-        it to the home Wi-Fi first.
-      </p>
+    <Panel title="This device" subtitle="Link the phone you're holding, so the house knows you're home while it's on the Wi-Fi. Connect it to the home Wi-Fi first.">
+      <Stack gap="m">
+        {link ? (
+          <>
+            <div>
+              <ExternalButton href={link.url} variant="primary" icon="phone" iconEnd={undefined}>Tap to confirm this device</ExternalButton>
+            </div>
+            <p role="status" className="fp-small fp-muted">
+              That opens a page from the home server. Once it says “Device found”, come back here. Waiting…
+            </p>
+            <ButtonRow>
+              <Button variant="quiet" onClick={() => setLink(null)}>Cancel</Button>
+            </ButtonRow>
+          </>
+        ) : (
+          <div>
+            <Button icon="phone" onClick={start} busy={busy} busyLabel="Starting…">
+              {status?.status === 'LINKED' ? 'Link again' : 'Link this device'}
+            </Button>
+          </div>
+        )}
 
-      {link ? (
-        <div className="flex flex-col gap-2">
-          <a href={link.url} target="_blank" rel="noopener noreferrer"
-            className={`${BUTTON} self-start border border-appaccent-border bg-appaccent-soft text-appaccent-text`}>
-            Tap to confirm this device
-          </a>
-          <p role="status" className="text-xs text-apptext-soft">
-            That opens a page from the NUC. Once it says “Device found”, come back here. Waiting…
-          </p>
-          <button type="button" onClick={() => setLink(null)}
-            className={`${BUTTON} self-start border border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong`}>
-            Cancel
-          </button>
-        </div>
-      ) : (
-        <button type="button" onClick={start} disabled={busy}
-          className={`${BUTTON} border border-appaccent-border bg-appaccent-soft text-appaccent-text`}>
-          {busy ? 'Starting…' : status?.status === 'LINKED' ? 'Link again' : 'Link this device'}
-        </button>
-      )}
-
-      {status?.status === 'LINKED' && (
-        <p role="status" className="mt-3 text-sm text-apptext-success">
-          Linked: {status.name ?? 'this device'}
-          {status.type ? ` (${TYPE_LABEL[status.type] ?? status.type.toLowerCase()})` : ''}.
-          {status.type === 'MOBILE' || status.type === 'WATCH'
-            ? ' You’ll show as home while it’s on the Wi-Fi.'
-            : ' Only phones and watches count toward being home.'}
+        {status?.status === 'LINKED' && (
+          <Notice tone="ok" live="polite">
+            Linked: {status.name ?? 'this device'}
+            {status.type ? ` (${TYPE_LABEL[status.type] ?? status.type.toLowerCase()})` : ''}.
+            {status.type === 'MOBILE' || status.type === 'WATCH'
+              ? ' You’ll show as home while it’s on the Wi-Fi.'
+              : ' Only phones and watches count toward being home.'}
+          </Notice>
+        )}
+        {status?.status === 'EXPIRED' && (
+          <Notice tone="headsup" live="polite">That link timed out. Try again.</Notice>
+        )}
+        {error && <Notice tone="problem" live="assertive">{error}</Notice>}
+      </Stack>
+      <Disclosure variant="row" summary="How the house knows you're home" openSummary="Hide the details" className="mt-3">
+        <p className="fp-small fp-muted">
+          The home server keeps an eye on the Wi-Fi for linked phones and watches. While yours is connected you
+          show as home; a computer or tablet can be linked, but doesn't count. Linking only works from the home Wi-Fi,
+          because that is how the server sees which device you're holding.
         </p>
-      )}
-      {status?.status === 'EXPIRED' && (
-        <p role="status" className="mt-3 text-xs text-apptext-warning">That link timed out. Try again.</p>
-      )}
-      {error && (
-        <p role="alert" className="mt-3 text-xs text-apptext-danger">
-          {error}
-        </p>
-      )}
-    </div>
+      </Disclosure>
+    </Panel>
   );
 }

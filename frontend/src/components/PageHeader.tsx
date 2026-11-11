@@ -1,65 +1,30 @@
-import { type ReactNode } from 'react';
-
 interface PageHeaderProps {
-  /** Page title rendered as the primary heading. */
+  /** The page's one title (from routes.ts, or a page's own via usePageMeta). */
   title: string;
-  /** Optional subtitle (one short sentence, rendered under the title). */
-  subtitle?: string;
-  /** Optional eyebrow — small uppercase label rendered above the title. */
+  /** The silk-screen group label above it: Everyday, House, You, Admin. */
   eyebrow?: string;
-  /** Optional slot for right-aligned content (status pills, action buttons, etc.). */
-  actions?: ReactNode;
-  /** Optional decorative art centered in the empty middle space (lg+ only). */
-  art?: ReactNode;
-  /** Optional compact art strip rendered full-width below the title (mobile only). */
-  artMobile?: ReactNode;
-  /** Heading level. Defaults to h2 to match the app shell. */
-  as?: 'h1' | 'h2' | 'h3';
+  /** A short freshness line ("Updated 5:00 PM"), in DM Mono. */
+  subtitle?: string;
 }
 
 /**
- * PageHeader — per-page header used inside the app shell.
+ * The page header the shell draws above every page: silk-screen group label, the
+ * title as the page's only h1, and an optional freshness line. Nothing else: the
+ * Backend / Unread / Access chips and the pixel-art scenes that used to sit here
+ * repeated the strip and pushed the page below the fold on a phone (B-013).
  *
- * Replaces the static "Operations Console / Utilities, alerts..." copy that was
- * duplicated on every route. Each page renders its own title/subtitle/eyebrow
- * and can optionally supply right-aligned action chips (status pills, CTAs).
+ * From lg it shows above the content; below lg the kit hides it visually (the
+ * strip shows the title and subtitle instead), so screen readers still get one h1.
+ * Pages never render a header of their own; their first block is the answer.
  */
-export function PageHeader({
-  title,
-  subtitle,
-  eyebrow,
-  actions,
-  art,
-  artMobile,
-  as = 'h2',
-}: PageHeaderProps) {
-  const HeadingTag = as;
+export function PageHeader({ title, eyebrow, subtitle }: PageHeaderProps) {
   return (
-    <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        {eyebrow ? (
-          <p className="inline-flex items-center rounded-full border border-appaccent-border bg-appaccent-soft px-3 py-1 text-2xs font-semibold uppercase tracking-[0.2em] text-appaccent-text">
-            {eyebrow}
-          </p>
-        ) : null}
-        <HeadingTag className="mt-3 max-w-3xl text-xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl xl:text-4xl">
-          {title}
-        </HeadingTag>
-        {subtitle ? (
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-apptext-soft sm:text-base">
-            {subtitle}
-          </p>
-        ) : null}
+    <div className="fp-pagehead">
+      <div className="fp-pagehead-text">
+        {eyebrow ? <p className="fp-label fp-pagehead-eyebrow">{eyebrow}</p> : null}
+        <h1 className="fp-pagehead-title">{title}</h1>
       </div>
-      {art ? (
-        <div className="pointer-events-none hidden min-w-0 flex-1 items-end justify-center self-stretch overflow-hidden lg:flex">
-          {art}
-        </div>
-      ) : null}
-      {artMobile ? (
-        <div className="pointer-events-none w-full overflow-hidden lg:hidden">{artMobile}</div>
-      ) : null}
-      {actions ? <div className="flex flex-wrap items-center gap-2 sm:gap-3">{actions}</div> : null}
+      {subtitle ? <p className="fp-pagehead-sub fp-mono">{subtitle}</p> : null}
     </div>
   );
 }

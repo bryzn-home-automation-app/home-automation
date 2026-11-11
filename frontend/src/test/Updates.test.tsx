@@ -48,8 +48,9 @@ describe("Updates (What's New) page", () => {
   it('shows the newest version in the header and marks it Latest', async () => {
     (releasesApi.fetchReleases as any).mockResolvedValue(SAMPLE);
     await renderUpdates();
-    // Header version badge reflects the newest release (index 0).
-    await waitFor(() => expect(screen.getAllByText('v1.1.0').length).toBeGreaterThan(0));
+    // The version plate shows the newest release (index 0); older ones are listed as vX.Y.Z.
+    await waitFor(() => expect(screen.getAllByText('1.1.0').length).toBeGreaterThan(0));
+    expect(screen.getByText('v1.0.0')).toBeInTheDocument();
     expect(screen.getByText('Second release')).toBeInTheDocument();
     expect(screen.getByText('Latest')).toBeInTheDocument();
   });

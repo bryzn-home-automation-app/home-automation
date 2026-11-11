@@ -1,41 +1,47 @@
-import { memo, useMemo, type CSSProperties } from 'react';
+import { memo, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import StatTile, { Icons } from '../components/StatTile';
-import DeferredRender from '../components/DeferredRender';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import CoservBillingHistory from '../components/CoservBillingHistory';
+import DeferredRender from '../components/DeferredRender';
 import { fetchCoservBills } from '../api/coservBills';
 import { fetchWeatherForRange } from '../api/weather';
-import { useTheme, DATA_SERIES } from '../context/ThemeContext';
+import { usePageMeta } from '../components/shell/PageMeta';
 import type { GasLineItem } from '../types';
+import { cycleTemperature, gasCycles, gasPricing, nextGasBill, type GasCycle } from '../utils/gasBills';
 import {
-  billMonth,
-  cycleTemperature,
-  gasCycles,
-  gasPricing,
-  nextGasBill,
-  shortDate,
-  type GasCycle,
-} from '../utils/gasBills';
+  DASH,
+  formatDate,
+  formatDateRange,
+  formatMoney,
+  formatMonthYear,
+  formatNumber,
+  formatShortDate,
+  formatTemp,
+  formatTime,
+  homeToday,
+} from '../utils/format';
+import { ChartLegend, Dial, DialCentre, DialLegend, EmptyState, InstrumentPanel, KeyValue, KV, Notice, Num, Panel, QueryState, Readout, Readouts, SkelInstrumentPanel, Split, toneColor, TooltipCard, TooltipLine, useChartTheme, Verdict, type ChartTone } from '../components/ui';
+import { DEFERRED_CHART } from './utility/parts';
 
-const CHART_MARGIN = { top: 5, right: 10, left: 0, bottom: 5 } as const;
-const TICK = { fill: 'var(--appchart-tick)', fontSize: 11 } as const;
-const AXIS_LINE = { stroke: 'var(--appchart-grid)' } as const;
-const LEGEND_STYLE = { fontSize: 12 } as const;
-const CARD = 'rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]';
-
-const money = (n: number) => `$${n.toFixed(2)}`;
-const perDay = (n: number) => n.toFixed(2);
-const period = (c: GasCycle) => `${shortDate(c.start)} – ${shortDate(c.end)}`;
+const MARGIN = { top: 12, right: 8, left: 0, bottom: 0 } as const;
 
 const KINDS = [
-  { key: 'fixed', label: 'Flat charges', color: 'gasFixed' },
-  { key: 'usage', label: 'Gas used', color: 'gasUsed' },
-  { key: 'taxes', label: 'Taxes & city fee', color: 'gasTaxes' },
-] as const;
+  { key: 'fixed', label: 'Flat charges', tone: 'ink' },
+  { key: 'usage', label: 'Gas used', tone: 'gas' },
+  { key: 'taxes', label: 'Taxes and city fee', tone: 'soft' },
+] as const satisfies ReadonlyArray<{ key: keyof NonNullable<GasCycle['split']>; label: string; tone: ChartTone }>;
 
-// Legend text stays in text ink; the swatch carries the series color.
-const legendLabel = (value: string) => <span style={{ color: 'var(--apptext-soft)' }}>{value}</span>;
+const perDay = (n: number) => formatNumber(n, { decimals: 2, fixed: true });
+const period = (c: GasCycle) => formatDateRange(c.start, c.end);
+
+/**
+ * A unit rate as CoServ prints it: at least two decimals, more when the tariff has them
+ * ("$1.30", not "$1.3"; "$0.1401" stays). B-092.
+ */
+export function formatUnitRate(rate: number): string {
+  const printed = (String(rate).split('.')[1] ?? '').length;
+  return `$${formatNumber(rate, { decimals: Math.max(2, printed), fixed: true })}`;
+}
 
 interface Row {
   label: string;
@@ -48,107 +54,118 @@ interface Row {
   unitemized: number;
 }
 
-function TooltipCard({ active, payload, money: asMoney }: { active?: boolean; payload?: { payload: Row }[]; money?: boolean }) {
+function GasTooltip({ active, payload, money }: { active?: boolean; payload?: { payload: Row }[]; money?: boolean }) {
   const row = active ? payload?.[0]?.payload : undefined;
   if (!row) return null;
   const { cycle } = row;
   return (
-    <div className="rounded-2xl border border-appchart-border bg-appchart-bg px-3 py-2 text-xs text-apptext shadow-[0_20px_50px_var(--appshadow-lg)]">
-      <p className="font-medium">{row.label} bill</p>
-      <p className="text-apptext-muted">{period(cycle)} · {cycle.days} days</p>
-      {asMoney ? (
+    <TooltipCard title={`${row.label} bill · ${period(cycle)}`}>
+      {money ? (
         cycle.split ? (
-          <ul className="mt-1 space-y-0.5">
-            {KINDS.map((k) => (
-              <li key={k.key} className="flex justify-between gap-4">
-                <span className="text-apptext-soft">{k.label}</span>
-                <span>{money(cycle.split![k.key])}</span>
-              </li>
-            ))}
-            <li className="flex justify-between gap-4 font-medium">
-              <span>Gas total</span>
-              <span>{money(cycle.charge)}</span>
-            </li>
-          </ul>
+          <>
+            {KINDS.map((k) => <TooltipLine key={k.key} label={k.label} value={formatMoney(cycle.split![k.key])} />)}
+            <TooltipLine strong label="Gas total" value={formatMoney(cycle.charge)} />
+          </>
         ) : (
-          <p className="mt-1">Gas total {money(cycle.charge)}</p>
+          <TooltipLine label="Gas total (not itemized)" value={formatMoney(cycle.charge)} />
         )
       ) : (
         <>
-          <p className="mt-1">
-            {cycle.ccf} CCF · {perDay(cycle.perDay)} a day
-          </p>
-          {row.temp != null && <p className="text-apptext-muted">Averaged {Math.round(row.temp)}°F outside</p>}
+          <TooltipLine label="Used" value={formatNumber(cycle.ccf, { unit: 'CCF' })} />
+          <TooltipLine label="A day" value={formatNumber(cycle.perDay, { decimals: 2, fixed: true, unit: 'CCF' })} />
+          {row.temp != null && <TooltipLine label="Outside, average" value={formatTemp(row.temp)} />}
         </>
       )}
-    </div>
+    </TooltipCard>
   );
 }
 
-/** The last bill's gas lines, grouped the way the chart splits them. */
+/** The last bill's gas lines, grouped the way the dial splits them, and what gas really costs. */
 function LastBill({ cycle }: { cycle: GasCycle }) {
   const items = cycle.items ?? [];
   const pricing = gasPricing(cycle);
   const describe = (item: GasLineItem) =>
-    item.ccf != null && item.rate != null ? `${item.ccf} CCF × $${item.rate}` : null;
+    item.ccf != null && item.rate != null ? ` · ${formatNumber(item.ccf)} CCF × ${formatUnitRate(item.rate)}` : '';
   return (
-    <section className={CARD}>
-      <h3 className="text-xl font-semibold text-apptext">What the last gas bill paid for</h3>
-      <p className="mt-1 text-sm text-apptext-muted">
-        {period(cycle)}, {cycle.ccf} CCF
-      </p>
-      <div className="mt-4 space-y-4 text-sm">
-        {KINDS.map((k) => {
-          const lines = items.filter((i) => i.kind === k.key);
-          if (!lines.length) return null;
-          return (
-            <div key={k.key}>
-              <div className="flex items-baseline justify-between gap-3 font-medium text-apptext">
-                <span className="flex items-center gap-2">
-                  <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: `var(--gas-${k.key})` }} />
-                  {k.label}
-                </span>
-                <span>{money(cycle.split![k.key])}</span>
-              </div>
-              <ul className="mt-1 space-y-0.5 pl-[18px] text-apptext-soft">
-                {lines.map((item) => (
-                  <li key={item.label} className="flex items-baseline justify-between gap-3">
-                    <span>
-                      {item.label}
-                      {describe(item) && <span className="text-apptext-muted"> · {describe(item)}</span>}
-                    </span>
-                    <span>{money(item.amount)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })}
-        <div className="flex items-baseline justify-between gap-3 border-t border-appborder pt-3 font-semibold text-apptext">
-          <span>Gas total</span>
-          <span>{money(cycle.charge)}</span>
-        </div>
-      </div>
-      {pricing && (
-        <p className="mt-4 rounded-2xl bg-appinset px-4 py-3 text-sm leading-6 text-apptext-soft">
-          With no gas used at all, this bill would still have been about{' '}
-          <span className="font-medium text-apptext">{money(pricing.withoutGas)}</span>. Each CCF added about{' '}
-          <span className="font-medium text-apptext">{money(pricing.perCcf)}</span>, taxes included.
-        </p>
+    <Panel title="What the last gas bill paid for" subtitle={`${period(cycle)}, ${formatNumber(cycle.ccf, { unit: 'CCF' })}`}>
+      <Split ratio="even">
+        <KeyValue>
+          {KINDS.map((k) => {
+            const lines = items.filter((i) => i.kind === k.key);
+            if (!lines.length) return null;
+            return [
+              <KV key={k.key} kind="group" label={k.label} value={formatMoney(cycle.split![k.key])} swatch={toneColor(k.tone)} />,
+              ...lines.map((item) => (
+                <KV key={`${k.key}-${item.label}`} kind="sub" label={`${item.label}${describe(item)}`} value={formatMoney(item.amount)} />
+              )),
+            ];
+          })}
+          <KV kind="total" label="Gas total" value={formatMoney(cycle.charge)} />
+        </KeyValue>
+        {pricing && (
+          <div className="fp-readout justify-center gap-2.5 p-5">
+            <span className="fp-label">In plain terms</span>
+            <p className="text-lead leading-snug">
+              With no gas used at all, this bill would still have been about <b className="font-semibold">{formatMoney(pricing.withoutGas)}</b>.
+            </p>
+            <p className="text-lead leading-snug">
+              Each CCF added about <b className="font-semibold">{formatMoney(pricing.perCcf)}</b>, taxes included.
+            </p>
+          </div>
+        )}
+      </Split>
+    </Panel>
+  );
+}
+
+/** The half dial: the last gas bill as flat charges, gas used, and taxes, end to end. */
+function GasDial({ cycle }: { cycle: GasCycle }) {
+  const top = Math.max(10, Math.ceil((cycle.charge * 1.08) / 10) * 10);
+  let at = 0;
+  const segments = cycle.split
+    ? KINDS.map((k) => {
+        const from = at;
+        at += cycle.split![k.key];
+        return { from, to: at, tone: k.tone as ChartTone };
+      })
+    : [{ from: 0, to: cycle.charge, tone: 'gas' as ChartTone }];
+  return (
+    <>
+      <Dial
+        half
+        start={-90}
+        sweep={180}
+        label={
+          cycle.split
+            ? `Last gas bill ${formatMoney(cycle.charge)}: flat charges ${formatMoney(cycle.split.fixed)}, gas used ${formatMoney(cycle.split.usage)}, taxes and city fee ${formatMoney(cycle.split.taxes)}.`
+            : `Last gas bill ${formatMoney(cycle.charge)}, not itemized.`
+        }
+        rings={[{
+          r: 92, w: 18, min: 0, max: top, ticks: 8, major: 2, gap: 1.2,
+          labels: [[0, '$0'], [top / 2, formatMoney(top / 2, { cents: false })], [top, formatMoney(top, { cents: false })]],
+          segments,
+        }]}
+      >
+        <DialCentre label="Last gas bill" note={period(cycle)} noteMono>
+          <Num size="l" value={formatMoney(cycle.charge)} />
+        </DialCentre>
+      </Dial>
+      {cycle.split && (
+        <DialLegend items={KINDS.map((k) => ({ label: k.label, value: formatMoney(cycle.split![k.key]), tone: k.tone, key: 'box' as const }))} />
       )}
-    </section>
+    </>
   );
 }
 
 export default memo(function GasUsage() {
-  const { theme } = useTheme();
-  const ds = DATA_SERIES[theme];
+  const t = useChartTheme();
   const bills = useQuery({ queryKey: ['coserv-bills'], queryFn: fetchCoservBills, staleTime: 30_000 });
   const cycles = useMemo(() => gasCycles(bills.data ?? []), [bills.data]);
-  const loading = bills.isLoading;
   const first = cycles[0];
   const latest = cycles[cycles.length - 1];
   const previous = cycles[cycles.length - 2];
+
+  usePageMeta({ subtitle: bills.dataUpdatedAt ? `Updated ${formatTime(bills.dataUpdatedAt)}` : undefined });
 
   const weather = useQuery({
     queryKey: ['weather', first?.start, latest?.end],
@@ -160,7 +177,7 @@ export default memo(function GasUsage() {
   const rows = useMemo<Row[]>(
     () =>
       cycles.map((c) => ({
-        label: billMonth(c),
+        label: formatMonthYear(c.end),
         cycle: c,
         ccf: c.ccf,
         temp: weather.data ? cycleTemperature(c, weather.data.daily ?? []) : null,
@@ -174,139 +191,150 @@ export default memo(function GasUsage() {
   const anyItemized = cycles.some((c) => c.split);
   const anyUnitemized = cycles.some((c) => !c.split);
   const next = nextGasBill(cycles);
-  const nextBillPassed = next != null && new Date().toISOString().slice(0, 10) > next.bill;
+  // Compared as home calendar days, so the evening of the expected day isn't "any day" yet (B-093).
+  const nextBillPassed = next != null && homeToday() > next.bill;
 
-  const usageNote = (() => {
-    if (!latest) return undefined;
-    const now = `${perDay(latest.perDay)} CCF a day`;
-    if (!previous) return now;
-    const change = latest.perDay - previous.perDay;
-    if (Math.abs(change) < 0.005) return `${now}, same as before`;
-    return `${now}, ${change > 0 ? 'up' : 'down'} from ${perDay(previous.perDay)}`;
-  })();
+  const change = latest && previous ? latest.perDay - previous.perDay : null;
+  const usageNote = latest
+    ? change == null
+      ? `${perDay(latest.perDay)} a day`
+      : Math.abs(change) < 0.005
+        ? `${perDay(latest.perDay)} a day, same as before`
+        : `${perDay(latest.perDay)} a day, ${change > 0 ? 'up' : 'down'} from ${perDay(previous!.perDay)}`
+    : undefined;
 
-  if (!loading && !latest) {
-    return (
-      <div className="space-y-6 sm:space-y-7">
-        <section className={`${CARD} p-8 text-center`}>
-          <div className="mb-3 text-4xl">🔥</div>
-          <h3 className="mb-2 text-xl font-semibold text-apptext">No gas bills yet</h3>
-          <p className="mx-auto max-w-md text-sm leading-6 text-apptext-muted">
-            Gas shows up here once a CoServ bill with gas service arrives. Bills are pulled from SmartHub once a day.
-          </p>
-        </section>
-        <CoservBillingHistory service="gas" />
-      </div>
-    );
-  }
+  const monthly = (
+    <Notice tone="neutral" title="Gas is only read once a month.">
+      CoServ reads the gas meter once a billing cycle, so this view changes when a new bill comes in.
+    </Notice>
+  );
 
   return (
-    <div
-      className="space-y-6 sm:space-y-7"
-      style={{ '--gas-fixed': ds.gasFixed, '--gas-usage': ds.gasUsed, '--gas-taxes': ds.gasTaxes } as CSSProperties}
-    >
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        <StatTile
-          label="Last gas bill"
-          value={latest ? money(latest.charge) : '—'}
-          unit=""
-          subtitle={latest ? period(latest) : undefined}
-          loading={loading}
-          icon={Icons.Dollar}
-        />
-        <StatTile
-          label="Gas used"
-          value={latest ? String(latest.ccf) : '—'}
-          unit="CCF"
-          subtitle={usageNote}
-          loading={loading}
-          icon={Icons.Flame}
-        />
-        <StatTile
-          label="Flat charges"
-          value={latest?.split ? money(latest.split.fixed) : '—'}
-          unit=""
-          subtitle={
-            latest?.split
-              ? `${Math.round((latest.split.fixed / latest.charge) * 100)}% of that bill, however much gas you use`
-              : 'Itemized after the next bill sync'
-          }
-          loading={loading}
-          icon={Icons.Dollar}
-        />
-        <StatTile
-          label="Next bill"
-          value={next ? (nextBillPassed ? 'Any day' : shortDate(next.bill)) : '—'}
-          unit=""
-          subtitle={next ? (nextBillPassed ? `Usually here by ${shortDate(next.bill)}` : `Meter read around ${shortDate(next.read)}`) : undefined}
-          loading={loading}
-          icon={Icons.Calendar}
-        />
-      </section>
-
-      <section className="perf-section grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <DeferredRender minHeight={360}>
-          <div className={CARD}>
-            <h3 className="text-xl font-semibold text-apptext">Gas used per bill</h3>
-            <p className="mb-4 mt-1 text-sm text-apptext-muted">CCF for each billing cycle, by the month CoServ read the meter.</p>
-            <ResponsiveContainer width="100%" height={260} debounce={80}>
-              <BarChart data={rows} margin={CHART_MARGIN}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--appchart-grid)" vertical={false} />
-                <XAxis dataKey="label" tick={TICK} axisLine={AXIS_LINE} tickLine={false} />
-                <YAxis tick={TICK} axisLine={AXIS_LINE} tickLine={false} allowDecimals={false} unit=" CCF" width={56} />
-                <Tooltip content={<TooltipCard />} cursor={{ fill: 'var(--appinset)' }} />
-                <Bar dataKey="ccf" name="Gas used" fill={ds.gasUsed} radius={[4, 4, 0, 0]} maxBarSize={48} isAnimationActive={false} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </DeferredRender>
-        <DeferredRender minHeight={360}>
-          <div className={CARD}>
-            <h3 className="text-xl font-semibold text-apptext">Gas charge per bill</h3>
-            <p className="mb-4 mt-1 text-sm text-apptext-muted">What each bill's gas charge went to.</p>
-            <ResponsiveContainer width="100%" height={260} debounce={80}>
-              <BarChart data={rows} margin={CHART_MARGIN}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--appchart-grid)" vertical={false} />
-                <XAxis dataKey="label" tick={TICK} axisLine={AXIS_LINE} tickLine={false} />
-                <YAxis tick={TICK} axisLine={AXIS_LINE} tickLine={false} tickFormatter={(v: number) => `$${v}`} width={44} />
-                <Tooltip content={<TooltipCard money />} cursor={{ fill: 'var(--appinset)' }} />
-                <Legend wrapperStyle={LEGEND_STYLE} formatter={legendLabel} />
-                {anyItemized && KINDS.map((k) => (
-                  <Bar
-                    key={k.key}
-                    dataKey={k.key}
-                    name={k.label}
-                    stackId="gas"
-                    fill={ds[k.color]}
-                    stroke="var(--appchart-bg)"
-                    strokeWidth={2}
-                    radius={k.key === 'taxes' ? [4, 4, 0, 0] : undefined}
-                    maxBarSize={48}
-                    isAnimationActive={false}
+    <>
+      <QueryState
+        query={bills}
+        what="the gas bills"
+        loading={<SkelInstrumentPanel readouts={3} />}
+        isEmpty={() => !latest}
+        empty={
+          <EmptyState icon="flame" title="No gas bills yet">
+            Gas shows up here once a CoServ bill with gas service arrives. Bills are pulled from SmartHub once a day.
+          </EmptyState>
+        }
+      >
+        {() => {
+          // isEmpty guarantees a latest cycle here.
+          const latest = cycles[cycles.length - 1];
+          const share = latest.split ? latest.split.fixed / latest.charge : null;
+          const nextWords = next
+            ? nextBillPassed
+              ? `The next bill is due any day; it's usually here by ${formatDate(next.bill)}.`
+              : `The next bill should arrive around ${formatDate(next.bill)}.`
+            : '';
+          return (
+            <InstrumentPanel
+              instrument={<GasDial cycle={latest} />}
+              verdict={
+                latest.split && share != null ? (
+                  <Verdict
+                    tone="ok"
+                    note={`${formatMoney(latest.split.fixed)} of the ${formatMoney(latest.charge)} is charged however much gas you use. ${nextWords}`}
+                  >
+                    {share > 0.5
+                      ? 'More than half of the last gas bill was flat charges.'
+                      : latest.split.usage / latest.charge > 0.5
+                        ? 'More than half of the last gas bill was for gas used.'
+                        : `About ${formatNumber(share * 100)}% of the last gas bill was flat charges.`}
+                  </Verdict>
+                ) : (
+                  <Verdict tone="ok" note={`For ${period(latest)}. ${nextWords}`}>
+                    The last gas bill was {formatMoney(latest.charge)}.
+                  </Verdict>
+                )
+              }
+              readouts={
+                <Readouts>
+                  <Readout
+                    label="Gas used"
+                    value={formatNumber(latest.ccf)}
+                    unit="CCF"
+                    note={usageNote}
+                    noteIcon={change == null || Math.abs(change) < 0.005 ? undefined : change > 0 ? 'arrow-up' : 'arrow-down'}
                   />
-                ))}
-                {anyUnitemized && (
-                  <Bar
-                    dataKey="unitemized"
-                    name="Not itemized yet"
-                    stackId="gas"
-                    fill="var(--apptext-muted)"
-                    stroke="var(--appchart-bg)"
-                    strokeWidth={2}
-                    radius={[4, 4, 0, 0]}
-                    maxBarSize={48}
-                    isAnimationActive={false}
+                  <Readout
+                    label="Flat charges"
+                    value={share != null ? formatNumber(share * 100) : DASH}
+                    unit={share != null ? '%' : undefined}
+                    note={
+                      latest.split
+                        ? `${formatMoney(latest.split.fixed)}, however much gas you use`
+                        : 'Itemized after the next bill sync'
+                    }
                   />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </DeferredRender>
-      </section>
+                  <Readout
+                    label="Next bill"
+                    value={next ? (nextBillPassed ? 'Any day' : formatShortDate(next.bill)) : DASH}
+                    note={next ? (nextBillPassed ? `Usually here by ${formatShortDate(next.bill)}` : `Meter read around ${formatShortDate(next.read)}`) : undefined}
+                  />
+                </Readouts>
+              }
+            >
+              {monthly}
+            </InstrumentPanel>
+          );
+        }}
+      </QueryState>
 
-      {latest?.split && <LastBill cycle={latest} />}
+      {latest && (
+        <>
+          <Split ratio="even">
+            <DeferredRender placeholder={DEFERRED_CHART}>
+              <Panel title="Gas used per bill" subtitle="CCF for each billing cycle, by the month CoServ read the meter">
+                <ResponsiveContainer width="100%" height={220} debounce={80}>
+                  <BarChart data={rows} margin={MARGIN}>
+                    <CartesianGrid {...t.grid} />
+                    <XAxis dataKey="label" {...t.axis} interval={0} />
+                    <YAxis {...t.axis} allowDecimals={false} width={36} />
+                    <Tooltip content={<GasTooltip />} cursor={t.barCursor} wrapperStyle={t.tooltip.wrapperStyle} />
+                    <Bar dataKey="ccf" name="Gas used" fill={t.series.gas} radius={[3, 3, 0, 0]} maxBarSize={48} isAnimationActive={false} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </Panel>
+            </DeferredRender>
+            <DeferredRender placeholder={DEFERRED_CHART}>
+              <Panel title="Gas charge per bill" subtitle="What each bill's gas charge went to">
+                <div className="fp-stack fp-stack--s">
+                  <ChartLegend
+                    items={[
+                      ...(anyItemized ? KINDS.map((k) => ({ label: k.label, tone: k.tone, key: 'box' as const })) : []),
+                      ...(anyUnitemized ? [{ label: 'Not itemized', tone: 'empty' as const, key: 'box' as const }] : []),
+                    ]}
+                  />
+                  <ResponsiveContainer width="100%" height={220} debounce={80}>
+                    <BarChart data={rows} margin={MARGIN}>
+                      <CartesianGrid {...t.grid} />
+                      <XAxis dataKey="label" {...t.axis} interval={0} />
+                      <YAxis {...t.axis} width={40} tickFormatter={(v: number) => formatMoney(v, { cents: false })} />
+                      <Tooltip content={<GasTooltip money />} cursor={t.barCursor} wrapperStyle={t.tooltip.wrapperStyle} />
+                      {anyItemized && KINDS.map((k) => (
+                        <Bar key={k.key} dataKey={k.key} name={k.label} stackId="gas" fill={t.series[k.tone]} maxBarSize={48} isAnimationActive={false} />
+                      ))}
+                      {anyUnitemized && (
+                        <Bar dataKey="unitemized" name="Not itemized" stackId="gas" fill={t.series.empty} maxBarSize={48} isAnimationActive={false} />
+                      )}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </Panel>
+            </DeferredRender>
+          </Split>
 
-      <CoservBillingHistory service="gas" />
-    </div>
+          {latest.split && <LastBill cycle={latest} />}
+        </>
+      )}
+
+      {/* Shown even with no gas cycles: a statement without gas service still lists here. */}
+      {bills.data !== undefined && <CoservBillingHistory service="gas" />}
+    </>
   );
 });

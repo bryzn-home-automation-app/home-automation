@@ -1,0 +1,676 @@
+<section class="screen" data-route="utility" data-title="Utilities" data-eyebrow="Everyday" data-subtitle="Checked 9:45 AM">
+
+  <!-- Subject switch: picks what the whole page is about, so it sits above the answer -->
+  <div class="seg" data-tabs="utility-view" role="tablist" aria-label="Utility">
+    <button class="seg-key is-active" type="button" role="tab" data-tab="electric"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg>Electric</button>
+    <button class="seg-key" type="button" role="tab" data-tab="gas"><svg class="icon" aria-hidden="true"><use href="#i-flame"/></svg>Gas</button>
+    <button class="seg-key" type="button" role="tab" data-tab="water"><svg class="icon" aria-hidden="true"><use href="#i-droplet"/></svg>Water</button>
+  </div>
+
+  <!-- ===================== ELECTRIC ===================== -->
+  <div class="stack stack--page" data-tab-panel="utility-view:electric" role="tabpanel" aria-label="Electric">
+
+    <section class="ip" aria-labelledby="el-verdict">
+      <div class="ip-instrument">
+        <div class="dial util-cycle" data-chart="dial" data-start="-150" data-sweep="300" data-rings='[{"r":98,"w":3,"min":0,"max":30,"ticks":30,"major":5,"labels":[[0,"Nov 5"],[30,"Dec 5"]],"segments":[{"from":0,"to":4.7,"tone":"ink"}],"needle":{"at":4.7}},{"r":78,"w":14,"min":0,"max":150,"ticks":15,"major":5,"tickSide":"in","segments":[{"from":0,"to":38.25,"tone":"ink"},{"from":38.25,"to":113.55,"tone":"graphite","dash":true}],"marks":[{"at":108.39,"inset":2,"out":4}]}]'>
+          <div class="dial-centre">
+            <span class="label">Predicted bill</span>
+            <span class="num num--xl">$114</span>
+            <span class="dial-note mono">26 days left</span>
+          </div>
+        </div>
+        <p class="sr-only">Day 5 of the Nov 5 to Dec 5 billing cycle. $38 metered so far, about $76 more forecast, $114 in all. Last bill was $108.</p>
+        <div class="dial-legend" aria-hidden="true">
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-ink)"></span>So far <b>$38</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--seg" style="--c: var(--chart-graphite)"></span>Forecast <b>$76</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--mark" style="--c: var(--chart-ink)"></span>Last bill <b>$108</b></span>
+          <span class="lg-item"><span class="lg-key" style="--c: var(--chart-ink)"></span>Day <b>5 of 30</b></span>
+        </div>
+      </div>
+      <div class="ip-body">
+        <div class="verdict">
+          <span class="lamp lamp--ok"></span>
+          <p class="verdict-text" id="el-verdict">Heading for about $114 this cycle.</p>
+          <p class="verdict-note">That's 5% more than the last electric charge of $108.39, with 26 days to go (Nov 5 – Dec 5).</p>
+        </div>
+        <div class="readouts">
+          <div class="readout">
+            <span class="label">Yesterday</span>
+            <span class="readout-value"><span class="num">35.5<span class="unit">kWh</span></span></span>
+            <span class="readout-note"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg>9% over the 32.6 forecast</span>
+          </div>
+          <div class="readout">
+            <span class="label">So far</span>
+            <span class="readout-value"><span class="num">117<span class="unit">kWh</span></span></span>
+            <span class="readout-note">Nov 5 – 8, about $38 with the fixed charge</span>
+          </div>
+          <div class="readout">
+            <span class="label">Daily average</span>
+            <span class="readout-value"><span class="num">25.4<span class="unit">kWh</span></span></span>
+            <span class="readout-note">Last 7 days. 30-day average 24.1</span>
+          </div>
+          <div class="readout">
+            <span class="label">Rate</span>
+            <span class="readout-value"><span class="num">$0.1171<span class="unit">/kWh</span></span></span>
+            <span class="readout-note">Plus $24.55 a month, fixed</span>
+          </div>
+        </div>
+        <details class="disclosure">
+          <summary><span class="when-closed">How the $114 is worked out</span><span class="when-open">Hide the working</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body stack stack--s">
+            <dl class="kv">
+              <div class="kv-row"><dt>Metered so far, Nov 5 – 8</dt><dd>117 kWh</dd></div>
+              <div class="kv-row"><dt>Forecast for the 26 days left</dt><dd>643 kWh</dd></div>
+              <div class="kv-row"><dt>Whole cycle</dt><dd>760 kWh</dd></div>
+              <div class="kv-row"><dt>Energy at $0.1171 a kWh</dt><dd>$89.00</dd></div>
+              <div class="kv-row"><dt>Fixed monthly charge</dt><dd>$24.55</dd></div>
+              <div class="kv-row kv-row--total"><dt>Predicted electric charge</dt><dd>$113.55</dd></div>
+            </dl>
+            <p class="small muted">Priced like your last full bill. Gas is billed separately on the same CoServ statement.</p>
+          </div>
+        </details>
+        <div class="ip-foot">
+          <span class="mono">Meter data through Sun, 11:00 PM</span>
+          <span class="cluster"><span class="lamp lamp--ok lamp--s"></span><span class="mono">Checked 9:45 AM</span></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- View switch: same subject, different detail -->
+    <div class="seg" data-tabs="utility-electric" role="tablist" aria-label="Electric view">
+      <button class="seg-key is-active" type="button" role="tab" data-tab="usage">Usage &amp; bills</button>
+      <button class="seg-key" type="button" role="tab" data-tab="forecast">Forecast &amp; stats</button>
+    </div>
+
+    <!-- ---------- Usage & bills ---------- -->
+    <div class="stack stack--page" data-tab-panel="utility-electric:usage" role="tabpanel" aria-label="Usage and bills">
+      <div class="split split--wide">
+        <section class="panel" aria-labelledby="el-trend-title">
+          <header class="panel-head">
+          <div><h3 class="panel-title" id="el-trend-title">Daily use</h3><p class="panel-sub">The last 30 days against the forecast, and the two weeks ahead</p></div>
+        </header>
+          <figure class="chart" data-chart="line" data-height="210" data-unit="kWh" data-decimals="1" data-y-min="10" data-today="30"
+          data-labels='["Sat, Oct 10","Sun, Oct 11","Mon, Oct 12","Tue, Oct 13","Wed, Oct 14","Thu, Oct 15","Fri, Oct 16","Sat, Oct 17","Sun, Oct 18","Mon, Oct 19","Tue, Oct 20","Wed, Oct 21","Thu, Oct 22","Fri, Oct 23","Sat, Oct 24","Sun, Oct 25","Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8","Mon, Nov 9","Tue, Nov 10","Wed, Nov 11","Thu, Nov 12","Fri, Nov 13","Sat, Nov 14","Sun, Nov 15","Mon, Nov 16","Tue, Nov 17","Wed, Nov 18","Thu, Nov 19","Fri, Nov 20","Sat, Nov 21","Sun, Nov 22"]' data-short='["Oct 10","","","","","","","Oct 17","","","","","","","Oct 24","","","","","","","Oct 31","","","","","","","Nov 7","","","","","","","Nov 14","","","","","","","Nov 21",""]' data-readout="29"
+          data-series='[{"name":"Actual","tone":"ink","values":[40.1,30,23.2,24.9,17.4,21.6,19.5,23.3,27.1,27.4,24.7,24.5,18.3,19.5,26.5,28,18.5,21.1,22.9,20.9,23.2,24.8,18.8,20.5,18.4,21.7,25.4,21.6,34.8,35.5,null,null,null,null,null,null,null,null,null,null,null,null,null,null]},{"name":"Forecast","tone":"graphite","dash":true,"values":[44.5,31,21.6,26.6,18.9,22,23.2,20.3,25.2,30.2,32.8,28,18.9,22.2,26.9,27.9,23.9,19.5,19.6,22.2,21.8,27.2,16.2,24,15.1,25.4,22.1,19.9,34.5,32.6,25.5,25.8,23.7,24.2,22.2,26.6,26.5,26.6,26.7,25.2,21.3,22.4,24.2,25.6]}]'>
+          <figcaption class="sr-only">Daily electricity use from Oct 10 to Nov 8 against the forecast, then the forecast for the next two weeks. Use rose to 35.5 kWh on Sunday, Nov 8, above the 32.6 kWh forecast.</figcaption>
+        </figure>
+        </section>
+        <section class="panel" aria-labelledby="el-month-title">
+          <header class="panel-head">
+          <div><h3 class="panel-title" id="el-month-title">By month</h3><p class="panel-sub">From hourly readings. September starts on the 10th</p></div>
+        </header>
+          <figure class="chart" data-chart="bars" data-height="210" data-unit="kWh" data-decimals="0" data-y-ticks="4" data-partial="[0,2]" data-partial-label="Partial month"
+          data-labels='["September, from Sep 10","October","November so far"]' data-short='["Sep","Oct","Nov"]'
+          data-values="[1055.9,880.0,196.8]" data-readout-decimals="1">
+          <figcaption class="sr-only">Monthly totals: September from the 10th 1,055.9 kWh, October 880.0 kWh, November so far 196.8 kWh.</figcaption>
+        </figure>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="el-bills-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="el-bills-title">Bills</h3><p class="panel-sub">Each CoServ statement covers electric and gas. Pulled from SmartHub once a day</p></div>
+        </header>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Period</th><th scope="col" class="is-num">Used</th><th scope="col" class="is-num">Electric</th><th scope="col" class="is-num">Statement</th><th scope="col">Due</th><th scope="col"><span class="sr-only">Bill</span></th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title" data-label="Period">Oct 7 – Nov 5</td><td class="is-num" data-label="Used">716 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Electric">$108.39</td><td class="is-num" data-label="Statement total">$145.62</td><td data-label="Due">Mon, Nov 30</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Sep 8 – Oct 7</td><td class="is-num" data-label="Used">1,454 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Electric">$194.63</td><td class="is-num" data-label="Statement total">$223.68</td><td data-label="Due">Mon, Nov 2</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Aug 6 – Sep 8</td><td class="is-num" data-label="Used">2,256 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Electric">$288.94</td><td class="is-num" data-label="Statement total">$316.35</td><td data-label="Due">Fri, Oct 2</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Jul 24 – Aug 6</td><td class="is-num" data-label="Used">996 <span class="unit">kWh</span></td><td class="cell-key is-num is-strong" data-label="Electric">$156.18</td><td class="is-num" data-label="Statement total">$168.82</td><td data-label="Due">Tue, Sep 1</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="el-log-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="el-log-title">Readings</h3><p class="panel-sub">From the CoServ meter, once a day</p></div>
+          <div class="panel-action"><div class="chips" data-tabs="utility-log" role="tablist" aria-label="Readings">
+            <button class="chip is-active" type="button" role="tab" data-tab="daily">Daily</button>
+            <button class="chip" type="button" role="tab" data-tab="hourly">Hourly</button>
+          </div></div>
+        </header>
+        <div data-tab-panel="utility-log:daily">
+          <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">Day</th><th scope="col" class="is-num">Used</th><th scope="col" class="is-num">Cost</th><th scope="col" class="is-num">Low / avg / high</th></tr></thead>
+                <tbody>
+                  <tr><td class="cell-title" data-label="Day">Sun, Nov 8</td><td class="cell-key is-num is-strong" data-label="Used">35.47 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$4.15</td><td class="is-num" data-label="Low / avg / high"><span class="mono">46° / 59° / 70°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sat, Nov 7</td><td class="cell-key is-num is-strong" data-label="Used">34.77 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$4.07</td><td class="is-num" data-label="Low / avg / high"><span class="mono">40° / 53° / 65°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Fri, Nov 6</td><td class="cell-key is-num is-strong" data-label="Used">21.62 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.53</td><td class="is-num" data-label="Low / avg / high"><span class="mono">38° / 51° / 63°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Thu, Nov 5</td><td class="cell-key is-num is-strong" data-label="Used">25.44 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.98</td><td class="is-num" data-label="Low / avg / high"><span class="mono">43° / 54° / 63°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Wed, Nov 4</td><td class="cell-key is-num is-strong" data-label="Used">21.73 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.54</td><td class="is-num" data-label="Low / avg / high"><span class="mono">44° / 56° / 67°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Tue, Nov 3</td><td class="cell-key is-num is-strong" data-label="Used">18.41 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.16</td><td class="is-num" data-label="Low / avg / high"><span class="mono">51° / 62° / 73°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Mon, Nov 2</td><td class="cell-key is-num is-strong" data-label="Used">20.51 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.40</td><td class="is-num" data-label="Low / avg / high"><span class="mono">53° / 65° / 76°</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          <details class="disclosure disclosure--row">
+            <summary><span class="when-closed">Show 23 more days</span><span class="when-open">Show fewer days</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="disclosure-body">
+              <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">Day</th><th scope="col" class="is-num">Used</th><th scope="col" class="is-num">Cost</th><th scope="col" class="is-num">Low / avg / high</th></tr></thead>
+                <tbody>
+                  <tr><td class="cell-title" data-label="Day">Sun, Nov 1</td><td class="cell-key is-num is-strong" data-label="Used">18.83 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.20</td><td class="is-num" data-label="Low / avg / high"><span class="mono">50° / 63° / 74°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sat, Oct 31</td><td class="cell-key is-num is-strong" data-label="Used">24.85 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.91</td><td class="is-num" data-label="Low / avg / high"><span class="mono">46° / 58° / 69°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Fri, Oct 30</td><td class="cell-key is-num is-strong" data-label="Used">23.20 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.72</td><td class="is-num" data-label="Low / avg / high"><span class="mono">47° / 60° / 72°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Thu, Oct 29</td><td class="cell-key is-num is-strong" data-label="Used">20.93 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.45</td><td class="is-num" data-label="Low / avg / high"><span class="mono">50° / 63° / 74°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Wed, Oct 28</td><td class="cell-key is-num is-strong" data-label="Used">22.87 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.68</td><td class="is-num" data-label="Low / avg / high"><span class="mono">48° / 60° / 70°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Tue, Oct 27</td><td class="cell-key is-num is-strong" data-label="Used">21.12 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.47</td><td class="is-num" data-label="Low / avg / high"><span class="mono">51° / 63° / 74°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Mon, Oct 26</td><td class="cell-key is-num is-strong" data-label="Used">18.47 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.16</td><td class="is-num" data-label="Low / avg / high"><span class="mono">50° / 62° / 72°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sun, Oct 25</td><td class="cell-key is-num is-strong" data-label="Used">27.99 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$3.28</td><td class="is-num" data-label="Low / avg / high"><span class="mono">42° / 54° / 65°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sat, Oct 24</td><td class="cell-key is-num is-strong" data-label="Used">26.46 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$3.10</td><td class="is-num" data-label="Low / avg / high"><span class="mono">47° / 58° / 68°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Fri, Oct 23</td><td class="cell-key is-num is-strong" data-label="Used">19.54 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.29</td><td class="is-num" data-label="Low / avg / high"><span class="mono">45° / 58° / 69°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Thu, Oct 22</td><td class="cell-key is-num is-strong" data-label="Used">18.31 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.14</td><td class="is-num" data-label="Low / avg / high"><span class="mono">51° / 62° / 72°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Wed, Oct 21</td><td class="cell-key is-num is-strong" data-label="Used">24.54 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.87</td><td class="is-num" data-label="Low / avg / high"><span class="mono">51° / 64° / 75°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Tue, Oct 20</td><td class="cell-key is-num is-strong" data-label="Used">24.66 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.89</td><td class="is-num" data-label="Low / avg / high"><span class="mono">55° / 68° / 80°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Mon, Oct 19</td><td class="cell-key is-num is-strong" data-label="Used">27.45 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$3.21</td><td class="is-num" data-label="Low / avg / high"><span class="mono">58° / 70° / 80°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sun, Oct 18</td><td class="cell-key is-num is-strong" data-label="Used">27.11 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$3.17</td><td class="is-num" data-label="Low / avg / high"><span class="mono">57° / 69° / 80°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sat, Oct 17</td><td class="cell-key is-num is-strong" data-label="Used">23.29 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.73</td><td class="is-num" data-label="Low / avg / high"><span class="mono">53° / 65° / 77°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Fri, Oct 16</td><td class="cell-key is-num is-strong" data-label="Used">19.52 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.29</td><td class="is-num" data-label="Low / avg / high"><span class="mono">49° / 62° / 73°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Thu, Oct 15</td><td class="cell-key is-num is-strong" data-label="Used">21.56 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.52</td><td class="is-num" data-label="Low / avg / high"><span class="mono">49° / 60° / 71°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Wed, Oct 14</td><td class="cell-key is-num is-strong" data-label="Used">17.43 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.04</td><td class="is-num" data-label="Low / avg / high"><span class="mono">51° / 64° / 75°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Tue, Oct 13</td><td class="cell-key is-num is-strong" data-label="Used">24.87 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.91</td><td class="is-num" data-label="Low / avg / high"><span class="mono">47° / 60° / 71°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Mon, Oct 12</td><td class="cell-key is-num is-strong" data-label="Used">23.20 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$2.72</td><td class="is-num" data-label="Low / avg / high"><span class="mono">49° / 62° / 74°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sun, Oct 11</td><td class="cell-key is-num is-strong" data-label="Used">30.03 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$3.52</td><td class="is-num" data-label="Low / avg / high"><span class="mono">55° / 68° / 79°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Day">Sat, Oct 10</td><td class="cell-key is-num is-strong" data-label="Used">40.15 <span class="unit">kWh</span></td><td class="is-num" data-label="Cost">$4.70</td><td class="is-num" data-label="Low / avg / high"><span class="mono">61° / 73° / 84°</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            </div>
+          </details>
+        </div>
+        <div data-tab-panel="utility-log:hourly" hidden>
+          <p class="small muted util-levels">Sun, Nov 8. <span class="badge">Low</span> under 2 kWh <span class="badge badge--warn">Moderate</span> 2 to 5 <span class="badge badge--problem">High</span> 5 and up</p>
+          <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">Hour</th><th scope="col" class="is-num">Used</th><th scope="col">Level</th><th scope="col" class="is-num">Cost</th><th scope="col" class="is-num">Outside</th></tr></thead>
+                <tbody>
+                  <tr><td class="cell-title" data-label="Hour">11 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.11 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.13</td><td class="is-num" data-label="Outside"><span class="mono">55°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">10 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.18 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.14</td><td class="is-num" data-label="Outside"><span class="mono">59°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">9 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.25 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.15</td><td class="is-num" data-label="Outside"><span class="mono">62°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">8 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.37 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.16</td><td class="is-num" data-label="Outside"><span class="mono">64°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">7 PM</td><td class="cell-key is-num is-strong" data-label="Used">3.18 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge badge--warn">Moderate</span></td><td class="is-num" data-label="Cost">$0.37</td><td class="is-num" data-label="Outside"><span class="mono">66°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">6 PM</td><td class="cell-key is-num is-strong" data-label="Used">6.03 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge badge--problem">High</span></td><td class="is-num" data-label="Cost">$0.71</td><td class="is-num" data-label="Outside"><span class="mono">69°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">5 PM</td><td class="cell-key is-num is-strong" data-label="Used">2.10 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge badge--warn">Moderate</span></td><td class="is-num" data-label="Cost">$0.25</td><td class="is-num" data-label="Outside"><span class="mono">70°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">4 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.87 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.22</td><td class="is-num" data-label="Outside"><span class="mono">69°</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+          <details class="disclosure disclosure--row">
+            <summary><span class="when-closed">Show the other 16 hours</span><span class="when-open">Show fewer hours</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="disclosure-body">
+              <div class="table-wrap">
+              <table class="table">
+                <thead><tr><th scope="col">Hour</th><th scope="col" class="is-num">Used</th><th scope="col">Level</th><th scope="col" class="is-num">Cost</th><th scope="col" class="is-num">Outside</th></tr></thead>
+                <tbody>
+                  <tr><td class="cell-title" data-label="Hour">3 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.34 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.16</td><td class="is-num" data-label="Outside"><span class="mono">69°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">2 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.62 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.19</td><td class="is-num" data-label="Outside"><span class="mono">69°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">1 PM</td><td class="cell-key is-num is-strong" data-label="Used">1.41 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.17</td><td class="is-num" data-label="Outside"><span class="mono">67°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">Noon</td><td class="cell-key is-num is-strong" data-label="Used">2.18 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge badge--warn">Moderate</span></td><td class="is-num" data-label="Cost">$0.25</td><td class="is-num" data-label="Outside"><span class="mono">64°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">11 AM</td><td class="cell-key is-num is-strong" data-label="Used">1.10 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.13</td><td class="is-num" data-label="Outside"><span class="mono">62°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">10 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.96 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.11</td><td class="is-num" data-label="Outside"><span class="mono">58°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">9 AM</td><td class="cell-key is-num is-strong" data-label="Used">1.00 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.12</td><td class="is-num" data-label="Outside"><span class="mono">55°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">8 AM</td><td class="cell-key is-num is-strong" data-label="Used">1.08 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.13</td><td class="is-num" data-label="Outside"><span class="mono">52°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">7 AM</td><td class="cell-key is-num is-strong" data-label="Used">1.11 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.13</td><td class="is-num" data-label="Outside"><span class="mono">50°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">6 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.83 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.10</td><td class="is-num" data-label="Outside"><span class="mono">48°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">5 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.84 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.10</td><td class="is-num" data-label="Outside"><span class="mono">47°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">4 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.71 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.08</td><td class="is-num" data-label="Outside"><span class="mono">46°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">3 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.78 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.09</td><td class="is-num" data-label="Outside"><span class="mono">46°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">2 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.74 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.09</td><td class="is-num" data-label="Outside"><span class="mono">48°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">1 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.80 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.09</td><td class="is-num" data-label="Outside"><span class="mono">49°</span></td></tr>
+                  <tr><td class="cell-title" data-label="Hour">12 AM</td><td class="cell-key is-num is-strong" data-label="Used">0.88 <span class="unit">kWh</span></td><td data-label="Level"><span class="badge">Low</span></td><td class="is-num" data-label="Cost">$0.10</td><td class="is-num" data-label="Outside"><span class="mono">52°</span></td></tr>
+                </tbody>
+              </table>
+            </div>
+            </div>
+          </details>
+        </div>
+      </section>
+    </div>
+
+    <!-- ---------- Forecast & stats ---------- -->
+    <div class="stack stack--page" data-tab-panel="utility-electric:forecast" role="tabpanel" aria-label="Forecast and stats" hidden>
+      <section class="panel" aria-labelledby="el-uvt-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="el-uvt-title">Use and temperature</h3><p class="panel-sub">Cold nights and hot afternoons drive the bill. Scrub either chart to compare the same moment</p></div>
+        </header>
+        <div class="stack">
+          <div class="chips" data-tabs="utility-uvt" role="tablist" aria-label="Range">
+            <button class="chip is-active" type="button" role="tab" data-tab="h24">24 hours</button>
+            <button class="chip" type="button" role="tab" data-tab="d7">7 days</button>
+            <button class="chip" type="button" role="tab" data-tab="d30">30 days</button>
+            <button class="chip" type="button" role="tab" data-tab="d60">60 days</button>
+          </div>
+          <div data-tab-panel="utility-uvt:h24" class="stack">
+            <div class="notice notice--plain"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><p class="notice-text">Sun, Nov 8 is the latest full day. The meter reports once a day, so today isn't in yet.</p></div>
+            <div class="stack stack--m">
+            <p class="label">Electricity used</p>
+            <figure class="chart" data-chart="line" data-height="150" data-unit="kWh" data-decimals="2" data-zero="true" data-y-ticks="3" data-sync="uvt-h24"
+              data-labels='["Sun 12 AM","Sun 1 AM","Sun 2 AM","Sun 3 AM","Sun 4 AM","Sun 5 AM","Sun 6 AM","Sun 7 AM","Sun 8 AM","Sun 9 AM","Sun 10 AM","Sun 11 AM","Sun Noon","Sun 1 PM","Sun 2 PM","Sun 3 PM","Sun 4 PM","Sun 5 PM","Sun 6 PM","Sun 7 PM","Sun 8 PM","Sun 9 PM","Sun 10 PM","Sun 11 PM"]' data-short='["12 AM","","","","","","6 AM","","","","","","Noon","","","","","","6 PM","","","","",""]'
+              data-series='[{"name":"Used","tone":"ink","area":true,"thin":true,"values":[0.88,0.8,0.74,0.78,0.71,0.84,0.83,1.11,1.08,1,0.96,1.1,2.18,1.41,1.62,1.34,1.87,2.1,6.03,3.18,1.37,1.25,1.18,1.11]}]'>
+              <figcaption class="sr-only">Electricity used each hour.</figcaption>
+            </figure>
+            <p class="label">Temperature outside</p>
+            <figure class="chart" data-chart="line" data-height="110" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-sync="uvt-h24"
+              data-labels='["Sun 12 AM","Sun 1 AM","Sun 2 AM","Sun 3 AM","Sun 4 AM","Sun 5 AM","Sun 6 AM","Sun 7 AM","Sun 8 AM","Sun 9 AM","Sun 10 AM","Sun 11 AM","Sun Noon","Sun 1 PM","Sun 2 PM","Sun 3 PM","Sun 4 PM","Sun 5 PM","Sun 6 PM","Sun 7 PM","Sun 8 PM","Sun 9 PM","Sun 10 PM","Sun 11 PM"]' data-short='["12 AM","","","","","","6 AM","","","","","","Noon","","","","","","6 PM","","","","",""]'
+              data-series='[{"name":"Outside","tone":"heat","thin":true,"values":[52,49,48,46,46,47,48,50,52,55,58,62,64,67,69,69,69,70,69,66,64,62,59,55]}]'>
+              <figcaption class="sr-only">Temperature outside each hour.</figcaption>
+            </figure>
+          </div>
+          </div>
+          <div data-tab-panel="utility-uvt:d7" hidden><div class="stack stack--m">
+            <p class="label">Electricity used</p>
+            <figure class="chart" data-chart="line" data-height="150" data-unit="kWh" data-decimals="2" data-zero="true" data-y-ticks="3" data-sync="uvt-d7"
+              data-labels='["Mon, Nov 2, 12 AM","Mon, Nov 2, 1 AM","Mon, Nov 2, 2 AM","Mon, Nov 2, 3 AM","Mon, Nov 2, 4 AM","Mon, Nov 2, 5 AM","Mon, Nov 2, 6 AM","Mon, Nov 2, 7 AM","Mon, Nov 2, 8 AM","Mon, Nov 2, 9 AM","Mon, Nov 2, 10 AM","Mon, Nov 2, 11 AM","Mon, Nov 2, Noon","Mon, Nov 2, 1 PM","Mon, Nov 2, 2 PM","Mon, Nov 2, 3 PM","Mon, Nov 2, 4 PM","Mon, Nov 2, 5 PM","Mon, Nov 2, 6 PM","Mon, Nov 2, 7 PM","Mon, Nov 2, 8 PM","Mon, Nov 2, 9 PM","Mon, Nov 2, 10 PM","Mon, Nov 2, 11 PM","Tue, Nov 3, 12 AM","Tue, Nov 3, 1 AM","Tue, Nov 3, 2 AM","Tue, Nov 3, 3 AM","Tue, Nov 3, 4 AM","Tue, Nov 3, 5 AM","Tue, Nov 3, 6 AM","Tue, Nov 3, 7 AM","Tue, Nov 3, 8 AM","Tue, Nov 3, 9 AM","Tue, Nov 3, 10 AM","Tue, Nov 3, 11 AM","Tue, Nov 3, Noon","Tue, Nov 3, 1 PM","Tue, Nov 3, 2 PM","Tue, Nov 3, 3 PM","Tue, Nov 3, 4 PM","Tue, Nov 3, 5 PM","Tue, Nov 3, 6 PM","Tue, Nov 3, 7 PM","Tue, Nov 3, 8 PM","Tue, Nov 3, 9 PM","Tue, Nov 3, 10 PM","Tue, Nov 3, 11 PM","Wed, Nov 4, 12 AM","Wed, Nov 4, 1 AM","Wed, Nov 4, 2 AM","Wed, Nov 4, 3 AM","Wed, Nov 4, 4 AM","Wed, Nov 4, 5 AM","Wed, Nov 4, 6 AM","Wed, Nov 4, 7 AM","Wed, Nov 4, 8 AM","Wed, Nov 4, 9 AM","Wed, Nov 4, 10 AM","Wed, Nov 4, 11 AM","Wed, Nov 4, Noon","Wed, Nov 4, 1 PM","Wed, Nov 4, 2 PM","Wed, Nov 4, 3 PM","Wed, Nov 4, 4 PM","Wed, Nov 4, 5 PM","Wed, Nov 4, 6 PM","Wed, Nov 4, 7 PM","Wed, Nov 4, 8 PM","Wed, Nov 4, 9 PM","Wed, Nov 4, 10 PM","Wed, Nov 4, 11 PM","Thu, Nov 5, 12 AM","Thu, Nov 5, 1 AM","Thu, Nov 5, 2 AM","Thu, Nov 5, 3 AM","Thu, Nov 5, 4 AM","Thu, Nov 5, 5 AM","Thu, Nov 5, 6 AM","Thu, Nov 5, 7 AM","Thu, Nov 5, 8 AM","Thu, Nov 5, 9 AM","Thu, Nov 5, 10 AM","Thu, Nov 5, 11 AM","Thu, Nov 5, Noon","Thu, Nov 5, 1 PM","Thu, Nov 5, 2 PM","Thu, Nov 5, 3 PM","Thu, Nov 5, 4 PM","Thu, Nov 5, 5 PM","Thu, Nov 5, 6 PM","Thu, Nov 5, 7 PM","Thu, Nov 5, 8 PM","Thu, Nov 5, 9 PM","Thu, Nov 5, 10 PM","Thu, Nov 5, 11 PM","Fri, Nov 6, 12 AM","Fri, Nov 6, 1 AM","Fri, Nov 6, 2 AM","Fri, Nov 6, 3 AM","Fri, Nov 6, 4 AM","Fri, Nov 6, 5 AM","Fri, Nov 6, 6 AM","Fri, Nov 6, 7 AM","Fri, Nov 6, 8 AM","Fri, Nov 6, 9 AM","Fri, Nov 6, 10 AM","Fri, Nov 6, 11 AM","Fri, Nov 6, Noon","Fri, Nov 6, 1 PM","Fri, Nov 6, 2 PM","Fri, Nov 6, 3 PM","Fri, Nov 6, 4 PM","Fri, Nov 6, 5 PM","Fri, Nov 6, 6 PM","Fri, Nov 6, 7 PM","Fri, Nov 6, 8 PM","Fri, Nov 6, 9 PM","Fri, Nov 6, 10 PM","Fri, Nov 6, 11 PM","Sat, Nov 7, 12 AM","Sat, Nov 7, 1 AM","Sat, Nov 7, 2 AM","Sat, Nov 7, 3 AM","Sat, Nov 7, 4 AM","Sat, Nov 7, 5 AM","Sat, Nov 7, 6 AM","Sat, Nov 7, 7 AM","Sat, Nov 7, 8 AM","Sat, Nov 7, 9 AM","Sat, Nov 7, 10 AM","Sat, Nov 7, 11 AM","Sat, Nov 7, Noon","Sat, Nov 7, 1 PM","Sat, Nov 7, 2 PM","Sat, Nov 7, 3 PM","Sat, Nov 7, 4 PM","Sat, Nov 7, 5 PM","Sat, Nov 7, 6 PM","Sat, Nov 7, 7 PM","Sat, Nov 7, 8 PM","Sat, Nov 7, 9 PM","Sat, Nov 7, 10 PM","Sat, Nov 7, 11 PM","Sun, Nov 8, 12 AM","Sun, Nov 8, 1 AM","Sun, Nov 8, 2 AM","Sun, Nov 8, 3 AM","Sun, Nov 8, 4 AM","Sun, Nov 8, 5 AM","Sun, Nov 8, 6 AM","Sun, Nov 8, 7 AM","Sun, Nov 8, 8 AM","Sun, Nov 8, 9 AM","Sun, Nov 8, 10 AM","Sun, Nov 8, 11 AM","Sun, Nov 8, Noon","Sun, Nov 8, 1 PM","Sun, Nov 8, 2 PM","Sun, Nov 8, 3 PM","Sun, Nov 8, 4 PM","Sun, Nov 8, 5 PM","Sun, Nov 8, 6 PM","Sun, Nov 8, 7 PM","Sun, Nov 8, 8 PM","Sun, Nov 8, 9 PM","Sun, Nov 8, 10 PM","Sun, Nov 8, 11 PM"]' data-short='["Mon","","","","","","","","","","","","","","","","","","","","","","","","Tue","","","","","","","","","","","","","","","","","","","","","","","","Wed","","","","","","","","","","","","","","","","","","","","","","","","Thu","","","","","","","","","","","","","","","","","","","","","","","","Fri","","","","","","","","","","","","","","","","","","","","","","","","Sat","","","","","","","","","","","","","","","","","","","","","","","","Sun","","","","","","","","","","","","","","","","","","","","","","",""]'
+              data-series='[{"name":"Used","tone":"ink","area":true,"thin":true,"values":[0.64,0.62,0.43,0.44,0.52,0.62,0.73,0.69,0.69,0.73,0.86,0.84,0.74,0.85,0.87,1.11,1.4,1.25,1.3,1.35,1.19,0.97,0.87,0.8,0.56,0.55,0.42,0.49,0.38,0.5,0.67,0.73,0.61,0.6,0.72,0.7,0.83,0.92,0.75,0.91,1.17,1.23,1,1.23,1.05,0.96,0.77,0.68,0.68,0.59,0.45,0.5,0.55,0.56,0.75,0.91,0.77,0.74,0.78,0.72,1.07,0.92,1.17,1.35,1.33,1.35,1.63,1.27,1.07,0.96,0.94,0.68,0.85,0.64,0.72,0.63,0.55,0.64,0.92,0.9,0.93,0.99,0.86,1.14,1,1.4,1.12,1.44,1.42,1.47,1.82,1.72,1.55,1.08,0.94,0.72,0.65,0.65,0.59,0.56,0.56,0.5,0.78,0.73,0.88,0.72,0.71,0.96,0.79,1.04,1.15,1.05,1.37,1.43,1.56,1.42,1.02,0.9,0.92,0.7,0.98,0.76,0.74,0.78,0.65,0.77,0.9,0.96,1.99,1.17,1.09,1.18,1.12,1.3,1.76,1.88,1.96,4.16,3.12,2.06,1.74,1.52,1.19,1.02,0.88,0.8,0.74,0.78,0.71,0.84,0.83,1.11,1.08,1,0.96,1.1,2.18,1.41,1.62,1.34,1.87,2.1,6.03,3.18,1.37,1.25,1.18,1.11]}]'>
+              <figcaption class="sr-only">Electricity used each hour.</figcaption>
+            </figure>
+            <p class="label">Temperature outside</p>
+            <figure class="chart" data-chart="line" data-height="110" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-sync="uvt-d7"
+              data-labels='["Mon, Nov 2, 12 AM","Mon, Nov 2, 1 AM","Mon, Nov 2, 2 AM","Mon, Nov 2, 3 AM","Mon, Nov 2, 4 AM","Mon, Nov 2, 5 AM","Mon, Nov 2, 6 AM","Mon, Nov 2, 7 AM","Mon, Nov 2, 8 AM","Mon, Nov 2, 9 AM","Mon, Nov 2, 10 AM","Mon, Nov 2, 11 AM","Mon, Nov 2, Noon","Mon, Nov 2, 1 PM","Mon, Nov 2, 2 PM","Mon, Nov 2, 3 PM","Mon, Nov 2, 4 PM","Mon, Nov 2, 5 PM","Mon, Nov 2, 6 PM","Mon, Nov 2, 7 PM","Mon, Nov 2, 8 PM","Mon, Nov 2, 9 PM","Mon, Nov 2, 10 PM","Mon, Nov 2, 11 PM","Tue, Nov 3, 12 AM","Tue, Nov 3, 1 AM","Tue, Nov 3, 2 AM","Tue, Nov 3, 3 AM","Tue, Nov 3, 4 AM","Tue, Nov 3, 5 AM","Tue, Nov 3, 6 AM","Tue, Nov 3, 7 AM","Tue, Nov 3, 8 AM","Tue, Nov 3, 9 AM","Tue, Nov 3, 10 AM","Tue, Nov 3, 11 AM","Tue, Nov 3, Noon","Tue, Nov 3, 1 PM","Tue, Nov 3, 2 PM","Tue, Nov 3, 3 PM","Tue, Nov 3, 4 PM","Tue, Nov 3, 5 PM","Tue, Nov 3, 6 PM","Tue, Nov 3, 7 PM","Tue, Nov 3, 8 PM","Tue, Nov 3, 9 PM","Tue, Nov 3, 10 PM","Tue, Nov 3, 11 PM","Wed, Nov 4, 12 AM","Wed, Nov 4, 1 AM","Wed, Nov 4, 2 AM","Wed, Nov 4, 3 AM","Wed, Nov 4, 4 AM","Wed, Nov 4, 5 AM","Wed, Nov 4, 6 AM","Wed, Nov 4, 7 AM","Wed, Nov 4, 8 AM","Wed, Nov 4, 9 AM","Wed, Nov 4, 10 AM","Wed, Nov 4, 11 AM","Wed, Nov 4, Noon","Wed, Nov 4, 1 PM","Wed, Nov 4, 2 PM","Wed, Nov 4, 3 PM","Wed, Nov 4, 4 PM","Wed, Nov 4, 5 PM","Wed, Nov 4, 6 PM","Wed, Nov 4, 7 PM","Wed, Nov 4, 8 PM","Wed, Nov 4, 9 PM","Wed, Nov 4, 10 PM","Wed, Nov 4, 11 PM","Thu, Nov 5, 12 AM","Thu, Nov 5, 1 AM","Thu, Nov 5, 2 AM","Thu, Nov 5, 3 AM","Thu, Nov 5, 4 AM","Thu, Nov 5, 5 AM","Thu, Nov 5, 6 AM","Thu, Nov 5, 7 AM","Thu, Nov 5, 8 AM","Thu, Nov 5, 9 AM","Thu, Nov 5, 10 AM","Thu, Nov 5, 11 AM","Thu, Nov 5, Noon","Thu, Nov 5, 1 PM","Thu, Nov 5, 2 PM","Thu, Nov 5, 3 PM","Thu, Nov 5, 4 PM","Thu, Nov 5, 5 PM","Thu, Nov 5, 6 PM","Thu, Nov 5, 7 PM","Thu, Nov 5, 8 PM","Thu, Nov 5, 9 PM","Thu, Nov 5, 10 PM","Thu, Nov 5, 11 PM","Fri, Nov 6, 12 AM","Fri, Nov 6, 1 AM","Fri, Nov 6, 2 AM","Fri, Nov 6, 3 AM","Fri, Nov 6, 4 AM","Fri, Nov 6, 5 AM","Fri, Nov 6, 6 AM","Fri, Nov 6, 7 AM","Fri, Nov 6, 8 AM","Fri, Nov 6, 9 AM","Fri, Nov 6, 10 AM","Fri, Nov 6, 11 AM","Fri, Nov 6, Noon","Fri, Nov 6, 1 PM","Fri, Nov 6, 2 PM","Fri, Nov 6, 3 PM","Fri, Nov 6, 4 PM","Fri, Nov 6, 5 PM","Fri, Nov 6, 6 PM","Fri, Nov 6, 7 PM","Fri, Nov 6, 8 PM","Fri, Nov 6, 9 PM","Fri, Nov 6, 10 PM","Fri, Nov 6, 11 PM","Sat, Nov 7, 12 AM","Sat, Nov 7, 1 AM","Sat, Nov 7, 2 AM","Sat, Nov 7, 3 AM","Sat, Nov 7, 4 AM","Sat, Nov 7, 5 AM","Sat, Nov 7, 6 AM","Sat, Nov 7, 7 AM","Sat, Nov 7, 8 AM","Sat, Nov 7, 9 AM","Sat, Nov 7, 10 AM","Sat, Nov 7, 11 AM","Sat, Nov 7, Noon","Sat, Nov 7, 1 PM","Sat, Nov 7, 2 PM","Sat, Nov 7, 3 PM","Sat, Nov 7, 4 PM","Sat, Nov 7, 5 PM","Sat, Nov 7, 6 PM","Sat, Nov 7, 7 PM","Sat, Nov 7, 8 PM","Sat, Nov 7, 9 PM","Sat, Nov 7, 10 PM","Sat, Nov 7, 11 PM","Sun, Nov 8, 12 AM","Sun, Nov 8, 1 AM","Sun, Nov 8, 2 AM","Sun, Nov 8, 3 AM","Sun, Nov 8, 4 AM","Sun, Nov 8, 5 AM","Sun, Nov 8, 6 AM","Sun, Nov 8, 7 AM","Sun, Nov 8, 8 AM","Sun, Nov 8, 9 AM","Sun, Nov 8, 10 AM","Sun, Nov 8, 11 AM","Sun, Nov 8, Noon","Sun, Nov 8, 1 PM","Sun, Nov 8, 2 PM","Sun, Nov 8, 3 PM","Sun, Nov 8, 4 PM","Sun, Nov 8, 5 PM","Sun, Nov 8, 6 PM","Sun, Nov 8, 7 PM","Sun, Nov 8, 8 PM","Sun, Nov 8, 9 PM","Sun, Nov 8, 10 PM","Sun, Nov 8, 11 PM"]' data-short='["Mon","","","","","","","","","","","","","","","","","","","","","","","","Tue","","","","","","","","","","","","","","","","","","","","","","","","Wed","","","","","","","","","","","","","","","","","","","","","","","","Thu","","","","","","","","","","","","","","","","","","","","","","","","Fri","","","","","","","","","","","","","","","","","","","","","","","","Sat","","","","","","","","","","","","","","","","","","","","","","","","Sun","","","","","","","","","","","","","","","","","","","","","","",""]'
+              data-series='[{"name":"Outside","tone":"heat","thin":true,"values":[58,56,54,53,53,53,54,56,59,60,64,67,71,73,75,76,76,76,74,72,70,68,65,62,56,54,52,51,50,50,52,54,56,60,62,65,66,70,71,73,72,73,71,70,67,64,61,59,50,48,46,44,44,44,45,48,49,53,55,59,61,64,66,67,66,67,65,64,63,58,55,52,48,45,45,44,43,44,44,46,49,51,53,56,59,60,62,63,63,63,63,60,59,56,53,51,43,41,40,39,39,38,40,42,44,47,50,54,56,59,60,62,63,63,61,59,57,54,51,48,46,45,43,41,40,41,42,44,46,50,52,56,59,61,63,65,65,64,64,62,59,56,53,49,52,49,48,46,46,47,48,50,52,55,58,62,64,67,69,69,69,70,69,66,64,62,59,55]}]'>
+              <figcaption class="sr-only">Temperature outside each hour.</figcaption>
+            </figure>
+          </div></div>
+          <div data-tab-panel="utility-uvt:d30" hidden><div class="stack stack--m">
+            <p class="label">Electricity used</p>
+            <figure class="chart" data-chart="line" data-height="150" data-unit="kWh" data-decimals="1" data-zero="true" data-y-ticks="3" data-sync="uvt-d30"
+              data-labels='["Sat, Oct 10","Sun, Oct 11","Mon, Oct 12","Tue, Oct 13","Wed, Oct 14","Thu, Oct 15","Fri, Oct 16","Sat, Oct 17","Sun, Oct 18","Mon, Oct 19","Tue, Oct 20","Wed, Oct 21","Thu, Oct 22","Fri, Oct 23","Sat, Oct 24","Sun, Oct 25","Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8"]' data-short='["Oct 10","","","","","","","Oct 17","","","","","","","Oct 24","","","","","","","Oct 31","","","","","","","Nov 7",""]'
+              data-series='[{"name":"Used","tone":"ink","area":false,"thin":false,"values":[40.1,30,23.2,24.9,17.4,21.6,19.5,23.3,27.1,27.4,24.7,24.5,18.3,19.5,26.5,28,18.5,21.1,22.9,20.9,23.2,24.8,18.8,20.5,18.4,21.7,25.4,21.6,34.8,35.5]}]'>
+              <figcaption class="sr-only">Electricity used each day.</figcaption>
+            </figure>
+            <p class="label">Temperature outside</p>
+            <figure class="chart" data-chart="line" data-height="110" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-sync="uvt-d30"
+              data-labels='["Sat, Oct 10","Sun, Oct 11","Mon, Oct 12","Tue, Oct 13","Wed, Oct 14","Thu, Oct 15","Fri, Oct 16","Sat, Oct 17","Sun, Oct 18","Mon, Oct 19","Tue, Oct 20","Wed, Oct 21","Thu, Oct 22","Fri, Oct 23","Sat, Oct 24","Sun, Oct 25","Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8"]' data-short='["Oct 10","","","","","","","Oct 17","","","","","","","Oct 24","","","","","","","Oct 31","","","","","","","Nov 7",""]'
+              data-series='[{"name":"High","tone":"heat","values":[84,79,74,71,75,71,73,77,80,80,80,75,72,69,68,65,72,74,70,74,72,69,74,76,73,67,63,63,65,70]},{"name":"Low","tone":"cool","values":[61,55,49,47,51,49,49,53,57,58,55,51,51,45,47,42,50,51,48,50,47,46,50,53,51,44,43,38,40,46]}]'>
+              <figcaption class="sr-only">Daily high and low temperature outside.</figcaption>
+            </figure>
+          </div></div>
+          <div data-tab-panel="utility-uvt:d60" hidden><div class="stack stack--m">
+            <p class="label">Electricity used</p>
+            <figure class="chart" data-chart="line" data-height="150" data-unit="kWh" data-decimals="1" data-zero="true" data-y-ticks="3" data-sync="uvt-d60"
+              data-labels='["Thu, Sep 10","Fri, Sep 11","Sat, Sep 12","Sun, Sep 13","Mon, Sep 14","Tue, Sep 15","Wed, Sep 16","Thu, Sep 17","Fri, Sep 18","Sat, Sep 19","Sun, Sep 20","Mon, Sep 21","Tue, Sep 22","Wed, Sep 23","Thu, Sep 24","Fri, Sep 25","Sat, Sep 26","Sun, Sep 27","Mon, Sep 28","Tue, Sep 29","Wed, Sep 30","Thu, Oct 1","Fri, Oct 2","Sat, Oct 3","Sun, Oct 4","Mon, Oct 5","Tue, Oct 6","Wed, Oct 7","Thu, Oct 8","Fri, Oct 9","Sat, Oct 10","Sun, Oct 11","Mon, Oct 12","Tue, Oct 13","Wed, Oct 14","Thu, Oct 15","Fri, Oct 16","Sat, Oct 17","Sun, Oct 18","Mon, Oct 19","Tue, Oct 20","Wed, Oct 21","Thu, Oct 22","Fri, Oct 23","Sat, Oct 24","Sun, Oct 25","Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8"]' data-short='["Sep 10","","","","","","","","","","","","","","Sep 24","","","","","","","","","","","","","","Oct 8","","","","","","","","","","","","","","Oct 22","","","","","","","","","","","","","","Nov 5","","",""]'
+              data-series='[{"name":"Used","tone":"ink","area":false,"thin":false,"values":[68.8,69.2,67.9,62.9,65.1,51.8,67,63.5,53.5,60.2,39.2,32.9,36,33.4,24.7,34.6,36,41.1,42.4,72.9,54.8,55.7,45.1,50.4,36.7,30,25.9,34.8,33.2,40.6,40.1,30,23.2,24.9,17.4,21.6,19.5,23.3,27.1,27.4,24.7,24.5,18.3,19.5,26.5,28,18.5,21.1,22.9,20.9,23.2,24.8,18.8,20.5,18.4,21.7,25.4,21.6,34.8,35.5]}]'>
+              <figcaption class="sr-only">Electricity used each day.</figcaption>
+            </figure>
+            <p class="label">Temperature outside</p>
+            <figure class="chart" data-chart="line" data-height="110" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-sync="uvt-d60"
+              data-labels='["Thu, Sep 10","Fri, Sep 11","Sat, Sep 12","Sun, Sep 13","Mon, Sep 14","Tue, Sep 15","Wed, Sep 16","Thu, Sep 17","Fri, Sep 18","Sat, Sep 19","Sun, Sep 20","Mon, Sep 21","Tue, Sep 22","Wed, Sep 23","Thu, Sep 24","Fri, Sep 25","Sat, Sep 26","Sun, Sep 27","Mon, Sep 28","Tue, Sep 29","Wed, Sep 30","Thu, Oct 1","Fri, Oct 2","Sat, Oct 3","Sun, Oct 4","Mon, Oct 5","Tue, Oct 6","Wed, Oct 7","Thu, Oct 8","Fri, Oct 9","Sat, Oct 10","Sun, Oct 11","Mon, Oct 12","Tue, Oct 13","Wed, Oct 14","Thu, Oct 15","Fri, Oct 16","Sat, Oct 17","Sun, Oct 18","Mon, Oct 19","Tue, Oct 20","Wed, Oct 21","Thu, Oct 22","Fri, Oct 23","Sat, Oct 24","Sun, Oct 25","Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8"]' data-short='["Sep 10","","","","","","","","","","","","","","Sep 24","","","","","","","","","","","","","","Oct 8","","","","","","","","","","","","","","Oct 22","","","","","","","","","","","","","","Nov 5","","",""]'
+              data-series='[{"name":"High","tone":"heat","values":[95,95,94,92,94,89,95,95,89,90,81,81,84,83,77,82,82,86,87,96,90,91,89,88,81,81,79,82,84,85,84,79,74,71,75,71,73,77,80,80,80,75,72,69,68,65,72,74,70,74,72,69,74,76,73,67,63,63,65,70]},{"name":"Low","tone":"cool","values":[75,74,72,69,70,67,74,72,66,70,61,60,62,59,56,58,60,64,64,75,67,68,64,64,59,57,55,60,60,62,61,55,49,47,51,49,49,53,57,58,55,51,51,45,47,42,50,51,48,50,47,46,50,53,51,44,43,38,40,46]}]'>
+              <figcaption class="sr-only">Daily high and low temperature outside.</figcaption>
+            </figure>
+          </div></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="el-good-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="el-good-title">How good is the forecast</h3><p class="panel-sub">Checked against the meter every night</p></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Accuracy</span><span class="readout-value"><span class="num">89<span class="unit">%</span></span></span><span class="readout-note">Over the last 30 days</span></div>
+          <div class="readout"><span class="label">Typical miss</span><span class="readout-value"><span class="num">2.5<span class="unit">kWh</span></span></span><span class="readout-note">A day, high or low</span></div>
+          <div class="readout"><span class="label">Confidence</span><span class="readout-value"><span class="num">85<span class="unit">%</span></span></span><span class="readout-note">Average for the next 2 weeks</span></div>
+          <div class="readout"><span class="label">Next 30 days</span><span class="readout-value"><span class="num">754<span class="unit">kWh</span></span></span><span class="readout-note">Projected use</span></div>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="el-fc-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="el-fc-title">Forecast</h3><p class="panel-sub">Two weeks of actual use, then the days ahead with their likely range</p></div>
+          <div class="panel-action"><div class="chips" data-tabs="utility-fc" role="tablist" aria-label="Days ahead">
+            <button class="chip is-active" type="button" role="tab" data-tab="d7">7 days</button>
+            <button class="chip" type="button" role="tab" data-tab="d14">14 days</button>
+          </div></div>
+        </header>
+        <div data-tab-panel="utility-fc:d7"><figure class="chart" data-chart="line" data-height="210" data-unit="kWh" data-decimals="1" data-today="14" data-readout="14"
+            data-labels='["Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8","Mon, Nov 9","Tue, Nov 10","Wed, Nov 11","Thu, Nov 12","Fri, Nov 13","Sat, Nov 14","Sun, Nov 15"]' data-short='["Oct 26","","","","","","","Nov 2","","","","","","","Nov 9","","","","","",""]'
+            data-band='{"name":"Likely range","short":"Likely","lower":[null,null,null,null,null,null,null,null,null,null,null,null,null,35.5,22.6,22.3,20,20.3,18.2,22.5,22.3],"upper":[null,null,null,null,null,null,null,null,null,null,null,null,null,35.5,29.4,29.4,27.4,28,26.2,30.7,30.8]}'
+            data-series='[{"name":"Actual","tone":"ink","dots":true,"values":[18.5,21.1,22.9,20.9,23.2,24.8,18.8,20.5,18.4,21.7,25.4,21.6,34.8,35.5,null,null,null,null,null,null,null]},{"name":"Forecast","tone":"graphite","dash":true,"values":[23.9,19.5,19.6,22.2,21.8,27.2,16.2,24,15.1,25.4,22.1,19.9,34.5,32.6,26,25.8,23.7,24.2,22.2,26.6,26.5]}]'>
+            <figcaption class="sr-only">Actual use for the last two weeks with the forecast and its likely range ahead.</figcaption>
+          </figure></div>
+        <div data-tab-panel="utility-fc:d14" hidden><figure class="chart" data-chart="line" data-height="210" data-unit="kWh" data-decimals="1" data-today="14" data-readout="14"
+            data-labels='["Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8","Mon, Nov 9","Tue, Nov 10","Wed, Nov 11","Thu, Nov 12","Fri, Nov 13","Sat, Nov 14","Sun, Nov 15","Mon, Nov 16","Tue, Nov 17","Wed, Nov 18","Thu, Nov 19","Fri, Nov 20","Sat, Nov 21","Sun, Nov 22"]' data-short='["Oct 26","","","","","","","Nov 2","","","","","","","Nov 9","","","","","","","Nov 16","","","","","",""]'
+            data-band='{"name":"Likely range","short":"Likely","lower":[null,null,null,null,null,null,null,null,null,null,null,null,null,35.5,22.6,22.3,20,20.3,18.2,22.5,22.3,22.3,22.3,20.7,16.6,17.6,19.3,20.5],"upper":[null,null,null,null,null,null,null,null,null,null,null,null,null,35.5,29.4,29.4,27.4,28,26.2,30.7,30.8,30.9,31.2,29.8,26,27.2,29.1,30.6]}'
+            data-series='[{"name":"Actual","tone":"ink","dots":true,"values":[18.5,21.1,22.9,20.9,23.2,24.8,18.8,20.5,18.4,21.7,25.4,21.6,34.8,35.5,null,null,null,null,null,null,null,null,null,null,null,null,null,null]},{"name":"Forecast","tone":"graphite","dash":true,"values":[23.9,19.5,19.6,22.2,21.8,27.2,16.2,24,15.1,25.4,22.1,19.9,34.5,32.6,26,25.8,23.7,24.2,22.2,26.6,26.5,26.6,26.7,25.2,21.3,22.4,24.2,25.6]}]'>
+            <figcaption class="sr-only">Actual use for the last two weeks with the forecast and its likely range ahead.</figcaption>
+          </figure></div>
+      </section>
+
+      <div class="split split--even">
+        <section class="panel" aria-labelledby="el-dow-title">
+          <header class="panel-head">
+          <div><h3 class="panel-title" id="el-dow-title">By day of week</h3><p class="panel-sub">How each day runs above or below what the weather alone predicts, learned from your own history</p></div>
+        </header>
+          <div data-chart="diverge" data-labels='["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]' data-values="[-4,-5,-2,-3,2,12,9]" data-max="12"></div>
+          <p class="small muted mt-m">Weekends use the most: Saturday runs 12% above what the weather would suggest.</p>
+        </section>
+        <section class="panel" aria-labelledby="el-acc-title">
+          <header class="panel-head">
+          <div><h3 class="panel-title" id="el-acc-title">Forecast misses</h3><p class="panel-sub">How far off each forecast was. It retrains every night, so this should drift down</p></div>
+          <div class="panel-action"><div class="chips" data-tabs="utility-acc" role="tablist" aria-label="Detail">
+            <button class="chip is-active" type="button" role="tab" data-tab="daily">Daily</button>
+            <button class="chip" type="button" role="tab" data-tab="hourly">Hourly</button>
+          </div></div>
+        </header>
+          <div data-tab-panel="utility-acc:daily"><figure class="chart" data-chart="line" data-height="170" data-unit="kWh" data-decimals="1" data-zero="true" data-y-ticks="4"
+            data-labels='["Sat, Oct 10","Sun, Oct 11","Mon, Oct 12","Tue, Oct 13","Wed, Oct 14","Thu, Oct 15","Fri, Oct 16","Sat, Oct 17","Sun, Oct 18","Mon, Oct 19","Tue, Oct 20","Wed, Oct 21","Thu, Oct 22","Fri, Oct 23","Sat, Oct 24","Sun, Oct 25","Mon, Oct 26","Tue, Oct 27","Wed, Oct 28","Thu, Oct 29","Fri, Oct 30","Sat, Oct 31","Sun, Nov 1","Mon, Nov 2","Tue, Nov 3","Wed, Nov 4","Thu, Nov 5","Fri, Nov 6","Sat, Nov 7","Sun, Nov 8"]' data-short='["Oct 10","","","","","","","Oct 17","","","","","","","Oct 24","","","","","","","Oct 31","","","","","","","Nov 7",""]'
+            data-series='[{"name":"Missed by","tone":"graphite","thin":true,"dots":true,"values":[4.33,0.93,1.56,1.77,1.51,0.41,3.66,3.01,1.94,2.71,8.1,3.48,0.57,2.7,0.42,0.13,5.4,1.58,3.28,1.26,1.45,2.39,2.62,3.46,3.32,3.66,3.33,1.77,0.3,2.84]},{"name":"7-day average","tone":"ink","values":[4.33,2.63,2.27,2.15,2.02,1.75,2.02,1.84,1.98,2.14,3.05,3.33,3.35,3.22,2.85,2.59,2.97,2.04,2.01,2.11,1.93,2.21,2.57,2.29,2.54,2.59,2.89,2.94,2.64,2.67]}]'>
+            <figcaption class="sr-only">How far each day's forecast was off over the last 30 days, with a 7-day average around 2 to 3 kWh.</figcaption>
+          </figure></div>
+          <div data-tab-panel="utility-acc:hourly" hidden><figure class="chart" data-chart="line" data-height="170" data-unit="kWh" data-decimals="2" data-zero="true" data-y-ticks="4"
+            data-labels='["Mon, Nov 2, 12 AM","Mon, Nov 2, 1 AM","Mon, Nov 2, 2 AM","Mon, Nov 2, 3 AM","Mon, Nov 2, 4 AM","Mon, Nov 2, 5 AM","Mon, Nov 2, 6 AM","Mon, Nov 2, 7 AM","Mon, Nov 2, 8 AM","Mon, Nov 2, 9 AM","Mon, Nov 2, 10 AM","Mon, Nov 2, 11 AM","Mon, Nov 2, Noon","Mon, Nov 2, 1 PM","Mon, Nov 2, 2 PM","Mon, Nov 2, 3 PM","Mon, Nov 2, 4 PM","Mon, Nov 2, 5 PM","Mon, Nov 2, 6 PM","Mon, Nov 2, 7 PM","Mon, Nov 2, 8 PM","Mon, Nov 2, 9 PM","Mon, Nov 2, 10 PM","Mon, Nov 2, 11 PM","Tue, Nov 3, 12 AM","Tue, Nov 3, 1 AM","Tue, Nov 3, 2 AM","Tue, Nov 3, 3 AM","Tue, Nov 3, 4 AM","Tue, Nov 3, 5 AM","Tue, Nov 3, 6 AM","Tue, Nov 3, 7 AM","Tue, Nov 3, 8 AM","Tue, Nov 3, 9 AM","Tue, Nov 3, 10 AM","Tue, Nov 3, 11 AM","Tue, Nov 3, Noon","Tue, Nov 3, 1 PM","Tue, Nov 3, 2 PM","Tue, Nov 3, 3 PM","Tue, Nov 3, 4 PM","Tue, Nov 3, 5 PM","Tue, Nov 3, 6 PM","Tue, Nov 3, 7 PM","Tue, Nov 3, 8 PM","Tue, Nov 3, 9 PM","Tue, Nov 3, 10 PM","Tue, Nov 3, 11 PM","Wed, Nov 4, 12 AM","Wed, Nov 4, 1 AM","Wed, Nov 4, 2 AM","Wed, Nov 4, 3 AM","Wed, Nov 4, 4 AM","Wed, Nov 4, 5 AM","Wed, Nov 4, 6 AM","Wed, Nov 4, 7 AM","Wed, Nov 4, 8 AM","Wed, Nov 4, 9 AM","Wed, Nov 4, 10 AM","Wed, Nov 4, 11 AM","Wed, Nov 4, Noon","Wed, Nov 4, 1 PM","Wed, Nov 4, 2 PM","Wed, Nov 4, 3 PM","Wed, Nov 4, 4 PM","Wed, Nov 4, 5 PM","Wed, Nov 4, 6 PM","Wed, Nov 4, 7 PM","Wed, Nov 4, 8 PM","Wed, Nov 4, 9 PM","Wed, Nov 4, 10 PM","Wed, Nov 4, 11 PM","Thu, Nov 5, 12 AM","Thu, Nov 5, 1 AM","Thu, Nov 5, 2 AM","Thu, Nov 5, 3 AM","Thu, Nov 5, 4 AM","Thu, Nov 5, 5 AM","Thu, Nov 5, 6 AM","Thu, Nov 5, 7 AM","Thu, Nov 5, 8 AM","Thu, Nov 5, 9 AM","Thu, Nov 5, 10 AM","Thu, Nov 5, 11 AM","Thu, Nov 5, Noon","Thu, Nov 5, 1 PM","Thu, Nov 5, 2 PM","Thu, Nov 5, 3 PM","Thu, Nov 5, 4 PM","Thu, Nov 5, 5 PM","Thu, Nov 5, 6 PM","Thu, Nov 5, 7 PM","Thu, Nov 5, 8 PM","Thu, Nov 5, 9 PM","Thu, Nov 5, 10 PM","Thu, Nov 5, 11 PM","Fri, Nov 6, 12 AM","Fri, Nov 6, 1 AM","Fri, Nov 6, 2 AM","Fri, Nov 6, 3 AM","Fri, Nov 6, 4 AM","Fri, Nov 6, 5 AM","Fri, Nov 6, 6 AM","Fri, Nov 6, 7 AM","Fri, Nov 6, 8 AM","Fri, Nov 6, 9 AM","Fri, Nov 6, 10 AM","Fri, Nov 6, 11 AM","Fri, Nov 6, Noon","Fri, Nov 6, 1 PM","Fri, Nov 6, 2 PM","Fri, Nov 6, 3 PM","Fri, Nov 6, 4 PM","Fri, Nov 6, 5 PM","Fri, Nov 6, 6 PM","Fri, Nov 6, 7 PM","Fri, Nov 6, 8 PM","Fri, Nov 6, 9 PM","Fri, Nov 6, 10 PM","Fri, Nov 6, 11 PM","Sat, Nov 7, 12 AM","Sat, Nov 7, 1 AM","Sat, Nov 7, 2 AM","Sat, Nov 7, 3 AM","Sat, Nov 7, 4 AM","Sat, Nov 7, 5 AM","Sat, Nov 7, 6 AM","Sat, Nov 7, 7 AM","Sat, Nov 7, 8 AM","Sat, Nov 7, 9 AM","Sat, Nov 7, 10 AM","Sat, Nov 7, 11 AM","Sat, Nov 7, Noon","Sat, Nov 7, 1 PM","Sat, Nov 7, 2 PM","Sat, Nov 7, 3 PM","Sat, Nov 7, 4 PM","Sat, Nov 7, 5 PM","Sat, Nov 7, 6 PM","Sat, Nov 7, 7 PM","Sat, Nov 7, 8 PM","Sat, Nov 7, 9 PM","Sat, Nov 7, 10 PM","Sat, Nov 7, 11 PM","Sun, Nov 8, 12 AM","Sun, Nov 8, 1 AM","Sun, Nov 8, 2 AM","Sun, Nov 8, 3 AM","Sun, Nov 8, 4 AM","Sun, Nov 8, 5 AM","Sun, Nov 8, 6 AM","Sun, Nov 8, 7 AM","Sun, Nov 8, 8 AM","Sun, Nov 8, 9 AM","Sun, Nov 8, 10 AM","Sun, Nov 8, 11 AM","Sun, Nov 8, Noon","Sun, Nov 8, 1 PM","Sun, Nov 8, 2 PM","Sun, Nov 8, 3 PM","Sun, Nov 8, 4 PM","Sun, Nov 8, 5 PM","Sun, Nov 8, 6 PM","Sun, Nov 8, 7 PM","Sun, Nov 8, 8 PM","Sun, Nov 8, 9 PM","Sun, Nov 8, 10 PM","Sun, Nov 8, 11 PM"]' data-short='["Mon","","","","","","","","","","","","","","","","","","","","","","","","Tue","","","","","","","","","","","","","","","","","","","","","","","","Wed","","","","","","","","","","","","","","","","","","","","","","","","Thu","","","","","","","","","","","","","","","","","","","","","","","","Fri","","","","","","","","","","","","","","","","","","","","","","","","Sat","","","","","","","","","","","","","","","","","","","","","","","","Sun","","","","","","","","","","","","","","","","","","","","","","",""]'
+            data-series='[{"name":"Missed by","tone":"graphite","thin":true,"values":[0.09,0.04,0.18,0.15,0.07,0.02,0.05,0.24,0.19,0.1,0,0.09,0.29,0.28,0.35,0.21,0.02,0.27,0.27,0.12,0.13,0.2,0.11,0.01,0.1,0.13,0.04,0.12,0.01,0.1,0.18,0.14,0.06,0.08,0.18,0.11,0.18,0.21,0.02,0.08,0.28,0.28,0.01,0.31,0.22,0.22,0.15,0.17,0.1,0.11,0.2,0.12,0.07,0.11,0.08,0.07,0.16,0.14,0.13,0.26,0.02,0.27,0.13,0.05,0.17,0.26,0.03,0.28,0.33,0.28,0.1,0.17,0.17,0.03,0.16,0.09,0.01,0.05,0.2,0.04,0.12,0.22,0.07,0.28,0.05,0.36,0.01,0.22,0.11,0.07,0.38,0.37,0.33,0,0.04,0.02,0.04,0.1,0.08,0.07,0.07,0.03,0.13,0.04,0.15,0.03,0,0.19,0.06,0.11,0.14,0.04,0.2,0.17,0.26,0.2,0.07,0.07,0.11,0.03,0.08,0.19,0.14,0.06,0.19,0.14,0.23,0.38,0.72,0.03,0.14,0.16,0.36,0.32,0,0.02,0.08,1.98,0.87,0.05,0.16,0.17,0.22,0.14,0.12,0.1,0.09,0.02,0.09,0.03,0.24,0.16,0.12,0.13,0.21,0.17,0.78,0.12,0.04,0.46,0.06,0.04,3.9,1.18,0.43,0.35,0.15,0.01]},{"name":"24-hour average","tone":"ink","values":[0.09,0.07,0.1,0.12,0.11,0.09,0.09,0.11,0.11,0.11,0.1,0.1,0.12,0.13,0.14,0.15,0.14,0.15,0.15,0.15,0.15,0.15,0.15,0.14,0.15,0.15,0.14,0.14,0.14,0.14,0.15,0.14,0.14,0.14,0.15,0.15,0.14,0.14,0.13,0.12,0.13,0.13,0.12,0.13,0.13,0.13,0.13,0.14,0.14,0.14,0.15,0.15,0.15,0.15,0.15,0.14,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.14,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.15,0.14,0.16,0.16,0.16,0.15,0.15,0.14,0.14,0.14,0.14,0.14,0.14,0.14,0.13,0.13,0.14,0.13,0.12,0.12,0.12,0.11,0.12,0.11,0.11,0.12,0.11,0.1,0.09,0.1,0.1,0.1,0.1,0.1,0.11,0.11,0.11,0.12,0.12,0.14,0.16,0.16,0.16,0.16,0.18,0.18,0.18,0.18,0.17,0.25,0.27,0.27,0.27,0.28,0.28,0.28,0.29,0.28,0.28,0.28,0.27,0.27,0.27,0.26,0.24,0.24,0.24,0.24,0.26,0.25,0.25,0.27,0.27,0.19,0.32,0.36,0.38,0.38,0.38,0.38]}]'>
+            <figcaption class="sr-only">How far the hour-by-hour forecast was off over the last week; about 0.19 kWh on average.</figcaption>
+          </figure>
+            <p class="small muted mt-s">Average miss 0.19 kWh an hour over the last 168 hours.</p></div>
+        </section>
+      </div>
+
+      <section class="panel" aria-labelledby="el-hl-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="el-hl-title">Highs and lows</h3><p class="panel-sub">Totals and extremes for each period</p></div>
+        </header>
+        <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Period</th><th scope="col" class="is-num">Total</th><th scope="col" class="is-num">Daily average</th><th scope="col">Lowest day</th><th scope="col">Highest day</th><th scope="col">Outside, avg / high / low</th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title" data-label="Period">This month <span class="small muted">· 8 days</span></td><td class="cell-key is-num is-strong" data-label="Total">196.8 <span class="unit">kWh</span></td><td class="is-num" data-label="Daily average">24.6 <span class="unit">kWh</span></td><td data-label="Lowest day">18.4 <span class="unit">kWh</span> <span class="small muted">Tue, Nov 3</span></td><td data-label="Highest day">35.5 <span class="unit">kWh</span> <span class="small muted">Sun, Nov 8</span></td><td data-label="Outside"><span class="mono">57° / 76° / 38°</span></td></tr>
+              <tr><td class="cell-title" data-label="Period">This quarter <span class="small muted">· 39 days</span></td><td class="cell-key is-num is-strong" data-label="Total">1,076.8 <span class="unit">kWh</span></td><td class="is-num" data-label="Daily average">27.6 <span class="unit">kWh</span></td><td data-label="Lowest day">17.4 <span class="unit">kWh</span> <span class="small muted">Wed, Oct 14</span></td><td data-label="Highest day">55.7 <span class="unit">kWh</span> <span class="small muted">Thu, Oct 1</span></td><td data-label="Outside"><span class="mono">63° / 91° / 38°</span></td></tr>
+              <tr><td class="cell-title" data-label="Period">This year <span class="small muted">· 108 days</span></td><td class="cell-key is-num is-strong" data-label="Total">5,538.0 <span class="unit">kWh</span></td><td class="is-num" data-label="Daily average">51.3 <span class="unit">kWh</span></td><td data-label="Lowest day">17.4 <span class="unit">kWh</span> <span class="small muted">Wed, Oct 14</span></td><td data-label="Highest day">93.5 <span class="unit">kWh</span> <span class="small muted">Tue, Aug 4</span></td><td data-label="Outside"><span class="mono">76° / 106° / 38°</span></td></tr>
+              <tr><td class="cell-title" data-label="Period">Since Jul 24 <span class="small muted">· 108 days</span></td><td class="cell-key is-num is-strong" data-label="Total">5,538.0 <span class="unit">kWh</span></td><td class="is-num" data-label="Daily average">51.3 <span class="unit">kWh</span></td><td data-label="Lowest day">17.4 <span class="unit">kWh</span> <span class="small muted">Wed, Oct 14</span></td><td data-label="Highest day">93.5 <span class="unit">kWh</span> <span class="small muted">Tue, Aug 4</span></td><td data-label="Outside"><span class="mono">76° / 106° / 38°</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel panel--flush">
+        <details class="disclosure disclosure--row util-curious">
+          <summary><span class="when-closed">For the curious: the forecast model</span><span class="when-open">The forecast model</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <dl class="kv kv--cols">
+              <div class="kv-row"><dt>Trained on</dt><dd>108 days</dd></div>
+              <div class="kv-row"><dt>Fit to weather (R², 0 to 1)</dt><dd class="mono">0.8437</dd></div>
+              <div class="kv-row"><dt>Average miss (MAE)</dt><dd>2.46 kWh</dd></div>
+              <div class="kv-row"><dt>Root-mean-square miss</dt><dd>2.97 kWh</dd></div>
+              <div class="kv-row"><dt>Average miss, percent</dt><dd>10.7%</dd></div>
+              <div class="kv-row"><dt>Hourly readings, last 60 days</dt><dd>1,430</dd></div>
+              <div class="kv-row"><dt>Use, last 60 days</dt><dd>2,133 kWh</dd></div>
+              <div class="kv-row"><dt>Energy cost, last 60 days</dt><dd>$249.73</dd></div>
+            </dl>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== GAS ===================== -->
+  <div class="stack stack--page" data-tab-panel="utility-view:gas" role="tabpanel" aria-label="Gas" hidden>
+    <section class="ip" aria-labelledby="gas-verdict">
+      <div class="ip-instrument">
+        <div class="dial dial--half" data-chart="dial" data-start="-90" data-sweep="180" data-rings='[{"r":92,"w":18,"min":0,"max":40,"ticks":8,"major":2,"gap":1.2,"labels":[[0,"$0"],[20,"$20"],[40,"$40"]],"segments":[{"from":0,"to":20.37,"tone":"ink"},{"from":20.37,"to":33.69,"tone":"gas"},{"from":33.69,"to":37.23,"tone":"soft"}]}]'>
+          <div class="dial-centre">
+            <span class="label">Last gas bill</span>
+            <span class="num num--xl">$37.23</span>
+            <span class="dial-note mono">Oct 7 – Nov 5</span>
+          </div>
+        </div>
+        <div class="dial-legend">
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-ink)"></span>Flat charges <b>$20.37</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-gas)"></span>Gas used <b>$13.32</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-soft)"></span>Taxes and city fee <b>$3.54</b></span>
+        </div>
+      </div>
+      <div class="ip-body">
+        <div class="verdict">
+          <span class="lamp lamp--ok"></span>
+          <p class="verdict-text" id="gas-verdict">More than half of the last gas bill was flat charges.</p>
+          <p class="verdict-note">$20.37 of the $37.23 is charged however much gas you use. The next bill should arrive around Wed, Dec 9.</p>
+        </div>
+        <div class="readouts">
+          <div class="readout"><span class="label">Gas used</span><span class="readout-value"><span class="num">9<span class="unit">CCF</span></span></span><span class="readout-note"><svg class="icon" aria-hidden="true"><use href="#i-arrow-up"/></svg>0.31 a day, up from 0.14</span></div>
+          <div class="readout"><span class="label">Flat charges</span><span class="readout-value"><span class="num">55<span class="unit">%</span></span></span><span class="readout-note">$20.37, however much gas you use</span></div>
+          <div class="readout"><span class="label">Next bill</span><span class="readout-value"><span class="num">Dec 9</span></span><span class="readout-note">Meter read around Dec 5</span></div>
+        </div>
+        <div class="notice notice--plain"><svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><div><p class="notice-title">Gas is only read once a month.</p><p class="notice-text">CoServ reads the gas meter once a billing cycle, so this view changes when a new bill comes in.</p></div></div>
+      </div>
+    </section>
+
+    <div class="split split--even">
+      <section class="panel" aria-labelledby="gas-used-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="gas-used-title">Gas used per bill</h3><p class="panel-sub">CCF for each billing cycle, by the month CoServ read the meter</p></div>
+        </header>
+        <figure class="chart" data-chart="bars" data-height="190" data-unit="CCF" data-decimals="0" data-y-ticks="3"
+          data-labels='["Aug ’26 bill","Sep ’26 bill","Oct ’26 bill","Nov ’26 bill"]' data-short='["Aug","Sep","Oct","Nov"]'
+          data-values="[1,3,4,9]" data-notes='["Jul 24 – Aug 6, 13 days","Aug 6 – Sep 8, 33 days, 0.09 a day","Sep 8 – Oct 7, 29 days, 0.14 a day","Oct 7 – Nov 5, 29 days, 0.31 a day, 64° outside on average"]'>
+          <figcaption class="sr-only">Gas used per bill: 1, 3, 4 and 9 CCF.</figcaption>
+        </figure>
+      </section>
+      <section class="panel" aria-labelledby="gas-charge-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="gas-charge-title">Gas charge per bill</h3><p class="panel-sub">What each bill's gas charge went to</p></div>
+        </header>
+        <figure class="chart" data-chart="stack" data-height="190" data-prefix="$" data-decimals="0" data-y-ticks="4" data-empty="[0]"
+          data-labels='["Aug ’26 bill","Sep ’26 bill","Oct ’26 bill","Nov ’26 bill"]' data-short='["Aug","Sep","Oct","Nov"]'
+          data-totals="[12.64,27.41,29.05,37.23]"
+          data-parts='[{"name":"Flat charges","tone":"ink","values":[0,20.37,20.37,20.37]},{"name":"Gas used","tone":"gas","values":[0,4.44,5.92,13.32]},{"name":"Taxes and city fee","tone":"soft","values":[0,2.6,2.76,3.54]}]'>
+          <figcaption class="sr-only">Gas charge per bill: $12.64 (not itemized), $27.41, $29.05 and $37.23, with flat charges of $20.37 each time.</figcaption>
+        </figure>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="gas-paid-title">
+      <header class="panel-head">
+          <div><h3 class="panel-title" id="gas-paid-title">What the last gas bill paid for</h3><p class="panel-sub">Oct 7 – Nov 5, 9 CCF</p></div>
+        </header>
+      <div class="split split--even">
+        <dl class="kv">
+          <div class="kv-row kv-row--group"><dt><span class="swatch" style="--sw: var(--chart-ink)"></span>Flat charges</dt><dd>$20.37</dd></div>
+          <div class="kv-row kv-row--sub"><dt>Customer charge</dt><dd>$19.25</dd></div>
+          <div class="kv-row kv-row--sub"><dt>Rate case expense rider</dt><dd>$1.12</dd></div>
+          <div class="kv-row kv-row--group"><dt><span class="swatch" style="--sw: var(--chart-gas)"></span>Gas used</dt><dd>$13.32</dd></div>
+          <div class="kv-row kv-row--sub"><dt>Usage charge · 9 CCF × $0.27</dt><dd>$2.43</dd></div>
+          <div class="kv-row kv-row--sub"><dt>Purchased gas factor · 9 CCF × $1.21</dt><dd>$10.89</dd></div>
+          <div class="kv-row kv-row--group"><dt><span class="swatch" style="--sw: var(--chart-soft)"></span>Taxes and city fee</dt><dd>$3.54</dd></div>
+          <div class="kv-row kv-row--sub"><dt>City franchise fee</dt><dd>$1.35</dd></div>
+          <div class="kv-row kv-row--sub"><dt>State and local sales tax</dt><dd>$2.19</dd></div>
+          <div class="kv-row kv-row--total"><dt>Gas total</dt><dd>$37.23</dd></div>
+        </dl>
+        <div class="readout util-takeaway">
+          <span class="label">In plain terms</span>
+          <p class="util-takeaway-text">With no gas used at all, this bill would still have been about <b>$22.51</b>.</p>
+          <p class="util-takeaway-text">Each CCF added about <b>$1.64</b>, taxes included.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="gas-bills-title">
+      <header class="panel-head">
+          <div><h3 class="panel-title" id="gas-bills-title">Bills</h3><p class="panel-sub">The gas part of each CoServ statement</p></div>
+        </header>
+      <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Period</th><th scope="col" class="is-num">Used</th><th scope="col" class="is-num">Gas</th><th scope="col" class="is-num">Statement</th><th scope="col">Due</th><th scope="col"><span class="sr-only">Bill</span></th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title" data-label="Period">Oct 7 – Nov 5</td><td class="is-num" data-label="Used">9 <span class="unit">CCF</span></td><td class="cell-key is-num is-strong" data-label="Gas">$37.23</td><td class="is-num" data-label="Statement total">$145.62</td><td data-label="Due">Mon, Nov 30</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Sep 8 – Oct 7</td><td class="is-num" data-label="Used">4 <span class="unit">CCF</span></td><td class="cell-key is-num is-strong" data-label="Gas">$29.05</td><td class="is-num" data-label="Statement total">$223.68</td><td data-label="Due">Mon, Nov 2</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Aug 6 – Sep 8</td><td class="is-num" data-label="Used">3 <span class="unit">CCF</span></td><td class="cell-key is-num is-strong" data-label="Gas">$27.41</td><td class="is-num" data-label="Statement total">$316.35</td><td data-label="Due">Fri, Oct 2</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Jul 24 – Aug 6</td><td class="is-num" data-label="Used">1 <span class="unit">CCF</span></td><td class="cell-key is-num is-strong" data-label="Gas">$12.64</td><td class="is-num" data-label="Statement total">$168.82</td><td data-label="Due">Tue, Sep 1</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+    </section>
+  </div>
+
+  <!-- ===================== WATER ===================== -->
+  <div class="stack stack--page" data-tab-panel="utility-view:water" role="tabpanel" aria-label="Water" hidden>
+    <section class="ip" aria-labelledby="water-verdict">
+      <div class="ip-instrument">
+        <div class="dial" data-chart="dial" data-start="0" data-sweep="360" data-rings='[{"r":88,"w":16,"min":0,"max":112.17,"gap":1.6,"ticks":40,"major":10,"segments":[{"from":0,"to":62.87,"tone":"water"},{"from":62.87,"to":90.52,"tone":"ink"},{"from":90.52,"to":104.7,"tone":"graphite"},{"from":104.7,"to":111,"tone":"cool"},{"from":111,"to":112.17,"tone":"soft"}]}]'>
+          <div class="dial-centre">
+            <span class="label">Latest bill</span>
+            <span class="num num--xl">$110.67</span>
+            <span class="dial-note mono">Due Tue, Nov 24</span>
+          </div>
+        </div>
+        <div class="dial-legend">
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-water)"></span>Water <b>$62.87</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-ink)"></span>Sewer <b>$27.65</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-graphite)"></span>Refuse <b>$14.18</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-cool)"></span>Stormwater <b>$6.30</b></span>
+          <span class="lg-item"><span class="lg-key lg-key--box" style="--c: var(--chart-soft)"></span>Tax <b>$1.17</b></span>
+        </div>
+      </div>
+      <div class="ip-body">
+        <div class="verdict">
+          <span class="lamp lamp--ok"></span>
+          <p class="verdict-text" id="water-verdict">$110.67 is due Tue, Nov 24.</p>
+          <p class="verdict-note">That's below your $120.18 average. You used 11,400 gallons from Sep 21 to Oct 20.</p>
+        </div>
+        <div class="readouts">
+          <div class="readout"><span class="label">Used</span><span class="readout-value"><span class="num">11,400<span class="unit">gal</span></span></span><span class="readout-note">About 380 a day</span></div>
+          <div class="readout"><span class="label">Average bill</span><span class="readout-value"><span class="num">$120.18</span></span><span class="readout-note">Over the last 4 bills</span></div>
+          <div class="readout"><span class="label">Due in</span><span class="readout-value"><span class="num">15<span class="unit">days</span></span></span><span class="readout-note">Autopay takes off $1.50</span></div>
+        </div>
+        <!-- the other end of Diagnostics' "Gmail refused the saved sign-in": the fix lives where the bills live -->
+        <div class="notice notice--warn" data-role-only="admin"><svg class="icon" aria-hidden="true"><use href="#i-alert-triangle"/></svg>
+          <div><p class="notice-title">New water bills are paused.</p><p class="notice-text">Gmail stopped letting the app read the bill emails on Sun, 11:11 AM. This bill is safe; the next one won't show up until you sign in again.</p></div>
+          <div class="notice-action"><button class="btn btn--sm" type="button" data-toast="Gmail sign-in opened in a new tab"><svg class="icon" aria-hidden="true"><use href="#i-mail"/></svg>Sign in to Gmail</button><a class="btn btn--sm btn--quiet" href="#admin-debug" data-nav="admin-debug">Diagnostics</a></div></div>
+      </div>
+    </section>
+
+    <div class="split split--even">
+      <section class="panel" aria-labelledby="water-use-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="water-use-title">Use per bill</h3><p class="panel-sub">Gallons for each billing period, by the month it started</p></div>
+        </header>
+        <figure class="chart" data-chart="bars" data-height="190" data-unit="gal" data-decimals="0" data-y-ticks="4" data-value-labels="all"
+          data-labels='["Jun 22 – Jul 22","Jul 22 – Aug 20","Aug 20 – Sep 21","Sep 21 – Oct 20"]' data-short='["Jun","Jul","Aug","Sep"]'
+          data-values="[9800,13200,16900,11400]">
+          <figcaption class="sr-only">Gallons per bill: 9,800, 13,200, 16,900 and 11,400.</figcaption>
+        </figure>
+      </section>
+      <section class="panel" aria-labelledby="water-charge-title">
+        <header class="panel-head">
+          <div><h3 class="panel-title" id="water-charge-title">Charges per bill</h3><p class="panel-sub">Before the $1.50 autopay discount</p></div>
+        </header>
+        <figure class="chart" data-chart="stack" data-height="190" data-prefix="$" data-decimals="0" data-y-ticks="4"
+          data-labels='["Jun 22 – Jul 22","Jul 22 – Aug 20","Aug 20 – Sep 21","Sep 21 – Oct 20"]' data-short='["Jun","Jul","Aug","Sep"]'
+          data-parts='[{"name":"Water","tone":"water","values":[52.14,74.1,96.33,62.87]},{"name":"Sewer","tone":"ink","values":[26.1,28.4,31.02,27.65]},{"name":"Refuse","tone":"graphite","values":[14.18,14.18,14.18,14.18]},{"name":"Stormwater","tone":"cool","values":[6.3,6.3,6.3,6.3]},{"name":"Tax","tone":"soft","values":[1.17,1.17,1.17,1.17]}]'>
+          <figcaption class="sr-only">Water, sewer, refuse, stormwater and tax for each bill.</figcaption>
+        </figure>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="water-bills-title">
+      <header class="panel-head">
+          <div><h3 class="panel-title" id="water-bills-title">Bills</h3><p class="panel-sub">From the “Water Bill” label in Gmail, checked once a day</p></div>
+        </header>
+      <div class="table-wrap">
+          <table class="table">
+            <thead><tr><th scope="col">Period</th><th scope="col" class="is-num">Used</th><th scope="col" class="is-num">Water</th><th scope="col" class="is-num">Sewer</th><th scope="col" class="is-num">Refuse</th><th scope="col" class="is-num">Storm&shy;water</th><th scope="col" class="is-num">Tax</th><th scope="col" class="is-num">Autopay</th><th scope="col" class="is-num">Total</th><th scope="col">Due</th><th scope="col"><span class="sr-only">Bill</span></th></tr></thead>
+            <tbody>
+              <tr><td class="cell-title" data-label="Period">Sep 21 – Oct 20</td><td class="is-num" data-label="Used">11,400 <span class="unit">gal</span></td><td class="is-num" data-label="Water">$62.87</td><td class="is-num" data-label="Sewer">$27.65</td><td class="is-num" data-label="Refuse">$14.18</td><td class="is-num" data-label="Stormwater">$6.30</td><td class="is-num" data-label="Tax">$1.17</td><td class="is-num" data-label="Autopay">−$1.50</td><td class="cell-key is-num is-strong" data-label="Total">$110.67</td><td data-label="Due">Tue, Nov 24</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill-water"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Aug 20 – Sep 21</td><td class="is-num" data-label="Used">16,900 <span class="unit">gal</span></td><td class="is-num" data-label="Water">$96.33</td><td class="is-num" data-label="Sewer">$31.02</td><td class="is-num" data-label="Refuse">$14.18</td><td class="is-num" data-label="Stormwater">$6.30</td><td class="is-num" data-label="Tax">$1.17</td><td class="is-num" data-label="Autopay">−$1.50</td><td class="cell-key is-num is-strong" data-label="Total">$147.50</td><td data-label="Due">Mon, Oct 26</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill-water"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Jul 22 – Aug 20</td><td class="is-num" data-label="Used">13,200 <span class="unit">gal</span></td><td class="is-num" data-label="Water">$74.10</td><td class="is-num" data-label="Sewer">$28.40</td><td class="is-num" data-label="Refuse">$14.18</td><td class="is-num" data-label="Stormwater">$6.30</td><td class="is-num" data-label="Tax">$1.17</td><td class="is-num" data-label="Autopay">−$1.50</td><td class="cell-key is-num is-strong" data-label="Total">$122.65</td><td data-label="Due">Fri, Sep 25</td><td class="cell-action"><button class="btn btn--sm" type="button" data-open-modal="utility-bill-water"><svg class="icon" aria-hidden="true"><use href="#i-file"/></svg>View bill</button></td></tr>
+              <tr><td class="cell-title" data-label="Period">Jun 22 – Jul 22</td><td class="is-num" data-label="Used">9,800 <span class="unit">gal</span></td><td class="is-num" data-label="Water">$52.14</td><td class="is-num" data-label="Sewer">$26.10</td><td class="is-num" data-label="Refuse">$14.18</td><td class="is-num" data-label="Stormwater">$6.30</td><td class="is-num" data-label="Tax">$1.17</td><td class="is-num" data-label="Autopay"><span class="muted">—</span></td><td class="cell-key is-num is-strong" data-label="Total">$99.89</td><td data-label="Due">Tue, Aug 25</td><td class="cell-action"><span class="small muted">No PDF for this bill</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+    </section>
+  </div>
+
+  <!-- ===================== Dialog: CoServ bill ===================== -->
+  <div class="dialog dialog--wide dialog--full" data-modal="utility-bill" hidden role="dialog" aria-modal="true" aria-labelledby="bill-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">Bill</p>
+          <h2 class="dialog-title" id="bill-title">CoServ statement, Oct 7 – Nov 5</h2>
+          <p class="dialog-sub">Electric and gas · due Mon, Nov 30</p>
+        </div>
+        <div class="dialog-tools">
+          <button class="btn btn--sm btn--quiet" type="button" data-toast="Opening the PDF in a new tab"><svg class="icon" aria-hidden="true"><use href="#i-external-link"/></svg><span class="hide-phone">Open PDF</span><span class="sr-only">Open PDF</span></button>
+          <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+      </header>
+      <div class="dialog-body dialog-body--well">
+        <article class="bill-paper" aria-label="Statement, page 1 of 2">
+          <header class="bill-top">
+            <div><p class="bill-kicker">Statement</p><p class="bill-org">CoServ · electric and gas</p></div>
+            <p class="bill-meta">Account ending 8203<br>Statement date Nov 8, 2026<br>Due Nov 30, 2026</p>
+          </header>
+          <p class="bill-period">Billing period Oct 7 – Nov 5, 2026 · 29 days</p>
+          <section class="bill-block">
+            <h3 class="bill-h">Electric service <span>Meter 48213377 · 716 kWh</span></h3>
+            <p class="bill-line"><span>Customer charge</span><span>$24.55</span></p>
+            <p class="bill-line"><span>Energy · 716 kWh × $0.1171</span><span>$83.84</span></p>
+            <p class="bill-line bill-sum"><span>Electric total</span><span>$108.39</span></p>
+          </section>
+          <section class="bill-block">
+            <h3 class="bill-h">Gas service <span>9 CCF</span></h3>
+            <p class="bill-line"><span>Customer charge</span><span>$19.25</span></p>
+            <p class="bill-line"><span>Rate case expense rider</span><span>$1.12</span></p>
+            <p class="bill-line"><span>Usage charge · 9 CCF × $0.27</span><span>$2.43</span></p>
+            <p class="bill-line"><span>Purchased gas factor · 9 CCF × $1.21</span><span>$10.89</span></p>
+            <p class="bill-line"><span>City franchise fee</span><span>$1.35</span></p>
+            <p class="bill-line"><span>State and local sales tax</span><span>$2.19</span></p>
+            <p class="bill-line bill-sum"><span>Gas total</span><span>$37.23</span></p>
+          </section>
+          <p class="bill-line bill-total"><span>Total due</span><span>$145.62</span></p>
+        </article>
+      </div>
+      <footer class="dialog-foot dialog-foot--split">
+        <button class="btn btn--sm" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Previous</button>
+        <span class="mono muted">Page 1 of 2</span>
+        <button class="btn btn--sm" type="button" data-toast="Page 2 is the usage history">Next<svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ===================== Dialog: water bill ===================== -->
+  <div class="dialog dialog--wide dialog--full" data-modal="utility-bill-water" hidden role="dialog" aria-modal="true" aria-labelledby="wbill-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">Bill</p>
+          <h2 class="dialog-title" id="wbill-title">Water bill, Sep 21 – Oct 20</h2>
+          <p class="dialog-sub">City utilities · due Tue, Nov 24</p>
+        </div>
+        <div class="dialog-tools">
+          <button class="btn btn--sm btn--quiet" type="button" data-toast="Opening the PDF in a new tab"><svg class="icon" aria-hidden="true"><use href="#i-external-link"/></svg><span class="hide-phone">Open PDF</span><span class="sr-only">Open PDF</span></button>
+          <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+        </div>
+      </header>
+      <div class="dialog-body dialog-body--well">
+        <article class="bill-paper" aria-label="Water bill, page 1 of 1">
+          <header class="bill-top">
+            <div><p class="bill-kicker">Utility bill</p><p class="bill-org">City utilities · water, sewer, refuse</p></div>
+            <p class="bill-meta">Account ending 7002<br>Billed Oct 30, 2026<br>Due Nov 24, 2026</p>
+          </header>
+          <p class="bill-period">Service Sep 21 – Oct 20, 2026 · 11,400 gallons</p>
+          <section class="bill-block">
+            <h3 class="bill-h">Current charges</h3>
+            <p class="bill-line"><span>Water · 11,400 gal</span><span>$62.87</span></p>
+            <p class="bill-line"><span>Sewer</span><span>$27.65</span></p>
+            <p class="bill-line"><span>Refuse</span><span>$14.18</span></p>
+            <p class="bill-line"><span>Stormwater</span><span>$6.30</span></p>
+            <p class="bill-line"><span>Tax</span><span>$1.17</span></p>
+            <p class="bill-line"><span>Autopay discount</span><span>−$1.50</span></p>
+          </section>
+          <p class="bill-line bill-total"><span>Total due</span><span>$110.67</span></p>
+        </article>
+      </div>
+      <footer class="dialog-foot dialog-foot--split">
+        <button class="btn btn--sm" type="button" disabled><svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>Previous</button>
+        <span class="mono muted">Page 1 of 1</span>
+        <button class="btn btn--sm" type="button" disabled>Next<svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      </footer>
+    </div>
+  </div>
+</section>

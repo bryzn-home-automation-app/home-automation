@@ -1,0 +1,13 @@
+/* Activity log — only the page's unique pieces: the timeline's faces (and the icon stand-in for changes made outside the app). */
+.screen[data-route="admin-logs"] .logs-lead { width: 30px; height: 30px; border-radius: 50%; }
+.screen[data-route="admin-logs"] .logs-lead .icon { width: 16px; height: 16px; }
+.screen[data-route="admin-logs"] .logs-lead--xs { width: 24px; height: 24px; }
+.screen[data-route="admin-logs"] .logs-lead--xs .icon { width: 14px; height: 14px; }
+.screen[data-route="admin-logs"] .logs-timeline .tl-item { padding: 8px 0; }
+.screen[data-route="admin-logs"] .logs-timeline .tl-time { padding-top: 7px; }
+.screen[data-route="admin-logs"] .logs-timeline .tl-item > .lamp { margin-top: 11px; }
+.screen[data-route="admin-logs"] .logs-timeline .person { align-items: flex-start; }
+.screen[data-route="admin-logs"] .logs-who { gap: 8px; flex-wrap: nowrap; }
+.screen[data-route="admin-logs"] .logs-day[hidden] { display: none; }
+.screen[data-route="admin-logs"] .logs-earlier[hidden] { display: none; }
+.screen[data-route="admin-logs"] .tl-item[hidden] { display: none; }

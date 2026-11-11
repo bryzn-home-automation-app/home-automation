@@ -1,11 +1,33 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
-import type { PanInfo } from 'framer-motion';
-import { fetchAllUsers, type AdminUser } from '../api/auth';
+import { Link } from 'react-router-dom';
+import type { AdminUser } from '../api/auth';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
-import webBackgroundImage from '../../images/web_guest_bg.png';
-import mobileBackgroundImage from '../../images/mobile_guest_bg.png';
+import {
+  Badge,
+  Button,
+  Dialog,
+  InstrumentPanel,
+  KeyValue,
+  KV,
+  Lamp,
+  LinkButton,
+  Notice,
+  Panel,
+  QueryState,
+  Readout,
+  Readouts,
+  SkelRows,
+  Verdict,
+  EmptyState,
+  cx,
+  knobs,
+} from '../components/ui';
+import { formatList, formatTime } from '../utils/format';
+import { roleLabel, type Tone } from '../utils/status';
+import DoorFrame from './door/DoorFrame';
+import VisitorBadge from './guest/VisitorBadge';
 import chickenPng from '../../images/animals/chicken.png';
 import raccoonPng from '../../images/animals/raccoon.png';
 import dinoPng from '../../images/animals/dino.png';
@@ -22,53 +44,16 @@ import chickPng from '../../images/animals/chick.png';
 import bearPng from '../../images/animals/bear.png';
 import dogPng from '../../images/animals/dog.png';
 
-const TOKEN_KEY = 'auth_token';
-const MOBILE_MEDIA_QUERY = '(max-width: 767px)';
+/*
+ * The guest lobby (/guest/home): who's at the house, for a visitor who just checked in. Every
+ * person is real, from /auth/users (B-032: the room used to be padded with made-up "Guest 7" …
+ * "Guest 15" shown as online). Each keeps their lobby animal (Bryan is always the chicken).
+ * The visitor's session stays in sessionStorage and rides on this page's own request: the
+ * shared sign-in key is never touched, so trying the lobby in a family member's browser can't
+ * swap their sign-in for the guest's (B-165).
+ */
 
-type AnimalKey =
-  | 'chicken'
-  | 'raccoon'
-  | 'dino'
-  | 'horse'
-  | 'sheep'
-  | 'fox'
-  | 'pig'
-  | 'koala'
-  | 'bird'
-  | 'bunny'
-  | 'hedgehog'
-  | 'cow'
-  | 'chick'
-  | 'bear'
-  | 'dog';
-
-type AnimalDef = {
-  key: AnimalKey;
-  label: string;
-  image: string;
-};
-
-type HangoutSpot = {
-  name: string;
-  x: number;
-  y: number;
-  scale: number;
-};
-
-type SceneLayout = {
-  width: number;
-  height: number;
-  spots: HangoutSpot[];
-};
-
-type LobbyMember = {
-  user: AdminUser;
-  animal: AnimalDef;
-  spot: HangoutSpot;
-  slotIndex: number;
-  activity: string;
-  entryFrom: 'left' | 'right';
-};
+type AnimalDef = { key: string; label: string; image: string };
 
 const ANIMALS: AnimalDef[] = [
   { key: 'chicken', label: 'Chicken', image: chickenPng },
@@ -79,7 +64,7 @@ const ANIMALS: AnimalDef[] = [
   { key: 'fox', label: 'Fox', image: foxPng },
   { key: 'pig', label: 'Pig', image: pigPng },
   { key: 'koala', label: 'Koala', image: koalaPng },
-  { key: 'bird', label: 'Blue Bird', image: birdPng },
+  { key: 'bird', label: 'Blue bird', image: birdPng },
   { key: 'bunny', label: 'Bunny', image: bunnyPng },
   { key: 'hedgehog', label: 'Hedgehog', image: hedgehogPng },
   { key: 'cow', label: 'Cow', image: cowPng },
@@ -88,109 +73,10 @@ const ANIMALS: AnimalDef[] = [
   { key: 'dog', label: 'Dog', image: dogPng },
 ];
 
-const DESKTOP_SCENE: SceneLayout = {
-  width: 1920,
-  height: 1080,
-  spots: [
-    { name: 'left couch pillow', x: 469, y: 572, scale: 0.98 },
-    { name: 'middle couch seat', x: 625, y: 549, scale: 1.0 },
-    { name: 'right couch pillow', x: 824, y: 556, scale: 0.98 },
-    { name: 'left floor by couch', x: 318, y: 719, scale: 1.04 },
-    { name: 'lamp table', x: 1119, y: 509, scale: 0.92 },
-    { name: 'floor under lamp', x: 936, y: 685, scale: 1.04 },
-    { name: 'bean bag', x: 1438, y: 626, scale: 1.08 },
-    { name: 'pizza box', x: 127, y: 853, scale: 1.08 },
-    { name: 'rug left', x: 491, y: 830, scale: 1.12 },
-    { name: 'rug center', x: 712, y: 850, scale: 1.12 },
-    { name: 'rug right', x: 1004, y: 884, scale: 1.12 },
-    { name: 'controller', x: 1188, y: 783, scale: 1.08 },
-    { name: 'bean bag floor', x: 1410, y: 837, scale: 1.08 },
-    { name: 'tv stand', x: 1658, y: 747, scale: 1.06 },
-    { name: 'between couch and lamp', x: 1357, y: 225, scale: 0.86 },
-  ],
-};
-
-const MOBILE_SCENE: SceneLayout = {
-  width: 1080,
-  height: 1920,
-  spots: [
-    { name: 'left couch', x: 390, y: 690, scale: 1.0 },
-    { name: 'middle couch', x: 540, y: 665, scale: 1.0 },
-    { name: 'right couch', x: 690, y: 690, scale: 1.0 },
-    { name: 'left armrest', x: 300, y: 700, scale: 0.98 },
-    { name: 'right armrest', x: 785, y: 700, scale: 0.98 },
-    { name: 'top rug', x: 540, y: 980, scale: 1.07 },
-    { name: 'upper left rug', x: 390, y: 1110, scale: 1.1 },
-    { name: 'upper right rug', x: 690, y: 1110, scale: 1.1 },
-    { name: 'center rug', x: 540, y: 1250, scale: 1.12 },
-    { name: 'middle left rug', x: 390, y: 1375, scale: 1.14 },
-    { name: 'middle right rug', x: 690, y: 1375, scale: 1.14 },
-    { name: 'bottom left rug', x: 330, y: 1540, scale: 1.16 },
-    { name: 'bottom center rug', x: 540, y: 1600, scale: 1.18 },
-    { name: 'bottom right rug', x: 750, y: 1540, scale: 1.16 },
-    { name: 'bean bag', x: 930, y: 810, scale: 1.05 },
-  ],
-};
-
-const ACTIVITIES = [
-  'playing games',
-  'eating pizza',
-  'watching TV',
-  'chatting',
-  'vibing',
-  'snack break',
-  'queueing co-op',
-  'controller in hand',
-  'hanging out',
-];
-
 const ROLE_ORDER: Record<string, number> = { ADMIN: 0, USER: 1, GUEST: 2 };
-
-function mulberry32(seed: number) {
-  let t = seed >>> 0;
-  return () => {
-    t += 0x6d2b79f5;
-    let r = Math.imul(t ^ (t >>> 15), t | 1);
-    r ^= r + Math.imul(r ^ (r >>> 7), r | 61);
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-function shuffleWithSeed<T>(items: T[], seed: number): T[] {
-  const arr = [...items];
-  const rand = mulberry32(seed);
-  for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(rand() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
-}
 
 function getDisplayName(user: AdminUser): string {
   return user.displayName || user.username;
-}
-
-function roleLabel(role: string): string {
-  if (role === 'ADMIN') return 'Homeowner';
-  if (role === 'USER') return 'Household Member';
-  return 'Guest';
-}
-
-function toPctX(x: number, sceneWidth: number): string {
-  return `${(x / sceneWidth) * 100}%`;
-}
-
-function toPctY(y: number, sceneHeight: number): string {
-  return `${(y / sceneHeight) * 100}%`;
-}
-
-function avatarBaseSize(spotName: string): number {
-  const n = spotName.toLowerCase();
-  if (n.includes('couch') || n.includes('armrest')) return 148;
-  if (n.includes('bean')) return 164;
-  if (n.includes('rug')) return 156;
-  if (n.includes('pizza') || n.includes('drink') || n.includes('controller')) return 160;
-  return 152;
 }
 
 function hashStringToInt(value: string): number {
@@ -201,34 +87,28 @@ function hashStringToInt(value: string): number {
   return Math.abs(hash);
 }
 
-function stableAnimalIndexForUser(user: AdminUser): number {
-  const key = `${user.id}:${user.username}:${user.email}`;
-  return hashStringToInt(key) % ANIMALS.length;
-}
-
 function isBryanAdmin(user: AdminUser): boolean {
   const text = `${user.displayName || ''} ${user.username || ''} ${user.email || ''}`.toLowerCase();
   return user.role === 'ADMIN' && text.includes('bryan');
 }
 
-function buildUniqueAnimalMap(users: AdminUser[]): Map<number, AnimalDef> {
+/**
+ * Each person's lobby animal: the same one every visit (a hash of who they are), no two alike
+ * while there are animals to go round, and Bryan is always the chicken.
+ */
+export function lobbyAnimals(users: readonly AdminUser[]): Map<number, AnimalDef> {
   const map = new Map<number, AnimalDef>();
   const used = new Set<number>();
-  const chickenIndex = ANIMALS.findIndex((animal) => animal.key === 'chicken');
-
-  // Priority override: Bryan admin is always the chicken.
-  const bryanAdmin = users.find((user) => isBryanAdmin(user));
-  if (bryanAdmin && chickenIndex >= 0) {
+  const chickenIndex = ANIMALS.findIndex((a) => a.key === 'chicken');
+  const bryan = users.find(isBryanAdmin);
+  if (bryan && chickenIndex >= 0) {
     used.add(chickenIndex);
-    map.set(bryanAdmin.id, ANIMALS[chickenIndex]);
+    map.set(bryan.id, ANIMALS[chickenIndex]);
   }
-
   users.forEach((user) => {
     if (map.has(user.id)) return;
-    const preferred = stableAnimalIndexForUser(user);
+    const preferred = hashStringToInt(`${user.id}:${user.username}:${user.email}`) % ANIMALS.length;
     let chosen = preferred;
-
-    // Keep each visible user unique by probing for next available animal.
     for (let i = 0; i < ANIMALS.length; i += 1) {
       const candidate = (preferred + i) % ANIMALS.length;
       if (!used.has(candidate)) {
@@ -236,452 +116,212 @@ function buildUniqueAnimalMap(users: AdminUser[]): Map<number, AnimalDef> {
         break;
       }
     }
-
     used.add(chosen);
     map.set(user.id, ANIMALS[chosen]);
   });
-
   return map;
 }
 
-function createLobbyMembers(users: AdminUser[], seed: number, spots: HangoutSpot[]): LobbyMember[] {
-  const sorted = [...users].sort((a, b) => {
-    const roleSort = (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9);
-    if (roleSort !== 0) return roleSort;
-    return a.id - b.id;
-  });
-
-  const rand = mulberry32(seed + 151);
-  const activityPool = shuffleWithSeed(ACTIVITIES, seed + 93);
-  const uniqueAnimalMap = buildUniqueAnimalMap(sorted.slice(0, spots.length));
-
-  return sorted.slice(0, spots.length).map((user, index) => ({
-    user,
-    animal: uniqueAnimalMap.get(user.id) || ANIMALS[index % ANIMALS.length],
-    spot: spots[index],
-    slotIndex: index,
-    activity: activityPool[index % activityPool.length],
-    entryFrom: rand() > 0.5 ? 'left' : 'right',
-  }));
+/** The household in lobby order: admins, members, guests; online first within each. */
+export function lobbyOrder(users: readonly AdminUser[]): AdminUser[] {
+  return [...users].sort((a, b) =>
+    (ROLE_ORDER[a.role] ?? 9) - (ROLE_ORDER[b.role] ?? 9) || Number(b.isOnline) - Number(a.isOnline) || a.id - b.id,
+  );
 }
 
-function cloneSpots(spots: HangoutSpot[]): HangoutSpot[] {
-  return spots.map((spot) => ({ ...spot }));
-}
+// A person in the lobby is online in the app or not; being away isn't a problem.
+const PRESENCE: Record<'on' | 'off', { tone: Tone; label: string }> = {
+  on: { tone: 'ok', label: 'Online now' },
+  off: { tone: 'neutral', label: 'Away right now' },
+};
 
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-function formatLayoutSnapshot(title: string, width: number, height: number, spots: HangoutSpot[]): string {
-  const header = `# ${title} (${width}x${height})`;
-  const tableHeader = '| Slot | Area | X | Y |';
-  const tableRule = '| --- | --- | ---: | ---: |';
-  const rows = spots.map((spot, index) => `| ${index + 1} | ${spot.name} | ${Math.round(spot.x)} | ${Math.round(spot.y)} |`);
-  return [header, '', tableHeader, tableRule, ...rows].join('\n');
-}
-
-function fillUsersToSlotCount(users: AdminUser[], fallbackGuest: AdminUser, slotCount: number): AdminUser[] {
-  if (users.length >= slotCount) return users.slice(0, slotCount);
-
-  const filled = [...users];
-  for (let i = users.length; i < slotCount; i += 1) {
-    filled.push({
-      ...fallbackGuest,
-      id: -(i + 1),
-      username: `guest-${i + 1}`,
-      displayName: `Guest ${i + 1}`,
-      isOnline: true,
-    });
+function readSession(key: string): string | null {
+  try {
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
   }
-
-  return filled;
-}
-
-function useIsMobileScene() {
-  const [isMobile, setIsMobile] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia(MOBILE_MEDIA_QUERY).matches;
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const media = window.matchMedia(MOBILE_MEDIA_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setIsMobile(event.matches);
-    setIsMobile(media.matches);
-
-    if (typeof media.addEventListener === 'function') {
-      media.addEventListener('change', onChange);
-      return () => media.removeEventListener('change', onChange);
-    }
-
-    media.addListener(onChange);
-    return () => media.removeListener(onChange);
-  }, []);
-
-  return isMobile;
-}
-
-function LobbyAvatar({
-  member,
-  index,
-  sceneSeed,
-  sceneWidth,
-  sceneHeight,
-  editMode,
-  reduceMotion,
-  onMove,
-  onSelect,
-}: {
-  member: LobbyMember;
-  index: number;
-  sceneSeed: number;
-  sceneWidth: number;
-  sceneHeight: number;
-  editMode: boolean;
-  reduceMotion: boolean;
-  onMove: (slotIndex: number, dxPx: number, dyPx: number) => void;
-  onSelect: (member: LobbyMember) => void;
-}) {
-  // When the visitor prefers reduced motion, hold avatars still (same static
-  // branch editMode uses) instead of running a perpetual per-avatar float loop.
-  const still = editMode || reduceMotion;
-  const displayName = getDisplayName(member.user);
-  const zLayer = Math.round(member.spot.y) + 200;
-  const baseSize = avatarBaseSize(member.spot.name) * member.spot.scale;
-  const idleTransition = { type: 'spring' as const, stiffness: 150, damping: 16, delay: index * 0.04 };
-  const editTransition = { duration: 0 };
-
-  return (
-    <motion.div
-      className="absolute"
-      style={{ left: toPctX(member.spot.x, sceneWidth), top: toPctY(member.spot.y, sceneHeight), zIndex: zLayer }}
-      initial={{
-        opacity: 0,
-        x: member.entryFrom === 'left' ? -240 : 240,
-        y: 14,
-        scale: 0.82,
-      }}
-      animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-      exit={{
-        opacity: 0,
-        x: member.entryFrom === 'left' ? 240 : -240,
-        y: 14,
-        scale: 0.82,
-      }}
-      transition={still ? editTransition : idleTransition}
-      drag={editMode}
-      dragMomentum={false}
-      dragElastic={0}
-      onDragEnd={(_, info: PanInfo) => onMove(member.slotIndex, info.offset.x, info.offset.y)}
-    >
-      <motion.button
-        type="button"
-        onClick={() => onSelect(member)}
-        className="group relative flex -translate-x-1/2 -translate-y-1/2 flex-col items-center"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.96 }}
-      >
-        <motion.img
-          src={member.animal.image}
-          alt={`${member.animal.label} avatar for ${displayName}`}
-          className="relative z-10 select-none object-contain"
-          style={{ width: `${baseSize}px`, height: `${baseSize}px` }}
-          animate={still ? { y: 0, rotate: 0, scaleY: 1 } : { y: [0, -3, 0], rotate: [0, 0, 1.5, 0, -1.5, 0], scaleY: [1, 1, 0.9, 1, 1, 1] }}
-          transition={
-            still
-              ? { duration: 0 }
-              : {
-                  repeat: Infinity,
-                  duration: 5.9 + (index % 3) * 0.7,
-                  times: [0, 0.34, 0.39, 0.44, 0.78, 1],
-                  ease: 'easeInOut',
-                }
-          }
-          draggable={false}
-        />
-
-        <p className="mt-1 rounded-full border border-black/10 bg-white/75 px-2.5 py-0.5 text-xs font-semibold text-slate-800">
-          {displayName}
-        </p>
-
-        <div className="pointer-events-none absolute -top-12 left-1/2 z-20 w-max -translate-x-1/2 rounded-full border border-white/70 bg-white/92 px-2.5 py-1 text-3xs text-slate-700 opacity-0 shadow transition-opacity duration-150 group-hover:opacity-100">
-          {member.activity}
-        </div>
-
-        <div className="absolute inset-0 rounded-3xl opacity-0 blur-xl transition-opacity duration-200 group-hover:opacity-100" style={{ backgroundColor: 'rgba(255,255,255,0.45)' }} />
-      </motion.button>
-
-      {!still && (
-        <motion.div
-          key={`step-${sceneSeed}-${member.user.id}`}
-          className="absolute left-1/2 top-[62%] h-0.5 -translate-x-1/2 rounded-full bg-white/85"
-          style={{ width: `${baseSize * 0.24}px` }}
-          initial={{ opacity: 0, x: member.entryFrom === 'left' ? -38 : 38 }}
-          animate={{ opacity: [0, 0.8, 0], x: [member.entryFrom === 'left' ? -34 : 34, 0, member.entryFrom === 'left' ? 14 : -14] }}
-          transition={{ duration: 0.75, ease: 'easeOut' }}
-        />
-      )}
-    </motion.div>
-  );
-}
-
-function ProfileCard({ selected, onClose }: { selected: LobbyMember; onClose: () => void }) {
-  const displayName = getDisplayName(selected.user);
-
-  return (
-    <motion.div
-      className="absolute inset-x-4 bottom-4 z-[999] rounded-3xl border border-amber-900/25 bg-white/92 p-4 shadow-[0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur"
-      initial={{ y: 32, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 32, opacity: 0 }}
-      transition={{ duration: 0.2 }}
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <img src={selected.animal.image} alt={selected.animal.label} className="h-14 w-14 rounded-xl border border-white/70 bg-white object-contain" />
-          <div>
-            <p className="text-sm font-semibold text-slate-900">{displayName}</p>
-            <p className="text-xs text-slate-600">{selected.animal.label} · {roleLabel(selected.user.role)}</p>
-          </div>
-        </div>
-        <button type="button" onClick={onClose} className="rounded-full border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700">
-          Close
-        </button>
-      </div>
-
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-700">
-          <p className="text-3xs uppercase tracking-[0.14em] text-slate-500">Current Activity</p>
-          <p className="mt-1">{selected.activity}</p>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-slate-700">
-          <p className="text-3xs uppercase tracking-[0.14em] text-slate-500">Status</p>
-          <p className="mt-1">{selected.user.isOnline ? 'Online now' : 'Away right now'}</p>
-        </div>
-      </div>
-    </motion.div>
-  );
 }
 
 export default function GuestHome() {
-  const guestName = sessionStorage.getItem('guestName') || 'Guest';
-  const guestToken = sessionStorage.getItem('guestToken');
-  const [sceneSeed, setSceneSeed] = useState(() => Date.now());
-  const [selected, setSelected] = useState<LobbyMember | null>(null);
-  const [editMode, setEditMode] = useState(false);
-  const [snapshotStatus, setSnapshotStatus] = useState<string | null>(null);
-  const reduceMotion = useReducedMotion() ?? false;
+  const guestName = readSession('guestName') || 'Guest';
+  const guestToken = readSession('guestToken');
+  const guestAccent = readSession('guestAccent') || '#A855F7';
+  const guestAvatar = readSession('guestAvatar') || null;
   const lobbyInterval = useJitteredInterval(30_000);
-  const isMobileScene = useIsMobileScene();
-  const [desktopSpots, setDesktopSpots] = useState<HangoutSpot[]>(() => cloneSpots(DESKTOP_SCENE.spots));
-  const [mobileSpots, setMobileSpots] = useState<HangoutSpot[]>(() => cloneSpots(MOBILE_SCENE.spots));
-  const activeScene = useMemo<SceneLayout>(
-    () => ({
-      width: isMobileScene ? MOBILE_SCENE.width : DESKTOP_SCENE.width,
-      height: isMobileScene ? MOBILE_SCENE.height : DESKTOP_SCENE.height,
-      spots: isMobileScene ? mobileSpots : desktopSpots,
-    }),
-    [isMobileScene, mobileSpots, desktopSpots],
-  );
-
-  useEffect(() => {
-    if (!guestToken) return;
-    const previous = localStorage.getItem(TOKEN_KEY);
-    localStorage.setItem(TOKEN_KEY, guestToken);
-    return () => {
-      if (previous) {
-        localStorage.setItem(TOKEN_KEY, previous);
-      } else {
-        localStorage.removeItem(TOKEN_KEY);
-      }
-    };
-  }, [guestToken]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
 
   const usersQuery = useQuery({
-    queryKey: ['all-users-guest-lobby'],
-    queryFn: fetchAllUsers,
+    queryKey: ['all-users-guest-lobby', guestToken],
+    queryFn: async () => {
+      const { data } = await axios.get<AdminUser[]>('/api/auth/users', {
+        headers: { Authorization: `Bearer ${guestToken}` },
+        timeout: 30_000,
+      });
+      return data;
+    },
+    enabled: !!guestToken,
     staleTime: 25_000,
     refetchInterval: lobbyInterval,
     refetchIntervalInBackground: false,
+    // A pass that has ended won't come back by retrying.
+    retry: (count, err) => !isSignedOut(err) && count < 2,
   });
 
-  useEffect(() => {
-    if (editMode) return;
-    const timer = setInterval(() => {
-      setSceneSeed(Date.now());
-    }, 22000);
-    return () => clearInterval(timer);
-  }, [editMode]);
+  const users = useMemo(() => lobbyOrder(usersQuery.data ?? []), [usersQuery.data]);
+  const animals = useMemo(() => lobbyAnimals(users), [users]);
+  const selected = users.find((u) => u.id === selectedId) ?? null;
 
-  const refreshScene = useCallback(() => {
-    usersQuery.refetch();
-    setSceneSeed(Date.now());
-  }, [usersQuery]);
+  const foot = <>Live here? <Link className="fp-link text-apptext" to="/login">Sign in instead</Link></>;
 
-  const moveSpot = useCallback(
-    (slotIndex: number, dxPx: number, dyPx: number) => {
-      if (typeof window === 'undefined') return;
-      const viewportWidth = Math.max(window.innerWidth, 1);
-      const viewportHeight = Math.max(window.innerHeight, 1);
-      const dxScene = (dxPx / viewportWidth) * activeScene.width;
-      const dyScene = (dyPx / viewportHeight) * activeScene.height;
+  // No guest session in this tab: nothing to show but the way in (B-032).
+  if (!guestToken) {
+    return (
+      <DoorFrame foot={foot} center>
+        <Panel className="flex w-[min(100%,440px)] flex-col gap-4">
+          <p className="fp-label">Guest welcome</p>
+          <h1 className="text-title font-semibold text-apptext">Check in first</h1>
+          <p className="fp-muted">The lobby shows who’s at the house once you’ve checked in as a guest with the code from your host.</p>
+          <LinkButton to="/guest" variant="primary" size="lg" block icon="log-in">Check in as a guest</LinkButton>
+        </Panel>
+      </DoorFrame>
+    );
+  }
 
-      const applyMove = (spots: HangoutSpot[]) =>
-        spots.map((spot, index) => {
-          if (index !== slotIndex) return spot;
-          return {
-            ...spot,
-            x: clamp(spot.x + dxScene, 0, activeScene.width),
-            y: clamp(spot.y + dyScene, 0, activeScene.height),
-          };
-        });
-
-      if (isMobileScene) {
-        setMobileSpots((prev) => applyMove(prev));
-      } else {
-        setDesktopSpots((prev) => applyMove(prev));
-      }
-    },
-    [activeScene.height, activeScene.width, isMobileScene],
-  );
-
-  const copySnapshot = useCallback(async () => {
-    const title = isMobileScene ? 'Mobile (1080x1920)' : 'Desktop (1920x1080)';
-    const snapshot = formatLayoutSnapshot(title, activeScene.width, activeScene.height, activeScene.spots);
-    try {
-      await navigator.clipboard.writeText(snapshot);
-      setSnapshotStatus('Snapshot copied to clipboard');
-    } catch {
-      setSnapshotStatus('Clipboard blocked. Snapshot printed to console.');
-      console.log(snapshot);
-    }
-  }, [activeScene.height, activeScene.spots, activeScene.width, isMobileScene]);
-
-  const users = usersQuery.data ?? [];
-  const onlineCount = users.filter((u) => u.isOnline).length;
-
-  const fallbackGuest: AdminUser = useMemo(
-    () => ({
-      id: -1,
-      email: 'guest@home.local',
-      username: guestName.toLowerCase().replace(/\s+/g, '-') || 'guest',
-      displayName: guestName,
-      role: 'GUEST',
-      status: 'ACTIVE',
-      lastLoginAt: null,
-      loginCount: 1,
-      createdAt: new Date().toISOString(),
-      approvedAt: null,
-      isOnline: true,
-      avatarUrl: null,
-      accentColor: '#a855f7',
-    }),
-    [guestName],
-  );
-
-  const lobbyMembers = useMemo(() => {
-    const source = users.length > 0 ? users : [fallbackGuest];
-    const filledSource = fillUsersToSlotCount(source, fallbackGuest, activeScene.spots.length);
-    return createLobbyMembers(filledSource, sceneSeed, activeScene.spots);
-  }, [users, fallbackGuest, sceneSeed, activeScene]);
-
-  useEffect(() => {
-    if (!selected) return;
-    const stillExists = lobbyMembers.some((m) => m.user.id === selected.user.id);
-    if (!stillExists) setSelected(null);
-  }, [lobbyMembers, selected]);
+  const online = users.filter((u) => u.isOnline);
+  const onlineNames = online.map(getDisplayName);
+  const loaded = usersQuery.data !== undefined;
+  const passEnded = usersQuery.isError && isSignedOut(usersQuery.error);
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-black">
-      <picture>
-        <source media="(max-width: 767px)" srcSet={mobileBackgroundImage} />
-        <img src={webBackgroundImage} alt="Cozy living room background" className="pointer-events-none fixed inset-0 h-full w-full object-cover" />
-      </picture>
-
-      <div className="pointer-events-none fixed inset-x-4 top-4 z-30 flex items-start justify-between gap-3 sm:inset-x-6 sm:top-5">
-        <div className="pointer-events-auto rounded-2xl border border-white/40 bg-white/75 px-4 py-3 shadow-[0_8px_22px_rgba(0,0,0,0.16)] backdrop-blur">
-          <h1 className="text-xl font-semibold tracking-[-0.03em] text-slate-900 sm:text-2xl">Who&apos;s at the House?</h1>
-          <p className="mt-1 text-sm font-medium text-slate-700">
-            {onlineCount} online now
-            <span className="ml-2 inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-          </p>
-        </div>
-
-        <div className="pointer-events-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setEditMode((prev) => !prev)}
-            className="rounded-full border border-white/55 bg-white/75 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur"
-          >
-            {editMode ? 'Done Moving' : 'Move Animals'}
-          </button>
-          <button
-            type="button"
-            onClick={copySnapshot}
-            className="rounded-full border border-white/55 bg-white/75 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur"
-          >
-            Snapshot
-          </button>
-          <button type="button" onClick={refreshScene} className="rounded-full border border-white/55 bg-white/75 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
-            Refresh
-          </button>
-          <button type="button" className="rounded-full border border-white/55 bg-white/75 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
-            Invite
-          </button>
-          <button type="button" className="rounded-full border border-white/55 bg-white/75 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm backdrop-blur">
-            Settings
-          </button>
-        </div>
-      </div>
-
-      <div className="absolute inset-0 z-20 overflow-hidden">
-        <div className="absolute inset-0">
-          <AnimatePresence>
-            {lobbyMembers.map((member, index) => (
-              <LobbyAvatar
-                // Key by slot, NOT sceneSeed — otherwise every avatar unmounts
-                // and re-plays its enter animation on each 22s scene refresh
-                // (a 15-element animation storm). Keyed by slot, a refresh
-                // updates members in place.
-                key={member.slotIndex}
-                member={member}
-                index={index}
-                sceneSeed={sceneSeed}
-                sceneWidth={activeScene.width}
-                sceneHeight={activeScene.height}
-                editMode={editMode}
-                reduceMotion={reduceMotion}
-                onMove={moveSpot}
-                onSelect={setSelected}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-
-        <AnimatePresence>
-          {selected && <ProfileCard selected={selected} onClose={() => setSelected(null)} />}
-        </AnimatePresence>
-      </div>
-
-      <motion.button
-        type="button"
-        className="fixed bottom-5 right-4 z-40 rounded-full border border-[#fcd34d]/80 bg-[#fde68a] px-5 py-3 text-sm font-semibold text-[#78350f] shadow-[0_12px_24px_rgba(0,0,0,0.18)]"
-        whileHover={{ scale: 1.05 }}
-        whileTap={{ scale: 0.96 }}
+    <DoorFrame foot={foot}>
+      <h1 className="fp-sr-only">Who’s at the house</h1>
+      <InstrumentPanel
+        instrument={
+          <VisitorBadge
+            label={`Visitor badge for ${guestName}`}
+            name={guestName}
+            color={guestAccent}
+            photoUrl={guestAvatar}
+            role={<><Lamp tone="ok" size="s" />Guest at the house</>}
+            foot={[['Guest pass', 'Lasts 30 days from check-in']]}
+          />
+        }
+        verdict={
+          passEnded ? (
+            <Verdict tone="headsup" note="Check in again with the code from your host.">Your guest pass has ended.</Verdict>
+          ) : (
+            <Verdict
+              tone={loaded ? 'ok' : 'neutral'}
+              note={loaded ? (online.length ? `${formatList(onlineNames)} ${online.length === 1 ? 'is' : 'are'} on the app right now.` : 'Nobody else is on the app right now.') : 'Looking for who’s around…'}
+            >
+              You’re in, {guestName}.
+            </Verdict>
+          )
+        }
+        readouts={
+          loaded ? (
+            <Readouts count={2}>
+              <Readout label="Online now" value={online.length} unit={online.length === 1 ? 'person' : 'people'} tone={online.length ? 'ok' : 'neutral'} />
+              <Readout label="Household" value={users.length} unit={users.length === 1 ? 'person' : 'people'} note="Everyone with the app" />
+            </Readouts>
+          ) : undefined
+        }
       >
-        Join House
-      </motion.button>
+        {passEnded && <LinkButton to="/guest" variant="primary" size="lg" block icon="log-in">Check in again</LinkButton>}
+      </InstrumentPanel>
 
-      <div className="pointer-events-none fixed bottom-3 left-1/2 z-20 -translate-x-1/2 text-3xs uppercase tracking-[0.22em] text-white/70">
-        powered by bryzncode
-      </div>
+      <Panel
+        title="Who’s at the house"
+        subtitle="Tap someone to see more"
+        action={
+          <Button size="sm" variant="quiet" icon="refresh" busy={usersQuery.isFetching} busyLabel="Refreshing…" onClick={() => usersQuery.refetch()}>
+            Refresh
+          </Button>
+        }
+        footer={usersQuery.dataUpdatedAt ? <span className="fp-mono fp-muted">Updated {formatTime(usersQuery.dataUpdatedAt)}</span> : undefined}
+      >
+        <QueryState
+          query={usersQuery}
+          what="who’s here"
+          loading={<SkelRows count={3} />}
+          error={passEnded ? <Notice tone="headsup" title="Your guest pass has ended.">Check in again to see who’s here.</Notice> : undefined}
+          empty={<EmptyState icon="users" title="Nobody’s here yet" compact>People show up here once they have the house app.</EmptyState>}
+        >
+          {() => (
+            <ul className="grid grid-cols-2 overflow-hidden rounded-well border-l border-t border-appborder sm:grid-cols-3 lg:grid-cols-4" aria-label="People at the house">
+              {users.map((u) => {
+                const p = PRESENCE[u.isOnline ? 'on' : 'off'];
+                const animal = animals.get(u.id);
+                return (
+                  <li key={u.id} className="flex border-b border-r border-appborder">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedId(u.id)}
+                      className="flex min-h-[var(--apptap)] w-full flex-col items-center gap-1.5 px-2 py-4 text-center hover:bg-[var(--approw-hover)] focus-visible:[outline-offset:-3px]"
+                    >
+                      <AnimalFace animal={animal} color={u.accentColor} away={!u.isOnline} />
+                      <span className="w-full truncate font-semibold text-apptext">{getDisplayName(u)}</span>
+                      <span className="flex items-center gap-1.5">
+                        <Lamp tone={p.tone} />
+                        <span className="fp-label">{u.isOnline ? 'Online' : 'Away'}</span>
+                      </span>
+                      <span className="fp-small fp-muted">{roleLabel(u.role)}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </QueryState>
+      </Panel>
 
-      {snapshotStatus && (
-        <div className="pointer-events-none fixed bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/50 bg-black/65 px-4 py-2 text-xs font-semibold text-white backdrop-blur">
-          {snapshotStatus}
-        </div>
-      )}
-    </div>
+      <Dialog
+        open={selected != null}
+        onClose={() => setSelectedId(null)}
+        size="narrow"
+        eyebrow="At the house"
+        title={selected ? getDisplayName(selected) : ''}
+      >
+        {selected && (
+          <div className="flex flex-col gap-4">
+            <div className="fp-person">
+              <AnimalFace animal={animals.get(selected.id)} color={selected.accentColor} away={!selected.isOnline} large />
+              <div className="flex flex-col gap-1">
+                <p className="fp-strong">{roleLabel(selected.role)}</p>
+                <p className="fp-small fp-muted">Shown as the {animals.get(selected.id)?.label.toLowerCase() ?? 'animal'} in the lobby</p>
+              </div>
+            </div>
+            <KeyValue>
+              <KV label="In the app" value={<Badge tone={PRESENCE[selected.isOnline ? 'on' : 'off'].tone}>{PRESENCE[selected.isOnline ? 'on' : 'off'].label}</Badge>} />
+            </KeyValue>
+          </div>
+        )}
+      </Dialog>
+    </DoorFrame>
   );
 }
+
+/** A 401/403: the guest's pass has ended or was revoked. */
+function isSignedOut(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } } | null)?.response?.status;
+  return status === 401 || status === 403;
+}
+
+/** The person's lobby animal on a disc in their own colour (a hollow ring while away). */
+function AnimalFace({ animal, color, away, large }: { animal?: AnimalDef; color: string | null; away?: boolean; large?: boolean }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cx(
+        'grid flex-none place-items-center rounded-full',
+        large ? 'h-[72px] w-[72px]' : 'h-16 w-16',
+        away ? 'bg-appinset shadow-[inset_0_0_0_2px_var(--fp-who)]' : 'bg-[color-mix(in_srgb,var(--fp-who)_28%,var(--appsurface))]',
+      )}
+      style={knobs({ '--fp-who': color || 'var(--appavatar-default)' })}
+    >
+      {animal && <img src={animal.image} alt="" className={cx('h-[86%] w-[86%] object-contain', away && 'opacity-60')} draggable={false} />}
+    </span>
+  );
+}
+

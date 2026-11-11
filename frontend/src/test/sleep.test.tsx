@@ -163,6 +163,19 @@ describe('SleepWarning', () => {
     vi.useRealTimers();
   });
 
+  it('reads the seconds once, then speaks only at 30 and 10 seconds left', () => {
+    const { rerender } = render(<SleepWarning secondsLeft={42} totalSeconds={60} onStay={() => {}} />);
+    // The paragraph with the ticking number is the dialog's description, not a live region.
+    expect(screen.getByText(/goes to sleep in 42 seconds/)).not.toHaveAttribute('aria-live');
+    expect(screen.getByRole('status')).toHaveTextContent(/^$/);
+    rerender(<SleepWarning secondsLeft={29} totalSeconds={60} onStay={() => {}} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Thirty seconds left.');
+    rerender(<SleepWarning secondsLeft={28} totalSeconds={60} onStay={() => {}} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Thirty seconds left.');
+    rerender(<SleepWarning secondsLeft={9} totalSeconds={60} onStay={() => {}} />);
+    expect(screen.getByRole('status')).toHaveTextContent('Ten seconds left.');
+  });
+
   it('renders nothing when there is no countdown', () => {
     render(<SleepWarning secondsLeft={null} totalSeconds={60} onStay={() => {}} />);
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();

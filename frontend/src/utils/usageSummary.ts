@@ -1,10 +1,12 @@
 import type { DailyUsagePoint, EnergyUsage, UsageRangeSummary } from '../types';
+import { homeToday } from './format';
 
 /**
  * A day is only "complete" enough to trust its total once it has most of its
  * 24 hourly rows. The current day (still syncing) and any day CoServ under-posted
  * fall below this and must be excluded from trend/average math, or they read as
- * artificial dips. Matches the >=18 guard used by the daily usage-log table.
+ * artificial dips. The Electric tab's last reading and readings log use the same
+ * rule, so Home and the Electric tab name the same latest day (B-081).
  */
 export const COMPLETE_DAY_MIN_HOURS = 18;
 
@@ -181,49 +183,14 @@ export function averageCompleteDailyKwh(
   minReadings = COMPLETE_DAY_MIN_HOURS,
   now = new Date()
 ): number {
-  const threshold = new Date(now.getTime() - days * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .slice(0, 10);
+  // The window is counted in the home's calendar days. It used to subtract 24h
+  // multiples and read the result in UTC, so from 6 PM Central (7 PM in summer)
+  // the cutoff jumped a day ahead and the 7-day average quietly averaged 6 (B-076).
+  const [y, m, d] = homeToday(now).split('-').map(Number);
+  const threshold = new Date(Date.UTC(y, m - 1, d - days)).toISOString().slice(0, 10);
   const matching = points.filter(
     (p) => p.readingCount >= minReadings && p.date >= threshold
   );
   if (!matching.length) return 0;
   return matching.reduce((sum, p) => sum + Number(p.totalKwh), 0) / matching.length;
-}
-
-export function formatSummaryDate(timestamp?: string | null) {
-  if (!timestamp) {
-    return 'No data';
-  }
-
-  return new Date(timestamp).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
-}
-
-export function formatPeriodRange(start: string, end: string) {
-  const formatDisplay = (value: string) => {
-    if (value === 'Today') {
-      return value;
-    }
-
-    const isoDateOnlyMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    const date = isoDateOnlyMatch
-      ? new Date(
-          Number(isoDateOnlyMatch[1]),
-          Number(isoDateOnlyMatch[2]) - 1,
-          Number(isoDateOnlyMatch[3])
-        )
-      : new Date(value);
-
-    return date.toLocaleDateString('en-US', {
-      month: 'numeric',
-      day: 'numeric',
-      year: 'numeric',
-    });
-  };
-
-  return `${formatDisplay(start)} - ${formatDisplay(end)}`;
 }

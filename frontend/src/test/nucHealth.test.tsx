@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { HostHealth, HostHistory, HostSnapshot } from '../types';
 import { bits, bytes, duration, powerEvents, processLabel, restartCause, since } from '../utils/host';
@@ -58,7 +58,8 @@ const HISTORY: HostHistory = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><NucHealth /></QueryClientProvider>);
+  const view = render(<QueryClientProvider client={client}><NucHealth /></QueryClientProvider>);
+  return { ...view, client };
 }
 
 describe('NUC Health formatting', () => {
@@ -108,13 +109,16 @@ describe('NUC Health page', () => {
 
   it('shows the headline numbers, the containers and what is using the NUC', async () => {
     renderPage();
-    expect(await screen.findByText('All good: nothing on the NUC needs attention.')).toBeInTheDocument();
+    expect(await screen.findByText('The home server is healthy.')).toBeInTheDocument();
+    expect(screen.getByText('All good: nothing on the NUC needs attention.')).toBeInTheDocument();
     expect(screen.getByText('Reported just now')).toBeInTheDocument();
-    expect(screen.getByText('24%')).toBeInTheDocument();
-    expect(screen.getAllByText('Drive C:')).toHaveLength(2); // the tile and the Storage card
+    expect(screen.getByRole('img', { name: 'Processor 24%' })).toBeInTheDocument();
+    expect(screen.getByText('Drive C:', { selector: '.fp-label' })).toBeInTheDocument(); // the gauge
     expect(screen.getByText('60.1 GB free')).toBeInTheDocument();
-    expect(screen.getByText('57 °C')).toBeInTheDocument();
-    expect(screen.getByText('2 days 7 h')).toBeInTheDocument();
+    // Temperatures stay in the °C the monitor reports, and say so.
+    expect(screen.getByRole('img', { name: 'Processor 57 degrees Celsius' })).toBeInTheDocument();
+    expect(screen.getByText('SSD 41 °C')).toBeInTheDocument();
+    expect(screen.getByText(/^2 days 7\shr, since/)).toBeInTheDocument();
     expect(screen.getByText('homeplatform-backend')).toBeInTheDocument();
     expect(screen.getByText('Running · healthy')).toBeInTheDocument();
     expect(screen.getByText('1 of 2 running · Docker 29.7.2 · 6.8 GB VM')).toBeInTheDocument();
@@ -132,10 +136,12 @@ describe('NUC Health page', () => {
       ],
     });
     renderPage();
-    const card = (await screen.findByText('Needs attention')).closest('section')!;
+    // The verdict is the worst one; the list says each one's status word as well as its lamp.
+    expect(await screen.findByText("Docker isn't responding.")).toBeInTheDocument();
+    const card = screen.getByRole('region', { name: 'Needs attention' });
     const items = within(card).getAllByRole('listitem');
-    expect(items[0]).toHaveTextContent("Critical: Docker isn't responding");
-    expect(items[1]).toHaveTextContent('Warning: Drive C: is getting full');
+    expect(items[0]).toHaveTextContent(/^Problem\s*Docker isn't responding/);
+    expect(items[1]).toHaveTextContent(/^Heads-up\s*Drive C: is getting full/);
   });
 
   it('says when Docker is not answering instead of listing containers', async () => {
@@ -145,6 +151,7 @@ describe('NUC Health page', () => {
     });
     renderPage();
     expect(await screen.findByText(/no answer from Docker within 15 s/)).toBeInTheDocument();
+    expect(screen.getByText("Docker isn't answering")).toBeInTheDocument();
     expect(screen.queryByText('homeplatform-backend')).not.toBeInTheDocument();
   });
 
@@ -160,6 +167,7 @@ describe('NUC Health page', () => {
     vi.mocked(hostApi.fetchHostHealth).mockResolvedValue({ ...HEALTH, status: 'OFFLINE', lastReportAt: iso(3 * 3_600_000) });
     renderPage();
     expect(await screen.findByText('Monitor offline · last report 3 hr ago')).toBeInTheDocument();
+    expect(screen.getByText('The health monitor stopped reporting.')).toBeInTheDocument();
     expect(screen.getByText(/^Last readings, from /)).toBeInTheDocument(); // the tiles aren't passed off as current
   });
 
@@ -172,11 +180,30 @@ describe('NUC Health page', () => {
   it('switches the history range, and lists the quiet spells', async () => {
     renderPage();
     expect(await screen.findByText('Times it went quiet')).toBeInTheDocument();
-    expect(screen.getByText(/1 h · it restarted/)).toBeInTheDocument();
+    expect(screen.getByText('It restarted')).toBeInTheDocument();
+    expect(screen.getByText('1 hr')).toBeInTheDocument();
     expect(screen.getByText(/avg 18% · busiest minute 61%/)).toBeInTheDocument();
     expect(hostApi.fetchHostHistory).toHaveBeenCalledWith('24h');
-    fireEvent.click(screen.getByRole('button', { name: '7 d' }));
+    fireEvent.click(screen.getByRole('button', { name: '7 days' }));
     await waitFor(() => expect(hostApi.fetchHostHistory).toHaveBeenCalledWith('7d'));
-    expect(screen.getByRole('button', { name: '7 d' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: '7 days' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('keeps the last readings when a refresh fails (B-187)', async () => {
+    const view = renderPage();
+    await screen.findByText('The home server is healthy.');
+    vi.mocked(hostApi.fetchHostHealth).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => {
+      await view.client.refetchQueries({ queryKey: ['admin-host'] });
+    });
+    expect(await screen.findByText("Couldn't refresh the server's health.")).toBeInTheDocument();
+    expect(screen.getByText('The home server is healthy.')).toBeInTheDocument();
+  });
+
+  it('says the first load failed, with a way to try again (B-005)', async () => {
+    vi.mocked(hostApi.fetchHostHealth).mockRejectedValue(new Error('offline'));
+    renderPage();
+    expect(await screen.findByText("Couldn't load the server's health")).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
   });
 });

@@ -1,0 +1,107 @@
+<section class="screen" data-route="login" data-chrome="none" data-title="Sign in">
+  <div class="door">
+    <header class="door-top">
+      <span class="door-brand"><span class="door-dot" aria-hidden="true"></span>HOMEOS</span>
+      <span class="mono muted">Mon, Nov 9 · 5:00 PM</span>
+    </header>
+
+    <div class="door-main">
+      <section class="panel door-plate" aria-labelledby="login-title">
+        <div class="notice notice--ok" role="status" data-login-out hidden>
+          <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+          <div><p class="notice-title">You’re signed out.</p><p class="notice-text">Sign in again whenever you like.</p></div>
+        </div>
+
+        <div class="door-head">
+          <p class="label">Front door</p>
+          <h1 class="door-title" id="login-title">Welcome home.</h1>
+          <p class="muted">Sign in with your household account to see the house.</p>
+        </div>
+
+        <!-- the instrument: one large key, set in a recessed bezel -->
+        <div class="door-bezel">
+          <a class="btn btn--primary btn--lg btn--block" href="#home" data-nav="home" data-login-sso><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span data-login-sso-text>Sign in with Home</span></a>
+        </div>
+        <p class="door-status"><span class="lamp lamp--ok lamp--s"></span><span class="small muted">The home server is on</span></p>
+
+        <details class="disclosure door-fallback">
+          <summary><span class="when-closed">Use a password instead</span><span class="when-open">Hide the password form</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body stack mt-s">
+            <p class="small muted">Only works while password sign-in is switched on at the home server.</p>
+            <div class="notice notice--problem" role="alert" data-login-error hidden>
+              <svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg>
+              <div><p class="notice-title">Enter your username and password.</p><p class="notice-text">Both are needed to sign in this way.</p></div>
+            </div>
+            <label class="field"><span class="label">Username</span><input class="input" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="bryan" data-login-user></label>
+            <label class="field"><span class="label">Password</span><input class="input" type="password" autocomplete="current-password" placeholder="••••••••" data-login-pass></label>
+            <button class="btn btn--block" type="button" data-login-submit><svg class="icon" aria-hidden="true"><use href="#i-log-in"/></svg>Sign in</button>
+          </div>
+        </details>
+
+        <ul class="list" aria-label="Other ways in">
+          <li><button class="row" type="button" data-open-modal="login-register">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg></span>
+            <span class="row-main"><span class="row-title">New to the house?</span><span class="row-meta">Request an account. Bryan approves it</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button></li>
+          <li><a class="row" href="#guest-portal" data-nav="guest-portal">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-door"/></svg></span>
+            <span class="row-main"><span class="row-title">Just visiting?</span><span class="row-meta">Sign in as a guest with an invite code</span></span>
+            <svg class="icon chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></a></li>
+        </ul>
+      </section>
+    </div>
+
+    <footer class="door-foot">
+      <span class="door-maker"><span class="label">HomeOS</span><span class="mono">1.10.1</span></span>
+      <span class="mono muted">made by bryzncode</span>
+    </footer>
+  </div>
+
+  <!-- ===================== Dialog: request an account ===================== -->
+  <div class="dialog" data-modal="login-register" hidden role="dialog" aria-modal="true" aria-labelledby="login-register-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading"><p class="label">Front door</p><h2 class="dialog-title" id="login-register-title">Request an account</h2><p class="dialog-sub">Bryan approves every new account and picks its role.</p></div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack">
+        <label class="field"><span class="label">Email</span><input class="input" type="email" autocomplete="email" placeholder="you@example.com" value="sam.lee@example.com"></label>
+        <div class="form-grid">
+          <label class="field"><span class="label">Username</span><input class="input" type="text" autocomplete="username" autocapitalize="none" placeholder="samlee" value="samlee"></label>
+          <label class="field"><span class="label">Name to show</span><input class="input" type="text" autocomplete="name" placeholder="Sam Lee" value="Sam"><span class="field-help">Optional</span></label>
+          <label class="field"><span class="label">Password</span><input class="input" type="password" autocomplete="new-password" value="otter-lake" placeholder="At least 6 characters" data-login-new><span class="field-help">At least 6 characters</span></label>
+          <label class="field" data-login-again><span class="label">Password again</span><input class="input" type="password" autocomplete="new-password" value="otter-lake" placeholder="Type it once more">
+            <span class="field-error" hidden><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg>The passwords don’t match</span></label>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal>Cancel</button>
+        <button class="btn btn--primary" type="button" data-login-request>Send request</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ===================== Dialog: the waiting room ===================== -->
+  <div class="dialog dialog--narrow" data-modal="login-pending" hidden role="dialog" aria-modal="true" aria-labelledby="login-pending-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading"><p class="label">Request sent</p><h2 class="dialog-title" id="login-pending-title">Waiting for Bryan</h2></div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack">
+        <div class="verdict">
+          <span class="lamp lamp--warn"></span>
+          <p class="verdict-text">Your account is waiting for approval.</p>
+          <p class="verdict-note">Bryan will look at it and choose your role. You can sign in as soon as he approves it.</p>
+        </div>
+        <dl class="kv">
+          <div class="kv-row"><dt>Username</dt><dd class="mono">samlee</dd></div>
+          <div class="kv-row"><dt>Status</dt><dd><span class="badge badge--warn">Waiting</span></dd></div>
+        </dl>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--block" type="button" data-close-modal>Back to sign in</button>
+      </footer>
+    </div>
+  </div>
+</section>

@@ -1,0 +1,310 @@
+/* ==========================================================================
+   Faceplate — tokens. Every colour, size, radius and timing lives here.
+   kit.css and screens/*.css use these names only (no literal colours).
+   Light = matte enamel faceplate (default). Dark = the same object in a dim room.
+   There is NO accent colour: selection is ink-on-enamel inversion; hue appears
+   only as status lamps and chart data.
+   ========================================================================== */
+
+:root, html[data-theme="light"] {
+  color-scheme: light;
+
+  /* ---- surfaces ---- */
+  --enamel: #E9ECEA;            /* page */
+  --panel: #F7F8F7;             /* flat panel / card / bezel (strip, key column, key row) */
+  --well: #DFE3E0;              /* recessed readout, input, track */
+  --well-deep: #D3D8D5;         /* hover inside a well */
+  --key-face: #FDFDFC;          /* raised key (secondary button, icon button) */
+  --key-face-hover: #F1F3F2;
+  --key-lip: rgba(21, 24, 26, .18);          /* 1px inset bottom edge of a raised key */
+  --primary-lip: rgba(0, 0, 0, .35);         /* bottom edge of an ink key */
+  --well-shadow: inset 0 1px 1.5px rgba(21, 24, 26, .14);  /* recess (inner shadow only) */
+  --row-hover: rgba(21, 24, 26, .04);        /* hover wash on list rows / table rows */
+  --skel-shine: rgba(255, 255, 255, .55);    /* loading shimmer */
+
+  /* ---- ink ---- */
+  --ink: #15181A;               /* primary text, selected key fill, primary series */
+  --graphite: #4E555A;          /* secondary text, comparison series */
+  --graphite-soft: #8A9196;     /* decorative only: ticks, disabled marks (never body text) */
+  --on-ink: #F7F8F7;            /* text/icon on an ink-filled key */
+  --hairline: rgba(21, 24, 26, .14);
+  --hairline-strong: rgba(21, 24, 26, .26);
+  --focus: #15181A;
+
+  /* ---- lamps (fills) and lamp text (>= 4.5:1 on panel AND well) ---- */
+  --lamp-ok: #22A35A;
+  --lamp-warn: #E0A100;
+  --lamp-problem: #E0483B;
+  --lamp-info: #3B82F6;
+  --lamp-off: #C9CFCB;          /* unlit lamp */
+  --lamp-edge: rgba(21, 24, 26, .22);         /* defines a lit lamp on light enamel */
+  --text-ok: #0F703C;
+  --text-warn: #8A5A00;
+  --text-problem: #B3261E;
+  --text-info: #1F5FBF;
+  --tint-ok: rgba(34, 163, 90, .10);
+  --tint-warn: rgba(224, 161, 0, .13);
+  --tint-problem: rgba(224, 72, 59, .10);
+  --tint-info: rgba(59, 130, 246, .09);
+  --edge-ok: rgba(34, 163, 90, .45);
+  --edge-warn: rgba(176, 124, 0, .45);
+  --edge-problem: rgba(224, 72, 59, .45);
+  --edge-info: rgba(59, 130, 246, .40);
+
+  /* ---- danger key ---- */
+  --danger-fill: #B3261E;
+  --on-danger: #FFFFFF;
+
+  /* ---- charts (data only) ---- */
+  --chart-ink: #15181A;         /* primary series */
+  --chart-graphite: #6A7277;    /* comparison / predicted (dashed) */
+  --chart-soft: #A3AAAE;        /* minor stacked part */
+  --chart-heat: #D9480F;
+  --chart-cool: #1C7ED6;
+  --chart-water: #1098AD;
+  --chart-gas: #B8860B;
+  --chart-grid: rgba(21, 24, 26, .09);
+  --chart-band: rgba(21, 24, 26, .09);       /* confidence band */
+  --chart-cursor: rgba(21, 24, 26, .38);
+  --chart-empty: #C3C9C6;                    /* "not itemized yet" */
+
+  /* ---- dial ---- */
+  --dial-track: #DFE3E0;
+  --dial-day: #FFFFFF;          /* daylight arc on the 24-hour ring */
+  --dial-night: #B4BABD;        /* night arc on the 24-hour ring */
+  --dial-tick: rgba(21, 24, 26, .42);
+
+  /* ---- overlays ---- */
+  --scrim: rgba(18, 21, 23, .46);
+  --toast-bg: #15181A;
+  --toast-fg: #F7F8F7;
+
+  /* ---- camera / media (same in both themes: footage is always dark) ---- */
+  --media-bg: #101315;
+  --media-ink: #F2F4F3;
+  --media-ink-soft: rgba(242, 244, 243, .78);
+  --media-scrim: rgba(8, 10, 11, .62);
+  --media-rec: #FF4B3E;
+  --scene-sky: #2A3A44;
+  --scene-far: #1E2A31;
+  --scene-near: #172126;
+  --scene-ground: #131B1F;
+  --scene-line: rgba(242, 244, 243, .16);
+  --scene-light: rgba(255, 214, 140, .55);
+
+  /* ---- label plate (QR, visitor badge, bill paper): always white enamel ---- */
+  --plate: #FFFFFF;
+  --plate-ink: #111111;
+  --plate-soft: #555B60;
+  --plate-edge: rgba(21, 24, 26, .22);
+
+  /* ---- map ---- */
+  --map-floor: #F1F3F2;
+  --map-wall: #15181A;
+  --map-room: rgba(21, 24, 26, .05);
+  --map-dot: rgba(21, 24, 26, .12);
+
+  /* ---- people (accent colours are identity data; initials are always --avatar-ink) ---- */
+  --avatar-ink: #15181A;
+  --person-bryan: #0EA5E9;
+  --person-mai: #F43F5E;
+  --person-linh: #A855F7;
+  --person-danny: #60A5FA;
+  --person-kim: #94A3B8;
+  --person-alex: #2DD4BF;
+  --person-jordan: #F59E0B;
+  --avatar-ring: #F7F8F7;       /* ring between stacked avatars = panel */
+
+  --mask: #000;                 /* alpha-only mask colour (meter segments, dial sweep) */
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --enamel: #121416;
+  --panel: #1B1E21;
+  --well: #0D0F10;
+  --well-deep: #070809;
+  --key-face: #262A2E;
+  --key-face-hover: #2E3337;
+  --key-lip: rgba(0, 0, 0, .6);
+  --primary-lip: rgba(0, 0, 0, .25);
+  --well-shadow: inset 0 1px 2px rgba(0, 0, 0, .7);
+  --row-hover: rgba(238, 241, 239, .04);
+  --skel-shine: rgba(238, 241, 239, .06);
+
+  --ink: #EEF1EF;
+  --graphite: #A7AEB3;
+  --graphite-soft: #6A7277;
+  --on-ink: #15181A;
+  --hairline: rgba(238, 241, 239, .13);
+  --hairline-strong: rgba(238, 241, 239, .24);
+  --focus: #EEF1EF;
+
+  --lamp-ok: #3DDC84;
+  --lamp-warn: #FFB627;
+  --lamp-problem: #FF6B5E;
+  --lamp-info: #6FA8FF;
+  --lamp-off: #33393D;
+  --lamp-edge: rgba(0, 0, 0, .35);
+  --text-ok: #3DDC84;
+  --text-warn: #FFB627;
+  --text-problem: #FF6B5E;
+  --text-info: #6FA8FF;
+  --tint-ok: rgba(61, 220, 132, .08);
+  --tint-warn: rgba(255, 182, 39, .09);
+  --tint-problem: rgba(255, 107, 94, .09);
+  --tint-info: rgba(111, 168, 255, .08);
+  --edge-ok: rgba(61, 220, 132, .38);
+  --edge-warn: rgba(255, 182, 39, .38);
+  --edge-problem: rgba(255, 107, 94, .40);
+  --edge-info: rgba(111, 168, 255, .36);
+
+  --danger-fill: #FF6B5E;
+  --on-danger: #15181A;
+
+  --chart-ink: #EEF1EF;
+  --chart-graphite: #9AA2A7;
+  --chart-soft: #5E676D;
+  --chart-heat: #FF8A4C;
+  --chart-cool: #6FB6FF;
+  --chart-water: #3CC6DA;
+  --chart-gas: #E0B341;
+  --chart-grid: rgba(238, 241, 239, .09);
+  --chart-band: rgba(238, 241, 239, .11);
+  --chart-cursor: rgba(238, 241, 239, .45);
+  --chart-empty: #454C51;
+
+  --dial-track: #0D0F10;
+  --dial-day: #59616A;
+  --dial-night: #0D0F10;
+  --dial-tick: rgba(238, 241, 239, .40);
+
+  --scrim: rgba(0, 0, 0, .62);
+  --toast-bg: #EEF1EF;
+  --toast-fg: #15181A;
+
+  --plate: #F4F5F3;
+  --plate-ink: #111111;
+  --plate-soft: #50565B;
+  --plate-edge: rgba(0, 0, 0, .5);
+
+  --map-floor: #16191B;
+  --map-wall: #EEF1EF;
+  --map-room: rgba(238, 241, 239, .05);
+  --map-dot: rgba(238, 241, 239, .12);
+
+  --avatar-ring: #1B1E21;
+}
+
+/* ---- palettes = enamel finishes ----
+   Faceplate has no accent colour, so a palette tints the enamel, panels and wells only.
+   Ink, lamps, status text and chart colours never change, so status reads the same in every finish.
+   Set by Profile on <html data-palette="ocean|sunset|violet">; no attribute = Default. */
+:root {
+  --finish-default: #C9CFCB;    /* swatch samples shown on the Profile palette keys */
+  --finish-ocean: #B7C7D4;
+  --finish-sunset: #D8C6B0;
+  --finish-violet: #C8C1D8;
+}
+html[data-palette="ocean"] {
+  --enamel: #E5EAEE; --panel: #F6F8FA; --well: #DAE2E8; --well-deep: #CDD7DF;
+  --key-face: #FCFDFE; --key-face-hover: #EFF3F6; --dial-track: #DAE2E8; --map-floor: #EEF2F5;
+  --lamp-off: #C5CED5; --avatar-ring: #F6F8FA; --on-ink: #F6F8FA;
+}
+html[data-palette="sunset"] {
+  --enamel: #EDE9E3; --panel: #FAF8F5; --well: #E4DED6; --well-deep: #D8D1C7;
+  --key-face: #FEFDFB; --key-face-hover: #F4F1EC; --dial-track: #E4DED6; --map-floor: #F4F1EC;
+  --lamp-off: #D3CBC0; --avatar-ring: #FAF8F5; --on-ink: #FAF8F5;
+}
+html[data-palette="violet"] {
+  --enamel: #E9E7EE; --panel: #F8F7FA; --well: #DFDCE6; --well-deep: #D3CFDC;
+  --key-face: #FDFDFE; --key-face-hover: #F2F0F5; --dial-track: #DFDCE6; --map-floor: #F1EFF5;
+  --lamp-off: #CDC8D6; --avatar-ring: #F8F7FA; --on-ink: #F8F7FA;
+}
+html[data-theme="dark"][data-palette="ocean"] {
+  --enamel: #10151A; --panel: #192026; --well: #0A0E12; --well-deep: #05080A;
+  --key-face: #232C33; --key-face-hover: #2B353D; --dial-track: #0A0E12; --map-floor: #141A1F;
+  --lamp-off: #303A42; --avatar-ring: #192026; --on-ink: #15181A;
+}
+html[data-theme="dark"][data-palette="sunset"] {
+  --enamel: #16130F; --panel: #211D19; --well: #0F0C0A; --well-deep: #080605;
+  --key-face: #2D2823; --key-face-hover: #36302A; --dial-track: #0F0C0A; --map-floor: #1B1714;
+  --lamp-off: #3D362F; --avatar-ring: #211D19; --on-ink: #15181A;
+}
+html[data-theme="dark"][data-palette="violet"] {
+  --enamel: #131219; --panel: #1C1B23; --well: #0D0C12; --well-deep: #07060A;
+  --key-face: #282631; --key-face-hover: #302E3A; --dial-track: #0D0C12; --map-floor: #17161D;
+  --lamp-off: #36333F; --avatar-ring: #1C1B23; --on-ink: #15181A;
+}
+
+/* ---- theme-independent scale ---- */
+:root {
+  --font: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* type */
+  --t-label: 11.5px;            /* silk-screen label (the only uppercase) */
+  --t-key: 11px;                /* label under a nav key */
+  --t-small: 13px;              /* meta, captions, notes */
+  --t-body: 15px;
+  --t-lead: 18px;               /* verdict sentence (21px desktop) */
+  --t-section: 16px;            /* panel title */
+  --t-title: 22px;              /* page title */
+  --t-title-lg: 28px;           /* page title, wide desktop */
+  --t-num-xl: 44px;             /* instrument centre */
+  --t-num-l: 28px;              /* readout well */
+  --t-num-m: 18px;              /* inline numeral */
+  --t-mono-s: 11.5px;           /* axis labels, timestamps */
+  --t-mono: 13px;               /* units, clock, IDs */
+  --lh-tight: 1.15;
+  --lh-body: 1.45;
+  --stretch-label: 112%;
+  --stretch-num: 88%;
+  --stretch-key: 94%;
+
+  /* space (4px base) */
+  --s-1: 4px;
+  --s-2: 8px;
+  --s-3: 12px;
+  --s-4: 16px;
+  --s-5: 20px;
+  --s-6: 24px;
+  --s-7: 32px;
+  --s-8: 40px;
+  --s-9: 56px;
+
+  /* radius */
+  --r-panel: 12px;
+  --r-key: 10px;
+  --r-well: 8px;
+  --r-chip: 8px;
+  --r-tag: 6px;
+
+  /* sizes */
+  --tap: 44px;                  /* minimum touch target and default control height */
+  --tap-sm: 36px;               /* compact controls (a hidden hit area keeps them >= 44px) */
+  --strip-h: 48px;
+  --strip-h-phone: 52px;
+  --keycol-w: 96px;
+  --keyrow-h: 64px;
+  --content-max: 1240px;
+  --gutter: 16px;
+  --panel-pad: 16px;
+  --gap: 12px;                  /* space between panels on a page */
+  --icon: 20px;
+  --lamp: 9px;
+  --dial-max: 240px;
+
+  /* motion */
+  --ease: cubic-bezier(.2, .7, .2, 1);
+  --t-fast: 120ms;
+  --t-sweep: 500ms;
+}
+
+@media (min-width: 640px) {
+  :root { --gutter: 24px; --panel-pad: 20px; --gap: 16px; }
+}
+@media (min-width: 1024px) {
+  :root { --gutter: 40px; --panel-pad: 24px; --gap: 20px; --t-lead: 21px; --dial-max: 300px; }
+}

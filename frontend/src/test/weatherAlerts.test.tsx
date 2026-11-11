@@ -30,7 +30,7 @@ vi.mock('../api/weatherAlerts', () => ({
   }),
 }));
 
-import WeatherAlertSettings, { clockLabel, hoursCovered } from '../components/WeatherAlertSettings';
+import WeatherAlertSettings, { clockLabel, hoursCovered, spanLabel } from '../components/WeatherAlertSettings';
 
 function rain(): WeatherAlert {
   return {
@@ -97,11 +97,11 @@ describe('<WeatherAlertSettings>', () => {
 
     expect(screen.getByLabelText('Check at')).toHaveValue('20:00');
     expect(screen.getByLabelText('Look ahead to')).toHaveValue('08:00');
-    expect(screen.getByText('Checked every day at 8 PM, looking ahead to 8 AM (12 hours).')).toBeInTheDocument();
+    expect(screen.getByText('Checked every day at 8 PM, looking ahead to 8 AM (12 hr).')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Look ahead to'), { target: { value: '06:00' } });
     await waitFor(() => expect(state.saves[1]).toEqual(['WEATHER_RAIN', { until: '06:00' }]));
-    expect(await screen.findByText('Checked every day at 8 PM, looking ahead to 6 AM (10 hours).')).toBeInTheDocument();
+    expect(await screen.findByText('Checked every day at 8 PM, looking ahead to 6 AM (10 hr).')).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Chance of rain'), { target: { value: '70' } });
     await waitFor(() => expect(state.saves[2]).toEqual(['WEATHER_RAIN', { threshold: 70 }]));
@@ -139,5 +139,13 @@ describe('<WeatherAlertSettings>', () => {
     expect(hoursCovered('20:00', '08:00')).toBe(12);
     expect(hoursCovered('07:00', '21:00')).toBe(14);
     expect(hoursCovered('07:00', '07:00')).toBe(24);
+  });
+
+  it('writes the window in the app duration style, never "1 hours" or "0.3 hours" (B-163)', () => {
+    expect(spanLabel('20:00', '21:00')).toBe('1 hr');
+    expect(spanLabel('20:00', '20:15')).toBe('15 min');
+    expect(spanLabel('20:00', '20:45')).toBe('45 min');
+    expect(spanLabel('20:00', '21:30')).toBe('1 hr 30 min');
+    expect(spanLabel('20:00', '08:00')).toBe('12 hr');
   });
 });

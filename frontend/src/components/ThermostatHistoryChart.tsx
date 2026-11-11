@@ -2,33 +2,18 @@ import { memo, useMemo } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { Thermostat, ThermostatReading } from '../types';
 import { currentSetpoint } from '../utils/thermostat';
-import { useMediaQuery } from '../hooks/useMediaQuery';
-import { FOCUS_RING } from './ThermostatControls';
+import { formatTimeTick, timeTicks } from '../utils/cameras';
+import { formatDateTime, toInstant } from '../utils/format';
+import { Chips, DialLegend, EmptyState, ErrorState, Loading, Panel, SkelBlock, useChartTheme } from './ui';
 
-// Same hoisted chart styling as the other usage charts — CSS vars so both themes work.
-const CHART_MARGIN = { top: 5, right: 8, left: 0, bottom: 0 } as const;
-const TICK_PROPS = { fontSize: 11 } as const;
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: 'var(--appchart-bg)',
-  border: '1px solid var(--appchart-border)',
-  borderRadius: '16px',
-  fontSize: '13px',
-  color: 'var(--apptext)',
-  boxShadow: '0 20px 50px var(--appshadow-lg)',
-} as const;
-const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
-
-// Orange = heat, sky = cool everywhere on the tab; indoor temp stays neutral.
-// Dedicated chart tokens (not the orange-300/sky-300 text remaps, which light
-// mode darkens to near-black 800 shades for text contrast and would make heat
-// and cool hard to tell apart as thin dashed lines).
-const COLORS = {
-  temp: 'var(--apptext-soft)',
-  heat: 'var(--appchart-heat)',
-  cool: 'var(--appchart-cool)',
-} as const;
+const CHART_MARGIN = { top: 8, right: 8, left: 0, bottom: 0 } as const;
 
 export type HistoryRange = 24 | 168;
+
+const RANGES = [
+  { value: '24', label: '24 hours' },
+  { value: '168', label: '7 days' },
+] as const;
 
 export interface Point {
   t: number;
@@ -65,7 +50,7 @@ function sides(
 export function buildSeries(readings: ThermostatReading[], live: Thermostat | undefined, now = Date.now()): Point[] {
   const pts: Point[] = readings
     .map((r) => ({
-      t: new Date(r.recordedAt).getTime(),
+      t: toInstant(r.recordedAt) ?? NaN,
       temp: r.temperature,
       ...sides(r.hvacMode, r.targetTemperature, r.heatSetpoint, r.coolSetpoint),
     }))
@@ -85,160 +70,146 @@ export function buildSeries(readings: ThermostatReading[], live: Thermostat | un
   return pts;
 }
 
-function formatTick(t: number, range: HistoryRange): string {
-  const d = new Date(t);
-  return range === 24
-    ? d.toLocaleTimeString(undefined, { hour: 'numeric' })
-    : d.toLocaleDateString(undefined, { weekday: 'short' });
+/**
+ * One temperature scale for every thermostat, in whole degrees with an even step (B-101: the
+ * old per-room 'dataMin - 2' bounds printed 78°, 71.7°, 67.7° and put the rooms on different
+ * scales). Even steps of 2 or more, at least 4 ticks.
+ */
+export function sharedDomain(series: Point[][]): { domain: [number, number]; ticks: number[] } | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const pts of series) {
+    for (const p of pts) {
+      for (const v of [p.temp, p.heat, p.cool]) {
+        if (v != null && Number.isFinite(v)) {
+          lo = Math.min(lo, v);
+          hi = Math.max(hi, v);
+        }
+      }
+    }
+  }
+  if (!Number.isFinite(lo)) return null;
+  const span = Math.max(4, hi - lo + 2);
+  const step = span <= 8 ? 2 : span <= 20 ? 5 : 10;
+  const min = Math.floor((lo - 1) / step) * step;
+  const max = Math.ceil((hi + 1) / step) * step;
+  const ticks: number[] = [];
+  for (let v = min; v <= max; v += step) ticks.push(v);
+  return { domain: [min, max], ticks };
 }
 
-const SERIES_NAMES: Record<string, string> = { temp: 'Indoor', heat: 'Heat to', cool: 'Cool to' };
+const SERIES_NAMES: Record<string, string> = { temp: 'Inside', heat: 'Heat to', cool: 'Cool to' };
 
-function Legend() {
-  const item = (color: string, label: string, dashed: boolean) => (
-    <span className="inline-flex items-center gap-1.5">
-      <svg width="18" height="6" aria-hidden="true">
-        <line x1="0" y1="3" x2="18" y2="3" stroke={color} strokeWidth="2.5" strokeDasharray={dashed ? '4 3' : undefined} />
-      </svg>
-      {label}
-    </span>
-  );
-  return (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-apptext-soft">
-      {item(COLORS.temp, 'Indoor', false)}
-      {item(COLORS.heat, 'Heat to', true)}
-      {item(COLORS.cool, 'Cool to', true)}
-    </div>
-  );
-}
-
-const SmallChart = memo(function SmallChart({
-  name,
-  points,
-  domain,
-  range,
-  unit,
-  narrow,
-}: {
-  name: string;
-  points: Point[];
-  domain: [number, number];
+interface ThermostatHistoryChartProps {
+  thermostats: Thermostat[];
+  /** The thermostat on screen. */
+  selectedId: string;
+  /** Readings per thermostat id (undefined while that thermostat is loading). */
+  history: Record<string, ThermostatReading[] | undefined>;
+  /** Thermostats whose history failed to load (B-005: a failure is not "collecting data"). */
+  failed: Record<string, boolean>;
+  onRetry: () => void;
+  retrying: boolean;
   range: HistoryRange;
+  onRangeChange: (range: HistoryRange) => void;
   unit: string;
-  narrow: boolean;
-}) {
-  const hasHistory = points.length >= 2;
-  return (
-    <div className="rounded-2xl border border-appborder bg-appinset p-3">
-      <p className="mb-2 text-sm font-semibold text-apptext">{name}</p>
-      {!hasHistory ? (
-        <div className="flex h-[220px] items-center justify-center px-6 text-center text-xs text-apptext-muted">
-          Collecting data — history fills in as the thermostat reports changes, and at least every 15 minutes.
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height={220} debounce={80}>
+}
+
+function ThermostatHistoryChart({ thermostats, selectedId, history, failed, onRetry, retrying, range, onRangeChange, unit }: ThermostatHistoryChartProps) {
+  const t = useChartTheme();
+  // "now" is re-read whenever data or range changes, so the window's right edge
+  // and each series' live point stay in step.
+  const { series, domain, scale, ticks } = useMemo(() => {
+    const now = Date.now();
+    const from = now - range * 3_600_000;
+    const all = thermostats.map((th) => ({ id: th.id, points: buildSeries(history[th.id] ?? [], th, now) }));
+    return {
+      series: all,
+      domain: [from, now] as [number, number],
+      scale: sharedDomain(all.map((s) => s.points)),
+      ticks: timeTicks(from, now, range),
+    };
+  }, [thermostats, history, range]);
+
+  const selected = thermostats.find((th) => th.id === selectedId);
+  const points = series.find((s) => s.id === selectedId)?.points ?? [];
+  const loaded = history[selectedId] !== undefined;
+
+  let body;
+  if (failed[selectedId] && !loaded) {
+    body = <ErrorState compact title="Couldn't load the history" onRetry={onRetry} retrying={retrying} />;
+  } else if (!loaded) {
+    body = (
+      <Loading label="Loading the history">
+        <SkelBlock height={220} />
+      </Loading>
+    );
+  } else if (points.length < 2) {
+    body = (
+      <EmptyState compact icon="thermometer" title="Collecting data">
+        History fills in as the thermostat reports changes, and at least every 15 minutes.
+      </EmptyState>
+    );
+  } else {
+    body = (
+      <div className="h-[220px]">
+        <ResponsiveContainer width="100%" height="100%" debounce={80}>
           <LineChart data={points} margin={CHART_MARGIN}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--appchart-grid)" />
+            <CartesianGrid {...t.grid} />
             <XAxis
               dataKey="t"
               type="number"
               scale="time"
               domain={domain}
-              tickFormatter={(t: number) => formatTick(t, range)}
-              tick={{ fill: 'var(--appchart-tick)', ...TICK_PROPS }}
-              axisLine={{ stroke: 'var(--appchart-grid)' }}
-              tickLine={false}
-              minTickGap={narrow ? 48 : 32}
+              ticks={ticks}
+              tickFormatter={(v: number) => formatTimeTick(v, range)}
+              {...t.axis}
             />
             <YAxis
-              tick={{ fill: 'var(--appchart-tick)', ...TICK_PROPS }}
-              axisLine={{ stroke: 'var(--appchart-grid)' }}
-              tickLine={false}
+              {...t.axis}
               unit="°"
               width={40}
-              domain={['dataMin - 2', 'dataMax + 2']}
+              domain={scale?.domain ?? ['auto', 'auto']}
+              ticks={scale?.ticks}
               allowDecimals={false}
             />
             <Tooltip
-              contentStyle={TOOLTIP_CONTENT_STYLE}
-              labelStyle={TOOLTIP_LABEL_STYLE}
-              labelFormatter={(t: number) =>
-                new Date(t).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })
-              }
+              {...t.tooltip}
+              labelFormatter={(v: number) => formatDateTime(v)}
               formatter={(value: number, key: string) => [`${Number(value).toFixed(1)}${unit}`, SERIES_NAMES[key] ?? key]}
             />
-            <Line dataKey="temp" type="monotone" stroke={COLORS.temp} strokeWidth={2.5} dot={false} connectNulls isAnimationActive={false} />
-            <Line dataKey="heat" type="stepAfter" stroke={COLORS.heat} strokeWidth={1.75} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
-            <Line dataKey="cool" type="stepAfter" stroke={COLORS.cool} strokeWidth={1.75} strokeDasharray="5 4" dot={false} isAnimationActive={false} />
+            <Line dataKey="temp" type="monotone" stroke={t.series.ink} strokeWidth={2} dot={false} connectNulls isAnimationActive={false} />
+            <Line dataKey="heat" type="stepAfter" stroke={t.series.heat} strokeWidth={1.75} strokeDasharray={t.dash} dot={false} isAnimationActive={false} />
+            <Line dataKey="cool" type="stepAfter" stroke={t.series.cool} strokeWidth={1.75} strokeDasharray={t.dash} dot={false} isAnimationActive={false} />
           </LineChart>
         </ResponsiveContainer>
-      )}
-    </div>
-  );
-});
-
-interface ThermostatHistoryChartProps {
-  thermostats: Thermostat[];
-  /** Readings per thermostat id (undefined while that thermostat is loading). */
-  history: Record<string, ThermostatReading[] | undefined>;
-  range: HistoryRange;
-  onRangeChange: (range: HistoryRange) => void;
-  loading: boolean;
-  unit: string;
-}
-
-function ThermostatHistoryChart({ thermostats, history, range, onRangeChange, loading, unit }: ThermostatHistoryChartProps) {
-  const narrow = useMediaQuery('(max-width: 639px)');
-  // "now" is re-read whenever data or range changes, so the window's right edge
-  // and each series' live point stay in step.
-  const { series, domain } = useMemo(() => {
-    const now = Date.now();
-    return {
-      series: thermostats.map((th) => ({ id: th.id, name: th.name, points: buildSeries(history[th.id] ?? [], th, now) })),
-      domain: [now - range * 3_600_000, now] as [number, number],
-    };
-  }, [thermostats, history, range]);
+      </div>
+    );
+  }
 
   return (
-    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-4 shadow-[0_10px_28px_var(--appshadow)] sm:p-5">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">History</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">Temperature & setpoints</h3>
-        </div>
-        <div className="flex gap-1 rounded-full border border-appborder bg-appinset p-1" role="group" aria-label="History range">
-          {([24, 168] as HistoryRange[]).map((r) => (
-            <button
-              key={r}
-              type="button"
-              aria-pressed={range === r}
-              onClick={() => onRangeChange(r)}
-              className={`h-9 rounded-full px-4 text-3xs font-semibold uppercase tracking-[0.14em] transition-colors ${FOCUS_RING} ${
-                range === r ? 'bg-appaccent-soft text-apptext' : 'text-apptext-muted hover:text-apptext'
-              }`}
-            >
-              {r === 24 ? '24 h' : '7 d'}
-            </button>
-          ))}
-        </div>
+    <Panel
+      title="Temperature history"
+      subtitle={selected ? `${selected.name}, inside against what it was set to` : 'Inside, against what it was set to'}
+    >
+      <div className="fp-stack">
+        <Chips
+          label="History range"
+          value={String(range) as '24' | '168'}
+          onChange={(v) => onRangeChange(Number(v) as HistoryRange)}
+          options={RANGES}
+        />
+        <DialLegend
+          className="justify-start"
+          items={[
+            { label: 'Inside', tone: 'ink', key: 'line' },
+            { label: 'Heat to', tone: 'heat', key: 'dash' },
+            { label: 'Cool to', tone: 'cool', key: 'dash' },
+          ]}
+        />
+        {body}
       </div>
-      <div className="mb-3">
-        <Legend />
-      </div>
-      {loading ? (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {thermostats.map((th) => (
-            <div key={th.id} className="h-[262px] animate-pulse rounded-2xl bg-appinset" />
-          ))}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          {series.map((s) => (
-            <SmallChart key={s.id} name={s.name} points={s.points} domain={domain} range={range} unit={unit} narrow={narrow} />
-          ))}
-        </div>
-      )}
-    </div>
+    </Panel>
   );
 }
 

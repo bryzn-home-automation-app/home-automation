@@ -1,83 +1,49 @@
-import { lazy, memo, Suspense, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import PageSkeleton from '../components/PageSkeleton';
+import { lazy, memo, Suspense } from 'react';
+import { Loading, Screen, Seg, SegPanel, SkelInstrumentPanel, SkelPanel, useSearchParamState } from '../components/ui';
 
-// Each tab pulls in its own recharts-backed sub-tree (and, for Water, the
-// react-pdf viewer — see BillPdfModal). Only one tab is ever visible at a
-// time, so loading all three eagerly (as this used to) meant every /utility
-// visit downloaded and parsed Electric + Gas + Water regardless of which tab
-// opened. Split per-tab so the initial /utility chunk only carries the
-// active view.
+// Each view pulls in its own recharts-backed sub-tree (and the react-pdf bill
+// viewer, lazily, from its bills table). Only one view is ever visible at a
+// time, so they are split per view: the /utility chunk only carries the switch.
 const ElectricalUsage = lazy(() => import('./ElectricalUsage'));
 const GasUsage = lazy(() => import('./GasUsage'));
 const WaterUsage = lazy(() => import('./WaterUsage'));
 
-type UtilityView = 'electric' | 'gas' | 'water';
-
-const TABS: { key: UtilityView; label: string; icon: string }[] = [
-  { key: 'electric', label: 'Electric', icon: '⚡' },
-  { key: 'gas', label: 'Gas', icon: '🔥' },
-  { key: 'water', label: 'Water', icon: '💧' },
-];
-
-/** Deep-link ?view= values map straight to a tab key. */
-function viewFromParam(value: string | null): UtilityView {
-  return value === 'gas' || value === 'water' ? value : 'electric';
-}
+const VIEWS = ['electric', 'gas', 'water'] as const;
+const VIEW_OPTIONS = [
+  { value: 'electric', label: 'Electric', icon: 'bolt' },
+  { value: 'gas', label: 'Gas', icon: 'flame' },
+  { value: 'water', label: 'Water', icon: 'droplet' },
+] as const;
 
 /**
- * Combined "Utility" tab: swap between Electric (default), Gas, and Water at the
- * top. Each child page renders its own content (no page header of its own), so
- * this just owns the switcher + a gas-specific note about monthly reporting.
+ * Utilities: the subject switch (Electric, Gas, Water) and the chosen view. The switch sits
+ * above the answer because it picks what the whole page is about; each view opens with its
+ * own instrument panel. The view lives in ?view= (B-075), so a reload, Back, the sleep screen
+ * or a Home quick-link (/utility?view=water) all land on the same one.
  */
 export default memo(function Utility() {
-  useDocumentTitle('Utility');
-  // Deep-link support: /utility?view=gas|water opens on that tab (e.g. a Home quick-link).
-  const [params] = useSearchParams();
-  const [view, setView] = useState<UtilityView>(viewFromParam(params.get('view')));
+  const [view, setView] = useSearchParamState('view', VIEWS, 'electric');
 
   return (
-    <div className="space-y-4">
-      <div
-        role="tablist"
-        aria-label="Utility"
-        className="inline-flex rounded-xl border border-appborder bg-appinset p-1"
-      >
-        {TABS.map((tab) => {
-          const active = view === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setView(tab.key)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-appaccent-soft text-appaccent-text shadow-[0_1px_3px_var(--appshadow)]'
-                  : 'text-apptext-soft hover:text-apptext'
-              }`}
-            >
-              <span aria-hidden="true">{tab.icon}</span>
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {view === 'gas' && (
-        <div className="rounded-xl border border-appborder bg-appinset px-4 py-3 text-sm leading-6 text-apptext-soft">
-          <span className="font-medium text-apptext">Gas is only reported monthly.</span>{' '}
-          CoServ reads the gas meter once a billing cycle, so this tab changes when a new bill comes in.
-        </div>
-      )}
-
-      <Suspense fallback={<PageSkeleton variant="stats-charts" />}>
-        {view === 'electric' && <ElectricalUsage />}
-        {view === 'gas' && <GasUsage />}
-        {view === 'water' && <WaterUsage />}
-      </Suspense>
-    </div>
+    <Screen>
+      <Seg id="utility-view" label="Utility" value={view} onChange={setView} options={VIEW_OPTIONS} />
+      <SegPanel id="utility-view" value={view}>
+        {/* The view's chunk downloads on first use: its own shape, inside the page (B-051). */}
+        <Suspense
+          fallback={
+            <Loading label="Loading">
+              <div className="fp-stack fp-stack--page">
+                <SkelInstrumentPanel readouts={3} />
+                <SkelPanel chart />
+              </div>
+            </Loading>
+          }
+        >
+          {view === 'electric' && <ElectricalUsage />}
+          {view === 'gas' && <GasUsage />}
+          {view === 'water' && <WaterUsage />}
+        </Suspense>
+      </SegPanel>
+    </Screen>
   );
 });

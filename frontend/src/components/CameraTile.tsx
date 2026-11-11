@@ -1,48 +1,59 @@
-import { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { fetchCameraSnapshot, goToCameraPreset, nudgeCamera, reportLiveDiagnostics, startCameraLive, type PanTiltDirection } from '../api/cameras';
 import { errorMessage } from '../api/climate';
 import { HlsPlayer, MsePlayer, liveSupported, preferHls, type LivePlayer } from '../utils/msePlayer';
 import {
   BATTERY_LIVE_BUDGET_MS,
-  ago,
   autoLive,
-  batteryTone,
+  batteryLampTone,
   chargeLabel,
   isRecent,
+  isSolar,
   latestEvent,
   shouldStream,
   type ChargeState,
 } from '../utils/cameras';
-import { FOCUS_RING } from './ThermostatControls';
+import { formatRelative, formatStamp } from '../utils/format';
+import { Button, Icon, IconButton, Lamp, cx, type IconName } from './ui';
 import type { Camera } from '../types';
 
-const TONE_CLASS = {
-  ok: 'text-emerald-300',
-  low: 'text-amber-300',
-  critical: 'text-rose-300',
-  unknown: 'text-apptext-muted',
-} as const;
+/** "2 min ago", "just now", "Mon, Nov 9": formatRelative to sit after a word. */
+export function agoText(at: string | null | undefined): string {
+  const r = formatRelative(at);
+  return /^[A-Z][a-z]{2}, /.test(r) ? r : r.charAt(0).toLowerCase() + r.slice(1);
+}
 
-/** Battery badge: "🔋 87% · ☀️ Solar charging". Wired cameras say so. */
+/**
+ * The power line under a tile: "Battery 87% · Solar charging" with a lamp on the camera
+ * alerts' thresholds, or "Wired power". The sun only shows for a solar charge (B-109).
+ */
 export function BatteryBadge({ camera, state, inferred }: { camera: Camera; state: ChargeState; inferred: boolean }) {
   if (camera.powerSource === 'wired') {
-    return <span className="text-2xs text-apptext-muted">🔌 Wired power</span>;
+    return (
+      <span className="fp-cluster min-w-0 text-small text-apptext-muted">
+        <Icon name="plug" />
+        <span>Wired power</span>
+      </span>
+    );
   }
   if (camera.batteryPercent == null) return null;
-  const tone = batteryTone(camera.batteryPercent);
   const label = chargeLabel(camera, state, inferred);
+  const charging = state === 'charging';
+  const icon: IconName | null = charging ? (isSolar(camera.chargingStatus) ? 'sun' : 'battery-charging') : null;
   return (
-    <span className="inline-flex items-center gap-1.5 text-2xs">
-      <span className={`font-semibold tabular-nums ${TONE_CLASS[tone]}`}>
-        {tone === 'critical' ? '🪫' : '🔋'} {Math.round(camera.batteryPercent)}%
+    <span className="fp-cluster min-w-0 text-small">
+      <Lamp tone={batteryLampTone(camera.batteryPercent, charging && !inferred)} size="s" />
+      <span>
+        Battery <span className="tabular-nums">{Math.round(camera.batteryPercent)}%</span>
+        {label && (
+          <span className="text-apptext-muted">
+            {' · '}
+            {icon && <Icon name={icon} className="mr-1 align-[-2px]" />}
+            {label}
+          </span>
+        )}
       </span>
-      {label && (
-        <span className={state === 'charging' ? 'text-emerald-300' : 'text-apptext-muted'}>
-          · {state === 'charging' ? '☀️ ' : ''}
-          {label}
-        </span>
-      )}
     </span>
   );
 }
@@ -163,7 +174,7 @@ function LiveVideo({
     };
   }, [cameraId]);
 
-  return <video ref={videoRef} muted playsInline autoPlay className="absolute inset-0 h-full w-full object-cover" />;
+  return <video ref={videoRef} muted playsInline autoPlay className="fp-media-feed" />;
 }
 
 interface CameraTileProps {
@@ -179,6 +190,9 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
   const battery = camera.powerSource === 'battery';
   const [requested, setRequested] = useState(false);
   const [budgetHit, setBudgetHit] = useState(false);
+  // Stop was tapped (B-022): auto-live alone would keep the picture going, so this holds it off
+  // until Play, or the next visit.
+  const [paused, setPaused] = useState(false);
   const [liveError, setLiveError] = useState<string | null>(null);
   const [status, setStatus] = useState<LiveStatus | null>(null);
   // The phone won't start the picture until someone taps (see Autoplay in msePlayer).
@@ -190,13 +204,19 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
 
   const streaming =
     supported &&
-    shouldStream({ camera, requested, pageVisible, idle, failed: liveError != null || budgetHit });
+    shouldStream({ camera, requested, pageVisible, idle, failed: liveError != null || budgetHit || paused });
 
   // Leaving the tab ends the visit: coming back starts live again rather than
-  // on the "Still watching?" prompt a battery camera left behind.
+  // on the "Still watching?" prompt a battery camera left behind, a Stop, or an
+  // earlier "keeps dropping" (B-112: each visit gets one fresh attempt).
   useEffect(() => {
     if (!pageVisible || idle) setRequested(false);
-    if (!pageVisible) setBudgetHit(false);
+    if (!pageVisible) {
+      setBudgetHit(false);
+      setPaused(false);
+      setLiveError(null);
+      setReconnects(0);
+    }
   }, [pageVisible, idle]);
 
   useEffect(() => {
@@ -226,6 +246,7 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
     onWake();
     setLiveError(null);
     setBudgetHit(false);
+    setPaused(false);
     setReconnects(0);
     setRequested(true);
     setSession((s) => s + 1);
@@ -233,6 +254,7 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
   const stop = () => {
     setRequested(false);
     setBudgetHit(false);
+    setPaused(true);
   };
   // A tap is the one thing Safari never refuses, so start the video right inside it.
   // (Any tap on the page does it too, for every tile: see Autoplay.)
@@ -246,6 +268,9 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
   // so reconnect rather than ask. Our budget above still decides when to ask.
   const onEnded = () => {
     if (reconnects < 3) {
+      // The picture is frozen from here on: drop LIVE and the live keys now (B-111),
+      // not when the new session reports in two seconds later.
+      setStatus('connecting');
       setReconnects((n) => n + 1);
       window.setTimeout(() => setSession((s) => s + 1), 2_000);
     } else {
@@ -259,9 +284,9 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
   // The still stays underneath until the first frame, so connecting never flashes black.
   const showSnapshot = !live;
 
-  let overlay: React.ReactNode = null;
+  let overlay: ReactNode = null;
   if (!camera.available) {
-    overlay = <OverlayNote>Camera offline</OverlayNote>;
+    overlay = null; // the offline plate on the picture says it
   } else if (!camera.liveAvailable) {
     overlay = null;
   } else if (!supported) {
@@ -296,24 +321,35 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
     overlay = <OverlayNote>{battery ? 'Waking camera…' : 'Connecting…'}</OverlayNote>;
   }
 
+  const fullKey = (
+    <IconButton
+      icon="maximize"
+      variant="quiet"
+      label={fullscreen.active ? `Exit full screen for ${camera.name}` : `Full screen ${camera.name}`}
+      onClick={fullscreen.toggle}
+    />
+  );
+  const stopKey = (
+    <Button size="sm" variant="quiet" icon="stop" onClick={stop}>
+      Stop
+    </Button>
+  );
+  // With pan/tilt keys on the picture, the corner plates would sit under them.
+  const plates = !(live && camera.canPanTilt);
+
   return (
-    <div
-      className={`overflow-hidden rounded-[24px] border bg-appsurface-raised shadow-[0_10px_28px_var(--appshadow)] transition-colors ${
-        recent ? 'border-rose-400/70 ring-2 ring-rose-400/40' : 'border-appborder'
-      }`}
-    >
+    <figure className="fp-media">
       <div
         ref={pictureRef}
-        className="relative aspect-video bg-black [&:fullscreen_img]:object-contain [&:fullscreen_video]:object-contain"
+        className={cx(
+          'fp-media-frame [&:fullscreen_img]:object-contain [&:fullscreen_video]:object-contain',
+          !camera.available && 'fp-is-offline',
+        )}
       >
         {snapshotUrl && showSnapshot && (
-          <img src={snapshotUrl} alt={`Latest snapshot from ${camera.name}`} className="absolute inset-0 h-full w-full object-cover" />
+          <img src={snapshotUrl} alt={`Latest snapshot from ${camera.name}`} className="fp-media-feed" />
         )}
-        {!snapshotUrl && snapshotQuery.isLoading && <div className="absolute inset-0 animate-pulse bg-appinset" />}
-        {!snapshotUrl && snapshotQuery.isError && !live && (
-          // Corner, not centre — the play button / overlays own the middle.
-          <p className="absolute bottom-3 left-3 text-2xs text-white/60">No snapshot yet</p>
-        )}
+        {!snapshotUrl && snapshotQuery.isLoading && <span className="fp-skel absolute inset-0 -z-10 rounded-none" aria-hidden="true" />}
         {streaming && (
           <LiveVideo
             key={session}
@@ -324,65 +360,69 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
             onBlocked={setBlocked}
           />
         )}
-        <div className="pointer-events-none absolute left-3 top-3 flex gap-2">
-          {live ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-3xs font-semibold uppercase tracking-[0.14em] text-white">
-              <span className="h-2 w-2 animate-pulse rounded-full bg-rose-500" /> Live
+        <span className="fp-media-vf" aria-hidden="true" />
+        {camera.available && plates && (live || snapshotUrl) && (
+          <span className={cx('fp-media-tag', !live && 'fp-media-tag--off')}>
+            <span className="fp-media-rec" aria-hidden="true" />
+            {live ? 'Live' : paused ? 'Paused' : 'Still'}
+          </span>
+        )}
+        {!camera.available && (
+          <span className="fp-media-offline" role="status">
+            <Icon name="zap-off" />
+            <span>
+              Camera offline
+              {camera.lastSeenAt ? ` since ${formatStamp(camera.lastSeenAt)}` : ''}
             </span>
-          ) : (
-            snapshotUrl && (
-              <span className="rounded-full bg-black/60 px-2 py-0.5 text-3xs font-medium text-white/80">Snapshot</span>
-            )
-          )}
-        </div>
-        {overlay && <div className="absolute inset-0 flex items-center justify-center bg-black/35 p-4">{overlay}</div>}
+          </span>
+        )}
+        {!snapshotUrl && snapshotQuery.isError && !live && camera.available && (
+          // Corner, not centre: the play key and the prompts own the middle.
+          <span className="fp-media-time">No still yet</span>
+        )}
+        {plates && <span className="fp-media-name">{camera.name}</span>}
+        {event && plates && (
+          // Fresh activity (under 2 minutes) is the one inverted plate on the picture.
+          <span className={cx('fp-media-note', recent && 'bg-appmedia-ink text-appmedia-bg')}>
+            {event.kind === 'person' ? 'Person' : 'Motion'} · {agoText(event.at)}
+          </span>
+        )}
+        {overlay && <div className="absolute inset-0 grid place-items-center p-4">{overlay}</div>}
         {live && camera.canPanTilt && <PanTiltPad cameraId={camera.id} name={camera.name} />}
-        {live && (
-          <button
-            type="button"
-            onClick={fullscreen.toggle}
-            aria-label={fullscreen.active ? `Exit full screen for ${camera.name}` : `Full screen ${camera.name}`}
-            title={fullscreen.active ? 'Exit full screen' : 'Full screen'}
-            className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 text-white transition-colors hover:bg-black/75 ${FOCUS_RING}`}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
-              {fullscreen.active ? (
-                <path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />
-              ) : (
-                <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
-              )}
-            </svg>
-          </button>
-        )}
-        {live && battery && (
-          <button
-            type="button"
-            onClick={stop}
-            className={`absolute bottom-3 right-3 h-9 rounded-full bg-black/60 px-3 text-xs font-semibold text-white hover:bg-black/75 ${FOCUS_RING}`}
-          >
-            Stop
-          </button>
+        {/* Full screen takes only the picture, so its own keys come along on it. */}
+        {fullscreen.active && (
+          <div className="absolute bottom-3 right-3 flex gap-2 rounded-key bg-[var(--appmedia-scrim)] p-1 text-appmedia-ink">
+            {live && battery && stopKey}
+            {fullKey}
+          </div>
         )}
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-apptext">{camera.name}</p>
-          {event ? (
-            <p className={`text-2xs ${recent ? 'font-semibold text-rose-300' : 'text-apptext-muted'}`}>
-              {event.kind === 'person' ? '🚶 Person' : '👀 Motion'} · {ago(event.at)}
-            </p>
-          ) : (
-            <p className="text-2xs text-apptext-muted">No recent activity</p>
+      <figcaption className="fp-media-cap">
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <BatteryBadge camera={camera} state={charge.state} inferred={charge.inferred} />
+          {plates || !event ? null : (
+            <span className="text-small text-apptext-muted">
+              {event.kind === 'person' ? 'Person' : 'Motion'} · {agoText(event.at)}
+            </span>
           )}
-        </div>
-        <BatteryBadge camera={camera} state={charge.state} inferred={charge.inferred} />
-      </div>
+          {!event && <span className="text-small text-apptext-muted">No recent activity</span>}
+        </span>
+        {live && (
+          <span className="fp-cluster flex-nowrap gap-0.5">
+            {battery && stopKey}
+            {fullKey}
+          </span>
+        )}
+      </figcaption>
       {camera.presets.length > 0 && (
         <PresetBar camera={camera} watching={live} onWatch={battery && !streaming ? start : undefined} />
       )}
-    </div>
+    </figure>
   );
 }
+
+/** How long a "Moving to …" note stays under the camera (B-119). */
+export const PRESET_NOTE_MS = 6_000;
 
 /**
  * Stored positions (saved in the eufy app). Tapping one swings the camera there; a
@@ -391,13 +431,23 @@ function CameraTile({ camera, pageVisible, idle, onWake, charge }: CameraTilePro
 function PresetBar({ camera, watching, onWatch }: { camera: Camera; watching: boolean; onWatch?: () => void }) {
   const [moving, setMoving] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (noteTimer.current) clearTimeout(noteTimer.current);
+    },
+    [],
+  );
 
   const go = async (index: number, name: string) => {
     setMoving(index);
     setNote(null);
+    if (noteTimer.current) clearTimeout(noteTimer.current);
     try {
       await goToCameraPreset(camera.id, index);
       setNote(watching ? `Moving to ${name}…` : `Moving to ${name}.`);
+      // The move takes a few seconds; after that the note would read as if it were still going.
+      noteTimer.current = setTimeout(() => setNote(null), PRESET_NOTE_MS);
     } catch (err) {
       setNote(errorMessage(err, "Couldn't move the camera"));
     } finally {
@@ -406,30 +456,30 @@ function PresetBar({ camera, watching, onWatch }: { camera: Camera; watching: bo
   };
 
   return (
-    <div className="border-t border-appborder px-4 py-3">
-      <div className="flex flex-wrap items-center gap-2" role="group" aria-label={`${camera.name} positions`}>
-        {camera.presets.map((p) => (
-          <button
-            key={p.index}
-            type="button"
-            onClick={() => go(p.index, p.name)}
-            disabled={moving !== null}
-            className={`h-9 rounded-full border border-appborder bg-appinset px-3 text-xs font-semibold text-apptext-soft transition-colors hover:border-appborder-hover hover:text-apptext disabled:opacity-50 ${FOCUS_RING}`}
-          >
-            {moving === p.index ? 'Moving…' : p.index === 0 && p.name === 'Home' ? '⌂ Home' : p.name}
-          </button>
-        ))}
+    <div className="flex flex-col gap-2 pt-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <span className="fp-label" aria-hidden="true">Turn to</span>
+        <div className="fp-chips" role="group" aria-label={`${camera.name} positions`}>
+          {camera.presets.map((p) => (
+            <button
+              key={p.index}
+              type="button"
+              className="fp-chip disabled:opacity-50"
+              onClick={() => go(p.index, p.name)}
+              disabled={moving !== null}
+            >
+              {moving === p.index ? 'Moving…' : p.name}
+            </button>
+          ))}
+        </div>
       </div>
       {note && (
-        <p role="status" className="mt-2 text-2xs text-apptext-muted">
+        <p role="status" className="flex flex-wrap items-center gap-2 text-small text-apptext-muted">
           {note}
           {onWatch && !watching && (
-            <>
-              {' '}
-              <button type="button" onClick={onWatch} className="font-semibold text-appaccent-text underline">
-                Watch live
-              </button>
-            </>
+            <Button size="sm" variant="quiet" icon="play" onClick={onWatch}>
+              Watch live
+            </Button>
           )}
         </p>
       )}
@@ -437,7 +487,10 @@ function PresetBar({ camera, watching, onWatch }: { camera: Camera; watching: bo
   );
 }
 
-/** Pan/tilt arrows over the live picture — only while live, when the move is visible. */
+const PTZ_KEY =
+  'absolute grid h-11 w-11 place-items-center rounded-full border border-[var(--appmedia-ink-soft)] bg-[var(--appmedia-scrim)] text-appmedia-ink disabled:opacity-60 active:translate-y-px';
+
+/** Pan/tilt keys on each edge of the live picture — only while live, when the move is visible. */
 function PanTiltPad({ cameraId, name }: { cameraId: string; name: string }) {
   const [busy, setBusy] = useState(false);
   const nudge = async (d: PanTiltDirection) => {
@@ -451,57 +504,42 @@ function PanTiltPad({ cameraId, name }: { cameraId: string; name: string }) {
       setBusy(false);
     }
   };
-  const arrow = (d: PanTiltDirection, label: string, pos: string, glyph: string) => (
-    <button
-      type="button"
-      onClick={() => nudge(d)}
-      disabled={busy}
-      aria-label={`${label} ${name}`}
-      className={`absolute ${pos} flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-lg text-white transition-colors hover:bg-black/70 disabled:opacity-60 ${FOCUS_RING}`}
-    >
-      {glyph}
+  const arrow = (d: PanTiltDirection, label: string, pos: string, icon: IconName) => (
+    <button type="button" onClick={() => nudge(d)} disabled={busy} aria-label={`${label} ${name}`} className={cx(PTZ_KEY, pos)}>
+      <Icon name={icon} />
     </button>
   );
   return (
     <>
-      {arrow('up', 'Tilt up', 'left-1/2 top-3 -translate-x-1/2', '▲')}
-      {arrow('down', 'Tilt down', 'bottom-3 left-1/2 -translate-x-1/2', '▼')}
-      {arrow('left', 'Pan left', 'left-3 top-1/2 -translate-y-1/2', '◀')}
-      {arrow('right', 'Pan right', 'right-3 top-1/2 -translate-y-1/2', '▶')}
+      {arrow('up', 'Tilt up', 'left-[calc(50%-22px)] top-2', 'chevron-up')}
+      {arrow('down', 'Tilt down', 'bottom-2 left-[calc(50%-22px)]', 'chevron-down')}
+      {arrow('left', 'Pan left', 'left-2 top-[calc(50%-22px)]', 'chevron-left')}
+      {arrow('right', 'Pan right', 'right-2 top-[calc(50%-22px)]', 'chevron-right')}
     </>
   );
 }
 
-function OverlayNote({ children }: { children: React.ReactNode }) {
-  return <p className="rounded-full bg-black/60 px-3 py-1.5 text-xs font-medium text-white">{children}</p>;
+function OverlayNote({ children }: { children: ReactNode }) {
+  return (
+    <p className="rounded-well bg-[var(--appmedia-scrim)] px-3 py-1.5 text-small font-medium text-appmedia-ink">{children}</p>
+  );
 }
 
-function OverlayAction({ children, label, onClick }: { children: React.ReactNode; label: string; onClick: () => void }) {
+function OverlayAction({ children, label, onClick }: { children: ReactNode; label: string; onClick: () => void }) {
   return (
-    <div className="flex max-w-[16rem] flex-col items-center gap-2 rounded-2xl bg-black/65 px-4 py-3 text-center">
-      <p className="text-xs text-white">{children}</p>
-      <button
-        type="button"
-        onClick={onClick}
-        className={`h-11 rounded-xl bg-white/90 px-4 text-sm font-semibold text-slate-900 hover:bg-white ${FOCUS_RING}`}
-      >
+    <div className="flex max-w-64 flex-col items-center gap-2 rounded-well bg-[var(--appmedia-scrim)] px-4 py-3 text-center text-appmedia-ink">
+      <p className="text-small">{children}</p>
+      <Button size="sm" onClick={onClick}>
         {label}
-      </button>
+      </Button>
     </div>
   );
 }
 
 function PlayButton({ onClick, name }: { onClick: () => void; name: string }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={`Watch ${name} live`}
-      className={`flex h-16 w-16 items-center justify-center rounded-full bg-black/60 text-white transition-transform hover:scale-105 hover:bg-black/75 ${FOCUS_RING}`}
-    >
-      <svg width="26" height="26" viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M8 5v14l11-7z" fill="currentColor" />
-      </svg>
+    <button type="button" className="fp-media-play" onClick={onClick} aria-label={`Watch ${name} live`}>
+      <Icon name="play" />
     </button>
   );
 }

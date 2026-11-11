@@ -51,11 +51,11 @@ describe('Debug sub-tabs', () => {
   it('opens on Overview and shows one group at a time, remembering the tab in the address', async () => {
     renderAt('/admin/debug');
     expect(screen.getByRole('tab', { name: 'Overview' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByText('Run Sync Jobs')).not.toBeInTheDocument();
-    expect(screen.queryByText('Test sleep')).not.toBeInTheDocument();
+    expect(screen.queryByText('Run a sync')).not.toBeInTheDocument();
+    expect(screen.queryByText('Test the sleep screen')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Sync' }));
-    expect(screen.getByText('Run Sync Jobs')).toBeInTheDocument();
+    expect(screen.getByText('Run a sync')).toBeInTheDocument();
     expect(screen.getByTestId('where')).toHaveTextContent('?tab=sync');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
@@ -64,11 +64,11 @@ describe('Debug sub-tabs', () => {
 
   it('opens the tab named in the address, and flags errors on Events', async () => {
     renderAt('/admin/debug?tab=tools');
-    expect(screen.getByText('Test sleep')).toBeInTheDocument();
-    expect(screen.getByText('Query Console')).toBeInTheDocument();
-    expect(await screen.findByLabelText('3 errors in the last 24 hours')).toBeInTheDocument();
+    expect(screen.getByText('Test the sleep screen')).toBeInTheDocument();
+    expect(screen.getByText('Query console')).toBeInTheDocument();
+    expect(await screen.findByText('3 errors in the last 24 hours')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: /Events/ }));
-    expect(screen.getByText('Diagnostic Log')).toBeInTheDocument();
+    expect(screen.getByText('Diagnostic log')).toBeInTheDocument();
   });
 });

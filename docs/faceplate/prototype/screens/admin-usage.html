@@ -1,0 +1,997 @@
+<section class="screen" data-route="admin-usage" data-title="App usage" data-eyebrow="Admin" data-subtitle="Updated 5:00&nbsp;PM">
+
+  <!-- Range switch: changes every number on the page, so it sits above the answer -->
+  <div class="seg" data-tabs="admin-usage-range" role="tablist" aria-label="Date range">
+    <button class="seg-key" type="button" role="tab" data-tab="7">7 days</button>
+    <button class="seg-key is-active" type="button" role="tab" data-tab="30">30 days</button>
+    <button class="seg-key" type="button" role="tab" data-tab="90">90 days</button>
+  </div>
+
+  <div class="stack stack--page" data-tab-panel="admin-usage-range:7" role="tabpanel" aria-label="7 days" hidden>
+    <section class="ip" aria-labelledby="admin-usage-verdict-7">
+      <div class="ip-instrument">
+        <div class="usage-meter">
+          <p class="label">Active time · everyone</p>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="small">Cameras</span></span>
+            <span class="mono">2 h 8 min</span>
+            <div class="meter" style="--v: 1.000; --n: 24" role="meter" aria-label="Cameras" aria-valuenow="128" aria-valuemin="0" aria-valuemax="128"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="small">Home</span></span>
+            <span class="mono">1 h 23 min</span>
+            <div class="meter" style="--v: 0.648; --n: 24" role="meter" aria-label="Home" aria-valuenow="83" aria-valuemin="0" aria-valuemax="128"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span class="small">Utilities</span></span>
+            <span class="mono">47 min</span>
+            <div class="meter" style="--v: 0.367; --n: 24" role="meter" aria-label="Utilities" aria-valuenow="47" aria-valuemin="0" aria-valuemax="128"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg><span class="small">Climate</span></span>
+            <span class="mono">45 min</span>
+            <div class="meter" style="--v: 0.352; --n: 24" role="meter" aria-label="Climate" aria-valuenow="45" aria-valuemin="0" aria-valuemax="128"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg><span class="small">Roomba</span></span>
+            <span class="mono">30 min</span>
+            <div class="meter" style="--v: 0.234; --n: 24" role="meter" aria-label="Roomba" aria-valuenow="30" aria-valuemin="0" aria-valuemax="128"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span class="small">Diagnostics</span></span>
+            <span class="mono">30 min</span>
+            <div class="meter" style="--v: 0.234; --n: 24" role="meter" aria-label="Diagnostics" aria-valuenow="30" aria-valuemin="0" aria-valuemax="128"><span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ip-body">
+        <div class="verdict">
+          <span class="lamp lamp--info"></span>
+          <p class="verdict-text" id="admin-usage-verdict-7">Cameras gets the most time; Home the most visits.</p>
+          <p class="verdict-note">The family spent 7 h in the app this week, and Bryan accounts for 62% of it. Guest Wi-Fi and People are barely opened.</p>
+        </div>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active time</span><span class="readout-value"><span class="num">7<span class="unit">h</span> 9<span class="unit">min</span></span></span><span class="readout-note">Everyone, 268 visits</span></div>
+          <div class="readout"><span class="label">Top tab</span><span class="readout-value"><span class="num">2<span class="unit">h</span> 8<span class="unit">min</span></span></span><span class="readout-note">Cameras, 48 visits</span></div>
+          <div class="readout"><span class="label">Most active</span><span class="readout-value"><span class="num">4<span class="unit">h</span> 26<span class="unit">min</span></span></span><span class="readout-note">Bryan, 62% of the time</span></div>
+          <div class="readout"><span class="label">Least used</span><span class="readout-value"><span class="num">1<span class="unit">min</span></span></span><span class="readout-note">People, 1 visit</span></div>
+        </div>
+        <div class="ip-foot">
+          <span class="mono">A visit is opening a tab; time counts only while in use</span>
+          <span class="mono">Guests aren’t tracked</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid-3">
+      <section class="panel" aria-labelledby="admin-usage-7-bryan">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><h2 class="row-title" id="admin-usage-7-bryan">Bryan <span class="tag">Admin</span></h2><span class="row-meta">Last active just now</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">4<span class="unit">h</span> 26<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">149</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">1 h 1 min · 22</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="61" aria-valuemin="0" aria-valuemax="61"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">49 min · 36</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="49" aria-valuemin="0" aria-valuemax="61"><span style="--p: 80%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Utilities</span>
+            <span class="mono">41 min · 14</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Utilities" aria-valuenow="41" aria-valuemin="0" aria-valuemax="61"><span style="--p: 67%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Diagnostics <span class="tag">Admin</span></span>
+            <span class="mono">30 min · 12</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Diagnostics" aria-valuenow="30" aria-valuemin="0" aria-valuemax="61"><span style="--p: 49%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">19 min · 15</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="19" aria-valuemin="0" aria-valuemax="61"><span style="--p: 31%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Server health <span class="tag">Admin</span></span>
+            <span class="mono">17 min · 10</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Server health" aria-valuenow="17" aria-valuemin="0" aria-valuemax="61"><span style="--p: 28%"></span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="admin-usage-7-mai">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><h2 class="row-title" id="admin-usage-7-mai">Mai <span class="tag">Member</span></h2><span class="row-meta">Last active 4 min ago</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">2<span class="unit">h</span> 3<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">88</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">45 min · 17</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="45" aria-valuemin="0" aria-valuemax="45"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">25 min · 23</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="25" aria-valuemin="0" aria-valuemax="45"><span style="--p: 56%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">22 min · 20</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="22" aria-valuemin="0" aria-valuemax="45"><span style="--p: 49%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Roomba</span>
+            <span class="mono">15 min · 12</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Roomba" aria-valuenow="15" aria-valuemin="0" aria-valuemax="45"><span style="--p: 33%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Utilities</span>
+            <span class="mono">6 min · 4</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Utilities" aria-valuenow="6" aria-valuemin="0" aria-valuemax="45"><span style="--p: 13%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Alerts</span>
+            <span class="mono">4 min · 7</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Alerts" aria-valuenow="4" aria-valuemin="0" aria-valuemax="45"><span style="--p: 9%"></span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="admin-usage-7-linh">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><h2 class="row-title" id="admin-usage-7-linh">Linh <span class="tag">Member</span></h2><span class="row-meta">Last active yesterday, 7:02&nbsp;AM</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">40<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">31</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">22 min · 9</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="22" aria-valuemin="0" aria-valuemax="22"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">9 min · 10</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="9" aria-valuemin="0" aria-valuemax="22"><span style="--p: 41%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">4 min · 5</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="4" aria-valuemin="0" aria-valuemax="22"><span style="--p: 18%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Roomba</span>
+            <span class="mono">2 min · 2</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Roomba" aria-valuenow="2" aria-valuemin="0" aria-valuemax="22"><span style="--p: 9%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Profile</span>
+            <span class="mono">2 min · 1</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Profile" aria-valuenow="2" aria-valuemin="0" aria-valuemax="22"><span style="--p: 9%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Alerts</span>
+            <span class="mono">1 min · 3</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Alerts" aria-valuenow="1" aria-valuemin="0" aria-valuemax="22"><span style="--p: 5%"></span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="admin-usage-all-7">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-usage-all-7">Every tab</h2><p class="panel-sub">Busiest first. Admin pages are only open to Bryan</p></div>
+      </header>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th scope="col">Tab</th><th scope="col" class="is-num">Active time</th><th scope="col" class="is-num hide-phone">Visits</th><th scope="col" class="is-num hide-phone">Per visit</th><th scope="col" class="is-num hide-phone">Share</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Cameras</span><span class="hide-wide small muted">48 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">2 h 8 min</td>
+              <td class="is-num hide-phone" data-label="Visits">48</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.7 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">30%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span><span class="hide-wide small muted">69 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 h 23 min</td>
+              <td class="is-num hide-phone" data-label="Visits">69</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.2 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">19%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span>Utilities</span><span class="hide-wide small muted">19 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">47 min</td>
+              <td class="is-num hide-phone" data-label="Visits">19</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">11%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg><span>Climate</span><span class="hide-wide small muted">40 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">45 min</td>
+              <td class="is-num hide-phone" data-label="Visits">40</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.1 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">10%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg><span>Roomba</span><span class="hide-wide small muted">22 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">30 min</td>
+              <td class="is-num hide-phone" data-label="Visits">22</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.4 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">7%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span>Diagnostics</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">12 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">30 min</td>
+              <td class="is-num hide-phone" data-label="Visits">12</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">7%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg><span>Server health</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">10 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">17 min</td>
+              <td class="is-num hide-phone" data-label="Visits">10</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.7 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">4%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg><span>Alerts</span><span class="hide-wide small muted">20 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">12 min</td>
+              <td class="is-num hide-phone" data-label="Visits">20</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">3%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <details class="disclosure disclosure--row">
+        <summary><span class="when-closed">Show 9 more tabs</span><span class="when-open">Show fewer tabs</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="disclosure-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th scope="col">Tab</th><th scope="col" class="is-num">Active time</th><th scope="col" class="is-num hide-phone">Visits</th><th scope="col" class="is-num hide-phone">Per visit</th><th scope="col" class="is-num hide-phone">Share</th></tr></thead>
+              <tbody>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-wrench"/></svg><span>Maintenance</span><span class="hide-wide small muted">5 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">11 min</td>
+              <td class="is-num hide-phone" data-label="Visits">5</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.2 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">3%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-map-pin"/></svg><span>Who’s home</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">5 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">7 min</td>
+              <td class="is-num hide-phone" data-label="Visits">5</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.4 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">2%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg><span>Profile</span><span class="hide-wide small muted">4 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">6 min</td>
+              <td class="is-num hide-phone" data-label="Visits">4</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bar-chart"/></svg><span>App usage</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">4 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">3 min</td>
+              <td class="is-num hide-phone" data-label="Visits">4</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg><span>What’s new</span><span class="hide-wide small muted">3 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">3 min</td>
+              <td class="is-num hide-phone" data-label="Visits">3</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.0 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg><span>Activity log</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">2 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">3 min</td>
+              <td class="is-num hide-phone" data-label="Visits">2</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg><span>Guest Wi-Fi</span><span class="hide-wide small muted">2 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">2 min</td>
+              <td class="is-num hide-phone" data-label="Visits">2</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.0 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg><span>Guests</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">2 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 min</td>
+              <td class="is-num hide-phone" data-label="Visits">2</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span>People</span><span class="hide-wide small muted">1 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 min</td>
+              <td class="is-num hide-phone" data-label="Visits">1</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.0 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+  <div class="stack stack--page" data-tab-panel="admin-usage-range:30" role="tabpanel" aria-label="30 days">
+    <section class="ip" aria-labelledby="admin-usage-verdict-30">
+      <div class="ip-instrument">
+        <div class="usage-meter">
+          <p class="label">Active time · everyone</p>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="small">Cameras</span></span>
+            <span class="mono">8 h 44 min</span>
+            <div class="meter" style="--v: 1.000; --n: 24" role="meter" aria-label="Cameras" aria-valuenow="524" aria-valuemin="0" aria-valuemax="524"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="small">Home</span></span>
+            <span class="mono">5 h 38 min</span>
+            <div class="meter" style="--v: 0.645; --n: 24" role="meter" aria-label="Home" aria-valuenow="338" aria-valuemin="0" aria-valuemax="524"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span class="small">Utilities</span></span>
+            <span class="mono">3 h 12 min</span>
+            <div class="meter" style="--v: 0.366; --n: 24" role="meter" aria-label="Utilities" aria-valuenow="192" aria-valuemin="0" aria-valuemax="524"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg><span class="small">Climate</span></span>
+            <span class="mono">3 h 5 min</span>
+            <div class="meter" style="--v: 0.353; --n: 24" role="meter" aria-label="Climate" aria-valuenow="185" aria-valuemin="0" aria-valuemax="524"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg><span class="small">Roomba</span></span>
+            <span class="mono">2 h</span>
+            <div class="meter" style="--v: 0.229; --n: 24" role="meter" aria-label="Roomba" aria-valuenow="120" aria-valuemin="0" aria-valuemax="524"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span class="small">Diagnostics</span></span>
+            <span class="mono">1 h 58 min</span>
+            <div class="meter" style="--v: 0.225; --n: 24" role="meter" aria-label="Diagnostics" aria-valuenow="118" aria-valuemin="0" aria-valuemax="524"><span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ip-body">
+        <div class="verdict">
+          <span class="lamp lamp--info"></span>
+          <p class="verdict-text" id="admin-usage-verdict-30">Cameras gets the most time; Home the most visits.</p>
+          <p class="verdict-note">The family spent 29 h in the app in 30 days, and Bryan accounts for 60% of it. Guest Wi-Fi and People are barely opened.</p>
+        </div>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active time</span><span class="readout-value"><span class="num">29<span class="unit">h</span> 2<span class="unit">min</span></span></span><span class="readout-note">Everyone, 1,099 visits</span></div>
+          <div class="readout"><span class="label">Top tab</span><span class="readout-value"><span class="num">8<span class="unit">h</span> 44<span class="unit">min</span></span></span><span class="readout-note">Cameras, 198 visits</span></div>
+          <div class="readout"><span class="label">Most active</span><span class="readout-value"><span class="num">17<span class="unit">h</span> 29<span class="unit">min</span></span></span><span class="readout-note">Bryan, 60% of the time</span></div>
+          <div class="readout"><span class="label">Least used</span><span class="readout-value"><span class="num">4<span class="unit">min</span></span></span><span class="readout-note">People, 5 visits</span></div>
+        </div>
+        <div class="ip-foot">
+          <span class="mono">A visit is opening a tab; time counts only while in use</span>
+          <span class="mono">Guests aren’t tracked</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid-3">
+      <section class="panel" aria-labelledby="admin-usage-30-bryan">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><h2 class="row-title" id="admin-usage-30-bryan">Bryan <span class="tag">Admin</span></h2><span class="row-meta">Last active just now</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">17<span class="unit">h</span> 29<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">592</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">4 h 1 min · 88</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="241" aria-valuemin="0" aria-valuemax="241"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">3 h 16 min · 142</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="196" aria-valuemin="0" aria-valuemax="241"><span style="--p: 81%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Utilities</span>
+            <span class="mono">2 h 43 min · 57</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Utilities" aria-valuenow="163" aria-valuemin="0" aria-valuemax="241"><span style="--p: 68%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Diagnostics <span class="tag">Admin</span></span>
+            <span class="mono">1 h 58 min · 46</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Diagnostics" aria-valuenow="118" aria-valuemin="0" aria-valuemax="241"><span style="--p: 49%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">1 h 14 min · 61</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="74" aria-valuemin="0" aria-valuemax="241"><span style="--p: 31%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Server health <span class="tag">Admin</span></span>
+            <span class="mono">1 h 7 min · 38</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Server health" aria-valuenow="67" aria-valuemin="0" aria-valuemax="241"><span style="--p: 28%"></span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="admin-usage-30-mai">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><h2 class="row-title" id="admin-usage-30-mai">Mai <span class="tag">Member</span></h2><span class="row-meta">Last active 4 min ago</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">8<span class="unit">h</span> 34<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">371</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">3 h 7 min · 71</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="187" aria-valuemin="0" aria-valuemax="187"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">1 h 44 min · 96</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="104" aria-valuemin="0" aria-valuemax="187"><span style="--p: 56%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">1 h 32 min · 84</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="92" aria-valuemin="0" aria-valuemax="187"><span style="--p: 49%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Roomba</span>
+            <span class="mono">1 h 1 min · 52</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Roomba" aria-valuenow="61" aria-valuemin="0" aria-valuemax="187"><span style="--p: 33%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Utilities</span>
+            <span class="mono">27 min · 18</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Utilities" aria-valuenow="27" aria-valuemin="0" aria-valuemax="187"><span style="--p: 14%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Alerts</span>
+            <span class="mono">17 min · 29</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Alerts" aria-valuenow="17" aria-valuemin="0" aria-valuemax="187"><span style="--p: 9%"></span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="admin-usage-30-linh">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><h2 class="row-title" id="admin-usage-30-linh">Linh <span class="tag">Member</span></h2><span class="row-meta">Last active yesterday, 7:02&nbsp;AM</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">2<span class="unit">h</span> 59<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">136</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">1 h 36 min · 39</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="96" aria-valuemin="0" aria-valuemax="96"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">38 min · 44</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="38" aria-valuemin="0" aria-valuemax="96"><span style="--p: 40%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">19 min · 22</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="19" aria-valuemin="0" aria-valuemax="96"><span style="--p: 20%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Profile</span>
+            <span class="mono">9 min · 4</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Profile" aria-valuenow="9" aria-valuemin="0" aria-valuemax="96"><span style="--p: 9%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Roomba</span>
+            <span class="mono">7 min · 9</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Roomba" aria-valuenow="7" aria-valuemin="0" aria-valuemax="96"><span style="--p: 7%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Alerts</span>
+            <span class="mono">6 min · 11</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Alerts" aria-valuenow="6" aria-valuemin="0" aria-valuemax="96"><span style="--p: 6%"></span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="admin-usage-all-30">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-usage-all-30">Every tab</h2><p class="panel-sub">Busiest first. Admin pages are only open to Bryan</p></div>
+      </header>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th scope="col">Tab</th><th scope="col" class="is-num">Active time</th><th scope="col" class="is-num hide-phone">Visits</th><th scope="col" class="is-num hide-phone">Per visit</th><th scope="col" class="is-num hide-phone">Share</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Cameras</span><span class="hide-wide small muted">198 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">8 h 44 min</td>
+              <td class="is-num hide-phone" data-label="Visits">198</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">30%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span><span class="hide-wide small muted">282 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">5 h 38 min</td>
+              <td class="is-num hide-phone" data-label="Visits">282</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.2 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">19%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span>Utilities</span><span class="hide-wide small muted">78 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">3 h 12 min</td>
+              <td class="is-num hide-phone" data-label="Visits">78</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">11%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg><span>Climate</span><span class="hide-wide small muted">167 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">3 h 5 min</td>
+              <td class="is-num hide-phone" data-label="Visits">167</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.1 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">11%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg><span>Roomba</span><span class="hide-wide small muted">94 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">2 h</td>
+              <td class="is-num hide-phone" data-label="Visits">94</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.3 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">7%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span>Diagnostics</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">46 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 h 58 min</td>
+              <td class="is-num hide-phone" data-label="Visits">46</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">7%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg><span>Server health</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">38 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 h 7 min</td>
+              <td class="is-num hide-phone" data-label="Visits">38</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">4%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg><span>Alerts</span><span class="hide-wide small muted">81 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">52 min</td>
+              <td class="is-num hide-phone" data-label="Visits">81</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">3%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <details class="disclosure disclosure--row">
+        <summary><span class="when-closed">Show 9 more tabs</span><span class="when-open">Show fewer tabs</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="disclosure-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th scope="col">Tab</th><th scope="col" class="is-num">Active time</th><th scope="col" class="is-num hide-phone">Visits</th><th scope="col" class="is-num hide-phone">Per visit</th><th scope="col" class="is-num hide-phone">Share</th></tr></thead>
+              <tbody>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-wrench"/></svg><span>Maintenance</span><span class="hide-wide small muted">20 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">45 min</td>
+              <td class="is-num hide-phone" data-label="Visits">20</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.3 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">3%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-map-pin"/></svg><span>Who’s home</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">21 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">26 min</td>
+              <td class="is-num hide-phone" data-label="Visits">21</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.2 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg><span>Profile</span><span class="hide-wide small muted">14 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">25 min</td>
+              <td class="is-num hide-phone" data-label="Visits">14</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg><span>What’s new</span><span class="hide-wide small muted">15 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">12 min</td>
+              <td class="is-num hide-phone" data-label="Visits">15</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bar-chart"/></svg><span>App usage</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">14 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">12 min</td>
+              <td class="is-num hide-phone" data-label="Visits">14</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.9 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg><span>Activity log</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">9 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">10 min</td>
+              <td class="is-num hide-phone" data-label="Visits">9</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.1 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg><span>Guest Wi-Fi</span><span class="hide-wide small muted">11 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">7 min</td>
+              <td class="is-num hide-phone" data-label="Visits">11</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg><span>Guests</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">6 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">5 min</td>
+              <td class="is-num hide-phone" data-label="Visits">6</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span>People</span><span class="hide-wide small muted">5 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">4 min</td>
+              <td class="is-num hide-phone" data-label="Visits">5</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+  <div class="stack stack--page" data-tab-panel="admin-usage-range:90" role="tabpanel" aria-label="90 days" hidden>
+    <section class="ip" aria-labelledby="admin-usage-verdict-90">
+      <div class="ip-instrument">
+        <div class="usage-meter">
+          <p class="label">Active time · everyone</p>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="small">Cameras</span></span>
+            <span class="mono">24 h 40 min</span>
+            <div class="meter" style="--v: 1.000; --n: 24" role="meter" aria-label="Cameras" aria-valuenow="1480" aria-valuemin="0" aria-valuemax="1480"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span class="small">Home</span></span>
+            <span class="mono">15 h 49 min</span>
+            <div class="meter" style="--v: 0.641; --n: 24" role="meter" aria-label="Home" aria-valuenow="949" aria-valuemin="0" aria-valuemax="1480"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span class="small">Utilities</span></span>
+            <span class="mono">8 h 53 min</span>
+            <div class="meter" style="--v: 0.360; --n: 24" role="meter" aria-label="Utilities" aria-valuenow="533" aria-valuemin="0" aria-valuemax="1480"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg><span class="small">Climate</span></span>
+            <span class="mono">8 h 42 min</span>
+            <div class="meter" style="--v: 0.353; --n: 24" role="meter" aria-label="Climate" aria-valuenow="522" aria-valuemin="0" aria-valuemax="1480"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg><span class="small">Roomba</span></span>
+            <span class="mono">5 h 39 min</span>
+            <div class="meter" style="--v: 0.229; --n: 24" role="meter" aria-label="Roomba" aria-valuenow="339" aria-valuemin="0" aria-valuemax="1480"><span></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span class="small">Diagnostics</span></span>
+            <span class="mono">5 h 26 min</span>
+            <div class="meter" style="--v: 0.220; --n: 24" role="meter" aria-label="Diagnostics" aria-valuenow="326" aria-valuemin="0" aria-valuemax="1480"><span></span></div>
+          </div>
+        </div>
+      </div>
+      <div class="ip-body">
+        <div class="verdict">
+          <span class="lamp lamp--info"></span>
+          <p class="verdict-text" id="admin-usage-verdict-90">Cameras gets the most time; Home the most visits.</p>
+          <p class="verdict-note">The family spent 81 h in the app in 90 days, and Bryan accounts for 59% of it. Guest Wi-Fi and People are barely opened.</p>
+        </div>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active time</span><span class="readout-value"><span class="num">81<span class="unit">h</span> 28<span class="unit">min</span></span></span><span class="readout-note">Everyone, 3,091 visits</span></div>
+          <div class="readout"><span class="label">Top tab</span><span class="readout-value"><span class="num">24<span class="unit">h</span> 40<span class="unit">min</span></span></span><span class="readout-note">Cameras, 560 visits</span></div>
+          <div class="readout"><span class="label">Most active</span><span class="readout-value"><span class="num">48<span class="unit">h</span> 17<span class="unit">min</span></span></span><span class="readout-note">Bryan, 59% of the time</span></div>
+          <div class="readout"><span class="label">Least used</span><span class="readout-value"><span class="num">11<span class="unit">min</span></span></span><span class="readout-note">People, 14 visits</span></div>
+        </div>
+        <div class="ip-foot">
+          <span class="mono">A visit is opening a tab; time counts only while in use</span>
+          <span class="mono">Guests aren’t tracked</span>
+        </div>
+      </div>
+    </section>
+
+    <div class="grid-3">
+      <section class="panel" aria-labelledby="admin-usage-90-bryan">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><h2 class="row-title" id="admin-usage-90-bryan">Bryan <span class="tag">Admin</span></h2><span class="row-meta">Last active just now</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">48<span class="unit">h</span> 17<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">1,634</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">11 h 5 min · 243</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="665" aria-valuemin="0" aria-valuemax="665"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">9 h 1 min · 392</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="541" aria-valuemin="0" aria-valuemax="665"><span style="--p: 81%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Utilities</span>
+            <span class="mono">7 h 30 min · 157</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Utilities" aria-valuenow="450" aria-valuemin="0" aria-valuemax="665"><span style="--p: 68%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Diagnostics <span class="tag">Admin</span></span>
+            <span class="mono">5 h 26 min · 127</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Diagnostics" aria-valuenow="326" aria-valuemin="0" aria-valuemax="665"><span style="--p: 49%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">3 h 24 min · 168</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="204" aria-valuemin="0" aria-valuemax="665"><span style="--p: 31%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Server health <span class="tag">Admin</span></span>
+            <span class="mono">3 h 5 min · 105</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Server health" aria-valuenow="185" aria-valuemin="0" aria-valuemax="665"><span style="--p: 28%"></span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="admin-usage-90-mai">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><h2 class="row-title" id="admin-usage-90-mai">Mai <span class="tag">Member</span></h2><span class="row-meta">Last active 4 min ago</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">24<span class="unit">h</span> 24<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">1,057</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">8 h 53 min · 202</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="533" aria-valuemin="0" aria-valuemax="533"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">4 h 56 min · 274</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="296" aria-valuemin="0" aria-valuemax="533"><span style="--p: 56%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">4 h 22 min · 239</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="262" aria-valuemin="0" aria-valuemax="533"><span style="--p: 49%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Roomba</span>
+            <span class="mono">2 h 54 min · 148</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Roomba" aria-valuenow="174" aria-valuemin="0" aria-valuemax="533"><span style="--p: 33%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Utilities</span>
+            <span class="mono">1 h 17 min · 51</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Utilities" aria-valuenow="77" aria-valuemin="0" aria-valuemax="533"><span style="--p: 14%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Alerts</span>
+            <span class="mono">48 min · 83</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Alerts" aria-valuenow="48" aria-valuemin="0" aria-valuemax="533"><span style="--p: 9%"></span></div>
+          </div>
+        </div>
+      </section>
+      <section class="panel" aria-labelledby="admin-usage-90-linh">
+        <header class="panel-head">
+          <div><div class="person"><span class="avatar" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><h2 class="row-title" id="admin-usage-90-linh">Linh <span class="tag">Member</span></h2><span class="row-meta">Last active yesterday, 7:02&nbsp;AM</span></span></div></div>
+        </header>
+        <div class="readouts">
+          <div class="readout"><span class="label">Active</span><span class="readout-value"><span class="num">8<span class="unit">h</span> 47<span class="unit">min</span></span></span></div>
+          <div class="readout"><span class="label">Visits</span><span class="readout-value"><span class="num">400</span></span></div>
+        </div>
+        <p class="label mt-m">Top tabs · time and visits</p>
+        <div class="stack stack--m mt-s">
+          <div class="meter-row">
+            <span class="small">Cameras</span>
+            <span class="mono">4 h 42 min · 115</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Cameras" aria-valuenow="282" aria-valuemin="0" aria-valuemax="282"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Home</span>
+            <span class="mono">1 h 52 min · 129</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Home" aria-valuenow="112" aria-valuemin="0" aria-valuemax="282"><span style="--p: 40%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Climate</span>
+            <span class="mono">56 min · 65</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Climate" aria-valuenow="56" aria-valuemin="0" aria-valuemax="282"><span style="--p: 20%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Profile</span>
+            <span class="mono">26 min · 12</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Profile" aria-valuenow="26" aria-valuemin="0" aria-valuemax="282"><span style="--p: 9%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Roomba</span>
+            <span class="mono">21 min · 26</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Roomba" aria-valuenow="21" aria-valuemin="0" aria-valuemax="282"><span style="--p: 7%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="small">Alerts</span>
+            <span class="mono">18 min · 32</span>
+            <div class="progress progress--thin" role="progressbar" aria-label="Alerts" aria-valuenow="18" aria-valuemin="0" aria-valuemax="282"><span style="--p: 6%"></span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <section class="panel" aria-labelledby="admin-usage-all-90">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-usage-all-90">Every tab</h2><p class="panel-sub">Busiest first. Admin pages are only open to Bryan</p></div>
+      </header>
+      <div class="table-wrap">
+        <table class="table">
+          <thead><tr><th scope="col">Tab</th><th scope="col" class="is-num">Active time</th><th scope="col" class="is-num hide-phone">Visits</th><th scope="col" class="is-num hide-phone">Per visit</th><th scope="col" class="is-num hide-phone">Share</th></tr></thead>
+          <tbody>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-camera"/></svg><span>Cameras</span><span class="hide-wide small muted">560 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">24 h 40 min</td>
+              <td class="is-num hide-phone" data-label="Visits">560</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">30%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg><span>Home</span><span class="hide-wide small muted">795 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">15 h 49 min</td>
+              <td class="is-num hide-phone" data-label="Visits">795</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.2 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">19%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bolt"/></svg><span>Utilities</span><span class="hide-wide small muted">217 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">8 h 53 min</td>
+              <td class="is-num hide-phone" data-label="Visits">217</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.5 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">11%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg><span>Climate</span><span class="hide-wide small muted">472 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">8 h 42 min</td>
+              <td class="is-num hide-phone" data-label="Visits">472</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.1 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">11%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-robot"/></svg><span>Roomba</span><span class="hide-wide small muted">265 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">5 h 39 min</td>
+              <td class="is-num hide-phone" data-label="Visits">265</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.3 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">7%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-activity"/></svg><span>Diagnostics</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">127 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">5 h 26 min</td>
+              <td class="is-num hide-phone" data-label="Visits">127</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">7%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-server"/></svg><span>Server health</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">105 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">3 h 5 min</td>
+              <td class="is-num hide-phone" data-label="Visits">105</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">4%</td>
+            </tr>
+            <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg><span>Alerts</span><span class="hide-wide small muted">228 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">2 h 26 min</td>
+              <td class="is-num hide-phone" data-label="Visits">228</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">3%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <details class="disclosure disclosure--row">
+        <summary><span class="when-closed">Show 9 more tabs</span><span class="when-open">Show fewer tabs</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="disclosure-body">
+          <div class="table-wrap">
+            <table class="table">
+              <thead><tr><th scope="col">Tab</th><th scope="col" class="is-num">Active time</th><th scope="col" class="is-num hide-phone">Visits</th><th scope="col" class="is-num hide-phone">Per visit</th><th scope="col" class="is-num hide-phone">Share</th></tr></thead>
+              <tbody>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-wrench"/></svg><span>Maintenance</span><span class="hide-wide small muted">56 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">2 h 6 min</td>
+              <td class="is-num hide-phone" data-label="Visits">56</td>
+              <td class="is-num hide-phone" data-label="Per visit">2.3 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">3%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-map-pin"/></svg><span>Who’s home</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">58 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 h 12 min</td>
+              <td class="is-num hide-phone" data-label="Visits">58</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.2 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg><span>Profile</span><span class="hide-wide small muted">40 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">1 h 10 min</td>
+              <td class="is-num hide-phone" data-label="Visits">40</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg><span>What’s new</span><span class="hide-wide small muted">42 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">34 min</td>
+              <td class="is-num hide-phone" data-label="Visits">42</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-bar-chart"/></svg><span>App usage</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">39 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">33 min</td>
+              <td class="is-num hide-phone" data-label="Visits">39</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-history"/></svg><span>Activity log</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">25 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">28 min</td>
+              <td class="is-num hide-phone" data-label="Visits">25</td>
+              <td class="is-num hide-phone" data-label="Per visit">1.1 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg><span>Guest Wi-Fi</span><span class="hide-wide small muted">31 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">20 min</td>
+              <td class="is-num hide-phone" data-label="Visits">31</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.6 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg><span>Guests</span><span class="tag hide-phone">Admin</span><span class="hide-wide small muted">17 visits · admin only</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">14 min</td>
+              <td class="is-num hide-phone" data-label="Visits">17</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+                <tr>
+              <td class="cell-title" data-label="Tab"><span class="cluster usage-tab"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg><span>People</span><span class="hide-wide small muted">14 visits</span></span></td>
+              <td class="cell-key is-num is-strong" data-label="Active time">11 min</td>
+              <td class="is-num hide-phone" data-label="Visits">14</td>
+              <td class="is-num hide-phone" data-label="Per visit">0.8 <span class="unit">min</span></td>
+              <td class="is-num hide-phone" data-label="Share of time">1%</td>
+            </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </details>
+    </section>
+  </div>
+</section>

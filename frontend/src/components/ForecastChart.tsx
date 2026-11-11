@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from 'react';
+import { memo, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ComposedChart,
@@ -12,153 +12,128 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { fetchForecast, fetchForecastAccuracy, fetchHourlyForecastAccuracy } from '../api/forecast';
-import { localTodayIso } from '../utils/localDate';
-import { useTheme, CHART_SERIES, DATA_SERIES, hexToRgba, predictedColor as predictedSeriesColor } from '../context/ThemeContext';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
-import StatTile, { Icons } from './StatTile';
+import { DASH, formatDate, formatHour, formatNumber, formatPercent, formatShortDate, homeToday, plural } from '../utils/format';
+import { ChartLegend, Chips, Disclosure, EmptyState, KeyValue, KV, Panel, Readout, Readouts, SkelBlock, Split, toneColor, useChartTheme } from './ui';
 
-const chartTheme = {
-  tooltipBg: 'var(--appchart-bg)',
-  tooltipBorder: 'var(--appchart-border)',
-  text: 'var(--apptext)',
-  muted: 'var(--apptext-muted)',
-  grid: 'var(--appchart-grid)',
-  tick: 'var(--appchart-tick)',
-};
+/*
+ * The electric forecast, in plain words: how good it has been, the days ahead with their
+ * likely range, how each weekday runs, and how far off each forecast was. The model's own
+ * numbers (R², MAE, RMSE) are in ForecastModelFacts, behind "For the curious".
+ */
 
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: chartTheme.tooltipBg,
-  border: `1px solid ${chartTheme.tooltipBorder}`,
-  borderRadius: '16px',
-  fontSize: '13px',
-  color: chartTheme.text,
-  boxShadow: '0 20px 50px var(--appshadow-lg)',
-} as const;
+const MARGIN = { top: 18, right: 16, left: 0, bottom: 0 } as const;
 
-function formatDateLabel(iso: string): string {
-  const d = new Date(iso + 'T12:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-// Accuracy "day-by-day" ranges. Lifetime is a large trailing window the backend
-// clamps against available graded snapshots — no special-casing needed server-side.
+// Accuracy ranges. Lifetime is a large trailing window the backend clamps against
+// available graded snapshots — no special-casing needed server-side.
 type AccRange = '7d' | '14d' | '30d' | 'all';
 const ACC_RANGE_DAYS: Record<AccRange, number> = { '7d': 7, '14d': 14, '30d': 30, all: 3650 };
-const ACC_RANGE_LABEL: Record<AccRange, string> = {
-  '7d': '1 Week', '14d': '2 Weeks', '30d': '1 Month', all: 'Lifetime',
-};
+const ACC_RANGES = [
+  { value: '7d', label: '1 week' },
+  { value: '14d', label: '2 weeks' },
+  { value: '30d', label: '1 month' },
+  { value: 'all', label: 'All' },
+] as const;
 
 // Hourly is capped at 1 month (no lifetime): raw per-hour points don't window,
 // so beyond ~30 days (~720 points) the line turns into an unreadable, laggy
-// band. The daily tab covers the long-horizon trend.
+// band. The daily view covers the long-horizon trend.
 type HourlyRange = '7d' | '14d' | '30d';
 const HOURLY_RANGE_DAYS: Record<HourlyRange, number> = { '7d': 7, '14d': 14, '30d': 30 };
-// Trailing window for the hourly moving average: 24 hours = one full day, so the
-// trend line reads through the intra-day scatter.
+const HOURLY_RANGES = ACC_RANGES.filter((r) => r.value !== 'all') as unknown as ReadonlyArray<{ value: HourlyRange; label: string }>;
+const RANGE_WORDS: Record<AccRange, string> = { '7d': 'week', '14d': 'two weeks', '30d': 'month', all: 'history' };
+// Trailing window for the hourly moving average: 24 hours = one full day.
 const HOURLY_TRAILING_WINDOW = 24;
-// Cap on labeled day-boundary ticks so a 30-day window doesn't crowd the axis.
+// Cap on labelled day ticks so a 30-day window doesn't crowd the axis.
 const HOURLY_MAX_TICKS = 8;
-
-type AccGranularity = 'daily' | 'hourly';
-
-// Trailing window (points) for the daily accuracy moving average — smooths the
-// day-to-day error scatter so the "is it actually improving" trend reads over
-// the longer ranges where raw dots are noisy.
+// Trailing window (days) for the daily moving average.
 const DAILY_TRAILING_WINDOW = 7;
 
-// Monday-first display order, independent of the java.time.DayOfWeek enum's
-// own Monday-first .name() ordering (kept explicit here since this is a
-// display concern, not something to couple to the backend's iteration order).
-const DOW_DISPLAY_ORDER = [
-  'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY',
+type AccGranularity = 'daily' | 'hourly';
+const GRANULARITIES = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'hourly', label: 'Hourly' },
 ] as const;
-const DOW_SHORT_LABEL: Record<string, string> = {
-  MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu',
-  FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun',
+
+type ForecastRange = '7d' | '14d';
+const FORECAST_RANGES = [
+  { value: '7d', label: '7 days' },
+  { value: '14d', label: '14 days' },
+] as const;
+
+// Monday-first display order; the keys are java.time.DayOfWeek names.
+const DOW_ORDER = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'] as const;
+const DOW_SHORT: Record<string, string> = {
+  MONDAY: 'Mon', TUESDAY: 'Tue', WEDNESDAY: 'Wed', THURSDAY: 'Thu', FRIDAY: 'Fri', SATURDAY: 'Sat', SUNDAY: 'Sun',
+};
+const DOW_PLURAL: Record<string, string> = {
+  MONDAY: 'Mondays', TUESDAY: 'Tuesdays', WEDNESDAY: 'Wednesdays', THURSDAY: 'Thursdays', FRIDAY: 'Fridays',
+  SATURDAY: 'Saturdays', SUNDAY: 'Sundays',
 };
 
+const kwh = (v: number, decimals = 1) => formatNumber(v, { decimals, fixed: true, unit: 'kWh' });
+
+/** The trailing mean of `error` over `window` points, for each point. */
+function withTrailing<T extends { error: number }>(pts: readonly T[], window: number) {
+  return pts.map((p, i) => {
+    const slice = pts.slice(Math.max(0, i - window + 1), i + 1);
+    return { ...p, trailing: Number((slice.reduce((s, x) => s + x.error, 0) / slice.length).toFixed(2)) };
+  });
+}
+
 /**
- * Learned per-weekday ratio to the weather-only prediction (ForecastService's
- * dowAdjustments) — e.g. SATURDAY: 1.2 means Saturdays run ~20% above what
- * weather alone would predict for that day. Descriptive only: the forecast adds
- * a weekend amount rather than multiplying by these. Diverges from a 1.0
- * (average) center line so above/below reads at a glance.
+ * Learned per-weekday ratio to the weather-only prediction (ForecastService's dowAdjustments):
+ * SATURDAY 1.12 means Saturdays run about 12% above what the weather alone would predict.
+ * Descriptive only (the forecast adds a weekend amount rather than multiplying by these).
+ * Bars diverge from the centre line, so above and below read at a glance.
  */
-function DowAdjustmentCard({ dowAdjustments }: { dowAdjustments: Record<string, number> }) {
-  const entries = DOW_DISPLAY_ORDER
-    .filter((day) => dowAdjustments[day] != null)
-    .map((day) => ({ day, factor: dowAdjustments[day] }));
-  if (entries.length === 0) return null;
-
+function DowAdjustments({ dowAdjustments }: { dowAdjustments: Record<string, number> }) {
+  const entries = DOW_ORDER.filter((day) => dowAdjustments[day] != null).map((day) => ({ day, factor: dowAdjustments[day] }));
+  if (entries.length === 0) {
+    return <EmptyState icon="calendar" title="No weekday pattern yet" compact>It appears once the model has a few weeks of history.</EmptyState>;
+  }
   const maxDeviation = Math.max(0.1, ...entries.map((e) => Math.abs(e.factor - 1)));
-  const { theme } = useTheme();
-  const ds = DATA_SERIES[theme];
-
+  const top = entries.reduce((a, b) => (b.factor > a.factor ? b : a));
   return (
-    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-      <div className="mb-4">
-        <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-          Learned Pattern
-        </p>
-        <h3 className="mt-2 text-xl font-semibold text-apptext">
-          Usage by Day of Week
-        </h3>
-        <p className="mt-1 text-xs text-apptext-muted">
-          How much each weekday runs above or below what weather alone would
-          predict, learned from your own history — not an assumption that
-          every day is equal.
-        </p>
-      </div>
-      <div className="space-y-2">
+    <div className="fp-stack fp-stack--m">
+      <ul className="fp-stack fp-stack--s" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {entries.map(({ day, factor }) => {
           const pct = (factor - 1) * 100;
           const above = pct >= 0;
-          const widthPct = (Math.abs(pct) / (maxDeviation * 100)) * 50;
+          const width = (Math.abs(pct) / (maxDeviation * 100)) * 50;
           return (
-            <div key={day} className="flex items-center gap-3">
-              <span className="w-9 shrink-0 text-xs font-medium text-apptext-soft">
-                {DOW_SHORT_LABEL[day]}
-              </span>
-              <div className="relative h-5 flex-1 rounded-full bg-appinset">
-                {/* Center line at 1.0 (average) */}
-                <div className="absolute left-1/2 top-0 h-full w-px bg-appborder" />
-                <div
-                  className="absolute top-0 h-full rounded-full"
-                  style={{
-                    width: `${widthPct}%`,
-                    left: above ? '50%' : `${50 - widthPct}%`,
-                    backgroundColor: above ? ds.positive : ds.caution,
-                    opacity: 0.75,
-                  }}
+            <li key={day} className="flex items-center gap-3">
+              <span className="w-9 shrink-0 fp-small">{DOW_SHORT[day]}</span>
+              <span className="relative h-4 flex-1 overflow-hidden rounded-well bg-appinset" aria-hidden="true">
+                <span className="absolute inset-y-0 left-1/2 w-px bg-appborder-strong" />
+                <span
+                  className="absolute inset-y-0.5 rounded-tag"
+                  style={{ width: `${width}%`, left: above ? '50%' : `${50 - width}%`, background: toneColor(above ? 'ink' : 'graphite') }}
                 />
-              </div>
-              <span
-                className="w-12 shrink-0 text-right text-xs font-semibold"
-                style={{ color: above ? ds.positive : ds.caution }}
-              >
-                {above ? '+' : ''}{pct.toFixed(0)}%
               </span>
-            </div>
+              <span className="w-12 shrink-0 text-right fp-mono">{formatNumber(pct, { signed: true, unit: '%' })}</span>
+            </li>
           );
         })}
-      </div>
+      </ul>
+      {top.factor > 1 && (
+        <p className="fp-small fp-muted">
+          {DOW_PLURAL[top.day]} use the most: they run {formatPercent((top.factor - 1) * 100)} above what the weather alone would suggest.
+        </p>
+      )}
     </div>
   );
 }
 
-type ForecastRange = '7d' | '14d';
-
 function ForecastChart() {
+  const t = useChartTheme();
   const [range, setRange] = useState<ForecastRange>('7d');
   const days = range === '14d' ? 14 : 7;
-  // Self-improvement accuracy view: daily vs hourly granularity, and (for daily)
-  // the trailing time range.
   const [accGranularity, setAccGranularity] = useState<AccGranularity>('daily');
   const [accRange, setAccRange] = useState<AccRange>('30d');
   const [hourlyRange, setHourlyRange] = useState<HourlyRange>('7d');
-  const { theme, palette } = useTheme();
-  const series = (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme];
   const forecastInterval = useJitteredInterval(600_000);
+  const today = homeToday();
 
   const { data: forecast, isLoading } = useQuery({
     queryKey: ['forecast', days],
@@ -168,8 +143,7 @@ function ForecastChart() {
     refetchIntervalInBackground: false,
   });
 
-  // 30-day accuracy powers the KPI tiles (a stable headline number, independent
-  // of whatever range the trend chart is showing below).
+  // 30-day accuracy powers the headline readouts (independent of the chart's range below).
   const { data: accuracy } = useQuery({
     queryKey: ['forecast-accuracy', 30],
     queryFn: () => fetchForecastAccuracy(30),
@@ -178,10 +152,8 @@ function ForecastChart() {
     refetchIntervalInBackground: false,
   });
 
-  // Daily accuracy for the selected trend range (dedupes with the KPI query when
-  // the range is also 30 days).
   const rangeDays = ACC_RANGE_DAYS[accRange];
-  const { data: rangeAccuracy } = useQuery({
+  const { data: rangeAccuracy, isPending: rangePending } = useQuery({
     queryKey: ['forecast-accuracy', rangeDays],
     queryFn: () => fetchForecastAccuracy(rangeDays),
     staleTime: 600_000,
@@ -189,9 +161,9 @@ function ForecastChart() {
     refetchIntervalInBackground: false,
   });
 
-  // Hourly accuracy — only fetched once the user toggles the hourly view on.
+  // Hourly accuracy — only fetched once the hourly view is chosen.
   const hourlyRangeDays = HOURLY_RANGE_DAYS[hourlyRange];
-  const { data: hourlyAccuracy } = useQuery({
+  const { data: hourlyAccuracy, isPending: hourlyPending } = useQuery({
     queryKey: ['forecast-accuracy-hourly', hourlyRangeDays],
     queryFn: () => fetchHourlyForecastAccuracy(hourlyRangeDays),
     enabled: accGranularity === 'hourly',
@@ -200,30 +172,12 @@ function ForecastChart() {
     refetchIntervalInBackground: false,
   });
 
-  // Daily accuracy series + trailing moving average (improvement trend).
-  const dailyAccData = useMemo(() => {
-    const pts = rangeAccuracy?.points ?? [];
-    return pts.map((p, i) => {
-      const from = Math.max(0, i - DAILY_TRAILING_WINDOW + 1);
-      const slice = pts.slice(from, i + 1);
-      const avg = slice.reduce((s, x) => s + x.error, 0) / slice.length;
-      return { label: formatDateLabel(p.date), error: p.error, trailing: Number(avg.toFixed(2)) };
-    });
-  }, [rangeAccuracy]);
-
-  // Hourly accuracy series: one point per graded hour over the selected window,
-  // X keyed by array index, with a 24h (one-day) moving average so the trend
-  // reads through the intra-day scatter at the denser ranges.
-  const hourlyAccData = useMemo(() => {
-    const pts = hourlyAccuracy?.points ?? [];
-    return pts.map((p, i) => {
-      const from = Math.max(0, i - HOURLY_TRAILING_WINDOW + 1);
-      const slice = pts.slice(from, i + 1);
-      const avg = slice.reduce((s, x) => s + x.error, 0) / slice.length;
-      return { idx: i, error: p.error, trailing: Number(avg.toFixed(2)), date: p.date, hour: p.hour };
-    });
-  }, [hourlyAccuracy]);
-  // Labeled ticks at day boundaries, thinned so a 30-day window stays legible.
+  const dailyAccData = useMemo(() => withTrailing(rangeAccuracy?.points ?? [], DAILY_TRAILING_WINDOW), [rangeAccuracy]);
+  const hourlyAccData = useMemo(
+    () => withTrailing((hourlyAccuracy?.points ?? []).map((p, idx) => ({ idx, error: p.error, date: p.date, hour: p.hour })), HOURLY_TRAILING_WINDOW),
+    [hourlyAccuracy]
+  );
+  // Labelled ticks at day boundaries, thinned so a 30-day window stays legible.
   const hourlyTicks = useMemo(() => {
     const seen = new Set<string>();
     const dayStarts: number[] = [];
@@ -234,33 +188,19 @@ function ForecastChart() {
     const step = Math.ceil(dayStarts.length / HOURLY_MAX_TICKS);
     return dayStarts.filter((_, i) => i % step === 0);
   }, [hourlyAccData]);
+  const dailyTicks = useMemo(() => {
+    const every = Math.max(1, Math.ceil(dailyAccData.length / 6));
+    return dailyAccData.filter((_, i) => i % every === 0).map((p) => p.date);
+  }, [dailyAccData]);
 
   const chartData = useMemo(() => {
     if (!forecast || forecast.status !== 'ok') return [];
-
-    const byDate = new Map<string, {
-      date: string;
-      label: string;
-      actual: number | null;
-      predicted: number | null;
-      lower: number | null;
-      upper: number | null;
-      confidenceBand: [number, number] | null;
-    }>();
+    const byDate = new Map<string, { date: string; actual: number | null; predicted: number | null; band: [number, number] | null }>();
 
     // Historical actuals from snapshots
     for (const s of forecast.snapshots ?? []) {
-      byDate.set(s.targetDate, {
-        date: s.targetDate,
-        label: formatDateLabel(s.targetDate),
-        actual: s.actualKwh,
-        predicted: s.predictedKwh,
-        lower: null,
-        upper: null,
-        confidenceBand: null,
-      });
+      byDate.set(s.targetDate, { date: s.targetDate, actual: s.actualKwh, predicted: s.predictedKwh, band: null });
     }
-
     // Future forecasts (also covers yesterday — see ForecastController — so a day
     // that just rolled from "today" into "yesterday" still gets a band instead of
     // an empty gap while its actual hasn't been backfilled yet).
@@ -269,450 +209,238 @@ function ForecastChart() {
       const actual = existing?.actual ?? null;
       byDate.set(f.date, {
         date: f.date,
-        label: formatDateLabel(f.date),
         actual,
         // Once a day is graded, `existing.predicted` is the TRUE historical
-        // prediction (the stored snapshot from whichever model was active
-        // when that day was actually forecast). f.predictedKwh here is a
-        // live re-hindcast from TODAY's model — using it would silently
-        // rewrite history every time the model retrains (e.g. yesterday's
-        // "predicted" value drifting as the model improves), which reads as
-        // a bug ("the chart predicted X" when it actually predicted Y).
+        // prediction (the stored snapshot from whichever model was active then).
+        // f.predictedKwh is a live re-hindcast from today's model; using it would
+        // silently rewrite history every time the model retrains.
         predicted: actual != null && existing ? existing.predicted : f.predictedKwh,
-        lower: f.lowerBound,
-        upper: f.upperBound,
-        // Once the real actual is known, let it stand on its own — don't keep
-        // drawing a band over an already-graded day.
-        confidenceBand: actual == null ? [f.lowerBound, f.upperBound] : null,
+        // Once the real actual is known it stands on its own, without a band.
+        band: actual == null ? [f.lowerBound, f.upperBound] : null,
       });
     }
-
     const sorted = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date));
 
-    // Anchor the band to the last known actual: without this, the band's first
-    // point jumps straight to its full width, leaving a visible seam between the
-    // actual line and the start of the band instead of the two meeting. A
-    // zero-width point at the last actual gives the Area a starting vertex to
-    // flare out from, connecting the two with no gap.
+    // Anchor the band to the last known actual (a zero-width point), so the band
+    // flares out of the actual line instead of starting at full width with a seam.
     let lastActualIdx = -1;
-    for (let i = 0; i < sorted.length; i++) {
-      if (sorted[i].actual != null) lastActualIdx = i;
-    }
-    if (lastActualIdx >= 0 && sorted[lastActualIdx].confidenceBand == null) {
+    sorted.forEach((r, i) => { if (r.actual != null) lastActualIdx = i; });
+    if (lastActualIdx >= 0 && sorted[lastActualIdx].band == null) {
       const anchor = sorted[lastActualIdx].actual as number;
-      sorted[lastActualIdx] = { ...sorted[lastActualIdx], confidenceBand: [anchor, anchor] };
+      sorted[lastActualIdx] = { ...sorted[lastActualIdx], band: [anchor, anchor] };
     }
-
     return sorted;
   }, [forecast]);
 
-  const actualColor = DATA_SERIES[theme].positive;
-  const predictedColor = predictedSeriesColor(palette, theme);
-  const errorColor = DATA_SERIES[theme].caution;
-  // Confidence band: a tint of the theme's CONTRASTING color (series.temp —
-  // e.g. yellow/amber against a purple usage line), not a tint of the
-  // predicted-usage color itself. A low-alpha tint of the same hue as the solid
-  // predicted line reads as a dark, muddy smudge in the tooltip's legend swatch
-  // (which shows the fill color at face value, not blended into the chart) even
-  // though the chart area itself looks fine. A contrasting hue stays legible in
-  // both places. Dark surfaces swallow low-alpha fills, so the band needs a
-  // touch more alpha there; the Area below pins fillOpacity={1} so this alpha is
-  // authoritative rather than being multiplied down by Recharts' default 0.6.
-  const bandColor = hexToRgba(series.temp, theme === 'dark' ? 0.22 : 0.16);
+  // About six dates, from the first, so the last label never runs off the right edge.
+  const forecastTicks = useMemo(() => {
+    const every = Math.max(1, Math.ceil(chartData.length / 6));
+    return chartData.filter((_, i) => i % every === 0 && i < chartData.length - 1).map((r) => r.date);
+  }, [chartData]);
 
-  if (isLoading) {
-    return (
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="animate-pulse">
-          <div className="mb-4 h-5 w-48 rounded bg-appinset" />
-          <div className="h-72 rounded-2xl bg-appinset" />
-        </div>
-      </div>
-    );
-  }
+  const ok = forecast?.status === 'ok';
+  const upcoming = ok ? forecast.forecasts ?? [] : [];
+  const avgConfidence = upcoming.length ? upcoming.reduce((s, f) => s + f.confidencePct, 0) / upcoming.length : null;
+  const projected30 = upcoming.length ? (upcoming.reduce((s, f) => s + f.predictedKwh, 0) / upcoming.length) * 30 : null;
+  const graded = accuracy && accuracy.dataPoints > 0 ? accuracy : null;
 
-  if (!forecast || forecast.status !== 'ok') {
-    return (
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4">
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-            AI Forecast
-          </p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">
-            Electric Usage Forecast
-          </h3>
-        </div>
-        <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-          {forecast?.message ?? 'Not enough data to build a forecast model yet. The system needs at least 7 days of usage data paired with weather observations.'}
-        </div>
-      </div>
-    );
-  }
+  // Recharts hands a band as [low, high]; everything else is a number (B-079).
+  const forecastTooltip = (value: number | [number, number], name: string): [string, string] => {
+    if (Array.isArray(value)) return [`${formatNumber(value[0], { decimals: 1, fixed: true })} – ${kwh(value[1])}`, name];
+    return [kwh(value), name];
+  };
 
-  const avgConfidence = forecast.forecasts && forecast.forecasts.length > 0
-    ? forecast.forecasts.reduce((s, f) => s + f.confidencePct, 0) / forecast.forecasts.length
-    : 0;
-
-  const projectedMonthlyKwh = forecast.forecasts && forecast.forecasts.length > 0
-    ? (forecast.forecasts.reduce((s, f) => s + f.predictedKwh, 0) / forecast.forecasts.length) * 30
-    : null;
+  const accSeries = accGranularity === 'daily' ? dailyAccData : hourlyAccData;
+  const accPending = accGranularity === 'daily' ? rangePending : hourlyPending;
+  const accLegend = (
+    <ChartLegend
+      items={[
+        { label: accGranularity === 'daily' ? 'Daily miss' : 'Hourly miss', tone: 'heat', key: 'line' },
+        { label: accGranularity === 'daily' ? '7-day average' : '24-hour average', tone: 'ink', key: 'line' },
+      ]}
+    />
+  );
 
   return (
-    <div className="space-y-4">
-      {/* KPI tiles */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile
-          label="Model Accuracy"
-          value={accuracy && accuracy.dataPoints > 0 ? `${(100 - accuracy.mape).toFixed(0)}` : '—'}
-          unit="%"
-          loading={false}
-          icon={Icons.Bolt}
-          subtitle={accuracy && accuracy.dataPoints > 0 ? `${accuracy.dataPoints} predictions graded` : 'Building...'}
-        />
-        <StatTile
-          label="MAE"
-          value={accuracy && accuracy.dataPoints > 0 ? accuracy.mae.toFixed(1) : '—'}
-          unit="kWh"
-          loading={false}
-          icon={Icons.Bolt}
-          subtitle="Mean absolute error"
-        />
-        <StatTile
-          label="Confidence"
-          value={avgConfidence > 0 ? `${avgConfidence.toFixed(0)}` : '—'}
-          unit="%"
-          loading={false}
-          icon={Icons.Calendar}
-          subtitle="Avg forecast confidence"
-        />
-        <StatTile
-          label="Proj. Monthly"
-          value={projectedMonthlyKwh ? `${projectedMonthlyKwh.toFixed(0)}` : '—'}
-          unit="kWh"
-          loading={false}
-          icon={Icons.Calendar}
-          subtitle="Projected 30-day usage"
-        />
-      </section>
+    <>
+      <Panel title="How good is the forecast" subtitle="Checked against the meter every night">
+        <Readouts>
+          <Readout
+            label="Accuracy"
+            value={graded ? formatNumber(100 - graded.mape) : DASH}
+            unit="%"
+            note={graded ? `Over the last 30 days, ${plural(graded.dataPoints, 'day')} checked` : 'Still learning'}
+          />
+          <Readout label="Typical miss" value={graded ? formatNumber(graded.mae, { decimals: 1, fixed: true }) : DASH} unit="kWh" note="A day, high or low" />
+          <Readout
+            label="Confidence"
+            value={avgConfidence != null ? formatNumber(avgConfidence) : DASH}
+            unit="%"
+            note={`Average for the next ${plural(days, 'day')}`}
+          />
+          <Readout label="Next 30 days" value={projected30 != null ? formatNumber(projected30) : DASH} unit="kWh" note="Projected use" />
+        </Readouts>
+      </Panel>
 
-      {/* Chart */}
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div>
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              AI Forecast
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">
-              Electric Usage Forecast
-            </h3>
-            <p className="mt-1 text-xs text-apptext-muted">
-              Trained on {forecast.dataPointsUsed} days · R² = {forecast.rSquared?.toFixed(4) ?? '—'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {(['7d', '14d'] as ForecastRange[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  range === r
-                    ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                    : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-                }`}
-              >
-                {r === '7d' ? '7 Days' : '14 Days'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Legend */}
-        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <svg width="18" height="6" aria-hidden="true">
-              <line x1="0" y1="3" x2="18" y2="3" stroke={actualColor} strokeWidth="2.5" />
-            </svg>
-            Actual
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <svg width="18" height="6" aria-hidden="true">
-              <line x1="0" y1="3" x2="18" y2="3" stroke={predictedColor} strokeWidth="2" strokeDasharray="5 3" />
-            </svg>
-            Predicted
-          </span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="inline-block h-3 w-5 rounded border" style={{ backgroundColor: series.temp, borderColor: series.temp }} />
-            Confidence band
-          </span>
-        </div>
-
-        {chartData.length < 2 ? (
-          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-            Waiting for forecast data...
-          </div>
+      <Panel
+        title="Forecast"
+        subtitle="Recent use, then the days ahead with their likely range"
+        action={<Chips label="Days ahead" value={range} onChange={setRange} options={FORECAST_RANGES} />}
+      >
+        {isLoading ? (
+          <SkelBlock height={240} />
+        ) : !ok ? (
+          <EmptyState icon="bar-chart" title="No forecast yet" compact>
+            {forecast?.message ?? 'The forecast needs at least 7 days of use alongside the weather. It builds itself once they are in.'}
+          </EmptyState>
+        ) : chartData.length < 2 ? (
+          <EmptyState icon="bar-chart" title="Waiting for forecast days" compact>The chart fills in after the next nightly update.</EmptyState>
         ) : (
-          <ResponsiveContainer width="100%" height={320} debounce={80}>
-            <ComposedChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-              <XAxis
-                dataKey="label"
-                tick={{ fill: chartTheme.tick, fontSize: 11 }}
-                axisLine={{ stroke: chartTheme.grid }}
-                tickLine={false}
-              />
-              <YAxis
-                tick={{ fill: chartTheme.tick, fontSize: 11 }}
-                axisLine={{ stroke: chartTheme.grid }}
-                tickLine={false}
-                unit=" kWh"
-              />
-              <Tooltip contentStyle={TOOLTIP_CONTENT_STYLE} />
-
-              <ReferenceLine
-                x={formatDateLabel(localTodayIso())}
-                stroke={chartTheme.muted}
-                strokeDasharray="4 4"
-                label={{ value: 'Today', fill: chartTheme.muted, fontSize: 10 }}
-              />
-
-              {/* Confidence band — no visible outline on the chart (strokeWidth 0),
-                  but stroke is still set to the bright theme color (not "none")
-                  so Recharts' hover tooltip swatch — which colors itself from
-                  stroke, falling back to the translucent fill only when no
-                  stroke exists — matches the bright legend swatch below the
-                  chart title instead of reading as a faded, hard-to-see dot. */}
-              <Area
-                dataKey="confidenceBand"
-                fill={bandColor}
-                fillOpacity={1}
-                stroke={series.temp}
-                strokeWidth={0}
-                isAnimationActive={false}
-                connectNulls={false}
-              />
-
-              {/* Predicted line (dashed) */}
-              <Line
-                type="monotone"
-                dataKey="predicted"
-                stroke={predictedColor}
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={false}
-                isAnimationActive={false}
-                connectNulls
-              />
-
-              {/* Actual line (solid) */}
-              <Line
-                type="monotone"
-                dataKey="actual"
-                stroke={actualColor}
-                strokeWidth={2.5}
-                dot={{ fill: actualColor, r: 3 }}
-                isAnimationActive={false}
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
-        )}
-      </div>
-
-      {/* Day-of-week learned pattern */}
-      {forecast.dowAdjustments && <DowAdjustmentCard dowAdjustments={forecast.dowAdjustments} />}
-
-      {/* Self-improvement accuracy trend — day-by-day with range toggle, plus an
-          optional hourly (past week) view. */}
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Self-Improvement
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">
-              Forecast Accuracy Over Time
-            </h3>
-            <p className="mt-1 max-w-prose text-xs text-apptext-muted">
-              {accGranularity === 'daily'
-                ? 'Absolute error of each past daily prediction, with a 7-day moving average. The model retrains nightly and should trend downward as data accumulates.'
-                : "Absolute error of the model's learned hour-of-day shape vs. actual usage, hour by hour over the selected range (capped at 1 month), with a 24-hour moving average — shows which times of day it still gets wrong."}
-            </p>
-          </div>
-          {/* Daily / Hourly granularity toggle */}
-          <div className="flex items-center gap-2">
-            {(['daily', 'hourly'] as AccGranularity[]).map((g) => (
-              <button
-                key={g}
-                onClick={() => setAccGranularity(g)}
-                aria-pressed={accGranularity === g}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  accGranularity === g
-                    ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                    : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-                }`}
-              >
-                {g === 'daily' ? 'Daily' : 'Hourly'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Daily range selector (hidden in hourly mode — hourly is fixed to a week) */}
-        {accGranularity === 'daily' ? (
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            {(['7d', '14d', '30d', 'all'] as AccRange[]).map((r) => (
-              <button
-                key={r}
-                onClick={() => setAccRange(r)}
-                aria-pressed={accRange === r}
-                className={`rounded-full px-3 py-1 text-2xs font-medium transition-colors ${
-                  accRange === r
-                    ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                    : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-                }`}
-              >
-                {ACC_RANGE_LABEL[r]}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-            <div className="flex flex-wrap items-center gap-2">
-              {(['7d', '14d', '30d'] as HourlyRange[]).map((r) => (
-                <button
-                  key={r}
-                  onClick={() => setHourlyRange(r)}
-                  aria-pressed={hourlyRange === r}
-                  className={`rounded-full px-3 py-1 text-2xs font-medium transition-colors ${
-                    hourlyRange === r
-                      ? 'bg-appaccent-soft text-appaccent-text border border-appaccent-border'
-                      : 'text-apptext-muted hover:text-apptext-soft border border-transparent hover:border-appborder'
-                  }`}
-                >
-                  {ACC_RANGE_LABEL[r]}
-                </button>
-              ))}
-            </div>
-            {hourlyAccuracy && hourlyAccuracy.dataPoints > 0 && (
-              <span className="text-2xs text-apptext-muted">
-                Avg hourly error {hourlyAccuracy.mae.toFixed(2)} kWh over {hourlyAccuracy.dataPoints} hours
-              </span>
-            )}
-          </div>
-        )}
-
-        {accGranularity === 'daily' ? (
-          dailyAccData.length < 2 ? (
-            <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-              Not enough graded predictions in this range yet.
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={220} debounce={80}>
-              <ComposedChart data={dailyAccData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-                <XAxis
-                  dataKey="label"
-                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
-                  axisLine={{ stroke: chartTheme.grid }}
-                  tickLine={false}
-                  minTickGap={28}
+          <div className="fp-stack fp-stack--s">
+            <ChartLegend
+              items={[
+                { label: 'Actual', tone: 'ink', key: 'line' },
+                { label: 'Forecast', tone: 'graphite', key: 'dash' },
+                { label: 'Likely range', key: 'band' },
+                { label: 'Today', key: 'today' },
+              ]}
+            />
+            <ResponsiveContainer width="100%" height={240} debounce={80}>
+              <ComposedChart data={chartData} margin={MARGIN}>
+                <CartesianGrid {...t.grid} />
+                <XAxis dataKey="date" {...t.axis} ticks={forecastTicks} interval="preserveStartEnd" minTickGap={12} tickFormatter={(d: string) => formatShortDate(d)} />
+                <YAxis {...t.axis} width={36} />
+                <Tooltip {...t.tooltip} labelFormatter={(d: string) => formatDate(d)} formatter={forecastTooltip} />
+                <ReferenceLine
+                  x={today}
+                  {...t.today}
+                  label={{ value: 'Today', position: 'top', fill: t.axis.tick.fill, fontSize: 11, fontFamily: t.axis.tick.fontFamily }}
                 />
-                <YAxis
-                  tick={{ fill: chartTheme.tick, fontSize: 10 }}
-                  axisLine={{ stroke: chartTheme.grid }}
-                  tickLine={false}
-                  unit=" kWh"
-                />
-                <Tooltip
-                  contentStyle={TOOLTIP_CONTENT_STYLE}
-                  formatter={(value: number, name: string) => [
-                    `${value.toFixed(1)} kWh`,
-                    name === 'trailing' ? '7-day avg' : 'Daily error',
-                  ]}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="error"
-                  name="error"
-                  stroke={errorColor}
-                  strokeWidth={1.5}
-                  dot={{ fill: errorColor, r: 2.5 }}
-                  isAnimationActive={false}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="trailing"
-                  name="trailing"
-                  stroke={series.usage}
-                  strokeWidth={2.5}
-                  dot={false}
-                  isAnimationActive={false}
-                />
+                <Area dataKey="band" name="Likely range" fill={t.series.band} fillOpacity={1} stroke="none" isAnimationActive={false} connectNulls={false} />
+                <Line type="monotone" dataKey="predicted" name="Forecast" stroke={t.series.graphite} strokeWidth={2} strokeDasharray={t.dash} dot={false} isAnimationActive={false} connectNulls />
+                <Line type="monotone" dataKey="actual" name="Actual" stroke={t.series.ink} strokeWidth={2.5} dot={{ fill: t.series.ink, r: 2.5 }} isAnimationActive={false} connectNulls />
               </ComposedChart>
             </ResponsiveContainer>
-          )
-        ) : hourlyAccData.length < 2 ? (
-          <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-            No hourly readings to grade in the past week yet.
           </div>
-        ) : (
-          <ResponsiveContainer width="100%" height={220} debounce={80}>
-            <ComposedChart data={hourlyAccData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-              <XAxis
-                dataKey="idx"
-                type="number"
-                domain={[0, hourlyAccData.length - 1]}
-                ticks={hourlyTicks}
-                tick={{ fill: chartTheme.tick, fontSize: 10 }}
-                axisLine={{ stroke: chartTheme.grid }}
-                tickLine={false}
-                tickFormatter={(idx: number) => {
-                  const d = hourlyAccData[idx];
-                  return d ? formatDateLabel(d.date) : '';
-                }}
-              />
-              <YAxis
-                tick={{ fill: chartTheme.tick, fontSize: 10 }}
-                axisLine={{ stroke: chartTheme.grid }}
-                tickLine={false}
-                unit=" kWh"
-              />
-              <Tooltip
-                contentStyle={TOOLTIP_CONTENT_STYLE}
-                labelFormatter={(idx: number) => {
-                  const d = hourlyAccData[idx];
-                  return d ? `${formatDateLabel(d.date)} · ${String(d.hour).padStart(2, '0')}:00` : '';
-                }}
-                formatter={(value: number, name: string) => [
-                  `${value.toFixed(2)} kWh`,
-                  name === 'trailing' ? '24h avg' : 'Hourly error',
-                ]}
-              />
-              <Line
-                type="monotone"
-                dataKey="error"
-                name="error"
-                stroke={errorColor}
-                strokeWidth={1.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="trailing"
-                name="trailing"
-                stroke={series.usage}
-                strokeWidth={2.5}
-                dot={false}
-                isAnimationActive={false}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
         )}
-      </div>
-    </div>
+      </Panel>
+
+      <Split ratio="even">
+        <Panel title="By day of week" subtitle="How each day runs above or below what the weather alone predicts, learned from your own history">
+          {isLoading ? <SkelBlock height={180} /> : <DowAdjustments dowAdjustments={(ok && forecast.dowAdjustments) || {}} />}
+        </Panel>
+
+        <Panel
+          title="Forecast misses"
+          subtitle="How far off each forecast was. It retrains every night, so this should drift down"
+          action={<Chips label="Detail" value={accGranularity} onChange={setAccGranularity} options={GRANULARITIES} />}
+        >
+          <div className="fp-stack fp-stack--m">
+            {accGranularity === 'daily' ? (
+              <Chips label="Misses over" value={accRange} onChange={setAccRange} options={ACC_RANGES} />
+            ) : (
+              <Chips label="Misses over" value={hourlyRange} onChange={setHourlyRange} options={HOURLY_RANGES} />
+            )}
+            {accPending ? (
+              // Still loading: a placeholder, not "nothing to grade" (B-078).
+              <SkelBlock height={200} />
+            ) : accSeries.length < 2 ? (
+              <EmptyState icon="bar-chart" title="Not enough checked forecasts yet" compact>
+                {accGranularity === 'daily'
+                  ? `Fewer than two days in the last ${RANGE_WORDS[accRange]} have been checked against the meter.`
+                  : `No hourly readings to check in the last ${RANGE_WORDS[hourlyRange]} yet.`}
+              </EmptyState>
+            ) : (
+              <div className="fp-stack fp-stack--s">
+                {accLegend}
+                <ResponsiveContainer width="100%" height={200} debounce={80}>
+                  {accGranularity === 'daily' ? (
+                    <ComposedChart data={dailyAccData} margin={MARGIN}>
+                      <CartesianGrid {...t.grid} />
+                      <XAxis dataKey="date" {...t.axis} ticks={dailyTicks} interval="preserveStartEnd" minTickGap={12} tickFormatter={(d: string) => formatShortDate(d)} />
+                      <YAxis {...t.axis} width={36} />
+                      <Tooltip
+                        {...t.tooltip}
+                        labelFormatter={(d: string) => formatDate(d)}
+                        formatter={(v: number, name: string) => [kwh(v), name === 'trailing' ? '7-day average' : 'Daily miss']}
+                      />
+                      <Line type="monotone" dataKey="error" stroke={t.series.heat} strokeWidth={1.5} dot={{ fill: t.series.heat, r: 2.5 }} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="trailing" stroke={t.series.ink} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    </ComposedChart>
+                  ) : (
+                    <ComposedChart data={hourlyAccData} margin={MARGIN}>
+                      <CartesianGrid {...t.grid} />
+                      <XAxis
+                        dataKey="idx"
+                        type="number"
+                        domain={[0, Math.max(0, hourlyAccData.length - 1)]}
+                        ticks={hourlyTicks}
+                        {...t.axis}
+                        tickFormatter={(idx: number) => {
+                          const d = hourlyAccData[idx];
+                          return d ? formatShortDate(d.date) : '';
+                        }}
+                      />
+                      <YAxis {...t.axis} width={36} />
+                      <Tooltip
+                        {...t.tooltip}
+                        labelFormatter={(idx: number) => {
+                          const d = hourlyAccData[idx];
+                          return d ? `${formatDate(d.date)}, ${formatHour(d.hour)}` : '';
+                        }}
+                        formatter={(v: number, name: string) => [kwh(v, 2), name === 'trailing' ? '24-hour average' : 'Hourly miss']}
+                      />
+                      <Line type="monotone" dataKey="error" stroke={t.series.heat} strokeWidth={1.25} dot={false} isAnimationActive={false} />
+                      <Line type="monotone" dataKey="trailing" stroke={t.series.ink} strokeWidth={2.5} dot={false} isAnimationActive={false} />
+                    </ComposedChart>
+                  )}
+                </ResponsiveContainer>
+                {accGranularity === 'hourly' && hourlyAccuracy && hourlyAccuracy.dataPoints > 0 && (
+                  <p className="fp-small fp-muted">
+                    Average miss {kwh(hourlyAccuracy.mae, 2)} an hour over the last {plural(hourlyAccuracy.dataPoints, 'hour')}.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </Panel>
+      </Split>
+    </>
   );
 }
 
 export default memo(ForecastChart);
+
+/**
+ * The model's own numbers, for whoever wants them, behind "For the curious" at the foot of
+ * the Forecast & stats view. `children` adds more rows (the page's 60-day totals).
+ */
+export function ForecastModelFacts({ children }: { children?: ReactNode }) {
+  const { data: forecast } = useQuery({
+    queryKey: ['forecast', 7],
+    queryFn: () => fetchForecast(7),
+    staleTime: 600_000,
+  });
+  const { data: accuracy } = useQuery({
+    queryKey: ['forecast-accuracy', 30],
+    queryFn: () => fetchForecastAccuracy(30),
+    staleTime: 600_000,
+  });
+  const ok = forecast?.status === 'ok';
+  const graded = accuracy && accuracy.dataPoints > 0 ? accuracy : null;
+  return (
+    <section className="fp-panel fp-panel--flush" aria-label="For the curious">
+      <Disclosure variant="row" summary="For the curious: the forecast model and raw numbers" openSummary="The forecast model and raw numbers">
+        <KeyValue cols>
+          <KV label="Trained on" value={ok && forecast.dataPointsUsed != null ? plural(forecast.dataPointsUsed, 'day') : DASH} />
+          <KV label="Fit to weather (R², 0 to 1)" value={ok && forecast.rSquared != null ? formatNumber(forecast.rSquared, { decimals: 4, fixed: true }) : DASH} mono />
+          <KV label="Average miss (MAE), last 30 days" value={graded ? kwh(graded.mae, 2) : DASH} />
+          <KV label="Root-mean-square miss" value={graded ? kwh(graded.rmse, 2) : DASH} />
+          <KV label="Average miss, percent" value={graded ? formatPercent(graded.mape, 1) : DASH} />
+          <KV label="Forecasts checked, last 30 days" value={graded ? formatNumber(graded.dataPoints) : DASH} />
+          {children}
+        </KeyValue>
+      </Disclosure>
+    </section>
+  );
+}

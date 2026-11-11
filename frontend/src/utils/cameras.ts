@@ -1,5 +1,8 @@
 import type { Camera, CameraBatteryReading } from '../types';
 import { SLEEP_AFTER_MS } from '../hooks/useAppSleep';
+import { formatHour, formatShortDate, formatTime, formatWeekday, homeClock, homeDayKey, toInstant } from './format';
+import type { Tone } from './status';
+import { errorMessage, errorStatus } from '../api/climate';
 
 // Presentation + live-view policy for the Cameras tab. Kept free of React so it
 // can be unit-tested directly (see src/test/cameras.test.tsx).
@@ -32,6 +35,23 @@ export function batteryTone(pct: number | null | undefined): BatteryTone {
   if (pct <= BATTERY_CRITICAL) return 'critical';
   if (pct <= BATTERY_LOW) return 'low';
   return 'ok';
+}
+
+/**
+ * The lamp tone for a battery level, on the same thresholds as the camera alerts (≤ 30% a
+ * heads-up, ≤ 15% a problem), so a tile and its alert never disagree. A charging battery
+ * never alarms.
+ */
+export function batteryLampTone(pct: number | null | undefined, charging = false): Tone {
+  const t = batteryTone(pct);
+  if (t === 'unknown') return 'neutral';
+  if (charging) return 'ok';
+  return t === 'critical' ? 'problem' : t === 'low' ? 'headsup' : 'ok';
+}
+
+/** The camera says its charge comes from the sun ("Solar charging"); a cable top-up doesn't (B-109). */
+export function isSolar(chargingStatus: string | null | undefined): boolean {
+  return /solar/i.test(chargingStatus ?? '');
 }
 
 export type ChargeState = 'charging' | 'draining' | 'steady' | 'unknown';
@@ -68,7 +88,7 @@ function trendOf(readings: CameraBatteryReading[] | undefined): ChargeState {
 export function chargeLabel(camera: Pick<Camera, 'chargingStatus'>, state: ChargeState, inferred: boolean): string {
   if (state === 'unknown') return '';
   if (state === 'charging') {
-    const solar = /solar/i.test(camera.chargingStatus ?? '');
+    const solar = isSolar(camera.chargingStatus);
     return inferred ? 'Likely charging' : solar ? 'Solar charging' : 'Charging';
   }
   if (state === 'draining') return 'On battery';
@@ -155,7 +175,7 @@ export interface BatteryPoint {
  * Boundary points carry both values so the two lines join up.
  */
 export function batterySeries(readings: CameraBatteryReading[]): BatteryPoint[] {
-  const pts: BatteryPoint[] = readings.map((r) => ({ t: new Date(r.at).getTime(), charge: null, drain: null }));
+  const pts: BatteryPoint[] = readings.map((r) => ({ t: toInstant(r.at) ?? NaN, charge: null, drain: null }));
   if (readings.length === 1) pts[0].drain = readings[0].percent;
   for (let i = 1; i < readings.length; i++) {
     const r = readings[i];
@@ -189,46 +209,103 @@ export function nightWindows(
 }
 
 export interface DaySummary {
-  /** Local date, YYYY-MM-DD. */
+  /** The home's calendar day, YYYY-MM-DD. */
   day: string;
   gained: number;
   used: number;
+  /** Every rise that day happened in daylight: the sun, not a cable (B-109). Absent without daylight data. */
+  solar?: boolean;
 }
 
 /**
- * Percentage points gained and used per local day: every rise between readings
- * counts as gained, every drop as used (a change spanning midnight goes to the
- * day it ends in). Newest day first.
+ * Percentage points gained and used per day at home: every rise between readings counts as
+ * gained, every drop as used (a change spanning midnight goes to the day it ends in). With the
+ * daylight windows, a day whose gains all came in daylight is marked `solar`. Newest day first.
  */
-export function dailySummary(readings: CameraBatteryReading[]): DaySummary[] {
-  const byDay = new Map<string, DaySummary>();
+export function dailySummary(
+  readings: CameraBatteryReading[],
+  daylight?: Array<{ from: string; to: string }>,
+): DaySummary[] {
+  const windows = (daylight ?? [])
+    .map((d) => ({ from: toInstant(d.from) ?? NaN, to: toInstant(d.to) ?? NaN }))
+    .filter((d) => Number.isFinite(d.from) && Number.isFinite(d.to));
+  const inDaylight = (at: number) => windows.some((w) => at >= w.from && at <= w.to);
+  const byDay = new Map<string, DaySummary & { dark: boolean }>();
   for (let i = 1; i < readings.length; i++) {
     const d = readings[i].percent - readings[i - 1].percent;
     if (d === 0) continue;
-    const day = localDay(readings[i].at);
-    const s = byDay.get(day) ?? { day, gained: 0, used: 0 };
-    if (d > 0) s.gained += d;
-    else s.used -= d;
+    const day = homeDayKey(readings[i].at);
+    if (!day) continue;
+    const s = byDay.get(day) ?? { day, gained: 0, used: 0, dark: false };
+    if (d > 0) {
+      s.gained += d;
+      if (!inDaylight(toInstant(readings[i].at) ?? NaN)) s.dark = true;
+    } else s.used -= d;
     byDay.set(day, s);
   }
   return [...byDay.values()]
-    .map((s) => ({ ...s, gained: Math.round(s.gained), used: Math.round(s.used) }))
+    .map(({ dark, ...s }) => ({
+      ...s,
+      gained: Math.round(s.gained),
+      used: Math.round(s.used),
+      ...(daylight ? { solar: s.gained > 0 && !dark } : {}),
+    }))
     .sort((a, b) => (a.day < b.day ? 1 : -1));
 }
 
-function localDay(iso: string): string {
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+/**
+ * The day-by-day list for a chart window: only days that start inside it (B-021: on the 24 h
+ * view, "Yesterday" covered only yesterday evening and read "+0% sun"). Seven at most.
+ */
+export function summaryDays(
+  readings: CameraBatteryReading[],
+  from: number,
+  daylight?: Array<{ from: string; to: string }>,
+): DaySummary[] {
+  return dailySummary(readings, daylight)
+    .filter((d) => (toInstant(d.day) ?? -Infinity) >= from)
+    .slice(0, 7);
 }
 
-/** "Today" / "Yesterday" / "Mon" for a YYYY-MM-DD local day. */
-export function dayLabel(day: string, now = new Date()): string {
-  const [y, m, d] = day.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const diff = Math.round((today.getTime() - date.getTime()) / 86_400_000);
-  if (diff === 0) return 'Today';
-  if (diff === 1) return 'Yesterday';
-  return date.toLocaleDateString(undefined, diff < 7 ? { weekday: 'short' } : { month: 'short', day: 'numeric' });
+/**
+ * Tick positions on whole hours at home for a time axis (B-102): every 3 hours on a day's
+ * window, each midnight on a week, every 5th midnight on a month.
+ */
+export function timeTicks(from: number, to: number, hours: number): number[] {
+  const ticks: number[] = [];
+  const HOUR = 3_600_000;
+  let midnights = 0;
+  // Whole UTC hours are whole hours at home too (Central is a whole number of hours off UTC).
+  for (let t = Math.ceil(from / HOUR) * HOUR; t <= to; t += HOUR) {
+    const c = homeClock(t);
+    if (!c) continue;
+    if (hours <= 24) {
+      if (c.hour % 3 === 0) ticks.push(t);
+    } else if (c.hour === 0) {
+      if (hours <= 24 * 7 || midnights % 5 === 0) ticks.push(t);
+      midnights++;
+    }
+  }
+  return ticks;
+}
+
+/** The label for a tick from timeTicks: "6 PM", "Tue", "Nov 4". */
+export function formatTimeTick(t: number, hours: number): string {
+  if (hours <= 24) return formatHour(t);
+  if (hours <= 24 * 7) return formatWeekday(t);
+  return formatShortDate(t);
+}
+
+/**
+ * Why a refresh of the thermostats or cameras failed, in words that point at the right thing
+ * (B-103). Both lists are served from the home server's database, so a 503 means the Home
+ * Assistant link is off; no status at all means the server (or the Wi-Fi) didn't answer.
+ */
+export function staleReason(error: unknown, lastGood: number | undefined): string {
+  const since = lastGood ? ` Showing what came in at ${formatTime(lastGood)}.` : '';
+  const status = errorStatus(error);
+  if (status === 503) return `Can't reach Home Assistant.${since}`;
+  if (status == null) return `Can't reach the home server.${since}`;
+  const msg = errorMessage(error).replace(/\.$/, '');
+  return `${msg}.${since}`;
 }

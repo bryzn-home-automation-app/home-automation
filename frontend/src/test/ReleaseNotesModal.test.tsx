@@ -54,6 +54,16 @@ describe('ReleaseNotesModal', () => {
     expect(localStorage.getItem(SEEN_KEY)).toBe('1.1.0');
   });
 
+  it('is a labelled dialog that takes focus and closes on Escape, recording the version', async () => {
+    await renderModal();
+    const dialog = await screen.findByRole('dialog', { name: LATEST.title });
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    await waitFor(() => expect(dialog.contains(document.activeElement)).toBe(true));
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(localStorage.getItem(SEEN_KEY)).toBe('1.1.0');
+  });
+
   it('stays hidden when the newest version was already seen', async () => {
     localStorage.setItem(SEEN_KEY, '1.1.0');
     await renderModal();

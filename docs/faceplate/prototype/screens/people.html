@@ -1,0 +1,310 @@
+<section class="screen" data-route="people" data-title="People" data-eyebrow="House" data-subtitle="Updated 5:00 PM">
+
+  <!-- 1–3. The answer: the presence board (one lamp per person) + verdict + readouts -->
+  <section class="ip" aria-labelledby="people-verdict">
+    <div class="ip-instrument">
+      <div class="board board--strip">
+      <ul class="board-grid" aria-label="Who's around now">
+        <li><div class="board-cell">
+          <span class="avatar avatar--lg" style="--who: var(--person-bryan)" aria-hidden="true">BR</span>
+          <span class="board-name">Bryan</span>
+          <span class="board-state"><span class="lamp lamp--ok"></span><span class="label">Home</span></span>
+          <span class="board-when">Sun, 6:12 PM</span>
+        </div></li>
+        <li><div class="board-cell">
+          <span class="avatar avatar--lg" style="--who: var(--person-mai)" aria-hidden="true">MA</span>
+          <span class="board-name">Mai</span>
+          <span class="board-state"><span class="lamp lamp--ok"></span><span class="label">Home</span></span>
+          <span class="board-when">7:39 AM</span>
+        </div></li>
+        <li><div class="board-cell is-away">
+          <span class="avatar avatar--lg is-away" style="--who: var(--person-linh)" aria-hidden="true">LI</span>
+          <span class="board-name">Linh</span>
+          <span class="board-state"><span class="lamp"></span><span class="label">Away</span></span>
+          <span class="board-when">Seen 3:02 PM</span>
+        </div></li>
+        <li><div class="board-cell">
+          <span class="avatar avatar--lg" style="--who: var(--person-alex)" aria-hidden="true">AL</span>
+          <span class="board-name">Alex</span>
+          <span class="board-state"><span class="lamp lamp--ok"></span><span class="label">Visiting</span></span>
+          <span class="board-when">1:42 PM</span>
+        </div></li>
+      </ul>
+      </div>
+      <div class="dial-legend" aria-hidden="true">
+        <span class="lg-item"><span class="lamp lamp--ok lamp--s"></span>Lit: phone is on the home or guest Wi-Fi</span>
+      </div>
+    </div>
+
+    <div class="ip-body">
+      <div class="verdict">
+        <span class="lamp lamp--ok"></span>
+        <p class="verdict-text" id="people-verdict">Bryan and Mai are home. Alex is visiting.</p>
+        <p class="verdict-note">Linh is out, last seen at 3:02 PM.<span data-role-only="admin"> Danny Tran is waiting for you to let him in.</span></p>
+      </div>
+      <div class="readouts">
+        <div class="readout">
+          <span class="label">Household</span>
+          <span class="readout-value"><span class="num">3<span class="unit">people</span></span></span>
+          <span class="readout-note">Bryan, Mai and Linh</span>
+        </div>
+        <div class="readout">
+          <span class="label"><span class="lamp lamp--ok lamp--s"></span>Online</span>
+          <span class="readout-value"><span class="num">3<span class="unit">now</span></span></span>
+          <span class="readout-note">Bryan, Mai and Alex, in the app</span>
+        </div>
+        <div class="readout">
+          <span class="label">Guests</span>
+          <span class="readout-value"><span class="num">1<span class="unit">active</span></span></span>
+          <span class="readout-note">Alex, until Wed, Dec 9</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Detail. The admin's approvals inbox comes first: it is the one thing on this page that waits on someone. -->
+  <section class="panel" aria-labelledby="people-pending-title" data-role-only="admin">
+    <header class="panel-head">
+      <div>
+        <h2 class="panel-title" id="people-pending-title">Asked to join</h2>
+        <p class="panel-sub">Sign-ups wait here until you let them in</p>
+      </div>
+      <div class="panel-action"><span class="badge badge--warn" data-ppl="pending-count">1 waiting</span></div>
+    </header>
+    <div class="empty empty--compact" data-ppl="pending-empty" hidden>
+      <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+      <p class="empty-title">No one is waiting</p>
+      <p class="empty-text">When someone signs up, they show up here until you let them in or turn them down.</p>
+    </div>
+    <ul class="list" data-ppl="pending-list">
+      <li class="ppl-request" data-ppl="request">
+        <div class="row">
+          <span class="avatar" style="--who: var(--person-danny)" aria-hidden="true">DT</span>
+          <span class="row-main">
+            <span class="row-title">Danny Tran</span>
+            <span class="row-meta">danny.tran@example.com · asked Sun,&nbsp;3:02&nbsp;PM</span>
+          </span>
+        </div>
+        <div class="ppl-decide">
+          <div class="ppl-decide-role">
+            <span class="label" id="people-danny-role-label">Let in as</span>
+            <div class="seg seg--inline" data-tabs="people-danny-role" role="tablist" aria-labelledby="people-danny-role-label">
+              <button class="seg-key is-active" type="button" role="tab" data-tab="member">Member</button>
+              <button class="seg-key" type="button" role="tab" data-tab="admin">Admin</button>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn btn--danger-quiet" type="button" data-open-modal="people-deny">Deny</button>
+            <button class="btn btn--primary" type="button" data-ppl-approve><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg>Approve</button>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <div class="split split--even">
+    <div class="stack stack--page">
+      <section class="panel" aria-labelledby="people-house-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="people-house-title">Household</h2>
+            <p class="panel-sub">The people who live here</p>
+          </div>
+        </header>
+        <ul class="list">
+          <li><div class="row">
+            <span class="avatar" style="--who: var(--person-bryan)" aria-hidden="true">BR<span class="lamp lamp--ok avatar-lamp"></span></span>
+            <span class="row-main">
+              <span class="row-title">Bryan <span class="tag">Admin</span></span>
+              <span class="row-meta">You · online now<span data-role-only="admin"> · 214&nbsp;sign&#8209;ins</span></span>
+            </span>
+          </div></li>
+          <li><div class="row">
+            <span class="avatar" style="--who: var(--person-mai)" aria-hidden="true">MA<span class="lamp lamp--ok avatar-lamp"></span></span>
+            <span class="row-main">
+              <span class="row-title">Mai <span class="tag">Member</span></span>
+              <span class="row-meta">Online now<span data-role-only="admin"> · 97&nbsp;sign&#8209;ins</span></span>
+            </span>
+            <span class="row-trail" data-role-only="admin">
+              <button class="icon-btn icon-btn--quiet" type="button" data-open-modal="people-manage" data-person="mai" aria-label="Manage Mai"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+            </span>
+          </div></li>
+          <li><div class="row">
+            <span class="avatar" style="--who: var(--person-linh)" aria-hidden="true">LI<span class="lamp avatar-lamp"></span></span>
+            <span class="row-main">
+              <span class="row-title">Linh <span class="tag">Member</span></span>
+              <span class="row-meta">Last signed in Sun, 8:05 AM<span data-role-only="admin"> · 41&nbsp;sign&#8209;ins</span></span>
+            </span>
+            <span class="row-trail" data-role-only="admin">
+              <button class="icon-btn icon-btn--quiet" type="button" data-open-modal="people-manage" data-person="linh" aria-label="Manage Linh"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+            </span>
+          </div></li>
+        </ul>
+        <details class="disclosure disclosure--row" data-role-only="admin">
+          <summary><span class="when-closed">Show 1 turned-off account</span><span class="when-open">Hide turned-off accounts</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <ul class="list">
+              <li><div class="row">
+                <span class="avatar is-away" style="--who: var(--person-kim)" aria-hidden="true">KN</span>
+                <span class="row-main">
+                  <span class="row-title">Kim Nguyen <span class="tag">Member</span></span>
+                  <span class="row-meta">Turned off · last signed in Wed, Sep 30 · 6&nbsp;sign&#8209;ins</span>
+                </span>
+                <span class="row-trail">
+                  <button class="btn btn--sm" type="button" data-toast="Kim Nguyen can sign in again">Turn back on</button>
+                </span>
+              </div></li>
+            </ul>
+          </div>
+        </details>
+      </section>
+    </div>
+
+    <div class="stack stack--page">
+      <section class="panel" aria-labelledby="people-guests-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="people-guests-title">Guests</h2>
+            <p class="panel-sub">Visitors get 30 days, then their access ends by itself</p>
+          </div>
+          <div class="panel-action" data-role-only="admin"><a class="btn btn--sm btn--quiet" href="#admin-guests" data-nav="admin-guests">Manage<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+        </header>
+        <div class="empty empty--compact" data-ppl="guests-empty" hidden>
+          <svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg>
+          <p class="empty-title">No guests right now</p>
+          <p class="empty-text">When a visitor signs in on the guest page, they show up here for their 30 days.</p>
+        </div>
+        <ul class="list" data-ppl="guests-list">
+          <li><div class="row">
+            <span class="avatar" style="--who: var(--person-alex)" aria-hidden="true">AL<span class="lamp lamp--ok avatar-lamp"></span></span>
+            <span class="row-main">
+              <span class="row-title">Alex <span class="tag">Guest</span></span>
+              <span class="row-meta">Online now · access until Wed, Dec 9</span>
+            </span>
+            <span class="row-trail" data-role-only="admin">
+              <button class="icon-btn icon-btn--quiet" type="button" data-open-modal="people-manage" data-person="alex" aria-label="Manage Alex"><svg class="icon" aria-hidden="true"><use href="#i-more"/></svg></button>
+            </span>
+          </div></li>
+        </ul>
+        <details class="disclosure disclosure--row">
+          <summary><span class="when-closed">Show 1 past guest</span><span class="when-open">Hide past guests</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <ul class="list">
+              <li><div class="row">
+                <span class="avatar is-away" style="--who: var(--person-jordan)" aria-hidden="true">JO</span>
+                <span class="row-main">
+                  <span class="row-title">Jordan <span class="tag">Guest</span></span>
+                  <span class="row-meta">Access ended Wed, Oct 21</span>
+                </span>
+                <span class="row-trail"><span class="badge">Expired</span></span>
+              </div></li>
+            </ul>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel panel--flush" aria-label="What each role can see">
+        <details class="disclosure disclosure--row">
+          <summary><span class="when-closed">What each role can see</span><span class="when-open">Hide the roles</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <ul class="list">
+              <li><div class="row">
+                <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-shield"/></svg></span>
+                <span class="row-main"><span class="row-title">Admin</span><span class="row-meta">Everything, plus Who's home, Guests, Activity log, App usage, Server health and Diagnostics.</span></span>
+              </div></li>
+              <li><div class="row">
+                <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg></span>
+                <span class="row-main"><span class="row-title">Member</span><span class="row-meta">Every everyday and house page, alerts on their phone, and linking a phone so the house knows they're home.</span></span>
+              </div></li>
+              <li><div class="row">
+                <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg></span>
+                <span class="row-main"><span class="row-title">Guest</span><span class="row-meta">Home, Utilities, Climate, Roomba, Guest Wi-Fi and People. No Cameras or Maintenance. Ends after 30 days.</span></span>
+              </div></li>
+            </ul>
+          </div>
+        </details>
+      </section>
+    </div>
+  </div>
+
+  <!-- Dialog: manage one person (filled by people.js from the row that opened it; Mai by default) -->
+  <div class="dialog dialog--narrow" data-modal="people-manage" hidden role="dialog" aria-modal="true" aria-labelledby="people-manage-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">People</p>
+          <h2 class="dialog-title" id="people-manage-title">Manage <span data-ppl-fill="name">Mai</span></h2>
+          <p class="dialog-sub" data-ppl-fill="email">mai@example.com</p>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack stack--l">
+        <div class="person">
+          <span class="avatar avatar--lg" data-ppl-fill="avatar" style="--who: var(--person-mai)" aria-hidden="true">MA</span>
+          <span class="stack stack--xs">
+            <span class="strong" data-ppl-fill="name">Mai</span>
+            <span class="small muted" data-ppl-fill="meta">Online now · 97 sign-ins since Sun, Aug 23</span>
+          </span>
+        </div>
+        <fieldset class="fieldset">
+          <legend class="label">Role</legend>
+          <div class="seg seg--fill" data-tabs="people-role" role="tablist" aria-label="Role">
+            <button class="seg-key" type="button" role="tab" data-tab="admin">Admin</button>
+            <button class="seg-key is-active" type="button" role="tab" data-tab="member">Member</button>
+            <button class="seg-key" type="button" role="tab" data-tab="guest">Guest</button>
+          </div>
+          <p class="field-help">Admins also get the admin pages. Guests can't see Cameras or Maintenance.</p>
+        </fieldset>
+        <div class="stack stack--s">
+          <p class="label">Access</p>
+          <p class="small muted" data-ppl-fill="access-help">Turning off the account signs Mai out everywhere. You can turn it back on any time.</p>
+          <button class="btn btn--danger-quiet self-start" type="button" data-open-modal="people-disable"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg><span data-ppl-fill="access-action">Turn off Mai's account</span></button>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal>Cancel</button>
+        <button class="btn btn--primary" type="button" data-close-modal data-ppl-save>Save role</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Dialog: confirm turning an account off -->
+  <div class="dialog dialog--narrow" data-modal="people-disable" hidden role="dialog" aria-modal="true" aria-labelledby="people-disable-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">People</p>
+          <h2 class="dialog-title" id="people-disable-title" data-ppl-fill="confirm-title">Turn off Mai's account?</h2>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <p class="prose" data-ppl-fill="confirm-text">Mai will be signed out on every device and won't be able to sign in. Settings and alert choices are kept, so turning the account back on picks up where it left off.</p>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal>Keep it on</button>
+        <button class="btn btn--danger" type="button" data-close-modal data-ppl-confirm data-toast="Mai's account is turned off"><span data-ppl-fill="confirm-action">Turn off account</span></button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Dialog: confirm turning down a sign-up -->
+  <div class="dialog dialog--narrow" data-modal="people-deny" hidden role="dialog" aria-modal="true" aria-labelledby="people-deny-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">Asked to join</p>
+          <h2 class="dialog-title" id="people-deny-title">Turn down Danny Tran?</h2>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body">
+        <p class="prose">The sign-up is deleted and Danny can't sign in. He can ask again from the sign-in page.</p>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal>Keep waiting</button>
+        <button class="btn btn--danger" type="button" data-close-modal data-ppl-deny data-toast="Danny Tran's request was turned down">Turn down</button>
+      </footer>
+    </div>
+  </div>
+</section>

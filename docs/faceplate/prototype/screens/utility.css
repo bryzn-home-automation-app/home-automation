@@ -1,0 +1,34 @@
+/* Utilities — only the page's unique pieces: the bill paper in the bill viewer, the gas takeaway well, the usage-level key. */
+.screen[data-route="utility"] .util-levels { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: -4px 0 12px; }
+.screen[data-route="utility"] .util-takeaway { justify-content: center; gap: 10px; padding: 18px 18px 20px; }
+.screen[data-route="utility"] .util-takeaway-text { font-size: var(--t-lead); line-height: 1.35; font-weight: 400; text-wrap: pretty; }
+.screen[data-route="utility"] .util-takeaway-text b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.screen[data-route="utility"] .util-curious > summary .cluster { flex-wrap: nowrap; }
+
+/* the bill, rendered as a sheet of paper (always white, in both themes) */
+.screen[data-route="utility"] .bill-paper {
+  max-width: 720px; margin: 0 auto; padding: 28px 24px 24px;
+  background: var(--plate); color: var(--plate-ink); border: 1px solid var(--plate-edge); border-radius: 4px;
+  font-size: 14px; line-height: 1.45;
+}
+.screen[data-route="utility"] .bill-top { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 24px; padding-bottom: 16px; border-bottom: 2px solid var(--plate-ink); }
+.screen[data-route="utility"] .bill-kicker { font-size: 20px; font-weight: 700; font-stretch: 110%; letter-spacing: .02em; }
+.screen[data-route="utility"] .bill-org { color: var(--plate-soft); font-size: 13px; }
+.screen[data-route="utility"] .bill-meta { font-family: var(--mono); font-size: 12px; color: var(--plate-soft); line-height: 1.6; }
+.screen[data-route="utility"] .bill-period { margin: 14px 0 6px; font-weight: 600; }
+.screen[data-route="utility"] .bill-block { padding: 10px 0 6px; border-bottom: 1px solid var(--plate-edge); }
+.screen[data-route="utility"] .bill-h {
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px;
+  font-size: 11px; font-weight: 700; font-stretch: 112%; text-transform: uppercase; letter-spacing: .1em;
+}
+.screen[data-route="utility"] .bill-h span { font-family: var(--mono); font-size: 11.5px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--plate-soft); }
+.screen[data-route="utility"] .bill-line { display: flex; justify-content: space-between; gap: 16px; padding: 3px 0; }
+.screen[data-route="utility"] .bill-line span:last-child { font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+.screen[data-route="utility"] .bill-sum { font-weight: 600; padding-top: 6px; }
+.screen[data-route="utility"] .bill-total { margin-top: 14px; padding: 12px 0 0; border-top: 2px solid var(--plate-ink); font-size: 17px; font-weight: 700; }
+.screen[data-route="utility"] .bill-total span:last-child { font-size: 17px; font-weight: 500; }
+@media (min-width: 640px) { .screen[data-route="utility"] .bill-paper { padding: 40px 44px 36px; } }
+
+/* the billing-cycle dial: its inner band sits close to the centre, so the three centre lines drop a little and
+   "PREDICTED BILL" clears the forecast hatching and the last-bill tick (the dial is open at the bottom) */
+.screen[data-route="utility"] .util-cycle .dial-centre { padding-top: 7%; }

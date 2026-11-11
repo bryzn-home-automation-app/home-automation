@@ -22,6 +22,8 @@ describe('tab names', () => {
     expect(tabKey('/admin')).toBe('admin');
     expect(tabKey('/%20weird')).toBeNull();
     expect(tabLabel('notifications')).toBe('Alerts');
+    expect(tabLabel('admin/nuc')).toBe('Server health');
+    expect(tabLabel('climate')).toBe('Climate');
     expect(tabLabel('somewhere-new')).toBe('somewhere-new');
   });
 
@@ -110,8 +112,9 @@ describe('TabUsage page', () => {
       </QueryClientProvider>,
     );
     expect(await screen.findByText('Sam')).toBeInTheDocument();
-    expect(screen.getByText(/1 h 15 min active · 13 visits/)).toBeInTheDocument();
-    expect(screen.getAllByText('Cameras')).toHaveLength(2);
+    expect(screen.getByText(/1\shr 15\smin active · 13\svisits/)).toBeInTheDocument();
+    expect(screen.getByText('Cameras gets the most time; Home the most visits.')).toBeInTheDocument();
+    expect(screen.getAllByText('Cameras').length).toBeGreaterThan(1);
     expect(screen.getByText(/Last active just now/)).toBeInTheDocument();
     expect(activityApi.fetchTabUsage).toHaveBeenCalledWith(30);
   });

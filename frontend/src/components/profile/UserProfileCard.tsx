@@ -1,5 +1,6 @@
+import { Tag } from '../ui';
+import { roleLabel } from '../../utils/status';
 import Avatar from './Avatar';
-import RoleBadge from './RoleBadge';
 
 interface UserProfileCardProps {
   displayName: string;
@@ -9,62 +10,27 @@ interface UserProfileCardProps {
   avatarUrl: string | null;
   accentColor: string;
   role: string;
-  onEdit: () => void;
 }
 
-/** Premium profile card showing identity + role. */
-export default function UserProfileCard({
-  displayName,
-  username,
-  email,
-  phone,
-  avatarUrl,
-  accentColor,
-  role,
-  onEdit,
-}: UserProfileCardProps) {
+/**
+ * Who you are, as Profile's instrument: your photo or initials on your own colour, your
+ * name with your role (Admin / Member / Guest, B-053), and how the house reaches you.
+ * Not a card of its own: it sits in the page's instrument panel.
+ */
+export default function UserProfileCard({ displayName, username, email, phone, avatarUrl, accentColor, role }: UserProfileCardProps) {
+  // Guest accounts carry an internal placeholder address that means nothing to anyone (B-182).
+  const realEmail = email && !email.endsWith('@guest.local') ? email : null;
   return (
-    <div className="rounded-[32px] border border-appborder bg-appsurface-raised p-6 shadow-[0_16px_48px_var(--appshadow)] sm:p-8">
-      <div className="flex flex-col items-center gap-5 sm:flex-row sm:gap-7">
-        {/* Avatar ring uses role or custom accent */}
-        <Avatar
-          displayName={displayName}
-          avatarUrl={avatarUrl}
-          accentColor={accentColor}
-          size={104}
-        />
-
-        <div className="flex-1 text-center sm:text-left">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-            <h2 className="text-2xl font-semibold tracking-[-0.03em] text-apptext">
-              {displayName}
-            </h2>
-            <RoleBadge role={role} accentColor={role === 'GUEST' ? accentColor : undefined} />
-          </div>
-
-          <p className="mt-1.5 text-sm text-apptext-muted">@{username}</p>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Email</p>
-              <p className="mt-0.5 text-sm font-medium text-apptext-soft truncate">{email}</p>
-            </div>
-            <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-              <p className="text-3xs uppercase tracking-[0.14em] text-apptext-dim">Phone</p>
-              <p className="mt-0.5 text-sm font-medium text-apptext-soft">
-                {phone || 'Not set'}
-              </p>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={onEdit}
-            className="mt-4 inline-flex items-center gap-2 rounded-xl border border-appaccent-border bg-appaccent-soft px-5 py-2.5 text-sm font-semibold text-appaccent-text transition-all hover:bg-appaccent-soft/80 active:scale-[0.98]"
-          >
-            ✏️ Edit Profile
-          </button>
-        </div>
+    <div className="flex w-full items-center gap-5">
+      <Avatar displayName={displayName} avatarUrl={avatarUrl} accentColor={accentColor} size={88} />
+      <div className="min-w-0">
+        <p className="flex flex-wrap items-center gap-2">
+          <span className="text-[22px] font-semibold leading-tight text-apptext">{displayName}</span>
+          <Tag>{roleLabel(role)}</Tag>
+        </p>
+        <p className="fp-mono mt-1 truncate text-sm text-apptext-muted">@{username}</p>
+        {realEmail && <p className="fp-mono truncate text-sm text-apptext-muted">{realEmail}</p>}
+        <p className="fp-mono truncate text-sm text-apptext-muted">{phone || 'No phone number'}</p>
       </div>
     </div>
   );

@@ -1,0 +1,134 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
+import Roomba from '../pages/Roomba';
+
+// The Roomba page with its APIs mocked: the keys stay admin-only, members get the state and
+// a reason, a failed load says so, the run list opens the kit dialog, and the view is a tab.
+
+globalThis.ResizeObserver ??= class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+} as unknown as typeof ResizeObserver;
+
+const state = {
+  role: 'ADMIN' as 'ADMIN' | 'USER',
+  runsFail: false,
+  status: {} as Record<string, unknown>,
+};
+
+vi.mock('../context/AuthContext', () => ({
+  useAuth: () => ({
+    user: { userId: 1, username: 'bryan', displayName: 'Bryan', role: state.role },
+    isAdmin: state.role === 'ADMIN',
+    isGuest: false,
+  }),
+}));
+
+const docked = {
+  robotId: 'r1', name: 'Rosie', batteryPct: 100, phase: 'charge', cycle: 'none', error: 0, errorText: null, running: false,
+  binPresent: true, tankPresent: true, currentMissionId: null, missionStart: null, sqft: null, runtimeMinutes: null,
+  dockState: 301, dockError: 0, dockText: 'Ready', notReady: 0, initiator: null, detectedPad: 'padPlate', chargeCycles: 412,
+  chargeErrors: 0, faultText: null, wear: { nStuck: 23 }, lifetimeMissions: 188, lifetimeRunMinutes: 19110, mapVersion: null,
+  online: true, needsAttention: false, attentionReasons: [], updatedAt: new Date().toISOString(),
+};
+
+const run = {
+  id: 7, startedAt: '2026-11-08T16:05:00Z', completedAt: '2026-11-08T21:44:00Z', durationMinutes: 339, squareFeet: 1124,
+  missionId: 'M1', missionNumber: 186, error: 0, errorText: null, initiator: 'schedule', cycle: 'clean', source: 'cloud',
+  chargeMinutes: 163, evacuations: 2, doneCode: 'ok', rooms: ['Living Room', 'Kitchen'], settings: null, verified: true,
+  status: 'COMPLETED',
+};
+
+vi.mock('../api/roomba', () => ({
+  fetchRoombaStatus: async () => ({ ...docked, ...state.status }),
+  fetchRoombaRuns: async () => {
+    if (state.runsFail) throw new Error('down');
+    return [run, { ...run, id: 8, startedAt: '2026-11-05T15:00:00Z', status: 'STUCK' }];
+  },
+  fetchRoombaMap: async () => null,
+  fetchRoombaDevice: async () => null,
+  fetchRoombaParts: async () => [],
+  fetchRoombaCommands: async () => [],
+  fetchRoombaPosition: async () => null,
+  fetchRoombaCoverage: async () => null,
+  fetchRoombaNativeSchedules: async () => [],
+  refreshRoombaNativeSchedules: async () => ({}),
+  sendRoombaCommand: vi.fn(async (command: string) => ({ id: 1, command, status: 'PENDING' })),
+  cleanRoombaRooms: vi.fn(),
+  cleanRoombaRoom: vi.fn(),
+  renameRoombaRoom: vi.fn(),
+  splitRoombaRoom: vi.fn(),
+  mergeRoombaRooms: vi.fn(),
+}));
+
+function renderPage(path = '/roomba') {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={[path]}>
+        <Roomba />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe('Roomba page', () => {
+  beforeEach(() => {
+    state.role = 'ADMIN';
+    state.runsFail = false;
+    state.status = {};
+  });
+
+  it('gives an admin the Clean key, which opens the kit dialog', async () => {
+    renderPage();
+    expect(await screen.findByText('Rosie is docked and ready.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /^Clean$/ }));
+    const dialog = await screen.findByRole('dialog', { name: 'Start a clean' });
+    expect(dialog.getAttribute('aria-modal')).toBe('true');
+  });
+
+  it('shows a member the state and why there are no keys', async () => {
+    state.role = 'USER';
+    renderPage();
+    expect(await screen.findByText('Rosie is docked and ready.')).toBeTruthy();
+    expect(screen.getByText(/Only an admin can start or stop the robot/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Clean$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Send home/ })).toBeNull();
+  });
+
+  it('never calls a stale clean live (B-138)', async () => {
+    state.status = { phase: 'run', cycle: 'clean', running: true, online: false, updatedAt: new Date(Date.now() - 3 * 3_600_000).toISOString() };
+    renderPage();
+    expect(await screen.findByText(/Rosie hasn't checked in since/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Pause$/ })).toBeNull();
+    expect(screen.getByText('Offline')).toBeTruthy();
+  });
+
+  it('lists runs by their visible words and opens the run dialog (B-132)', async () => {
+    renderPage();
+    const list = await screen.findByRole('region', { name: 'Recent cleans' });
+    const rows = await within(list).findAllByRole('button');
+    expect(rows[1].textContent).toMatch(/Stuck/);
+    fireEvent.click(rows[0]);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Docked to recharge')).toBeTruthy();
+  });
+
+  it('says a failed load failed, with Try again (B-005)', async () => {
+    state.runsFail = true;
+    renderPage();
+    expect(await screen.findByText("Couldn't load the recent cleans")).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: /Try again/ }).length).toBeGreaterThan(0);
+  });
+
+  it('opens the Maintenance view from the URL, with lifetime counters named once (B-128, B-129)', async () => {
+    renderPage('/roomba?view=maintenance');
+    const tab = await screen.findByRole('tab', { name: /Maintenance/ });
+    expect(tab.getAttribute('aria-selected')).toBe('true');
+    await waitFor(() => expect(screen.getByText('Powered on')).toBeTruthy());
+    expect(screen.getByText('Pad plate only (no pad)')).toBeTruthy();
+  });
+});

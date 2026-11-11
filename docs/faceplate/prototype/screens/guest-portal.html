@@ -1,0 +1,194 @@
+<section class="screen" data-route="guest-portal" data-chrome="none" data-title="Guest welcome">
+  <div class="gp">
+    <header class="gp-top">
+      <span class="gp-brand"><span class="gp-dot" aria-hidden="true"></span>HOMEOS</span>
+      <span class="mono muted">Mon, Nov 9 · 5:00 PM</span>
+    </header>
+
+    <div class="gp-main">
+      <!-- Two moments, each with its own answer, so the switch sits above them: check in, then who's here -->
+      <div class="seg" data-tabs="guest-portal-step" role="tablist" aria-label="Guest welcome">
+        <button class="seg-key is-active" type="button" role="tab" data-tab="checkin"><svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg>Check in</button>
+        <button class="seg-key" type="button" role="tab" data-tab="lobby"><svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>Who’s here</button>
+      </div>
+
+      <!-- ---------- Check in: make a visitor badge ---------- -->
+      <div class="stack stack--page" data-tab-panel="guest-portal-step:checkin" role="tabpanel" aria-label="Check in">
+        <section class="ip" aria-labelledby="guest-portal-verdict">
+          <div class="ip-instrument">
+            <div class="gp-badge" style="--who: var(--person-alex)" data-gp-badge role="group" aria-label="Visitor badge">
+          <span class="gp-badge-band" aria-hidden="true"><span class="gp-badge-slot"></span></span>
+          <span class="gp-badge-body">
+            <span class="gp-badge-face">
+              <span class="avatar" style="--who: inherit" aria-hidden="true" data-gp-initials>AL</span>
+              <button class="gp-photo" type="button" aria-label="Add a photo to your badge" data-toast="Pick a photo for your badge"><svg class="icon" aria-hidden="true"><use href="#i-image"/></svg></button>
+            </span>
+            <span class="gp-badge-id">
+              <span class="gp-badge-kind">Visitor</span>
+              <span class="gp-badge-name" data-gp-name>Alex</span>
+              <span class="gp-badge-role">Guest at the house</span>
+            </span>
+          </span>
+          <span class="gp-badge-foot"><span><span class="gp-badge-k">Pass</span>30 days</span><span class="t-right"><span class="gp-badge-k">Invite code</span><span data-gp-code-echo>MAPLE-4821</span></span></span>
+        </div>
+          </div>
+
+          <div class="ip-body">
+            <div class="verdict">
+              <span class="lamp lamp--info"></span>
+              <h1 class="verdict-text" id="guest-portal-verdict">Welcome! Make yourself a visitor badge.</h1>
+              <p class="verdict-note">Your name, the code from your host, and a colour so the family can tell guests apart.</p>
+            </div>
+
+            <div class="form-grid">
+              <label class="field" data-gp-field="name"><span class="label">Your name</span>
+                <input class="input" type="text" autocomplete="given-name" placeholder="Sarah or Mike" value="Alex" maxlength="24" data-gp-name-input>
+                <span class="field-error" hidden><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg><span data-gp-msg>Type your name to check in</span></span></label>
+              <label class="field" data-gp-field="code"><span class="label">Invite code</span>
+                <input class="input input--mono" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="From your host" value="MAPLE-4821" data-gp-code>
+                <span class="field-help">Filled in from your host’s link</span>
+                <span class="field-error" hidden><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg>That code didn’t work. Check it with your host.</span></label>
+            </div>
+
+            <div class="field"><span class="label" id="guest-portal-colour-l">Your colour</span>
+              <div class="swatches gp-colours" data-tabs="guest-portal-colour" role="tablist" aria-labelledby="guest-portal-colour-l">
+                <button class="swatch-key" type="button" role="tab" data-tab="rose" style="--sw: var(--person-mai)" aria-label="Rose"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="coral" style="--sw: color-mix(in srgb, var(--person-mai), var(--person-jordan))" aria-label="Coral"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="amber" style="--sw: var(--person-jordan)" aria-label="Amber"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="sage" style="--sw: color-mix(in srgb, var(--person-alex), var(--person-jordan))" aria-label="Sage"></button>
+                <button class="swatch-key is-active" type="button" role="tab" data-tab="teal" style="--sw: var(--person-alex)" aria-label="Teal"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="cyan" style="--sw: var(--chart-water)" aria-label="Cyan"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="sky" style="--sw: var(--person-bryan)" aria-label="Sky blue"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="blue" style="--sw: var(--chart-cool)" aria-label="Blue"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="periwinkle" style="--sw: color-mix(in srgb, var(--person-danny), var(--person-linh))" aria-label="Periwinkle"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="purple" style="--sw: var(--person-linh)" aria-label="Purple"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="magenta" style="--sw: color-mix(in srgb, var(--person-mai), var(--person-linh))" aria-label="Magenta"></button>
+                <button class="swatch-key" type="button" role="tab" data-tab="slate" style="--sw: var(--person-kim)" aria-label="Slate"></button>
+              </div>
+            </div>
+
+            <div class="stack stack--s">
+              <button class="btn btn--primary btn--lg btn--block" type="button" data-gp-join><svg class="icon" aria-hidden="true"><use href="#i-log-in"/></svg>Check in</button>
+              <p class="small muted">Your pass lasts 30 days, then ends by itself. Bryan gets a note when you check in.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ---------- The lobby: who's at the house ---------- -->
+      <div class="stack stack--page" data-tab-panel="guest-portal-step:lobby" role="tabpanel" aria-label="Who's here" hidden>
+        <section class="ip" aria-labelledby="guest-portal-in">
+          <div class="ip-instrument">
+            <div class="gp-badge" style="--who: var(--person-alex)" data-gp-badge role="group" aria-label="Visitor badge">
+          <span class="gp-badge-band" aria-hidden="true"><span class="gp-badge-slot"></span></span>
+          <span class="gp-badge-body">
+            <span class="gp-badge-face">
+              <span class="avatar" style="--who: inherit" aria-hidden="true" data-gp-initials>AL</span>
+            </span>
+            <span class="gp-badge-id">
+              <span class="gp-badge-kind">Visitor</span>
+              <span class="gp-badge-name" data-gp-name>Alex</span>
+              <span class="gp-badge-role"><span class="lamp lamp--ok lamp--s"></span>Checked in at 1:42 PM</span>
+            </span>
+          </span>
+          <span class="gp-badge-foot"><span><span class="gp-badge-k">Here since</span>1:42 PM</span><span class="t-right"><span class="gp-badge-k">Pass until</span>Wed, Dec 9</span></span>
+        </div>
+          </div>
+
+          <div class="ip-body">
+            <div class="verdict">
+              <span class="lamp lamp--ok"></span>
+              <h1 class="verdict-text" id="guest-portal-in">You’re in, <span data-gp-you-name>Alex</span>. Bryan and Mai are home.</h1>
+              <p class="verdict-note">Bryan got a note that you checked in. Linh is out right now.</p>
+            </div>
+            <div class="readouts">
+              <div class="readout">
+                <span class="label"><span class="lamp lamp--ok lamp--s"></span>Here now</span>
+                <span class="readout-value"><span class="num">3<span class="unit">people</span></span></span>
+                <span class="readout-note">Bryan, Mai and you</span>
+              </div>
+              <div class="readout">
+                <span class="label">Your pass</span>
+                <span class="readout-value"><span class="num">30<span class="unit">days</span></span></span>
+                <span class="readout-note">Until Wed, Dec 9</span>
+              </div>
+            </div>
+            <div class="stack stack--s">
+              <a class="btn btn--primary btn--lg btn--block" href="#wifi" data-nav="wifi"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg>Get on the Wi-Fi</a>
+              <a class="btn btn--block" href="#home" data-nav="home"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>Open the house app</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" aria-labelledby="guest-portal-board-title">
+          <header class="panel-head">
+            <div><h2 class="panel-title" id="guest-portal-board-title">Who’s at the house</h2><p class="panel-sub">Tap someone to see more</p></div>
+            <div class="panel-action"><button class="btn btn--sm btn--quiet" type="button" data-toast="Up to date. Nothing changed"><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Refresh</button></div>
+          </header>
+          <div class="board board--strip board--fill">
+          <ul class="board-grid" aria-label="People at the house">
+            <li><button class="board-cell" type="button" data-open-modal="guest-portal-person" data-gp-person="bryan">
+              <span class="avatar avatar--lg" style="--who: var(--person-bryan)" aria-hidden="true">BR</span>
+              <span class="board-name"><span>Bryan</span></span>
+              <span class="board-state"><span class="lamp lamp--ok"></span><span class="label">Home</span></span>
+              <span class="board-when">Since Sun, 6:12 PM</span>
+            </button></li>
+            <li><button class="board-cell" type="button" data-open-modal="guest-portal-person" data-gp-person="mai">
+              <span class="avatar avatar--lg" style="--who: var(--person-mai)" aria-hidden="true">MA</span>
+              <span class="board-name"><span>Mai</span></span>
+              <span class="board-state"><span class="lamp lamp--ok"></span><span class="label">Home</span></span>
+              <span class="board-when">Since 7:39 AM</span>
+            </button></li>
+            <li><button class="board-cell" type="button" data-open-modal="guest-portal-person" data-gp-person="alex">
+              <span class="avatar avatar--lg" style="--who: var(--person-alex)" aria-hidden="true" data-gp-you-face>AL</span>
+              <span class="board-name"><span data-gp-you-name>Alex</span> <span class="tag">You</span></span>
+              <span class="board-state"><span class="lamp lamp--ok"></span><span class="label">Visiting</span></span>
+              <span class="board-when">Since 1:42 PM</span>
+            </button></li>
+            <li><button class="board-cell is-away" type="button" data-open-modal="guest-portal-person" data-gp-person="linh">
+              <span class="avatar avatar--lg is-away" style="--who: var(--person-linh)" aria-hidden="true">LI</span>
+              <span class="board-name"><span>Linh</span></span>
+              <span class="board-state"><span class="lamp"></span><span class="label">Away</span></span>
+              <span class="board-when">Seen 3:02 PM</span>
+            </button></li>
+          </ul>
+          </div>
+          <div class="empty empty--compact" hidden>
+            <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+            <p class="empty-title">Nobody’s home right now</p>
+            <p class="empty-text">People show up here when their phone joins the home Wi-Fi.</p>
+          </div>
+          <footer class="panel-foot">
+            <span class="mono muted">Updated 5:00 PM</span>
+            <button class="btn btn--sm btn--quiet" type="button" data-gp-restart>Not you? Start over</button>
+          </footer>
+        </section>
+      </div>
+    </div>
+
+    <footer class="gp-foot">
+      <span class="small muted">Live here? <a class="link" href="#login" data-nav="login">Sign in instead</a></span>
+      <span class="gp-maker"><span class="label">HomeOS</span><span class="mono muted">made by bryzncode</span></span>
+    </footer>
+  </div>
+
+  <!-- ===================== Dialog: someone at the house ===================== -->
+  <div class="dialog dialog--narrow" data-modal="guest-portal-person" hidden role="dialog" aria-modal="true" aria-labelledby="guest-portal-person-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading"><p class="label">At the house</p><h2 class="dialog-title" id="guest-portal-person-title" data-gp-d-name>Bryan</h2></div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack">
+        <div class="person">
+          <span class="avatar avatar--lg" style="--who: var(--person-bryan)" aria-hidden="true" data-gp-d-face>BR</span>
+          <div class="stack stack--xs"><p class="strong" data-gp-d-role>Lives here. Runs the house app</p><p class="small muted" data-gp-d-note>Home since Sun, 6:12 PM</p></div>
+        </div>
+        <dl class="kv">
+          <div class="kv-row"><dt>Right now</dt><dd data-gp-d-state><span class="badge badge--ok">Home</span></dd></div>
+          <div class="kv-row"><dt>In the app</dt><dd data-gp-d-app>Online now</dd></div>
+        </dl>
+      </div>
+    </div>
+  </div>
+</section>

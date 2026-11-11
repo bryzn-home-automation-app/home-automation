@@ -1,120 +1,90 @@
-import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import { isDaytime, nextSunChange } from '../utils/sun';
 
 type Theme = 'dark' | 'light';
 /**
- * What the user picked. 'auto' follows sunrise/sunset at the home; 'system' (no
- * choice stored) follows the device's own light/dark setting.
+ * What the user picked. 'auto' follows sunrise/sunset at the home; 'system'
+ * follows the device's own light/dark setting. Nothing saved means the designed
+ * default, light.
  */
 export type ThemeMode = 'light' | 'dark' | 'auto' | 'system';
+
+/** The theme someone who has never chosen gets: the light enamel faceplate. */
+export const DEFAULT_MODE: ThemeMode = 'light';
 
 export interface PaletteOption {
   id: string;
   label: string;
-  /** Swatch color shown in the picker UI, per mode. */
+  /**
+   * Swatch shown in the picker UI, per mode. A palette is an enamel finish (it
+   * tints the surfaces only), so the swatch is a sample of that enamel and is
+   * the same in both modes.
+   */
   swatch: { light: string; dark: string };
 }
 
+/**
+ * The finishes. The ids are what people's phones have saved (and what index.css
+ * and the start-up script in index.html key on), so they keep their old names;
+ * the labels are what people see. Swatches match --appfinish-* in index.css.
+ */
 export const PALETTES: PaletteOption[] = [
-  { id: 'default', label: 'Default', swatch: { light: '#047857', dark: '#34d399' } },
-  { id: 'ocean', label: 'Ocean', swatch: { light: '#0369a1', dark: '#0284c7' } },
-  { id: 'sunset', label: 'Sunset', swatch: { light: '#c2410c', dark: '#ea580c' } },
-  { id: 'violet', label: 'Violet', swatch: { light: '#6d28d9', dark: '#7c3aed' } },
+  { id: 'default', label: 'Enamel', swatch: { light: '#c9cfcb', dark: '#c9cfcb' } },
+  { id: 'ocean', label: 'Sea glass', swatch: { light: '#b7c7d4', dark: '#b7c7d4' } },
+  { id: 'sunset', label: 'Sandstone', swatch: { light: '#d8c6b0', dark: '#d8c6b0' } },
+  { id: 'violet', label: 'Lilac', swatch: { light: '#c8c1d8', dark: '#c8c1d8' } },
 ];
 const PALETTE_IDS = PALETTES.map((p) => p.id);
 const DEFAULT_PALETTE = 'default';
 
 /**
- * Per-palette accent tones for multi-color decorative UI (e.g. the
- * Maintenance summary cards) that would otherwise hardcode a fixed
- * amber/sky/emerald/purple rainbow regardless of the chosen palette.
- * 6 tones per palette, in a consistent role order: [warm-1, cool-1,
- * success, warm-2, cool-2, distinct]. "success" (index 2) stays a
- * green/teal across every palette — a checkmark reading as anything
- * but "done" would be confusing — everything else is re-hued to fit
- * the palette's family. Split by mode (not just palette) so an exact
- * requested hex for one mode (e.g. dark Violet) doesn't also silently
- * change the other mode's already-approved look.
+ * Six decorative tones, in a consistent role order: [warm-1, cool-1, success,
+ * warm-2, cool-2, distinct]. Only the Maintenance summary cards use them, and
+ * that page has not been converted to Faceplate yet. A palette used to re-hue
+ * them; a palette is now an enamel finish and never changes a hue, so every
+ * palette has the same tones. The per-palette shape stays so callers keep
+ * working; drop this once Maintenance is converted.
  */
-export const KPI_TONES: Record<string, { light: string[]; dark: string[] }> = {
-  default: {
-    light: ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
-    dark:  ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
-  },
-  ocean: {
-    light: ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
-    dark:  ['#06b6d4', '#0ea5e9', '#14b8a6', '#06b6d4', '#0ea5e9', '#6366f1'],
-  },
-  sunset: {
-    // Same tones in both modes on request — dark mode isn't a separate
-    // brighter variant here, it should look like light Sunset.
-    light: ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
-    dark:  ['#f59e0b', '#f97316', '#10b981', '#f59e0b', '#f97316', '#fb7185'],
-  },
-  violet: {
-    // Same tones in both modes on request — dark mode isn't a separate
-    // brighter variant here, it should look like light Violet.
-    light: ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
-    dark:  ['#d946ef', '#8b5cf6', '#10b981', '#d946ef', '#8b5cf6', '#ec4899'],
-  },
+const DEFAULT_KPI_TONES = {
+  light: ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
+  dark:  ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
 };
+export const KPI_TONES: Record<string, { light: string[]; dark: string[] }> = Object.fromEntries(
+  PALETTE_IDS.map((id) => [id, DEFAULT_KPI_TONES]),
+);
 
 /**
- * Line-chart series colors for the Usage-vs-Temperature chart, per palette
- * and mode. `usage` tracks the palette's accent (so the kWh line is the theme
- * color — green default, blue Ocean, orange Sunset, violet Violet, matching
- * `--appaccent` / the PALETTES swatch). `temp` is the accent's COMPLEMENTARY
- * hue in every palette, so the temperature line always reads as a deliberate
- * contrast against its own usage line rather than defaulting to one shared
- * color:
- *   - Default: green usage ↔ amber temp
- *   - Ocean:   blue usage  ↔ orange temp
- *   - Sunset:  orange usage ↔ sky-blue temp
- *   - Violet:  violet usage ↔ yellow temp
- * Kept as explicit hex (not `var(--appaccent)`) because Recharts writes
- * `stroke` as an SVG *attribute*, where `var()` resolution is unreliable
- * across browsers (see DECISIONS.md) — same reason KPI_TONES above is
- * hardcoded rather than CSS-var-driven. Light-mode `usage`/`temp` values are
- * a notch deeper so both lines stay legible on the white chart background —
- * and since the °F legend chip uses `temp` as its TEXT color, every light
- * `temp` clears 4.5:1 on white (amber-600 #d97706 was 3.2:1 → amber-700;
- * yellow-600 #ca8a04 was 2.9:1 → yellow-700).
+ * Line-chart series colors for the Usage-vs-Temperature chart, per palette and
+ * mode. Faceplate draws the primary series in ink and gives a second series a
+ * hue only when the two must be told apart: usage is ink, temperature is the
+ * heat hue. They are the same for every palette (a palette never changes chart
+ * colours); the per-palette shape stays so callers keep working.
+ * Kept as explicit hex (not `var(--apptext)`) because Recharts writes `stroke`
+ * as an SVG *attribute*, where `var()` resolution is unreliable across browsers
+ * (see DECISIONS.md). Values match --appchart-ink / --appchart-heat in index.css.
+ * Both clear 3:1 on the panel (paletteContrast.test.ts).
  */
+const DEFAULT_CHART_SERIES = {
+  light: { usage: '#15181a', temp: '#d9480f' },
+  dark:  { usage: '#eef1ef', temp: '#ff8a4c' },
+};
 export const CHART_SERIES: Record<string, {
   light: { usage: string; temp: string };
   dark: { usage: string; temp: string };
-}> = {
-  default: {
-    light: { usage: '#047857', temp: '#b45309' }, // green ↔ amber
-    dark:  { usage: '#34d399', temp: '#f59e0b' },
-  },
-  ocean: {
-    light: { usage: '#0369a1', temp: '#c2410c' }, // blue ↔ orange
-    dark:  { usage: '#0284c7', temp: '#f97316' },
-  },
-  sunset: {
-    light: { usage: '#c2410c', temp: '#0369a1' }, // orange ↔ sky-blue
-    dark:  { usage: '#ea580c', temp: '#38bdf8' },
-  },
-  violet: {
-    light: { usage: '#6d28d9', temp: '#a16207' }, // violet ↔ yellow
-    dark:  { usage: '#7c3aed', temp: '#facc15' },
-  },
-};
+}> = Object.fromEntries(PALETTE_IDS.map((id) => [id, DEFAULT_CHART_SERIES]));
 
 /**
- * Palette-independent data-identity series (forecast actual/error lines, the
- * day-of-week over/under bars, gas and water charts), per mode. Dark values are
- * the hexes these charts always used; the dark-mode-tuned 400/500 shades were
- * 1.8-2.8:1 on the white light-mode chart, under the 3:1 minimum for chart
- * marks, so light gets the 600/700 step of the same hue (all >= 3.5:1;
- * `positive`/`caution` are also used as text and clear 4.5:1).
- * The Gas tab's charge split (gasFixed/gasUsed/gasTaxes, stacked in that order)
- * passed the dataviz palette validator on both chart backgrounds.
+ * Palette-independent data-identity series (forecast actual/predicted/error
+ * lines, the day-of-week over/under bars, gas and water charts), per mode, from
+ * the Faceplate chart tokens: actual = ink, predicted = graphite (drawn dashed),
+ * hue only where parts must be told apart. All >= 3:1 on the panel the charts
+ * sit on; `positive`/`caution` are also used as text and clear 4.5:1.
+ * Stacking orders: gas fixed/used/taxes; water water/sewer/refuse/tax/stormwater.
  */
 export const DATA_SERIES: Record<'light' | 'dark', {
   positive: string;
   caution: string;
+  predicted: string;
   gasLine: string;
   gasFixed: string;
   gasUsed: string;
@@ -126,26 +96,24 @@ export const DATA_SERIES: Record<'light' | 'dark', {
   stormwater: string;
 }> = {
   dark: {
-    positive: '#22c55e', caution: '#f59e0b',
-    gasLine: '#38bdf8',
-    gasFixed: '#a16207', gasUsed: '#0284c7', gasTaxes: '#d946ef', // yellow-700, sky-600, fuchsia-500
-    water: '#22d3ee', sewer: '#0ea5e9', refuse: '#6366f1', tax: '#a855f7', stormwater: '#14b8a6',
+    positive: '#eef1ef', caution: '#ffb627', // ink, heads-up text
+    predicted: '#9aa2a7', // graphite
+    gasLine: '#e0b341',
+    gasFixed: '#eef1ef', gasUsed: '#e0b341', gasTaxes: '#9aa2a7', // ink, gas, graphite
+    water: '#3cc6da', sewer: '#eef1ef', refuse: '#a7aeb3', tax: '#80888d', stormwater: '#6fb6ff',
   },
   light: {
-    positive: '#15803d', caution: '#b45309', // green-700, amber-700
-    gasLine: '#0284c7', // sky-600
-    gasFixed: '#a16207', gasUsed: '#0369a1', gasTaxes: '#c026d3', // yellow-700, sky-700, fuchsia-600
-    water: '#0891b2', sewer: '#0369a1', refuse: '#4f46e5', tax: '#9333ea', stormwater: '#0f766e',
+    positive: '#15181a', caution: '#794f00', // ink, heads-up text
+    predicted: '#6a7277', // graphite
+    gasLine: '#b8860b',
+    gasFixed: '#15181a', gasUsed: '#b8860b', gasTaxes: '#6a7277', // ink, gas, graphite
+    water: '#1098ad', sewer: '#15181a', refuse: '#6a7277', tax: '#828a8f', stormwater: '#1c7ed6',
   },
 };
 
-/**
- * The Predicted line next to Actual (always `DATA_SERIES.positive` green): the
- * palette's usage color, except on the green Default palette, where it's blue
- * so the two lines aren't both green.
- */
-export function predictedColor(palette: string, theme: 'light' | 'dark'): string {
-  return palette === 'default' ? DATA_SERIES[theme].gasLine : (CHART_SERIES[palette] ?? CHART_SERIES.default)[theme].usage;
+/** The Predicted line next to Actual: graphite, drawn dashed, in every palette. */
+export function predictedColor(_palette: string, theme: 'light' | 'dark'): string {
+  return DATA_SERIES[theme].predicted;
 }
 
 /** Convert a `#rrggbb` hex color to an `rgba(...)` string at the given alpha. */
@@ -168,34 +136,41 @@ interface ThemeContextValue {
   toggleTheme: () => void;
   isLight: boolean;
   isDark: boolean;
-  /** The active palette id. */
+  /** The active palette (finish) id. */
   palette: string;
   /** Set the palette (shared by light and dark mode). */
   setPalette: (id: string) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
-  theme: 'dark',
-  mode: 'system',
+  theme: 'light',
+  mode: DEFAULT_MODE,
   setMode: () => {},
   nextThemeChange: null,
   setSunLocation: () => {},
   toggleTheme: () => {},
-  isLight: false,
-  isDark: true,
+  isLight: true,
+  isDark: false,
   palette: DEFAULT_PALETTE,
   setPalette: () => {},
 });
 
+const MODE_KEY = 'theme';
+/**
+ * The theme the app last showed. The start-up script in index.html paints Auto
+ * with it before any JavaScript bundle (and the sun maths) has loaded.
+ */
+const RESOLVED_KEY = 'theme-resolved';
 const SUN_LOCATION_KEY = 'sun-location';
+const MODES: ThemeMode[] = ['light', 'dark', 'auto', 'system'];
 
 function readStoredMode(): ThemeMode {
-  if (typeof window === 'undefined') return 'system';
+  if (typeof window === 'undefined') return DEFAULT_MODE;
   try {
-    const stored = localStorage.getItem('theme');
-    if (stored === 'light' || stored === 'dark' || stored === 'auto') return stored;
+    const stored = localStorage.getItem(MODE_KEY) as ThemeMode | null;
+    if (stored && MODES.includes(stored)) return stored;
   } catch { /* localStorage blocked */ }
-  return 'system';
+  return DEFAULT_MODE;
 }
 
 function readSunLocation(): { lat: number; lon: number } | null {
@@ -207,9 +182,10 @@ function readSunLocation(): { lat: number; lon: number } | null {
   }
 }
 
+/** The device's light/dark setting. Light unless the device asks for dark. */
 function systemTheme(): Theme {
-  if (typeof window === 'undefined' || !window.matchMedia) return 'dark';
-  return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  if (typeof window === 'undefined' || !window.matchMedia) return 'light';
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
 /** The theme a mode means right now. Auto without a known location falls back to the device setting. */
@@ -227,7 +203,7 @@ const PALETTE_KEY = 'palette';
 /**
  * One palette for both modes. Older builds stored one per mode, so a palette
  * picked in dark mode left light mode (e.g. daytime under Auto) on Default;
- * adopt whichever of those was actually chosen.
+ * adopt whichever of those was actually chosen. index.html reads the same keys.
  */
 function readStoredPalette(): string {
   if (typeof window === 'undefined') return DEFAULT_PALETTE;
@@ -239,6 +215,21 @@ function readStoredPalette(): string {
   return DEFAULT_PALETTE;
 }
 
+/**
+ * Point the browser chrome at the page colour: Safari's tab bar, Android's status
+ * bar and the desktop PWA title bar tint from <meta name="theme-color">. It was a
+ * fixed dark navy, so a light page sat under a navy toolbar. Read from the
+ * resolved --appbg so it follows the theme and the finish without a second copy
+ * of the colours here. (The iPhone Home Screen app ignores it while the status
+ * bar is "black-translucent"; index.css handles that bar.)
+ */
+function syncThemeColorMeta() {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) return;
+  const bg = getComputedStyle(document.documentElement).getPropertyValue('--appbg').trim();
+  if (bg) meta.setAttribute('content', bg);
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [mode, setModeState] = useState<ThemeMode>(readStoredMode);
   const [sunLocation, setSunLocationState] = useState(readSunLocation);
@@ -248,10 +239,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // Suppress transitions during a theme/palette swap so the whole page repaints
   // once instead of animating every card's `transition-colors` for 300ms at
-  // once (which read as a laggy full-page repaint). Runs BEFORE the attribute
+  // once (which read as a laggy full-page repaint). Declared BEFORE the attribute
   // effects below so the guard class is applied before the CSS vars flip; the
   // double-rAF re-enables transitions only after the new colors have painted.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = document.documentElement;
     el.classList.add('theme-switching');
     let inner = 0;
@@ -265,18 +256,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [theme, palette]);
 
-  useEffect(() => {
+  // Layout effects, not effects: the attributes land before the browser paints
+  // the first React frame. The start-up script in index.html set them before the
+  // first paint of all; these keep them right from then on.
+  useLayoutEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
+    try { localStorage.setItem(RESOLVED_KEY, theme); } catch { /* quota exceeded */ }
   }, [theme]);
 
-  // Persist the choice (not the resolved theme): 'system' stores nothing, so the
-  // device setting keeps applying.
-  useEffect(() => {
-    try {
-      if (mode === 'system') localStorage.removeItem('theme');
-      else localStorage.setItem('theme', mode);
-    } catch { /* quota exceeded */ }
-  }, [mode]);
+  useLayoutEffect(() => {
+    document.documentElement.setAttribute('data-palette', palette);
+  }, [palette]);
+
+  useLayoutEffect(syncThemeColorMeta, [theme, palette]);
 
   // Auto: resolve now, then wake exactly at the next sunrise/sunset. Also re-check
   // when the app comes back to the foreground — a phone asleep through sunset
@@ -307,24 +299,24 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     };
   }, [mode, sunLocation]);
 
-  useEffect(() => {
-    document.documentElement.setAttribute('data-palette', palette);
-  }, [palette]);
-
-  // Follow the device's light/dark setting while no explicit choice is made (and
-  // for Auto until the home's location is known).
+  // Follow the device's light/dark setting in 'system' mode (and for Auto until
+  // the home's location is known).
   useEffect(() => {
     if (mode !== 'system' && !(mode === 'auto' && !sunLocation)) return;
-    const mq = window.matchMedia('(prefers-color-scheme: light)');
-    const handler = (e: MediaQueryListEvent) => setTheme(e.matches ? 'light' : 'dark');
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setTheme(e.matches ? 'dark' : 'light');
     setTheme(systemTheme());
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
   }, [mode, sunLocation]);
 
+  // Saved only when someone actually chooses, 'system' included (it is a choice:
+  // "follow my phone"), so the designed default can still change for people who
+  // never have.
   const setMode = useCallback((next: ThemeMode) => {
     setModeState(next);
     if (next === 'light' || next === 'dark') setTheme(next);
+    try { localStorage.setItem(MODE_KEY, next); } catch { /* quota exceeded */ }
   }, []);
 
   const toggleTheme = useCallback(() => setMode(theme === 'dark' ? 'light' : 'dark'), [theme, setMode]);

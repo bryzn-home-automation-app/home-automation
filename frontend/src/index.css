@@ -1,5 +1,63 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
+/* The Faceplate kit (fp-* classes). In the components layer, so a utility on the same
+   element still wins. See docs/faceplate/IMPLEMENTATION.md. */
+@import "./styles/faceplate.css" layer(components);
+
+/* Archivo (variable: weight and width) and DM Mono, served by the app itself. They used to
+   come from Google Fonts through a CSS @import, which held the first paint on a third-party
+   host: with the internet down and the LAN up, the app sat blank until that request gave up.
+   Bundled here, Vite fingerprints them into /assets/ (cached for a year by nginx). Latin and
+   Latin Extended only, split the way Google ships them. Both are SIL Open Font License. */
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('./assets/fonts/archivo-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Archivo';
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url('./assets/fonts/archivo-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/dm-mono-400-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/dm-mono-400-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/dm-mono-500-latin.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'DM Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./assets/fonts/dm-mono-500-latin-ext.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
 
 /* ── Fixed palettes (independent of theme) ── */
 @theme {
@@ -15,18 +73,28 @@
   --color-ink-800: #0d1726;
   --color-ink-700: #152235;
 
+  /* ── Faceplate type: Archivo (its width axis is part of the design) + DM Mono ── */
+  --font-sans: var(--appfont);
+  --font-mono: var(--appfont-mono);
+
   /* ── Semantic surface tokens ── */
   --color-appbg:              var(--appbg);
   --color-appsurface:         var(--appsurface);
   --color-appsurface-raised:  var(--appsurface-raised);
   --color-appinset:           var(--appinset);
   --color-appinset-strong:    var(--appinset-strong);
+  /* Raised key face (secondary buttons) and the hover wash on rows. */
+  --color-appkey:             var(--appkey);
+  --color-appkey-hover:       var(--appkey-hover);
+  --color-approw-hover:       var(--approw-hover);
 
   /* ── Semantic text tokens ── */
   --color-apptext:            var(--apptext);
   --color-apptext-soft:       var(--apptext-soft);
   --color-apptext-muted:      var(--apptext-muted);
   --color-apptext-dim:        var(--apptext-dim);
+  /* Decorative only (ticks, disabled marks): never text. */
+  --color-appink-faint:       var(--appink-faint);
 
   /* ── Semantic status TEXT tokens ──
      Text-safe status colors (>= 4.5:1 on every app surface, incl. a 10% tinted
@@ -43,8 +111,12 @@
   --color-appborder:          var(--appborder);
   --color-appborder-light:    var(--appborder-light);
   --color-appborder-hover:    var(--appborder-hover);
+  --color-appborder-strong:   var(--appborder-strong);
+  --color-appfocus:           var(--appfocus);
 
-  /* ── Accent & status ── */
+  /* ── Accent & status ──
+     Faceplate has no accent colour: the accent tokens are ink, so every old
+     "accent" fill becomes the ink-on-enamel selection. */
   --color-appaccent:          var(--appaccent);
   --color-appaccent-soft:     var(--appaccent-soft);
   --color-appaccent-border:   var(--appaccent-border);
@@ -56,7 +128,22 @@
   --color-appdanger:          var(--appdanger);
   --color-appdanger-fg:       var(--appdanger-fg);
 
-  /* ── Glow / gradient ── */
+  /* ── Lamps (status fills: OK, Heads-up, Problem, Info, unlit) and their 10% tints / edges ── */
+  --color-applamp-ok:         var(--applamp-ok);
+  --color-applamp-warn:       var(--applamp-warn);
+  --color-applamp-problem:    var(--applamp-problem);
+  --color-applamp-info:       var(--applamp-info);
+  --color-applamp-off:        var(--applamp-off);
+  --color-apptint-ok:         var(--apptint-ok);
+  --color-apptint-warn:       var(--apptint-warn);
+  --color-apptint-problem:    var(--apptint-problem);
+  --color-apptint-info:       var(--apptint-info);
+  --color-appedge-ok:         var(--appedge-ok);
+  --color-appedge-warn:       var(--appedge-warn);
+  --color-appedge-problem:    var(--appedge-problem);
+  --color-appedge-info:       var(--appedge-info);
+
+  /* ── Glow / gradient (retired: transparent in Faceplate) ── */
   --color-appglow:            var(--appglow);
   --color-appglow-accent:     var(--appglow-accent);
   --color-appglow-header:     var(--appglow-header);
@@ -70,199 +157,243 @@
   --color-appchart-heat:      var(--appchart-heat);
   --color-appchart-cool:      var(--appchart-cool);
   --color-appchart-charge:    var(--appchart-charge);
+  --color-appchart-ink:       var(--appchart-ink);
+  --color-appchart-graphite:  var(--appchart-graphite);
+  --color-appchart-soft:      var(--appchart-soft);
+  --color-appchart-water:     var(--appchart-water);
+  --color-appchart-gas:       var(--appchart-gas);
+  --color-appchart-band:      var(--appchart-band);
+  --color-appchart-cursor:    var(--appchart-cursor);
+  --color-appchart-empty:     var(--appchart-empty);
+
+  /* ── Overlays, media (always dark), label plate (always white), map ── */
+  --color-appscrim:           var(--appscrim);
+  --color-appmedia-bg:        var(--appmedia-bg);
+  --color-appmedia-ink:       var(--appmedia-ink);
+  --color-appplate:           var(--appplate);
+  --color-appplate-ink:       var(--appplate-ink);
+  --color-appmap-floor:       var(--appmap-floor);
 
   /* ── Shadows ── */
   --color-appshadow:          var(--appshadow);
   --color-appshadow-lg:       var(--appshadow-lg);
+  /* Faceplate has no drop shadows: panels are flat with a hairline. The stock
+     shadow scale is flattened too, so an old shadow-lg or shadow-2xl renders as
+     nothing until its page is converted. Recesses use --appwell-shadow (inset). */
+  --shadow-2xs: 0 0 #0000;
+  --shadow-xs:  0 0 #0000;
+  --shadow-sm:  0 0 #0000;
+  --shadow-md:  0 0 #0000;
+  --shadow-lg:  0 0 #0000;
+  --shadow-xl:  0 0 #0000;
+  --shadow-2xl: 0 0 #0000;
+
+  /* ── Radii: panel 12, control/key 10, well 8 (rounded-panel, rounded-key, ...) ── */
+  --radius-panel: var(--appradius-panel);
+  --radius-key:   var(--appradius-key);
+  --radius-well:  var(--appradius-well);
+  --radius-chip:  var(--appradius-chip);
+  --radius-tag:   var(--appradius-tag);
 
   /* ── Type scale ──
      One variable per size tier — tweak here, not at call sites.
-     text-3xs/2xs are custom (Tailwind has no built-in tier that small);
-     text-xs/sm/lg/xl/2xl/3xl redeclare Tailwind's own defaults so every
-     existing text-xs, text-sm, etc. usage across the app is controlled
-     from this one place too. Mobile values here are the base; the
-     min-width(lg) override below bumps secondary/body sizes further for
-     desktop — titles (lg/xl/2xl/3xl) intentionally keep one flat size,
-     nothing has asked for those to grow yet. */
-  --text-3xs:  0.6875rem; /* 11px — was 10px */
-  --text-2xs:  0.75rem;   /* 12px — was 11px */
-  --text-xs:   0.8125rem; /* 13px — was 12px */
-  --text-sm:   0.9375rem; /* 15px — was 14px */
-  --text-lg:   1.125rem;  /* 18px, unchanged */
-  --text-xl:   1.25rem;   /* 20px, unchanged */
-  --text-2xl:  1.5rem;    /* 24px, unchanged */
-  --text-3xl:  1.875rem;  /* 30px, unchanged */
-}
+     The generic tiers land on Faceplate's steps so the old pages read the same
+     as the converted ones: 3xs = silk-screen label (11.5), xs = small (13),
+     sm = body (15), lg = lead / inline numeral (18), 2xl = page title (22),
+     3xl = wide page title (28). Faceplate keeps one size per role on every
+     screen width (only the lead and the page title grow on desktop, through
+     --appfs-lead and the title-lg step), so the old desktop bump is gone.
+     Inputs stay 16px on phones whatever their class says (see "Form controls"
+     below): iOS zooms the page into anything smaller. */
+  --text-3xs:  0.71875rem; /* 11.5px (label) */
+  --text-2xs:  0.75rem;    /* 12px */
+  --text-xs:   0.8125rem;  /* 13px (small) */
+  --text-sm:   0.9375rem;  /* 15px (body) */
+  --text-lg:   1.125rem;   /* 18px */
+  --text-xl:   1.25rem;    /* 20px */
+  --text-2xl:  1.375rem;   /* 22px (page title) */
+  --text-3xl:  1.75rem;    /* 28px (page title, desktop) */
 
-@media (min-width: 1024px) {
-  :root {
-    --text-3xs: 0.75rem;    /* 12px */
-    --text-2xs: 0.8125rem;  /* 13px */
-    --text-xs:  0.875rem;   /* 14px */
-    --text-sm:  1rem;       /* 16px */
-  }
+  /* Faceplate roles by name (text-label, text-body, text-num-xl, ...). */
+  --text-label:   var(--appfs-label);
+  --text-label--line-height: 1.25;
+  --text-small:   var(--appfs-small);
+  --text-small--line-height: 1.4;
+  --text-body:    var(--appfs-body);
+  --text-body--line-height: 1.45;
+  --text-lead:    var(--appfs-lead);
+  --text-lead--line-height: 1.32;
+  --text-section: var(--appfs-section);
+  --text-section--line-height: 1.3;
+  --text-title:   var(--appfs-title);
+  --text-title--line-height: 1.15;
+  --text-num-xl:  var(--appfs-num-xl);
+  --text-num-xl--line-height: 1;
+  --text-num-l:   var(--appfs-num-l);
+  --text-num-l--line-height: 1;
+  --text-num-m:   var(--appfs-num-m);
+  --text-num-m--line-height: 1;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Dark theme (default)
+   Light theme (the default): a matte enamel faceplate.
+   Page = enamel, cards = flat panels with a hairline, recessed
+   readouts / inputs / tracks = wells, text = ink and graphite.
+   No accent colour: selection is ink-on-enamel inversion; hue is
+   only for status lamps and chart data.
+   :root carries it too, so the page is light before (or without)
+   a data-theme attribute.
    ═══════════════════════════════════════════════════════════════ */
 :root,
-[data-theme="dark"] {
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  /* Inset panels LIGHTEN the surface rather than darken it. The old values
-     (rgba(2,8,23,.45/.65) — near-black washes) rendered every inset tile
-     DARKER than the surface it sat on, so nested tiles (e.g. Total/Average
-     inside a card, the sidebar Status/Role boxes) collapsed into dark-on-dark
-     holes with only a faint border to define them. In a dark UI elevation
-     reads as a lighter fill, so a slate lift makes inset tiles legibly pop and
-     lets -strong (used for a further-nested or hovered tile) step one notch
-     lighter still. */
-  --appinset:           rgba(148, 163, 184, 0.06);
-  --appinset-strong:    rgba(148, 163, 184, 0.11);
-
-  --apptext:            #f8fafc;
-  --apptext-soft:       #cbd5e1;
-  --apptext-muted:      #94a3b8;
-  /* Was #64748b (slate-500): only 3.2-3.8:1 on the dark surfaces, under the
-     4.5:1 body-text minimum for the timestamps/captions that use it. Lifted
-     just enough to pass on --appinset-strong (4.7:1) while staying visibly
-     dimmer than --apptext-muted. */
-  --apptext-dim:        #8190a5;
-
-  /* Status text — the exact hexes --appsuccess/--appwarning/--appdanger
-     already had, so text-appsuccess → text-apptext-success is a no-op in dark.
-     Info matches the sky-300 the app uses for informational text. */
-  --apptext-success:    #4ade80;
-  --apptext-warning:    #fbbf24;
-  --apptext-danger:     #fb7185;
-  --apptext-info:       #7dd3fc;
-
-  --appborder:          rgba(255, 255, 255, 0.1);
-  --appborder-light:    rgba(255, 255, 255, 0.06);
-  --appborder-hover:    rgba(255, 255, 255, 0.2);
-
-  --appaccent:          #34d399;
-  --appaccent-soft:     rgba(16, 185, 129, 0.15);
-  --appaccent-border:   rgba(52, 211, 153, 0.4);
-  --appaccent-text:     #a7f3d0;
-  /* White on the bright dark-mode emerald was 1.9:1 (Sign in / Save buttons). */
-  --appaccent-fg:       #022c22;
-
-  --appsuccess:         #4ade80;
-  --appwarning:         #fbbf24;
-  --appdanger:          #fb7185;
-  /* White on #fb7185 is 2.7:1 (unread-count badges); rose-950 is 5.8:1. */
-  --appdanger-fg:       #4c0519;
-
-  --appglow:            rgba(56, 189, 248, 0.16);
-  --appglow-accent:     rgba(16, 185, 129, 0.18);
-  --appglow-header:     rgba(148, 163, 184, 0.04);
-
-  --appchart-bg:        #08101c;
-  --appchart-grid:      rgba(148, 163, 184, 0.12);
-  --appchart-tick:      #94a3b8;
-  --appchart-border:    rgba(148, 163, 184, 0.14);
-  /* Same colors the charts used before (Tailwind v4 orange-300 / sky-300 /
-     emerald-400, as rendered in sRGB). */
-  --appchart-heat:      #ffb86a;
-  --appchart-cool:      #74d4ff;
-  --appchart-charge:    #00d492;
-
-  --appshadow:          rgba(2, 8, 23, 0.24);
-  --appshadow-lg:       rgba(2, 8, 23, 0.42);
-
-  color-scheme: dark;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Light theme
-   ═══════════════════════════════════════════════════════════════ */
 [data-theme="light"] {
-  /* Distinctly grayer than white so raised cards (--appsurface) visibly pop
-     off the page instead of blending into it (previously #f8fafc, only ~2%
-     darker than white — cards were nearly indistinguishable from the page). */
-  --appbg:              #eef1f6;
-  --appsurface:         #ffffff;
-  --appsurface-raised:  rgba(255, 255, 255, 0.94);
-  --appinset:           #f1f5f9;
-  --appinset-strong:    #e2e8f0;
+  /* surfaces */
+  --appbg:              #e9ecea;   /* enamel */
+  --appsurface:         #f7f8f7;   /* panel */
+  /* Solid, like every surface now. It used to be 88-94% opaque, and a dialog
+     panel drawn with it let the page behind read through its text. */
+  --appsurface-raised:  var(--appsurface);
+  --appinset:           #dfe3e0;   /* well */
+  --appinset-strong:    #d3d8d5;   /* well, hovered or nested */
+  --appkey:             #fdfdfc;   /* raised key face */
+  --appkey-hover:       #f1f3f2;
+  --appkey-lip:         rgba(21, 24, 26, 0.18);
+  --appkey-lip-ink:     rgba(0, 0, 0, 0.35);
+  --appwell-shadow:     inset 0 1px 1.5px rgba(21, 24, 26, 0.14);
+  --approw-hover:       rgba(21, 24, 26, 0.04);
+  --appskel-shine:      rgba(255, 255, 255, 0.55);
 
-  --apptext:            #0f172a;
-  --apptext-soft:       #334155;
-  --apptext-muted:      #475569;
-  /* Darkened from #64748b (slate-500, ~4.6:1 on white — borderline for normal
-     text, and visibly too weak once used on a tinted card background rather
-     than plain white). The app uses this token for tiny 10-11px uppercase
-     eyebrow labels in ~50+ places (confirmed via screenshot across Debug
-     Dashboard, Maintenance, Home, WiFi, and others), the same role
-     --apptext-muted already handles correctly elsewhere — so this keeps a
-     hair of distinction from --apptext-muted rather than making them
-     identical, but is meaningfully more legible than the old value.
-     Nudged again #56637a → #4d596e: the tinted palettes' --appinset-strong
-     (Violet #dbcaef, Ocean #c3ddf0) took #56637a down to 3.96-4.3:1. */
-  --apptext-dim:        #4d596e;
+  /* ink: text steps from ink to graphite, all >= 4.5:1 on every surface and well */
+  --apptext:            #15181a;   /* ink */
+  --apptext-soft:       #33393d;
+  --apptext-muted:      #4e555a;   /* graphite */
+  --apptext-dim:        #52595e;
+  --appink-faint:       #8a9196;   /* ticks and disabled marks only, never text */
 
-  /* Status text — Tailwind 800 steps. 600/700 looked fine on white but fell
-     to 2.2-3.7:1 on the palette-tinted inset tiles and inside the 10% tinted
-     badges they usually sit in; 800 holds >= 4.5:1 on every surface except a
-     tinted badge on the darkest palette --appinset-strong (>= 4.0:1). */
-  --apptext-success:    #065f46;   /* emerald-800 */
-  --apptext-warning:    #92400e;   /* amber-800 */
-  --apptext-danger:     #9f1239;   /* rose-800 */
-  --apptext-info:       #075985;   /* sky-800 */
+  /* Status text: >= 4.5:1 on every surface and well of every finish, and inside a
+     10% tint of its own hue (a badge). The brief's lamp-text hexes, each darkened
+     just enough to hold that on the tinted finishes' wells. */
+  --apptext-success:    #0e6637;
+  --apptext-warning:    #794f00;
+  --apptext-danger:     #aa241d;
+  --apptext-info:       #1c56ad;
 
-  --appborder:          rgba(15, 23, 42, 0.14);
-  --appborder-light:    rgba(15, 23, 42, 0.08);
-  --appborder-hover:    rgba(15, 23, 42, 0.22);
+  --appborder:          rgba(21, 24, 26, 0.14);   /* hairline */
+  --appborder-light:    rgba(21, 24, 26, 0.08);
+  --appborder-strong:   rgba(21, 24, 26, 0.26);
+  --appborder-hover:    var(--appborder-strong);
+  --appfocus:           var(--apptext);
 
-  --appaccent:          #047857;
-  --appaccent-soft:     rgba(5, 150, 105, 0.14);
-  --appaccent-border:   rgba(4, 120, 87, 0.4);
-  --appaccent-text:     #065f46;
-  --appaccent-fg:       #ffffff;
+  /* Accent = ink. A solid accent fill is the ink key with panel-coloured text;
+     the soft accent is a neutral wash with a strong hairline. */
+  --appaccent:          var(--apptext);
+  --appaccent-soft:     rgba(21, 24, 26, 0.08);
+  --appaccent-border:   rgba(21, 24, 26, 0.34);
+  --appaccent-text:     var(--apptext);
+  --appaccent-fg:       var(--appsurface);
 
-  /* Fill tokens one step deeper (were green-600 / amber-600 / rose-600):
-     the old success/warning dots and bars were 2.2-2.7:1 against the inset
-     tiles, under the 3:1 non-text minimum. */
-  --appsuccess:         #15803d;   /* green-700 */
-  --appwarning:         #b45309;   /* amber-700 */
-  --appdanger:          #be123c;   /* rose-700 */
+  /* Lamps. --appsuccess / --appwarning are the lamp fills; --appdanger is the
+     destructive key, a deeper red than the problem lamp so white text on it
+     clears 4.5:1 (unread counts, Delete). */
+  --applamp-ok:         #22a35a;
+  --applamp-warn:       #e0a100;
+  --applamp-problem:    #e0483b;
+  --applamp-info:       #3b82f6;
+  --applamp-off:        #c9cfcb;
+  --applamp-edge:       rgba(21, 24, 26, 0.22);
+  --apptint-ok:         rgba(34, 163, 90, 0.10);
+  --apptint-warn:       rgba(224, 161, 0, 0.13);
+  --apptint-problem:    rgba(224, 72, 59, 0.10);
+  --apptint-info:       rgba(59, 130, 246, 0.09);
+  --appedge-ok:         rgba(34, 163, 90, 0.45);
+  --appedge-warn:       rgba(176, 124, 0, 0.45);
+  --appedge-problem:    rgba(224, 72, 59, 0.45);
+  --appedge-info:       rgba(59, 130, 246, 0.40);
+  --appsuccess:         var(--applamp-ok);
+  --appwarning:         var(--applamp-warn);
+  --appdanger:          #b3261e;
   --appdanger-fg:       #ffffff;
 
-  --appglow:            rgba(56, 189, 248, 0.1);
-  --appglow-accent:     rgba(5, 150, 105, 0.1);
-  --appglow-header:     rgba(0, 0, 0, 0.03);
+  /* The decorative glows are retired. */
+  --appglow:            transparent;
+  --appglow-accent:     transparent;
+  --appglow-header:     transparent;
 
-  --appchart-bg:        #ffffff;
-  --appchart-grid:      rgba(15, 23, 42, 0.1);
-  --appchart-tick:      #475569;
-  --appchart-border:    rgba(15, 23, 42, 0.14);
-  /* 600 steps: >= 3.5:1 on the white chart, and deliberately NOT the 800
-     text shades — at 800 heat (brown) and cool (navy) both go near-black and
-     stop reading as orange-vs-blue, and charging green merges with the slate
-     on-battery line. */
-  --appchart-heat:      #ea580c;   /* orange-600 */
-  --appchart-cool:      #0284c7;   /* sky-600 */
-  --appchart-charge:    #059669;   /* emerald-600 */
+  /* Charts sit on panels. Primary series = ink, comparison / predicted =
+     graphite (dashed); hue only when two series must be told apart. */
+  --appchart-bg:        var(--appsurface);
+  --appchart-grid:      rgba(21, 24, 26, 0.09);
+  --appchart-tick:      #4e555a;
+  --appchart-border:    rgba(21, 24, 26, 0.14);
+  --appchart-heat:      #d9480f;
+  --appchart-cool:      #1c7ed6;
+  --appchart-charge:    #1e9150;
+  --appchart-ink:       var(--apptext);
+  --appchart-graphite:  #6a7277;
+  --appchart-soft:      #a3aaae;   /* a minor stacked part, next to stronger parts */
+  --appchart-water:     #1098ad;
+  --appchart-gas:       #b8860b;
+  --appchart-band:      rgba(21, 24, 26, 0.09);
+  --appchart-cursor:    rgba(21, 24, 26, 0.38);
+  --appchart-empty:     #c3c9c6;
 
-  --appshadow:          rgba(15, 23, 42, 0.08);
-  --appshadow-lg:       rgba(15, 23, 42, 0.16);
+  /* the dial instrument */
+  --appdial-track:      var(--appinset);
+  --appdial-day:        #ffffff;
+  --appdial-night:      #b4babd;
+  --appdial-tick:       rgba(21, 24, 26, 0.42);
 
-  /* ── Pastel palette steps (100-400) used in component markup ──
-     Components are written for dark mode: badges are text-{c}-300 +
-     bg-{c}-300/10 + border-{c}-300/20, plain status text is text-{c}-200/300/400.
-     The app has no `dark:` variant, so light mode redefines those steps here.
-     They used to map to the 400-700 steps, which measured 1.2-3.8:1 as text
-     on the light surfaces (yellow/cyan/amber worst). Every step now resolves
-     to ONE text-safe shade per hue (the 800 step; 700 for the blue-violet
-     hues, whose 700 already clears 4.5:1), so text, the 10% tint behind it and
-     the border all stay one recognisable hue. The four status hues route
-     through the semantic --apptext-* tokens so there is one place to tune.
-     100 is left alone on purpose: it is only used as text on top of solid
-     -400/-600 gradient fills (UserManagement role rail), where a dark 100
-     would vanish. */
+  /* overlays */
+  --appscrim:           rgba(18, 21, 23, 0.46);
+  --apptoast-bg:        var(--apptext);
+  --apptoast-fg:        var(--appsurface);
+
+  /* camera footage is always dark, in both themes */
+  --appmedia-bg:        #101315;
+  --appmedia-ink:       #f2f4f3;
+  --appmedia-ink-soft:  rgba(242, 244, 243, 0.78);
+  --appmedia-scrim:     rgba(8, 10, 11, 0.62);
+  --appmedia-rec:       #ff4b3e;
+
+  /* the label plate (Wi-Fi QR, visitor badge, a bill) is always white enamel */
+  --appplate:           #ffffff;
+  --appplate-ink:       #111111;
+  --appplate-soft:      #555b60;
+  --appplate-edge:      rgba(21, 24, 26, 0.22);
+
+  /* the floor map */
+  --appmap-floor:       #f1f3f2;
+  --appmap-wall:        var(--apptext);
+  --appmap-room:        rgba(21, 24, 26, 0.05);
+  --appmap-dot:         rgba(21, 24, 26, 0.12);
+
+  /* people: a person's colour is data; the initials on it are always ink */
+  --appavatar-ink:      #15181a;
+  --appavatar-ring:     var(--appsurface);
+
+  --appmask:            #000;   /* alpha-only mask colour (chart sweeps, meter segments) */
+
+  /* No drop shadows. Old shadow-[..var(--appshadow)] utilities render nothing. */
+  --appshadow:          rgba(0, 0, 0, 0);
+  --appshadow-lg:       rgba(0, 0, 0, 0);
+
+  color-scheme: light;
+}
+
+/* ── Pastel palette steps (200-400) used in component markup, light theme only ──
+   Components not yet converted to Faceplate are written for dark mode: badges are
+   text-{c}-300 + bg-{c}-300/10 + border-{c}-300/20, plain status text is
+   text-{c}-200/300/400. The app has no `dark:` variant, so light mode redefines
+   those steps here. They used to map to the 400-700 steps, which measured
+   1.2-3.8:1 as text on light surfaces (yellow/cyan/amber worst). Every step now
+   resolves to ONE text-safe shade per hue (the 800 step; 700 for indigo and
+   violet, whose 700 already clears 4.5:1 on the darkest well), so text, the 10%
+   tint behind it and the border all stay one recognisable hue. The four status hues route through the
+   semantic --apptext-* tokens so there is one place to tune. paletteContrast.test
+   checks every step on the enamel, panel and wells of every finish.
+   100 is left alone on purpose: it is only used as text on top of solid
+   -400/-600 gradient fills (UserManagement role rail), where a dark 100 would
+   vanish. Kept until the last old page is converted. */
+:root:not([data-theme="dark"]) {
   --color-emerald-200:  var(--apptext-success);
   --color-emerald-300:  var(--apptext-success);
   --color-emerald-400:  var(--apptext-success);
@@ -276,9 +407,9 @@
   --color-amber-200:    var(--apptext-warning);
   --color-amber-300:    var(--apptext-warning);
   --color-amber-400:    var(--apptext-warning);
-  --color-yellow-200:   #854d0e;   /* 800 */
-  --color-yellow-300:   #854d0e;
-  --color-yellow-400:   #854d0e;
+  --color-yellow-200:   #824b0e;   /* 800, a hair darker for the wells */
+  --color-yellow-300:   #824b0e;
+  --color-yellow-400:   #824b0e;
   --color-orange-200:   #9a3412;   /* 800 */
   --color-orange-300:   #9a3412;
   --color-orange-400:   #9a3412;
@@ -302,188 +433,296 @@
   --color-cyan-200:     #155e75;   /* 800 */
   --color-cyan-300:     #155e75;
   --color-cyan-400:     #155e75;
-  --color-blue-200:     #1d4ed8;   /* 700 */
-  --color-blue-300:     #1d4ed8;
-  --color-blue-400:     #1d4ed8;
+  --color-blue-200:     #1e40af;   /* 800 */
+  --color-blue-300:     #1e40af;
+  --color-blue-400:     #1e40af;
   --color-indigo-200:   #4338ca;   /* 700 */
   --color-indigo-300:   #4338ca;
   --color-indigo-400:   #4338ca;
   --color-violet-200:   #6d28d9;   /* 700 */
   --color-violet-300:   #6d28d9;
   --color-violet-400:   #6d28d9;
-  --color-purple-200:   #7e22ce;   /* 700 */
-  --color-purple-300:   #7e22ce;
-  --color-purple-400:   #7e22ce;
-
-  color-scheme: light;
+  --color-purple-200:   #6b21a8;   /* 800 */
+  --color-purple-300:   #6b21a8;
+  --color-purple-400:   #6b21a8;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Palette variants — override the page background, surfaces, insets,
-   borders, and accent tokens for a real hue shift across the whole
-   UI, not just buttons/badges. Deliberately UNCHANGED per palette:
-   the --apptext and --appborder ratios stay legible (same lightness/opacity
-   approach as the default, just hue-shifted — contrast is a function
-   of lightness, not hue, so this keeps the contrast work from
-   earlier sessions intact) and --appsurface stays pure white (light)
-   / near-black (dark) in every palette so raised cards keep popping
-   against the now-tinted page background. Chart tick/grid/success/
-   warning/danger colors also stay fixed across palettes on purpose
-   (see DECISIONS.md — a user should not have to relearn what color
-   means error, and electric/gas charts use green/blue as a stable
-   data-identity convention, not a brand color).
-   Applied via a `data-palette` attribute alongside `data-theme`,
-   e.g. [data-theme="light"][data-palette="ocean"]. No block is
-   needed for the "default" palette — the base theme blocks above
-   already are the default.
+   Dark theme: the same object in a dim room. Wells are darker than
+   the panel (recessed), never lighter.
+   ═══════════════════════════════════════════════════════════════ */
+[data-theme="dark"] {
+  --appbg:              #121416;
+  --appsurface:         #1b1e21;
+  --appsurface-raised:  var(--appsurface);
+  --appinset:           #0d0f10;
+  --appinset-strong:    #070809;
+  --appkey:             #262a2e;
+  --appkey-hover:       #2e3337;
+  --appkey-lip:         rgba(0, 0, 0, 0.6);
+  --appkey-lip-ink:     rgba(0, 0, 0, 0.25);
+  --appwell-shadow:     inset 0 1px 2px rgba(0, 0, 0, 0.7);
+  --approw-hover:       rgba(238, 241, 239, 0.04);
+  --appskel-shine:      rgba(238, 241, 239, 0.06);
+
+  --apptext:            #eef1ef;
+  --apptext-soft:       #cdd2d5;
+  --apptext-muted:      #a7aeb3;
+  --apptext-dim:        #969da2;
+  --appink-faint:       #6a7277;
+
+  /* the lamps themselves pass as text on the dark panel and wells */
+  --apptext-success:    #3ddc84;
+  --apptext-warning:    #ffb627;
+  --apptext-danger:     #ff6b5e;
+  --apptext-info:       #6fa8ff;
+
+  --appborder:          rgba(238, 241, 239, 0.13);
+  --appborder-light:    rgba(238, 241, 239, 0.07);
+  --appborder-strong:   rgba(238, 241, 239, 0.24);
+
+  --appaccent-soft:     rgba(238, 241, 239, 0.08);
+  --appaccent-border:   rgba(238, 241, 239, 0.34);
+  /* On the light ink key, text is the near-black of the light ink. */
+  --appaccent-fg:       #15181a;
+
+  --applamp-ok:         #3ddc84;
+  --applamp-warn:       #ffb627;
+  --applamp-problem:    #ff6b5e;
+  --applamp-info:       #6fa8ff;
+  --applamp-off:        #33393d;
+  --applamp-edge:       rgba(0, 0, 0, 0.35);
+  --apptint-ok:         rgba(61, 220, 132, 0.08);
+  --apptint-warn:       rgba(255, 182, 39, 0.09);
+  --apptint-problem:    rgba(255, 107, 94, 0.09);
+  --apptint-info:       rgba(111, 168, 255, 0.08);
+  --appedge-ok:         rgba(61, 220, 132, 0.38);
+  --appedge-warn:       rgba(255, 182, 39, 0.38);
+  --appedge-problem:    rgba(255, 107, 94, 0.40);
+  --appedge-info:       rgba(111, 168, 255, 0.36);
+  --appdanger:          #ff6b5e;
+  --appdanger-fg:       #15181a;
+
+  --appchart-grid:      rgba(238, 241, 239, 0.09);
+  --appchart-tick:      #a7aeb3;
+  --appchart-border:    rgba(238, 241, 239, 0.13);
+  --appchart-heat:      #ff8a4c;
+  --appchart-cool:      #6fb6ff;
+  --appchart-charge:    #3ddc84;
+  --appchart-graphite:  #9aa2a7;
+  --appchart-soft:      #5e676d;
+  --appchart-water:     #3cc6da;
+  --appchart-gas:       #e0b341;
+  --appchart-band:      rgba(238, 241, 239, 0.11);
+  --appchart-cursor:    rgba(238, 241, 239, 0.45);
+  --appchart-empty:     #454c51;
+
+  --appdial-day:        #59616a;
+  --appdial-night:      #0d0f10;
+  --appdial-tick:       rgba(238, 241, 239, 0.40);
+
+  --appscrim:           rgba(0, 0, 0, 0.62);
+
+  --appplate:           #f4f5f3;
+  --appplate-soft:      #50565b;
+  --appplate-edge:      rgba(0, 0, 0, 0.5);
+
+  --appmap-floor:       #16191b;
+  --appmap-room:        rgba(238, 241, 239, 0.05);
+  --appmap-dot:         rgba(238, 241, 239, 0.12);
+
+  color-scheme: dark;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Palettes are enamel FINISHES. A finish tints the page, panels,
+   wells, keys and hairlines only. Ink, lamps, status text and chart
+   colours never change, so status reads the same in every finish
+   and a user never has to relearn what colour means a problem.
+   Applied via a `data-palette` attribute alongside `data-theme`
+   (ThemeContext, and the start-up script in index.html), e.g.
+   [data-theme="light"][data-palette="ocean"]. No block is needed
+   for "default": the theme blocks above already are the default.
+   ids stay ocean / sunset / violet (saved on people's phones);
+   the names people see are Sea glass / Sandstone / Lilac.
    ═══════════════════════════════════════════════════════════════ */
 
-/* ── Light: Ocean ── */
+/* ── Light: Sea glass ── */
 [data-theme="light"][data-palette="ocean"] {
-  --appbg:              #e8f1f9;
-  --appinset:           #dceaf5;
-  --appinset-strong:    #c3ddf0;
-  --appborder:          rgba(3, 105, 161, 0.16);
-  --appborder-light:    rgba(3, 105, 161, 0.09);
-  --appborder-hover:    rgba(3, 105, 161, 0.28);
-  --appaccent:          #0369a1;
-  --appaccent-soft:     rgba(2, 132, 199, 0.14);
-  --appaccent-border:   rgba(3, 105, 161, 0.4);
-  --appaccent-text:     #075985;
-  --appglow-accent:     rgba(2, 132, 199, 0.14);
+  --appbg:              #e5eaee;
+  --appsurface:         #f6f8fa;
+  --appinset:           #dae2e8;
+  --appinset-strong:    #cdd7df;
+  --appkey:             #fcfdfe;
+  --appkey-hover:       #eff3f6;
+  --appmap-floor:       #eef2f5;
+  --applamp-off:        #c5ced5;
+  --appborder:          rgba(20, 38, 54, 0.15);
+  --appborder-light:    rgba(20, 38, 54, 0.08);
+  --appborder-strong:   rgba(20, 38, 54, 0.27);
 }
 
-/* ── Light: Sunset ── */
+/* ── Light: Sandstone ── */
 [data-theme="light"][data-palette="sunset"] {
-  --appbg:              #fdf6f0;
-  --appinset:           #fbebdc;
-  --appinset-strong:    #f5dcc0;
-  --appborder:          rgba(194, 65, 12, 0.13);
-  --appborder-light:    rgba(194, 65, 12, 0.07);
-  --appborder-hover:    rgba(194, 65, 12, 0.22);
-  --appaccent:          #c2410c;
-  --appaccent-soft:     rgba(234, 88, 12, 0.14);
-  --appaccent-border:   rgba(194, 65, 12, 0.4);
-  --appaccent-text:     #9a3412;
-  --appglow-accent:     rgba(234, 88, 12, 0.14);
+  --appbg:              #ede9e3;
+  --appsurface:         #faf8f5;
+  --appinset:           #e4ded6;
+  --appinset-strong:    #d8d1c7;
+  --appkey:             #fefdfb;
+  --appkey-hover:       #f4f1ec;
+  --appmap-floor:       #f4f1ec;
+  --applamp-off:        #d3cbc0;
+  --appborder:          rgba(46, 32, 18, 0.15);
+  --appborder-light:    rgba(46, 32, 18, 0.08);
+  --appborder-strong:   rgba(46, 32, 18, 0.27);
 }
 
-/* ── Light: Violet ── */
+/* ── Light: Lilac ── */
 [data-theme="light"][data-palette="violet"] {
-  --appbg:              #f2eef9;
-  --appinset:           #e9e0f6;
-  --appinset-strong:    #dbcaef;
-  --appborder:          rgba(109, 40, 217, 0.16);
-  --appborder-light:    rgba(109, 40, 217, 0.09);
-  --appborder-hover:    rgba(109, 40, 217, 0.28);
-  --appaccent:          #6d28d9;
-  --appaccent-soft:     rgba(124, 58, 237, 0.14);
-  --appaccent-border:   rgba(109, 40, 217, 0.4);
-  --appaccent-text:     #5b21b6;
-  --appglow-accent:     rgba(124, 58, 237, 0.14);
+  --appbg:              #e9e7ee;
+  --appsurface:         #f8f7fa;
+  --appinset:           #dfdce6;
+  --appinset-strong:    #d3cfdc;
+  --appkey:             #fdfdfe;
+  --appkey-hover:       #f2f0f5;
+  --appmap-floor:       #f1eff5;
+  --applamp-off:        #cdc8d6;
+  --appborder:          rgba(34, 26, 54, 0.15);
+  --appborder-light:    rgba(34, 26, 54, 0.08);
+  --appborder-strong:   rgba(34, 26, 54, 0.27);
 }
 
-/* ── Dark: Ocean ── */
+/* ── Dark: Sea glass ── */
 [data-theme="dark"][data-palette="ocean"] {
-  /* Neutral surfaces, identical to the default dark theme — the color
-     only shows up in small parts of the UI (borders, icon badges,
-     accent fills), NOT as a background wash. Any tinting of the surface
-     tokens themselves made the color feel like it had too much effect.
-     Accent lightened a step vs. light Ocean (#0369a1 → #0284c7) so it
-     reads better against the dark neutral surface. */
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  /* Lightening insets — see the base dark theme block for rationale. */
-  --appinset:           rgba(148, 163, 184, 0.06);
-  --appinset-strong:    rgba(148, 163, 184, 0.11);
-  --appborder:          rgba(2, 132, 199, 0.18);
-  --appborder-light:    rgba(2, 132, 199, 0.1);
-  --appborder-hover:    rgba(2, 132, 199, 0.3);
-  --appaccent:          #0284c7;
-  --appaccent-soft:     rgba(2, 132, 199, 0.16);
-  --appaccent-border:   rgba(2, 132, 199, 0.42);
-  --appaccent-text:     #bae6fd;
-  /* White on #0284c7 is 4.1:1 — under 4.5 for the 15px button labels. */
-  --appaccent-fg:       #020617;
-  --appglow-accent:     rgba(2, 132, 199, 0.22);
+  --appbg:              #10151a;
+  --appsurface:         #192026;
+  --appinset:           #0a0e12;
+  --appinset-strong:    #05080a;
+  --appkey:             #232c33;
+  --appkey-hover:       #2b353d;
+  --appmap-floor:       #141a1f;
+  --applamp-off:        #303a42;
+  --appborder:          rgba(224, 236, 246, 0.13);
+  --appborder-light:    rgba(224, 236, 246, 0.07);
+  --appborder-strong:   rgba(224, 236, 246, 0.24);
 }
 
-/* ── Dark: Sunset ── */
+/* ── Dark: Sandstone ── */
 [data-theme="dark"][data-palette="sunset"] {
-  /* Neutral surfaces, identical to the default dark theme — see the
-     note in Dark: Ocean. Color shows only in small accent parts, never
-     as a background wash. */
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  /* Lightening insets — see the base dark theme block for rationale. */
-  --appinset:           rgba(148, 163, 184, 0.06);
-  --appinset-strong:    rgba(148, 163, 184, 0.11);
-  /* Accent lightened a step vs. light Sunset (#c2410c → #ea580c) so it
-     reads better against the dark neutral surface. */
-  --appborder:          rgba(234, 88, 12, 0.18);
-  --appborder-light:    rgba(234, 88, 12, 0.1);
-  --appborder-hover:    rgba(234, 88, 12, 0.3);
-  --appaccent:          #ea580c;
-  --appaccent-soft:     rgba(234, 88, 12, 0.16);
-  --appaccent-border:   rgba(234, 88, 12, 0.42);
-  --appaccent-text:     #ffe1d0;
-  /* White on #ea580c is 3.6:1. */
-  --appaccent-fg:       #020617;
-  --appglow-accent:     rgba(234, 88, 12, 0.22);
+  --appbg:              #16130f;
+  --appsurface:         #211d19;
+  --appinset:           #0f0c0a;
+  --appinset-strong:    #080605;
+  --appkey:             #2d2823;
+  --appkey-hover:       #36302a;
+  --appmap-floor:       #1b1714;
+  --applamp-off:        #3d362f;
+  --appborder:          rgba(246, 236, 224, 0.13);
+  --appborder-light:    rgba(246, 236, 224, 0.07);
+  --appborder-strong:   rgba(246, 236, 224, 0.24);
 }
 
-/* ── Dark: Violet ── */
+/* ── Dark: Lilac ── */
 [data-theme="dark"][data-palette="violet"] {
-  /* Neutral surfaces, identical to the default dark theme — see the
-     note in Dark: Ocean. Color shows only in small accent parts, never
-     as a background wash. */
-  --appbg:              #020617;
-  --appsurface:         #0f172a;
-  --appsurface-raised:  rgba(15, 23, 42, 0.88);
-  /* Lightening insets — see the base dark theme block for rationale. */
-  --appinset:           rgba(148, 163, 184, 0.06);
-  --appinset-strong:    rgba(148, 163, 184, 0.11);
-  /* Accent lightened a step vs. light Violet (#6d28d9 → #7c3aed) so it
-     reads better against the dark neutral surface. */
-  --appborder:          rgba(124, 58, 237, 0.2);
-  --appborder-light:    rgba(124, 58, 237, 0.11);
-  --appborder-hover:    rgba(124, 58, 237, 0.32);
-  --appaccent:          #7c3aed;
-  --appaccent-soft:     rgba(124, 58, 237, 0.16);
-  --appaccent-border:   rgba(124, 58, 237, 0.42);
-  --appaccent-text:     #dcc2ff;
-  --appaccent-fg:       #ffffff;   /* 5.7:1 */
-  --appglow-accent:     rgba(124, 58, 237, 0.22);
+  --appbg:              #131219;
+  --appsurface:         #1c1b23;
+  --appinset:           #0d0c12;
+  --appinset-strong:    #07060a;
+  --appkey:             #282631;
+  --appkey-hover:       #302e3a;
+  --appmap-floor:       #17161d;
+  --applamp-off:        #36333f;
+  --appborder:          rgba(236, 230, 248, 0.13);
+  --appborder-light:    rgba(236, 230, 248, 0.07);
+  --appborder-strong:   rgba(236, 230, 248, 0.24);
 }
 
-/* ── Safe-area padding for the mobile bottom nav ──
-   `pb-safe` was used on the bottom nav (App.tsx) but never defined, so it
-   silently did nothing and tab labels crowded the iOS home-indicator zone.
-   Requires `viewport-fit=cover` on the viewport meta for env() to resolve. */
-@utility pb-safe {
-  padding-bottom: env(safe-area-inset-bottom);
+/* ═══════════════════════════════════════════════════════════════
+   Theme-independent scale: type, radii, sizes, motion
+   ═══════════════════════════════════════════════════════════════ */
+:root {
+  --appfont: "Archivo", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --appfont-mono: "DM Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  /* type: Archivo's width axis is the system. Silk-screen labels are wide caps
+     (the only uppercase), numerals are condensed and tabular. */
+  --appfs-label:     0.71875rem;  /* 11.5px silk-screen label */
+  --appfs-key:       0.6875rem;   /* 11px label under a nav key */
+  --appfs-small:     0.8125rem;   /* 13px meta, captions, notes */
+  --appfs-body:      0.9375rem;   /* 15px */
+  --appfs-lead:      1.125rem;    /* 18px verdict sentence (21px desktop) */
+  --appfs-section:   1rem;        /* 16px panel title */
+  --appfs-title:     1.375rem;    /* 22px page title */
+  --appfs-title-lg:  1.75rem;     /* 28px page title, desktop */
+  --appfs-num-xl:    2.75rem;     /* 44px instrument centre */
+  --appfs-num-l:     1.75rem;     /* 28px readout well */
+  --appfs-num-m:     1.125rem;    /* 18px inline numeral */
+  --appfs-mono-s:    0.71875rem;  /* 11.5px axis labels, timestamps */
+  --appfs-mono:      0.8125rem;   /* 13px units, clock, IDs */
+  --applh-tight:     1.15;
+  --applh-body:      1.45;
+  --appstretch-label: 112%;
+  --appstretch-num:   88%;
+  --appstretch-key:   94%;
+
+  /* radius: dials and lamps are circles */
+  --appradius-panel: 12px;
+  --appradius-key:   10px;
+  --appradius-well:  8px;
+  --appradius-chip:  8px;
+  --appradius-tag:   6px;
+
+  /* sizes */
+  --apptap:          44px;   /* minimum touch target and default control height */
+  --apptap-sm:       36px;   /* compact controls (a hidden hit area keeps them >= 44px) */
+  --appstrip-h:      48px;
+  --appstrip-h-phone: 52px;
+  --appkeycol-w:     96px;
+  --appkeyrow-h:     64px;
+  --appcontent-max:  1240px;
+  --appgutter:       16px;
+  --apppanel-pad:    16px;
+  --appgap:          12px;   /* space between panels on a page */
+  --appicon:         20px;
+  --applamp-size:    9px;
+  --appdial-max:     240px;
+
+  /* motion */
+  --appease:         cubic-bezier(0.2, 0.7, 0.2, 1);
+  --appdur-fast:     120ms;
+  --appdur-sweep:    500ms;
+
+  /* a person with no colour of their own */
+  --appavatar-default: #94a3b8;
+
+  /* finish swatches shown on the Profile palette keys (same in both themes) */
+  --appfinish-default: #c9cfcb;
+  --appfinish-ocean:   #b7c7d4;
+  --appfinish-sunset:  #d8c6b0;
+  --appfinish-violet:  #c8c1d8;
 }
 
-/* ── Centred dialogs on a phone ──
-   modal-overlay keeps the panel clear of the notch and the home indicator in the
-   Home Screen app; modal-panel never grows past the screen, so a tall dialog
-   scrolls inside itself and its close and save buttons stay reachable. Before,
-   Edit Profile and a Roomba run's details ran off both ends of an iPhone screen. */
-@utility modal-overlay {
-  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+@media (width >= 40rem) {
+  :root {
+    --appgutter:    24px;
+    --apppanel-pad: 20px;
+    --appgap:       16px;
+  }
 }
 
-@utility modal-panel {
-  max-height: calc(100dvh - max(1rem, env(safe-area-inset-top)) - max(1rem, env(safe-area-inset-bottom)));
-  overflow-y: auto;
-  overscroll-behavior: contain;
+@media (width >= 64rem) {
+  :root {
+    --appgutter:    40px;
+    --apppanel-pad: 24px;
+    --appgap:       20px;
+    --appfs-lead:   1.3125rem;  /* 21px */
+    --appdial-max:  300px;
+  }
 }
 
 /* ── Base ── */
 html {
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--appfont);
   /* The app's own pull-to-refresh (PullToRefresh) replaces the browser's. */
   overscroll-behavior-y: contain;
 }
@@ -492,10 +731,50 @@ body {
   @apply bg-appbg text-apptext antialiased;
 }
 
-/* ── Performance ── */
-.perf-section {
-  content-visibility: auto;
-  contain-intrinsic-size: 1px 720px;
+@layer base {
+  /* Focus is visible by default: an ink outline (light ink in dark). A utility on
+     the element (focus:outline-none + a ring) still wins over this. */
+  :focus-visible {
+    outline: 2px solid var(--appfocus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: var(--apptext);
+    color: var(--appaccent-fg);
+  }
+}
+
+/* ── Form controls stay 16px on phones and tablets ──
+   iOS zooms the whole page into any text field under 16px when it is focused, and
+   stays zoomed, which pushed dialog buttons off-screen. text-sm (15px) and text-xs
+   controls are all over the old pages; this lifts every one of them below lg.
+   Unlayered on purpose, so it beats the text-* utilities. No maximum-scale in the
+   viewport meta instead: that would also take pinch-zoom away. */
+@media (width < 64rem) {
+  :where(input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"],
+      [type="button"], [type="submit"], [type="reset"], [type="image"], [type="hidden"]), select, textarea) {
+    font-size: 1rem;
+  }
+}
+
+/* ── Status bar in the light theme (iPhone Home Screen app) ──
+   index.html asks for the "black-translucent" status bar so the app can draw under
+   it, and iOS then always draws a WHITE clock and battery, reading the meta once
+   at launch. On the light enamel they were invisible. While the app runs as a
+   Home Screen app in the light theme, an ink band fills the status-bar inset so
+   the glyphs sit on ink, like the phone's own bezel. It is 0px tall in a browser
+   tab and on desktop (no inset there). Dark needs nothing. */
+@media (display-mode: standalone) {
+  :root:not([data-theme="dark"]) body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 auto;
+    height: env(safe-area-inset-top, 0px);
+    background: var(--apptext);
+    z-index: 2147483647;
+    pointer-events: none;
+  }
 }
 
 /* While a theme/palette swap is in flight (class toggled by ThemeProvider),
@@ -549,9 +828,9 @@ body {
   min-height: 100dvh;
 }
 
-/* ── Scrollbar ── */
+/* ── Scrollbar: a strong hairline thumb on no track ── */
 * {
-  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+  scrollbar-color: var(--appborder-strong) transparent;
 }
 
 ::-webkit-scrollbar {
@@ -564,169 +843,10 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.28);
+  background: var(--appborder-strong);
   border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.42);
-}
-
-/* ── Theme toggle button ── */
-.theme-toggle {
-  @apply relative inline-flex h-8 w-14 items-center rounded-full border border-appborder
-         bg-appinset p-0.5 transition-colors duration-300
-         hover:border-appborder-hover focus:outline-none focus-visible:ring-2
-         focus-visible:ring-appaccent focus-visible:ring-offset-2;
-}
-
-.theme-toggle-thumb {
-  /* Stays white in both themes (reads clearly against the dark track in
-     dark mode) but gets a hairline border so it doesn't blend into the
-     light-mode track, which is close to white too. */
-  @apply flex h-6 w-6 items-center justify-center rounded-full bg-white
-         border border-black/5 shadow-md
-         transition-transform duration-300 ease-out;
-}
-
-.theme-toggle-thumb.light {
-  transform: translateX(1.5rem);
-}
-
-/* ── WiFi QR card ── */
-.qr-canvas {
-  image-rendering: pixelated;
-}
-
-/* ── Guest login page background ── */
-.guest-bg {
-  background:
-    radial-gradient(circle at 20% 20%, var(--appglow), transparent 35%),
-    radial-gradient(circle at 80% 80%, var(--appglow-accent), transparent 40%),
-    radial-gradient(circle at 50% 50%, var(--appglow-header), transparent 60%);
-}
-
-/* ── Pixel scenes (header art — see components/PixelScene.tsx) ──
-   Gentle idle animations in the retro-game style: bobbing characters, a
-   flickering bolt, a patrolling roomba. All transform/opacity only (no
-   layout or paint cost while scrolling). */
-.px-bob {
-  animation: px-bob 2.2s ease-in-out infinite;
-}
-.px-bob-slow {
-  animation: px-bob 3.4s ease-in-out infinite;
-}
-@keyframes px-bob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
-}
-
-.px-flicker {
-  animation: px-flicker 2.8s steps(1) infinite;
-}
-@keyframes px-flicker {
-  0%, 100% { opacity: 1; }
-  86% { opacity: 1; }
-  88% { opacity: 0.25; }
-  90% { opacity: 1; }
-  93% { opacity: 0.4; }
-  95% { opacity: 1; }
-}
-
-.px-twinkle {
-  animation: px-twinkle 1.6s ease-in-out infinite;
-}
-@keyframes px-twinkle {
-  0%,
-  100% {
-    opacity: 0.15;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.px-pulse {
-  animation: px-pulse 2.4s ease-in-out infinite;
-}
-@keyframes px-pulse {
-  0%,
-  100% {
-    opacity: 0.75;
-  }
-  50% {
-    opacity: 1;
-  }
-}
-
-.px-drive {
-  animation: px-drive 7s ease-in-out infinite;
-}
-@keyframes px-drive {
-  0%,
-  100% {
-    transform: translateX(-16px);
-  }
-  50% {
-    transform: translateX(16px);
-  }
-}
-
-.px-swing {
-  transform-origin: top center;
-  animation: px-swing 2.6s ease-in-out infinite;
-}
-@keyframes px-swing {
-  0%,
-  100% {
-    transform: rotate(-8deg);
-  }
-  50% {
-    transform: rotate(8deg);
-  }
-}
-
-.px-spin-slow {
-  animation: px-spin 14s linear infinite;
-}
-@keyframes px-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .px-bob,
-  .px-bob-slow,
-  .px-flicker,
-  .px-twinkle,
-  .px-pulse,
-  .px-drive,
-  .px-swing,
-  .px-spin-slow {
-    animation: none;
-  }
-}
-
-.px-drive-wide {
-  animation: px-drive-wide 12s ease-in-out infinite;
-}
-@keyframes px-drive-wide {
-  0%,
-  100% {
-    transform: translateX(-110px);
-  }
-  50% {
-    transform: translateX(110px);
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .px-drive-wide {
-    animation: none;
-  }
+  background: var(--appink-faint);
 }

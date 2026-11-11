@@ -12,47 +12,25 @@ import {
 } from 'recharts';
 import { fetchForecast, fetchForecastSnapshots } from '../api/forecast';
 import { pickPredicted } from '../utils/forecastSeries';
-import { localTodayIso } from '../utils/localDate';
-import { useTheme, DATA_SERIES, predictedColor as predictedSeriesColor } from '../context/ThemeContext';
+import { formatDate, formatNumber, formatShortDate, homeToday } from '../utils/format';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
+import type { DailyUsagePoint } from '../types';
+import { ChartLegend, EmptyState, Panel, QueryState, SkelBlock, useChartTheme, type QueryLike } from './ui';
 
 /**
- * TrendOutlookChart — last 30 days of actual usage (solid green) against the
- * predicted line (dashed purple: the stored prediction for past days, the live
- * forecast from today on), so hovering any day shows both. Band-free; the
- * Forecast tab has the confidence band. Colors match that chart.
+ * Daily use: the last 30 days of actual use (ink) against the forecast (graphite, dashed: the
+ * stored prediction for past days, the live forecast from today on), with a Today marker.
+ * Band-free; the Forecast & stats view has the likely range.
  */
 
 const HIST_DAYS = 30;
 const OUTLOOK_DAYS = 14;
+const MARGIN = { top: 18, right: 16, left: 0, bottom: 0 } as const;
 
-const chartTheme = {
-  grid: 'var(--appchart-grid)',
-  tick: 'var(--appchart-tick)',
-  muted: 'var(--apptext-muted)',
-};
-
-const TOOLTIP_CONTENT_STYLE = {
-  backgroundColor: 'var(--appchart-bg)',
-  border: '1px solid var(--appchart-border)',
-  borderRadius: '16px',
-  fontSize: '13px',
-  color: 'var(--apptext)',
-  boxShadow: '0 20px 50px var(--appshadow-lg)',
-} as const;
-
-const TOOLTIP_LABEL_STYLE = { color: 'var(--apptext-muted)', marginBottom: 4 } as const;
-
-function formatDateLabel(iso: string): string {
-  const d = new Date(iso + 'T12:00:00');
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-/** ISO date + 1 calendar day, in local calendar terms (no UTC shifting). */
+/** ISO date + 1 calendar day, in calendar terms (no time-zone shifting). */
 function nextDay(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
-  const dt = new Date(y, m - 1, d + 1);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+  return new Date(Date.UTC(y, m - 1, d + 1)).toISOString().slice(0, 10);
 }
 
 function daysBetween(fromIso: string, toIso: string): number {
@@ -63,41 +41,33 @@ function daysBetween(fromIso: string, toIso: string): number {
 
 interface Row {
   date: string;
-  label: string;
   actual: number | null;
   predicted: number | null;
-  /** Invisible-to-tooltip connector joining the green line to the first predicted point. */
+  /** Tooltip-less connector joining the actual line to the first predicted point. */
   bridge: number | null;
 }
 
 interface TrendOutlookChartProps {
-  /** Server-aggregated daily totals, ascending by date. */
-  dailyPoints: Array<{ date: string; kWh: number }>;
-  loading?: boolean;
-  title?: string;
-  emptyText?: string;
+  /** The daily-totals query, for its loading and error states. */
+  daily: QueryLike<DailyUsagePoint[]>;
+  /** Its totals as `{ date, kWh }`, ascending by date. */
+  points: Array<{ date: string; kWh: number }>;
 }
 
-function TrendOutlookChart({
-  dailyPoints,
-  loading,
-  title = 'Usage trend & outlook',
-  emptyText = 'No electric usage data yet — readings sync automatically each evening.',
-}: TrendOutlookChartProps) {
-  const { theme, palette } = useTheme();
-  const forecastInterval = useJitteredInterval(600_000);
-  const today = localTodayIso();
+const kwh = (v: unknown) => (typeof v === 'number' ? formatNumber(v, { decimals: 1, fixed: true, unit: 'kWh' }) : String(v));
 
-  const actuals = useMemo(
-    () => dailyPoints.filter((p) => p.date <= today).slice(-HIST_DAYS),
-    [dailyPoints, today]
-  );
+function TrendOutlookChart({ daily, points }: TrendOutlookChartProps) {
+  const t = useChartTheme();
+  const forecastInterval = useJitteredInterval(600_000);
+  const today = homeToday();
+
+  const actuals = useMemo(() => points.filter((p) => p.date <= today).slice(-HIST_DAYS), [points, today]);
   const startDate = actuals.length ? actuals[0].date : '';
   // Snapshot window follows the first plotted day (not a fixed day count), so
   // the oldest visible day keeps its stored prediction even across data gaps.
   const historyDays = startDate ? Math.min(90, daysBetween(startDate, today) + 1) : HIST_DAYS;
 
-  // Same key as ForecastChart's 14-day view, so the two share one cached fetch.
+  // Same key as the forecast chart's 14-day view, so the two share one cached fetch.
   const { data: forecast } = useQuery({
     queryKey: ['forecast', OUTLOOK_DAYS],
     queryFn: () => fetchForecast(OUTLOOK_DAYS),
@@ -136,7 +106,6 @@ function TrendOutlookChart({
     for (let d = startDate; d <= endDate; d = nextDay(d)) {
       rows.push({
         date: d,
-        label: formatDateLabel(d),
         actual: actualByDate.get(d) ?? null,
         predicted: pickPredicted({
           date: d,
@@ -149,7 +118,7 @@ function TrendOutlookChart({
       });
     }
 
-    // If the last actual day has no prediction of its own, join the green line
+    // If the last actual day has no prediction of its own, join the actual line
     // to the first predicted point with a tooltip-less connector.
     let lastActualIdx = -1;
     rows.forEach((r, i) => { if (r.actual != null) lastActualIdx = i; });
@@ -160,139 +129,64 @@ function TrendOutlookChart({
         rows[nextIdx].bridge = rows[nextIdx].predicted;
       }
     }
-
     return rows;
   }, [actuals, startDate, snapshots, forecast, today]);
 
-  const predictedColor = predictedSeriesColor(palette, theme);
-  const actualColor = DATA_SERIES[theme].positive;
-
-  if (loading) {
-    return (
-      <div className="animate-pulse rounded-[28px] border border-appborder bg-appsurface-raised p-5">
-        <div className="mb-4 h-5 w-48 rounded bg-appinset" />
-        <div className="h-72 rounded-2xl bg-appinset" />
-      </div>
-    );
-  }
-
-  if (!dailyPoints.length) {
-    return (
-      <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4">
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Trend &amp; outlook</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">{title}</h3>
-        </div>
-        <div className="flex h-72 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-          {emptyText}
-        </div>
-      </div>
-    );
-  }
+  // A tick each week, from the first day, so the axis never crowds on a phone.
+  const ticks = useMemo(() => chartData.filter((_, i) => i % 7 === 0).map((r) => r.date), [chartData]);
 
   return (
-    <div className="rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">Trend &amp; outlook</p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">{title}</h3>
-          <p className="mt-1 text-xs text-apptext-muted">
-            Last {HIST_DAYS} days of actual usage vs. what was predicted at the time, plus the next {OUTLOOK_DAYS} days of AI-projected usage.
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-2xs text-apptext-muted">
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="18" height="6" aria-hidden="true">
-            <line x1="0" y1="3" x2="18" y2="3" stroke={actualColor} strokeWidth="2.5" />
-          </svg>
-          Actual
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <svg width="18" height="6" aria-hidden="true">
-            <line x1="0" y1="3" x2="18" y2="3" stroke={predictedColor} strokeWidth="2" strokeDasharray="5 3" />
-          </svg>
-          Predicted
-        </span>
-      </div>
-
-      {chartData.length < 2 ? (
-        <div className="flex h-48 items-center justify-center rounded-2xl border border-dashed border-appborder bg-appinset text-sm text-apptext-muted">
-          Waiting for usage data...
-        </div>
-      ) : (
-        <ResponsiveContainer width="100%" height={300} debounce={80}>
-          <ComposedChart data={chartData} margin={{ top: 5, right: 12, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.grid} />
-            <XAxis
-              dataKey="label"
-              tick={{ fill: chartTheme.tick, fontSize: 11 }}
-              axisLine={{ stroke: chartTheme.grid }}
-              tickLine={false}
-              interval="preserveStartEnd"
-              minTickGap={28}
-              angle={-35}
-              textAnchor="end"
-              height={50}
-            />
-            <YAxis
-              tick={{ fill: chartTheme.tick, fontSize: 11 }}
-              axisLine={{ stroke: chartTheme.grid }}
-              tickLine={false}
-              unit=" kWh"
-            />
-            <Tooltip
-              contentStyle={TOOLTIP_CONTENT_STYLE}
-              labelStyle={TOOLTIP_LABEL_STYLE}
-              formatter={(value: number, name: string) => [
-                `${value.toFixed(1)} kWh`,
-                name === 'actual' ? 'Actual' : 'Predicted',
-              ]}
-            />
-
-            <ReferenceLine
-              x={formatDateLabel(today)}
-              stroke={chartTheme.muted}
-              strokeDasharray="4 4"
-              label={{ value: 'Today', fill: chartTheme.muted, fontSize: 10 }}
-            />
-
-            <Line
-              type="monotone"
-              dataKey="bridge"
-              stroke={predictedColor}
-              strokeWidth={2}
-              strokeDasharray="6 3"
-              dot={false}
-              isAnimationActive={false}
-              connectNulls
-              tooltipType="none"
-            />
-
-            <Line
-              type="monotone"
-              dataKey="predicted"
-              stroke={predictedColor}
-              strokeWidth={2}
-              strokeDasharray="6 3"
-              dot={false}
-              isAnimationActive={false}
-            />
-
-            <Line
-              type="monotone"
-              dataKey="actual"
-              stroke={actualColor}
-              strokeWidth={2.5}
-              dot={false}
-              isAnimationActive={false}
-              connectNulls
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-      )}
-    </div>
+    <Panel title="Daily use" subtitle={`The last ${HIST_DAYS} days against the forecast, and the ${OUTLOOK_DAYS} days ahead`}>
+      <QueryState
+        query={daily}
+        what="the daily use"
+        loading={<SkelBlock height={240} />}
+        empty={
+          <EmptyState icon="bar-chart" title="No electric use yet" compact>
+            Readings sync each evening once CoServ posts the day.
+          </EmptyState>
+        }
+      >
+        {() =>
+          chartData.length < 2 ? (
+            <EmptyState icon="bar-chart" title="Not enough days to draw yet" compact>
+              The line starts once two days have posted.
+            </EmptyState>
+          ) : (
+            <div className="fp-stack fp-stack--s">
+              <ChartLegend
+                items={[
+                  { label: 'Actual', tone: 'ink', key: 'line' },
+                  { label: 'Forecast', tone: 'graphite', key: 'dash' },
+                  { label: 'Today', key: 'today' },
+                ]}
+              />
+              <ResponsiveContainer width="100%" height={240} debounce={80}>
+                <ComposedChart data={chartData} margin={MARGIN}>
+                  <CartesianGrid {...t.grid} />
+                  <XAxis dataKey="date" {...t.axis} ticks={ticks} interval="preserveStartEnd" minTickGap={12} tickFormatter={(d: string) => formatShortDate(d)} />
+                  <YAxis {...t.axis} width={36} />
+                  <Tooltip
+                    {...t.tooltip}
+                    labelFormatter={(d: string) => formatDate(d)}
+                    formatter={(value: number, name: string) => [kwh(value), name === 'actual' ? 'Actual' : 'Forecast']}
+                  />
+                  {/* The label sits above the plot, clear of the lines it marks (B-080). */}
+                  <ReferenceLine
+                    x={today}
+                    {...t.today}
+                    label={{ value: 'Today', position: 'top', fill: t.axis.tick.fill, fontSize: 11, fontFamily: t.axis.tick.fontFamily }}
+                  />
+                  <Line type="monotone" dataKey="bridge" stroke={t.series.graphite} strokeWidth={2} strokeDasharray={t.dash} dot={false} isAnimationActive={false} connectNulls tooltipType="none" />
+                  <Line type="monotone" dataKey="predicted" stroke={t.series.graphite} strokeWidth={2} strokeDasharray={t.dash} dot={false} isAnimationActive={false} />
+                  <Line type="monotone" dataKey="actual" stroke={t.series.ink} strokeWidth={2.5} dot={false} isAnimationActive={false} connectNulls />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )
+        }
+      </QueryState>
+    </Panel>
   );
 }
 

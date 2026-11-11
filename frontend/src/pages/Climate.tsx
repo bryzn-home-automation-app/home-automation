@@ -5,29 +5,24 @@ import ThermostatHistoryChart, { type HistoryRange } from '../components/Thermos
 import { discoverHomeDevices, errorMessage, errorStatus, fetchThermostatHistory, fetchThermostats } from '../api/climate';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useAuth } from '../context/AuthContext';
-import { FOCUS_RING } from '../components/ThermostatControls';
-import { formatTemp, statusChip, unitSymbol } from '../utils/thermostat';
-import type { ThermostatReading } from '../types';
-
-function Notice({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-[24px] border border-dashed border-appborder bg-appsurface-raised p-8 text-center">
-      <p className="text-3xl">🌡️</p>
-      <h3 className="mt-3 text-lg font-semibold text-apptext">{title}</h3>
-      <div className="mt-2 text-sm text-apptext-muted">{children}</div>
-    </div>
-  );
-}
-
-function CardSkeleton() {
-  return (
-    <div className="animate-pulse rounded-[24px] border border-appborder bg-appsurface-raised p-5">
-      <div className="mb-6 h-5 w-32 rounded bg-appinset" />
-      <div className="mb-6 h-12 w-40 rounded bg-appinset" />
-      <div className="h-24 rounded-2xl bg-appinset" />
-    </div>
-  );
-}
+import { usePageMeta } from '../components/shell/PageMeta';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  Notice,
+  QueryState,
+  Screen,
+  Seg,
+  SegPanel,
+  SkelInstrumentPanel,
+  SkelPanel,
+  useSearchParamState,
+} from '../components/ui';
+import { formatTime } from '../utils/format';
+import { formatTemp, unitSymbol } from '../utils/thermostat';
+import { staleReason } from '../utils/cameras';
+import type { Thermostat, ThermostatReading } from '../types';
 
 export default memo(function Climate() {
   const { user, isAdmin } = useAuth();
@@ -49,19 +44,34 @@ export default memo(function Climate() {
   });
   const thermostats = useMemo(() => thermostatsQuery.data ?? [], [thermostatsQuery.data]);
 
+  usePageMeta({ subtitle: thermostatsQuery.dataUpdatedAt ? `Updated ${formatTime(thermostatsQuery.dataUpdatedAt)}` : undefined });
+
+  // The thermostat on screen lives in the URL (?thermostat=…), so a reload or the sleep screen
+  // comes back to it.
+  const ids = useMemo(() => thermostats.map((t) => t.id), [thermostats]);
+  const [selectedParam, setSelected] = useSearchParamState('thermostat', ids, ids[0] ?? '');
+  const selectedId = selectedParam || ids[0] || '';
+
   // combine keeps the merged result referentially stable between renders, so
   // the chart's memo only recomputes when a history query actually changes.
   const combineHistory = useCallback(
     (results: UseQueryResult<ThermostatReading[]>[]) => {
       const byId: Record<string, ThermostatReading[] | undefined> = {};
+      const failed: Record<string, boolean> = {};
       thermostats.forEach((t, i) => {
         byId[t.id] = results[i]?.data;
+        failed[t.id] = !!results[i]?.isError;
       });
-      return { history: byId, historyLoading: results.some((r) => r.isLoading) };
+      return {
+        history: byId,
+        failed,
+        fetching: results.some((r) => r.isFetching),
+        refetch: () => results.forEach((r) => r.isError && void r.refetch()),
+      };
     },
     [thermostats],
   );
-  const { history, historyLoading } = useQueries({
+  const history = useQueries({
     queries: thermostats.map((t) => ({
       queryKey: ['thermostat-history', t.id, range],
       queryFn: () => fetchThermostatHistory(t.id, range),
@@ -77,112 +87,112 @@ export default memo(function Climate() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['thermostats'] }),
   });
 
-  if (thermostatsQuery.isLoading) {
-    return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CardSkeleton />
-        <CardSkeleton />
-      </div>
-    );
-  }
-
-  const retryButton = (
-    <button
-      type="button"
-      onClick={() => thermostatsQuery.refetch()}
-      disabled={thermostatsQuery.isFetching}
-      className={`mt-4 h-11 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 text-sm font-semibold text-apptext transition-colors hover:bg-appaccent/20 disabled:opacity-50 ${FOCUS_RING}`}
+  // QueryState draws loading, the first-load error and the empty state; a failed refresh is
+  // said here instead, with the reason (B-103), so the generic notice is turned off.
+  const held = { ...thermostatsQuery, isError: thermostatsQuery.isError && thermostatsQuery.data === undefined };
+  const firstError = errorStatus(thermostatsQuery.error) === 503 ? (
+    <ErrorState
+      title="Home Assistant isn't connected"
+      onRetry={() => void thermostatsQuery.refetch()}
+      retrying={thermostatsQuery.isFetching}
     >
-      {thermostatsQuery.isFetching ? 'Retrying…' : 'Retry'}
-    </button>
+      The thermostats come through Home Assistant, which isn't reachable right now.
+      {isAdmin && ' Check the homeassistant container and the HA_* settings in .env.'}
+    </ErrorState>
+  ) : (
+    <ErrorState title="Couldn't load the thermostats" onRetry={() => void thermostatsQuery.refetch()} retrying={thermostatsQuery.isFetching}>
+      {errorMessage(thermostatsQuery.error)}
+    </ErrorState>
   );
 
-  // Only a failure with nothing to show replaces the page; a failed background
-  // refresh keeps the last data and shows a slim banner instead.
-  if (thermostatsQuery.isError && !thermostatsQuery.data) {
-    const status = errorStatus(thermostatsQuery.error);
-    return status === 503 ? (
-      <Notice title="Home Assistant isn't connected">
-        <p>
-          The thermostats come through Home Assistant, which isn't reachable right now.
-          {isAdmin && ' Check the homeassistant container and the HA_* settings in .env.'}
-        </p>
-        {retryButton}
-      </Notice>
-    ) : (
-      <Notice title="Couldn't load thermostats">
-        <p>{errorMessage(thermostatsQuery.error)}</p>
-        {retryButton}
-      </Notice>
-    );
-  }
-
-  if (!thermostats.length) {
-    return (
-      <Notice title="No thermostats yet">
-        <p>Home Assistant is connected, but no thermostats have been found.</p>
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => discover.mutate()}
-            disabled={discover.isPending}
-            className="mt-4 rounded-xl border border-appaccent-border bg-appaccent-soft px-4 py-2 text-sm font-semibold text-apptext transition-colors hover:bg-appaccent/20 disabled:opacity-50"
-          >
-            {discover.isPending ? 'Discovering…' : 'Discover devices'}
-          </button>
-        )}
-        {discover.isError && <p className="mt-2 text-rose-300">{errorMessage(discover.error)}</p>}
-      </Notice>
-    );
-  }
-
-  const lastGood = thermostatsQuery.dataUpdatedAt
-    ? new Date(thermostatsQuery.dataUpdatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-    : null;
-
   return (
-    <div className="flex flex-col gap-4 lg:gap-5">
-      {thermostatsQuery.isError && (
-        <div role="alert" className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-3 py-2 text-xs text-amber-400">
-          Can't reach Home Assistant{lastGood ? ` — showing data from ${lastGood}` : ''}.
-        </div>
-      )}
-
-      {/* Phone: each card is tall, so later floors sit below the fold — a
-          compact strip shows all of them at a glance and jumps to each. */}
-      {thermostats.length > 1 && (
-        <nav aria-label="Thermostats" className="grid grid-cols-2 gap-2 lg:hidden">
-          {thermostats.map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() =>
-                document.getElementById(`thermostat-${t.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-              }
-              className={`min-h-11 rounded-2xl border border-appborder bg-appsurface-raised px-3 py-2 text-left transition-colors hover:border-appborder-hover ${FOCUS_RING}`}
-            >
-              <span className="block truncate text-xs font-semibold text-apptext">
-                {t.name} {formatTemp(t.temperature)}°
-              </span>
-              <span className="block truncate text-3xs text-apptext-muted">{statusChip(t).text}</span>
-            </button>
-          ))}
-        </nav>
-      )}
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-5">
-        {thermostats.map((t) => (
-          <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
-        ))}
-      </div>
-      <ThermostatHistoryChart
-        thermostats={thermostats}
-        history={history}
-        range={range}
-        onRangeChange={setRange}
-        loading={historyLoading}
-        unit={unitSymbol(thermostats[0]?.temperatureUnit)}
-      />
-    </div>
+    <Screen>
+      <QueryState
+        query={held}
+        what="the thermostats"
+        error={firstError}
+        loading={
+          <div className="fp-stack fp-stack--page">
+            <SkelInstrumentPanel readouts={2} />
+            <SkelPanel chart />
+          </div>
+        }
+        empty={
+          <EmptyState
+            icon="thermometer"
+            title="No thermostats yet"
+            action={
+              isAdmin ? (
+                <Button icon="search" busy={discover.isPending} busyLabel="Looking…" onClick={() => discover.mutate()}>
+                  Look for thermostats
+                </Button>
+              ) : undefined
+            }
+          >
+            {/* B-100: a search that finds nothing says so, instead of quietly resetting the key. */}
+            {discover.isError
+              ? errorMessage(discover.error)
+              : discover.isSuccess && !thermostatsQuery.isFetching
+                ? 'The search found no thermostats. Check the ecobee integration in Home Assistant.'
+                : 'Home Assistant is connected, but no thermostats have been found yet.'}
+          </EmptyState>
+        }
+      >
+        {(list: Thermostat[]) => {
+          const t = list.find((x) => x.id === selectedId) ?? list[0];
+          return (
+            <>
+              {thermostatsQuery.isError && (
+                <Notice
+                  tone="headsup"
+                  live="polite"
+                  title={staleReason(thermostatsQuery.error, thermostatsQuery.dataUpdatedAt)}
+                  action={
+                    <Button size="sm" icon="refresh" busy={thermostatsQuery.isFetching} busyLabel="Trying again…" onClick={() => void thermostatsQuery.refetch()}>
+                      Try again
+                    </Button>
+                  }
+                />
+              )}
+              {list.length > 1 && (
+                <Seg
+                  id="climate-thermostat"
+                  label="Thermostat"
+                  value={t.id}
+                  onChange={setSelected}
+                  options={list.map((x) => ({
+                    value: x.id,
+                    label: (
+                      <>
+                        {x.name}
+                        <span className="ml-2 font-medium tabular-nums">{formatTemp(x.temperature)}°</span>
+                      </>
+                    ),
+                  }))}
+                />
+              )}
+              {list.length > 1 ? (
+                <SegPanel id="climate-thermostat" value={t.id}>
+                  <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
+                </SegPanel>
+              ) : (
+                <ThermostatCard key={t.id} thermostat={t} canControl={canControl} currentUserId={user?.userId} />
+              )}
+              <ThermostatHistoryChart
+                thermostats={list}
+                selectedId={t.id}
+                history={history.history}
+                failed={history.failed}
+                onRetry={history.refetch}
+                retrying={history.fetching}
+                range={range}
+                onRangeChange={setRange}
+                unit={unitSymbol(t.temperatureUnit)}
+              />
+            </>
+          );
+        }}
+      </QueryState>
+    </Screen>
   );
 });

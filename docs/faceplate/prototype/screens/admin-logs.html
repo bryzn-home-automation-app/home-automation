@@ -1,0 +1,282 @@
+<section class="screen" data-route="admin-logs" data-title="Activity log" data-eyebrow="Admin" data-subtitle="Updated 5:00&nbsp;PM">
+
+  <!-- 1–3. The answer: today on a 24-hour ruler + the latest change -->
+  <section class="ip" aria-labelledby="admin-logs-verdict">
+    <div class="ip-instrument">
+      <div class="dial" data-chart="dial" data-start="180" data-sweep="360" data-rings='[{"r":84,"w":12,"min":0,"max":24,"edge":true,"ticks":24,"major":6,"labels":[[0,"12&nbsp;AM"],[6,"6&nbsp;AM"],[12,"Noon"],[18,"6&nbsp;PM"]],"marks":[{"at":16.93,"tone":"info","inset":1,"out":1},{"at":13.7,"tone":"ok","inset":1,"out":1},{"at":8.05,"tone":"graphite","inset":1,"out":1},{"at":7.7,"tone":"graphite","inset":1,"out":1},{"at":6,"tone":"info","inset":1,"out":1}]},{"r":68,"w":4,"min":0,"max":24,"track":false,"segments":[{"from":0,"to":17,"tone":"soft"}]}]'>
+        <div class="dial-centre">
+          <span class="label">Today</span>
+          <span class="num num--xl">5<span class="unit">events</span></span>
+          <span class="dial-note mono">latest 4:56&nbsp;PM</span>
+        </div>
+      </div>
+      <p class="sr-only">Today's events on a 24-hour ring: thermostat changes at 6:00&nbsp;AM and 4:56&nbsp;PM, sign-ins at 7:42 and 8:03&nbsp;AM, and a guest at 1:42&nbsp;PM.</p>
+      <div class="dial-legend" aria-hidden="true">
+        <span class="lg-item"><span class="lg-key lg-key--mark" style="--c: var(--lamp-info)"></span>Thermostat <b>2</b></span>
+        <span class="lg-item"><span class="lg-key lg-key--mark" style="--c: var(--chart-graphite)"></span>Sign-in <b>2</b></span>
+        <span class="lg-item"><span class="lg-key lg-key--mark" style="--c: var(--lamp-ok)"></span>Guest <b>1</b></span>
+      </div>
+    </div>
+    <div class="ip-body">
+      <div class="verdict">
+        <span class="lamp lamp--info"></span>
+        <p class="verdict-text" id="admin-logs-verdict">Mai set Upstairs to 70° at 4:56&nbsp;PM.</p>
+        <p class="verdict-note">Both thermostats followed their schedules until then. Downstairs still does.</p>
+      </div>
+      <div class="readouts">
+        <div class="readout">
+          <span class="label">Today</span>
+          <span class="readout-value"><span class="num">5<span class="unit">events</span></span></span>
+          <span class="readout-note">2 thermostat, 2 sign‑ins, 1 guest</span>
+        </div>
+        <div class="readout">
+          <span class="label">Thermostat</span>
+          <span class="readout-value"><span class="num">11<span class="unit">changes</span></span></span>
+          <span class="readout-note">Last 7 days, 2 by Bryan</span>
+        </div>
+        <a class="readout" href="#people" data-nav="people">
+          <span class="label"><span class="lamp lamp--warn lamp--s"></span>Waiting</span>
+          <span class="readout-value"><span class="num">1<span class="unit">to approve</span></span></span>
+          <span class="readout-note">Danny Tran asked to join</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Detail -->
+  <div class="split">
+    <section class="panel" aria-labelledby="admin-logs-tl-title">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-logs-tl-title">Timeline</h2><p class="panel-sub">Newest first. Thermostat changes are kept for 30 days</p></div>
+      </header>
+      <div class="stack stack--s logs-filters">
+        <div class="chips" data-tabs="admin-logs-kind" role="tablist" aria-label="Kind">
+          <button class="chip is-active" type="button" role="tab" data-tab="all">All</button>
+          <button class="chip" type="button" role="tab" data-tab="thermo"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg>Thermostat</button>
+          <button class="chip" type="button" role="tab" data-tab="signin"><svg class="icon" aria-hidden="true"><use href="#i-log-in"/></svg>Sign-ins</button>
+          <button class="chip" type="button" role="tab" data-tab="guest"><svg class="icon" aria-hidden="true"><use href="#i-id-card"/></svg>Guests</button>
+          <button class="chip" type="button" role="tab" data-tab="account"><svg class="icon" aria-hidden="true"><use href="#i-user"/></svg>Accounts</button>
+        </div>
+        <div class="chips" data-tabs="admin-logs-who" role="tablist" aria-label="Person">
+          <button class="chip is-active" type="button" role="tab" data-tab="all">Everyone</button>
+          <button class="chip" type="button" role="tab" data-tab="bryan"><span class="avatar avatar--xs" style="--who: var(--person-bryan)" aria-hidden="true">BR</span>Bryan</button>
+          <button class="chip" type="button" role="tab" data-tab="mai"><span class="avatar avatar--xs" style="--who: var(--person-mai)" aria-hidden="true">MA</span>Mai</button>
+          <button class="chip" type="button" role="tab" data-tab="linh"><span class="avatar avatar--xs" style="--who: var(--person-linh)" aria-hidden="true">LI</span>Linh</button>
+          <button class="chip" type="button" role="tab" data-tab="alex"><span class="avatar avatar--xs" style="--who: var(--person-alex)" aria-hidden="true">AL</span>Alex</button>
+          <button class="chip" type="button" role="tab" data-tab="outside">Outside the app</button>
+        </div>
+      </div>
+      <div class="timeline logs-timeline mt-m">
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">Today</span><span class="mono">Mon, Nov 9</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="mai"><span class="tl-time">4:56&nbsp;PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Upstairs set to 70° by Mai</span><span class="row-meta">Thermostat · from the app · heating</span></span></div></div></li>
+              <li class="tl-item" data-kind="guest" data-who="alex"><span class="tl-time">1:42&nbsp;PM</span><span class="lamp lamp--ok"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-alex)" aria-hidden="true">AL</span><span class="row-main"><span class="sr-only">OK.</span><span class="row-title row-title--regular">Alex joined as a guest</span><span class="row-meta">Guest Wi-Fi · iPhone · 192.168.1.57</span></span></div></div></li>
+              <li class="tl-item" data-kind="signin" data-who="mai"><span class="tl-time">8:03&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Mai signed in</span><span class="row-meta">Sign-in · iPhone</span></span></div></div></li>
+              <li class="tl-item" data-kind="signin" data-who="bryan"><span class="tl-time">7:42&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Bryan signed in</span><span class="row-meta">Sign-in · MacBook Pro</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="outside"><span class="tl-time">6:00&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="row-lead logs-lead" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Both thermostats switched to Home</span><span class="row-meta">Thermostat · by their schedules · Downstairs 68–75°, Upstairs 68°</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">Yesterday</span><span class="mono">Sun, Nov 8</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="outside"><span class="tl-time">10:00&nbsp;PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="row-lead logs-lead" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Both thermostats switched to Sleep</span><span class="row-meta">Thermostat · by their schedules · Downstairs 66–76°, Upstairs 66°</span></span></div></div></li>
+              <li class="tl-item" data-kind="account" data-who="danny"><span class="tl-time">3:02&nbsp;PM</span><span class="lamp lamp--warn"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-danny)" aria-hidden="true">DT</span><span class="row-main"><span class="sr-only">Heads-up.</span><span class="row-title row-title--regular">Danny Tran asked to join</span><span class="row-meta">Account · waiting for your approval in People</span></span></div></div></li>
+              <li class="tl-item" data-kind="signin" data-who="linh"><span class="tl-time">7:02&nbsp;AM</span><span class="lamp lamp--off"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Linh signed in</span><span class="row-meta">Sign-in · Pixel</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="outside"><span class="tl-time">1:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="row-lead logs-lead" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg></span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs set to 70° at the thermostat</span><span class="row-meta">Thermostat · by hand, on the wall · until 6:00&nbsp;AM</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">Saturday</span><span class="mono">Sat, Nov 7</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="linh"><span class="tl-time">6:57&nbsp;PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs set to 72° by Linh</span><span class="row-meta">Thermostat · from the app · heating</span></span></div></div></li>
+              <li class="tl-item" data-kind="guest" data-who="alex"><span class="tl-time">6:02&nbsp;PM</span><span class="lamp lamp--ok"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-alex)" aria-hidden="true">AL</span><span class="row-main"><span class="sr-only">OK.</span><span class="row-title row-title--regular">Alex came back as a guest</span><span class="row-meta">Guest Wi-Fi · iPhone · second visit</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="bryan"><span class="tl-time">3:32&nbsp;PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs switched to Heat, 70° by Bryan</span><span class="row-meta">Thermostat · from the app</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="mai"><span class="tl-time">11:20&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Upstairs back on its schedule, by Mai</span><span class="row-meta">Thermostat · from the app · ended Away</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="outside"><span class="tl-time">8:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="row-lead logs-lead" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg></span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Upstairs switched to Away until resumed</span><span class="row-meta">Thermostat · by Home Assistant</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">Friday</span><span class="mono">Fri, Nov 6</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="guest" data-who="alex"><span class="tl-time">7:02&nbsp;PM</span><span class="lamp lamp--ok"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-alex)" aria-hidden="true">AL</span><span class="row-main"><span class="sr-only">OK.</span><span class="row-title row-title--regular">Alex joined as a guest for the first time</span><span class="row-meta">Guest Wi-Fi · used the invite code</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="bryan"><span class="tl-time">2:02&nbsp;PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs turned off by Bryan</span><span class="row-meta">Thermostat · from the app</span></span></div></div></li>
+              <li class="tl-item" data-kind="thermo" data-who="linh"><span class="tl-time">4:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Upstairs set to 71° by Linh</span><span class="row-meta">Thermostat · from the app · heating</span></span></div></div></li>
+            </ol>
+          </section>
+      </div>
+      <div class="empty empty--compact mt-m" data-logs-empty hidden>
+        <svg class="icon" aria-hidden="true"><use href="#i-filter"/></svg>
+        <p class="empty-title">Nothing matches</p>
+        <p class="empty-text">Try another kind or person. Sign-ins show each person’s latest only.</p>
+      </div>
+      <details class="disclosure disclosure--row mt-m logs-earlier">
+        <summary><span class="when-closed">Show 9 earlier</span><span class="when-open">Show fewer</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="disclosure-body">
+          <div class="timeline logs-timeline">
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">Wednesday</span><span class="mono">Wed, Nov 4</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="outside"><span class="tl-time">7:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="row-lead logs-lead" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg></span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs set to 73° at the thermostat</span><span class="row-meta">Thermostat · by hand, on the wall · cooling</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">Last week</span><span class="mono">Mon, Nov 2</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="bryan"><span class="tl-time">11:02&nbsp;PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Upstairs switched to Away, 62° by Bryan</span><span class="row-meta">Thermostat · from the app</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">October</span><span class="mono">Sat, Oct 31</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="mai"><span class="tl-time">6:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs set to 72° by Mai</span><span class="row-meta">Thermostat · from the app · cooling</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">October</span><span class="mono">Wed, Oct 28</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="bryan"><span class="tl-time">3:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs switched to Cool, 75° by Bryan</span><span class="row-meta">Thermostat · from the app</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">October</span><span class="mono">Fri, Oct 23</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="outside"><span class="tl-time">9:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="row-lead logs-lead" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg></span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Downstairs set to 74° at the thermostat</span><span class="row-meta">Thermostat · by hand, on the wall</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">October</span><span class="mono">Sat, Oct 17</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="thermo" data-who="linh"><span class="tl-time">4:02&nbsp;AM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><span class="sr-only">Info.</span><span class="row-title row-title--regular">Upstairs set to 72° by Linh</span><span class="row-meta">Thermostat · from the app · heating</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">August</span><span class="mono">Sat, Aug 15</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="account" data-who="linh"><span class="tl-time">8:02&nbsp;AM</span><span class="lamp lamp--warn"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="row-main"><span class="sr-only">Heads-up.</span><span class="row-title row-title--regular">Linh was approved as a member</span><span class="row-meta">Account · approved by Bryan</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">July</span><span class="mono">Sun, Jul 26</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="account" data-who="mai"><span class="tl-time">12:15&nbsp;PM</span><span class="lamp lamp--warn"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="row-main"><span class="sr-only">Heads-up.</span><span class="row-title row-title--regular">Mai was approved as a member</span><span class="row-meta">Account · approved by Bryan</span></span></div></div></li>
+            </ol>
+          </section>
+          <section class="logs-day">
+            <h3 class="tl-day"><span class="label">July</span><span class="mono">Fri, Jul 24</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item" data-kind="account" data-who="bryan"><span class="tl-time">7:02&nbsp;PM</span><span class="lamp lamp--warn"></span>
+                <div class="tl-body"><div class="person"><span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="row-main"><span class="sr-only">Heads-up.</span><span class="row-title row-title--regular">Bryan set up the household</span><span class="row-meta">Account · Admin</span></span></div></div></li>
+            </ol>
+          </section>
+          </div>
+        </div>
+      </details>
+    </section>
+
+    <div class="stack stack--page">
+      <section class="panel" aria-labelledby="admin-logs-who-title">
+        <header class="panel-head">
+          <div><h2 class="panel-title" id="admin-logs-who-title">Who changes the thermostat</h2><p class="panel-sub">Last 30 days, 16 changes in all</p></div>
+        </header>
+        <div class="stack stack--m">
+          <div class="meter-row">
+            <span class="cluster logs-who"><span class="avatar avatar--xs" style="--who: var(--person-bryan)" aria-hidden="true">BR</span><span class="small">Bryan</span></span>
+            <span class="mono">4</span>
+            <div class="progress" role="progressbar" aria-label="Bryan" aria-valuenow="4" aria-valuemin="0" aria-valuemax="16"><span style="--p: 100%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster logs-who"><span class="avatar avatar--xs" style="--who: var(--person-mai)" aria-hidden="true">MA</span><span class="small">Mai</span></span>
+            <span class="mono">3</span>
+            <div class="progress" role="progressbar" aria-label="Mai" aria-valuenow="3" aria-valuemin="0" aria-valuemax="16"><span style="--p: 75%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster logs-who"><span class="row-lead logs-lead logs-lead--xs" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-thermometer"/></svg></span><span class="small">At the thermostat</span></span>
+            <span class="mono">3</span>
+            <div class="progress" role="progressbar" aria-label="At the thermostat" aria-valuenow="3" aria-valuemin="0" aria-valuemax="16"><span style="--p: 75%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster logs-who"><span class="avatar avatar--xs" style="--who: var(--person-linh)" aria-hidden="true">LI</span><span class="small">Linh</span></span>
+            <span class="mono">3</span>
+            <div class="progress" role="progressbar" aria-label="Linh" aria-valuenow="3" aria-valuemin="0" aria-valuemax="16"><span style="--p: 75%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster logs-who"><span class="row-lead logs-lead logs-lead--xs" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg></span><span class="small">Schedule</span></span>
+            <span class="mono">2</span>
+            <div class="progress" role="progressbar" aria-label="Schedule" aria-valuenow="2" aria-valuemin="0" aria-valuemax="16"><span style="--p: 50%"></span></div>
+          </div>
+          <div class="meter-row">
+            <span class="cluster logs-who"><span class="row-lead logs-lead logs-lead--xs" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg></span><span class="small">Home Assistant</span></span>
+            <span class="mono">1</span>
+            <div class="progress" role="progressbar" aria-label="Home Assistant" aria-valuenow="1" aria-valuemin="0" aria-valuemax="16"><span style="--p: 25%"></span></div>
+          </div>
+        </div>
+        <p class="small muted mt-m">“At the thermostat” is someone pressing the wall unit; the app can’t tell who.</p>
+      </section>
+
+      <section class="panel" aria-labelledby="admin-logs-sign-title">
+        <header class="panel-head">
+          <div><h2 class="panel-title" id="admin-logs-sign-title">Last sign-in</h2><p class="panel-sub">One line per account</p></div>
+          <div class="panel-action"><a class="btn btn--sm btn--quiet" href="#people" data-nav="people">People<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+        </header>
+        <ul class="list">
+          <li><div class="row row--compact">
+            <span class="avatar avatar--sm" style="--who: var(--person-bryan)" aria-hidden="true">BR</span>
+            <span class="row-main"><span class="row-title">Bryan <span class="tag">Admin</span></span><span class="row-meta">214 sign-ins</span></span>
+            <span class="row-trail"><span class="mono small">7:42&nbsp;AM today</span></span>
+          </div></li>
+          <li><div class="row row--compact">
+            <span class="avatar avatar--sm" style="--who: var(--person-mai)" aria-hidden="true">MA</span>
+            <span class="row-main"><span class="row-title">Mai <span class="tag">Member</span></span><span class="row-meta">97 sign-ins</span></span>
+            <span class="row-trail"><span class="mono small">8:03&nbsp;AM today</span></span>
+          </div></li>
+          <li><div class="row row--compact">
+            <span class="avatar avatar--sm" style="--who: var(--person-linh)" aria-hidden="true">LI</span>
+            <span class="row-main"><span class="row-title">Linh <span class="tag">Member</span></span><span class="row-meta">41 sign-ins</span></span>
+            <span class="row-trail"><span class="mono small">Sun, 7:02&nbsp;AM</span></span>
+          </div></li>
+          <li><div class="row row--compact">
+            <span class="avatar avatar--sm" style="--who: var(--person-alex)" aria-hidden="true">AL</span>
+            <span class="row-main"><span class="row-title">Alex <span class="tag">Guest</span></span><span class="row-meta">5 sign-ins</span></span>
+            <span class="row-trail"><span class="mono small">1:42&nbsp;PM today</span></span>
+          </div></li>
+          <li><div class="row row--compact">
+            <span class="avatar avatar--sm" style="--who: var(--person-danny)" aria-hidden="true">DT</span>
+            <span class="row-main"><span class="row-title">Danny Tran <span class="tag">Member</span></span><span class="row-meta">Asked to join Sun, 3:02&nbsp;PM</span></span>
+            <span class="row-trail"><span class="badge badge--warn">Waiting</span></span>
+          </div></li>
+          <li><div class="row row--compact">
+            <span class="avatar avatar--sm is-away" style="--who: var(--person-kim)" aria-hidden="true">KN</span>
+            <span class="row-main"><span class="row-title">Kim Nguyen <span class="tag">Member</span></span><span class="row-meta">Account turned off</span></span>
+            <span class="row-trail"><span class="badge">Off</span></span>
+          </div></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</section>

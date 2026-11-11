@@ -1,8 +1,5 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import StatTile, { Icons } from '../components/StatTile';
-import DeferredRender from '../components/DeferredRender';
-import VirtualizedList from '../components/VirtualizedList';
 import RoombaMap, { type RoomSelection, type SplitLine } from '../components/RoombaMap';
 import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
@@ -13,130 +10,50 @@ import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
 import RoombaNativeSchedules from '../components/RoombaNativeSchedules';
 import RoombaMaintenance from '../components/RoombaMaintenance';
+import { usePageMeta } from '../components/shell/PageMeta';
+import {
+  Badge, Button, Disclosure, EmptyState, Icon, IconButton, InstrumentPanel, KeyValue, KV, Lamp, List, Notice,
+  Num, Panel, QueryState, Readout, Readouts, Ring, Row, Screen, Seg, SegPanel, SkelRows, Split, Stack,
+  Verdict, useSearchParamState, type ChartTone,
+} from '../components/ui';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
+import { useRoombaNativeSchedules } from '../hooks/useRoombaNativeSchedules';
 import { useAuth } from '../context/AuthContext';
 import { cleaningMinutes, isRecharging, roomsSummary } from '../utils/roomba';
-import type { RoombaStatus, RoombaRun } from '../types';
+import {
+  initiatorLabel, nextCleanDay, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
+} from '../utils/roombaStatus';
+import { batteryStatus, humanize, onlineStatus, type Tone } from '../utils/status';
+import { DASH, NBSP, formatDayName, formatDuration, formatNumber, formatStamp, formatTime, plural } from '../utils/format';
+import type { RoombaRun, RoombaStatus } from '../types';
 
-// ── Presentation helpers ──────────────────────────────────
+// Overview is the everyday view (the map, recent cleans, schedules, rooms); Maintenance is the
+// robot's parts and lifetime counters, checked now and then. The view lives in ?view= so it
+// survives a reload, Back and the sleep screen.
+const VIEWS = [
+  { value: 'overview', label: 'Overview', icon: 'robot' },
+  { value: 'maintenance', label: 'Maintenance', icon: 'tool' },
+] as const;
+const VIEW_VALUES = ['overview', 'maintenance'] as const;
 
-/** Map a raw V4 phase to a human label. */
-function phaseLabel(status: RoombaStatus | null | undefined): string {
-  if (!status) return 'Unknown';
-  if (status.error && status.error !== 0) return 'Needs attention';
-  if (isRecharging(status)) return 'Recharging mid-clean';
-  switch (status.phase) {
-    case 'run':
-      return 'Cleaning';
-    case 'evac':
-      return 'Emptying bin';
-    case 'charge':
-      return 'Charging';
-    case 'hmMidMsn':
-    case 'hmPostMsn':
-    case 'hmUsrDock':
-      return 'Returning to dock';
-    case 'stop':
-    case 'idle':
-    case 'none':
-    case null:
-    case undefined:
-      return 'Idle';
-    default:
-      return status.phase.charAt(0).toUpperCase() + status.phase.slice(1);
-  }
+// The run list shows this many, then a "Show more" disclosure (no scroll box inside the page; B-006).
+const RUNS_SHOWN = 7;
+
+const TONE_TO_CHART: Record<Tone, ChartTone> = { ok: 'ok', headsup: 'warn', problem: 'problem', info: 'info', neutral: 'ink' };
+
+/** "Cleaned yesterday" / "Last cleaned Sun, Nov 1" for a room, from the newest confirmed run that named it. */
+function lastCleanedLine(at: string | undefined, now: Date): string {
+  if (!at) return 'No clean recorded yet';
+  const day = formatDayName(at, now);
+  return day === 'Today' || day === 'Yesterday' ? `Cleaned ${day.toLowerCase()}` : `Last cleaned ${day}`;
 }
 
-function formatDuration(minutes: number | null | undefined): string {
-  if (minutes == null || !Number.isFinite(minutes)) return '—';
-  if (minutes < 60) return `${Math.round(minutes)} min`;
-  const h = Math.floor(minutes / 60);
-  const m = Math.round(minutes % 60);
-  return m === 0 ? `${h} hr` : `${h} hr ${m} min`;
+/** "9:00 AM" → ["9:00", "AM"], so a readout can set the AM/PM in mono like a unit. */
+function splitTime(text: string): [string, string | undefined] {
+  const i = text.lastIndexOf(NBSP);
+  return i > 0 ? [text.slice(0, i), text.slice(i + 1)] : [text, undefined];
 }
-
-function formatRelative(iso: string | null | undefined): string {
-  if (!iso) return 'never';
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return 'unknown';
-  const diffSec = Math.round((Date.now() - then) / 1000);
-  if (diffSec < 45) return 'just now';
-  if (diffSec < 90) return 'a minute ago';
-  const diffMin = Math.round(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} min ago`;
-  const diffHr = Math.round(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hr ago`;
-  const diffDay = Math.round(diffHr / 24);
-  return `${diffDay} day${diffDay === 1 ? '' : 's'} ago`;
-}
-
-const INITIATOR_LABELS: Record<string, string> = {
-  rmtApp: 'App',
-  localApp: 'App',
-  schedule: 'Schedule',
-  manual: 'Robot button',
-  cloud: 'Cloud',
-  voice: 'Voice assistant',
-};
-function initiatorLabel(v: string | null | undefined): string {
-  if (!v) return '—';
-  return INITIATOR_LABELS[v] ?? v;
-}
-
-/** One label/value cell in the maintenance detail strip. */
-function Detail({ label, value, tone }: { label: string; value: string; tone?: 'warn' }) {
-  return (
-    <div>
-      <p className="text-3xs uppercase tracking-[0.16em] text-apptext-dim">{label}</p>
-      <p className={`mt-1 font-medium ${tone === 'warn' ? 'text-amber-300' : 'text-apptext'}`}>{value}</p>
-    </div>
-  );
-}
-
-function runStatusStyle(status: string): { label: string; className: string } {
-  switch (status) {
-    case 'COMPLETED':
-      return {
-        label: 'Completed',
-        className: 'border border-emerald-300/20 bg-emerald-300/10 text-emerald-300',
-      };
-    case 'STUCK':
-      return {
-        label: 'Stuck',
-        className: 'border border-rose-300/20 bg-rose-300/10 text-rose-300',
-      };
-    case 'CANCELLED':
-      return {
-        label: 'Cancelled',
-        className: 'border border-amber-300/20 bg-amber-300/10 text-amber-300',
-      };
-    default:
-      return {
-        label: status.charAt(0) + status.slice(1).toLowerCase(),
-        className: 'border border-appborder bg-appinset text-apptext-muted',
-      };
-  }
-}
-
-function presenceChip(label: string, present: boolean | null | undefined): { text: string; className: string } {
-  if (present == null) {
-    return { text: `${label}: —`, className: 'border-appborder bg-appinset text-apptext-muted' };
-  }
-  return present
-    ? { text: `${label} present`, className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' }
-    : { text: `${label} missing`, className: 'border-amber-300/20 bg-amber-300/10 text-amber-300' };
-}
-
-// Sub-tabs (same pattern as the Electric tab): the everyday view stays short —
-// live status, map, history — and the "check it occasionally" upkeep data gets
-// its own view instead of stacking one more long section on the page.
-type RoombaTab = 'overview' | 'maintenance';
-
-const ROOMBA_TABS: { key: RoombaTab; label: string; icon: string }[] = [
-  { key: 'overview', label: 'Overview', icon: '🤖' },
-  { key: 'maintenance', label: 'Maintenance', icon: '🧰' },
-];
 
 // ── Page ──────────────────────────────────────────────────
 
@@ -191,12 +108,18 @@ export default memo(function Roomba() {
     refetchIntervalInBackground: false,
   });
 
+  // The same query the Schedules panel reads (one request): the "Next clean" readout.
+  const { query: schedulesQuery } = useRoombaNativeSchedules(true);
+
   const status = statusQuery.data ?? null;
   const device = deviceQuery.data ?? null;
   const runs = useMemo<RoombaRun[]>(() => runsQuery.data ?? [], [runsQuery.data]);
-  const statusLoading = statusQuery.isLoading;
   const running = status?.running ?? false;
+  const state = roombaState(status);
   const { isAdmin } = useAuth();
+  const [view, setView] = useSearchParamState('view', VIEW_VALUES, 'overview');
+
+  usePageMeta({ subtitle: statusQuery.dataUpdatedAt ? `Updated ${formatTime(statusQuery.dataUpdatedAt)}` : undefined });
 
   // When a clean finishes (running → idle), the robot regenerates its floor plan, so
   // pull the fresh map and the newly-recorded run instead of waiting on the ~5-min map
@@ -220,6 +143,7 @@ export default memo(function Roomba() {
     ];
     return () => timers.forEach(clearTimeout);
   }, [running, queryClient]);
+
   const [selectedRoom, setSelectedRoom] = useState<RoomSelection | null>(null);
   const [splitMode, setSplitMode] = useState(false);
   const [pendingSplit, setPendingSplit] = useState<SplitLine | null>(null);
@@ -240,10 +164,16 @@ export default memo(function Roomba() {
   const [cleanRoom, setCleanRoom] = useState<RoomSelection | null>(null);
   // "Start a clean" dialog (whole-house or a room selection, with options).
   const [showClean, setShowClean] = useState(false);
-  // Run history: the run whose detail popup is open.
+  // Run history: the run whose detail dialog is open.
   const [selectedRun, setSelectedRun] = useState<RoombaRun | null>(null);
-  // Which sub-view is showing (see ROOMBA_TABS).
-  const [tab, setTab] = useState<RoombaTab>('overview');
+
+  // The map is the instrument at the top; the map tools sit with the Rooms list further
+  // down, so entering a mode brings the map back into view.
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const showMap = () => {
+    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    mapRef.current?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+  };
 
   const exitSplitMode = () => {
     setSplitMode(false);
@@ -262,16 +192,19 @@ export default memo(function Roomba() {
     exitMergeMode();
     exitCleanMode();
     setSplitMode(true);
+    showMap();
   };
   const enterMergeMode = () => {
     exitSplitMode();
     exitCleanMode();
     setMergeMode(true);
+    showMap();
   };
   const enterCleanMode = () => {
     exitSplitMode();
     exitMergeMode();
     setCleanMode(true);
+    showMap();
   };
 
   const toggleMergeRoom = useCallback((room: RoomSelection) =>
@@ -329,7 +262,7 @@ export default memo(function Roomba() {
     [mergeSelection],
   );
 
-  // Mapped rooms (id + name) for the "Start a clean" dialog's room picker.
+  // Mapped rooms (id + name) for the "Start a clean" dialog and the Rooms list.
   const cleanRooms = useMemo<CleanRoomOption[]>(() => {
     const feats = mapQuery.data?.geojson?.rooms?.features ?? [];
     return feats
@@ -341,558 +274,329 @@ export default memo(function Roomba() {
       });
   }, [mapQuery.data]);
 
-  const deviceLine = device
-    ? [device.family || device.sku, device.series && `Series ${device.series}`,
-       device.firmware && `firmware ${device.firmware}`].filter(Boolean).join(' · ')
-    : null;
+  // Newest confirmed clean of each named room (runs come newest first).
+  const lastCleaned = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const r of runs) {
+      if (!r.verified) continue;
+      for (const name of r.rooms) if (!m.has(name)) m.set(name, r.startedAt);
+    }
+    return m;
+  }, [runs]);
 
+  const now = new Date();
   const recharging = isRecharging(status);
-  const dockChip = useMemo(() => {
-    if (!status) return null;
-    if (running) return { text: 'Cleaning', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
-    if (isRecharging(status)) {
-      return { text: 'Docked · resumes once charged', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
-    }
-    if (status.dockText) {
-      const attention = status.dockError != null && status.dockError !== 0;
-      return {
-        text: `Dock · ${status.dockText}`,
-        className: attention
-          ? 'border-amber-300/25 bg-amber-300/10 text-amber-300'
-          : 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300',
-      };
-    }
-    if (status.phase === 'charge') return { text: 'Docked · charging', className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
-    if (status.phase === 'evac') return { text: 'Docked · emptying', className: 'border-appaccent-border bg-appaccent-soft text-appaccent-text' };
-    return { text: 'Idle', className: 'border-appborder bg-appinset text-apptext-muted' };
-  }, [status, running]);
+  const mapLive = running && !state.offline;
 
-  const binChip = presenceChip('Bin', status?.binPresent);
-  const tankChip = presenceChip('Tank', status?.tankPresent);
+  // ── The answer ─────────────────────────────────────────
+  const statusPending = statusQuery.data === undefined && !statusQuery.isError;
+  const statusFailed = statusQuery.data === undefined && statusQuery.isError;
+  let verdict: ReactNode;
+  if (statusPending) {
+    // A neutral "checking" while the first answer is on its way, never "No data" (B-139).
+    verdict = <Verdict tone="neutral" note="This takes a moment.">Checking on the robot…</Verdict>;
+  } else if (statusFailed) {
+    verdict = (
+      <Verdict
+        tone="problem"
+        note={
+          <>
+            The home server didn't answer.{' '}
+            <button type="button" className="fp-link" onClick={() => void statusQuery.refetch()}>Try again</button>
+          </>
+        }
+      >
+        Couldn't reach the robot's status.
+      </Verdict>
+    );
+  } else {
+    const v = roombaVerdict({ status, parts: partsQuery.data });
+    verdict = (
+      <Verdict
+        tone={v.tone}
+        note={
+          v.note || v.aboutParts ? (
+            <>
+              {v.note}
+              {v.aboutParts && (
+                <>
+                  {' '}
+                  <button type="button" className="fp-link" onClick={() => setView('maintenance')}>See parts</button>
+                </>
+              )}
+            </>
+          ) : undefined
+        }
+      >
+        {v.sentence}
+      </Verdict>
+    );
+  }
 
-  const wearSummary = useMemo(() => {
-    const w = status?.wear;
-    if (!w) return null;
-    const parts: string[] = [];
-    if (w.nStuck) parts.push(`${w.nStuck} stuck`);
-    if (w.nCliffsF) parts.push(`${w.nCliffsF} cliff`);
-    if (w.nPicks) parts.push(`${w.nPicks} pickup`);
-    return parts.length ? parts.join(' · ') : null;
-  }, [status?.wear]);
+  // First readout: this clean while one is under way (a mid-clean recharge included, B-130),
+  // otherwise the last finished one.
+  const lastRun = runs[0] ?? null;
+  let firstReadout: ReactNode;
+  if (status && state.inMission) {
+    const so = recharging
+      ? 'Recharging to finish'
+      : status.runtimeMinutes != null ? `${formatDuration(status.runtimeMinutes)} so far` : 'Under way';
+    const by = initiatorLabel(status.initiator);
+    firstReadout = (
+      <Readout
+        label="This clean"
+        value={status.sqft != null ? formatNumber(status.sqft) : DASH}
+        unit={status.sqft != null ? 'sq ft' : undefined}
+        // The verdict already says how far along it is; this says who started it (the old
+        // "Started by" detail), else the time so far.
+        note={!recharging && by ? `Started by ${by.charAt(0).toLowerCase()}${by.slice(1)}` : so}
+      />
+    );
+  } else if (lastRun) {
+    const mins = cleaningMinutes(lastRun);
+    const rooms = lastRun.verified && lastRun.rooms.length ? plural(lastRun.rooms.length, 'room') : null;
+    firstReadout = (
+      <Readout
+        label={formatDayName(lastRun.startedAt, now)}
+        value={lastRun.squareFeet != null ? formatNumber(lastRun.squareFeet) : DASH}
+        unit={lastRun.squareFeet != null ? 'sq ft' : undefined}
+        note={[rooms, mins != null ? `${rooms ? 'in ' : ''}${formatDuration(mins)}` : null].filter(Boolean).join(' ') || runStatus(lastRun.status).label}
+      />
+    );
+  } else {
+    firstReadout = (
+      <Readout
+        label="Last clean"
+        value={status?.sqft != null ? formatNumber(status.sqft) : DASH}
+        unit={status?.sqft != null ? 'sq ft' : undefined}
+        note={runsQuery.isError && !runsQuery.data ? "Couldn't load the cleans" : 'No cleans recorded yet'}
+      />
+    );
+  }
 
-  // One-glance upkeep chip for the hero (tap → Maintenance tab). Hidden until the
-  // poller has synced the part counters at least once.
-  const partsData = partsQuery.data;
-  const upkeepChip = useMemo(() => {
-    if (!partsData || partsData.length === 0) return null;
-    const overdue = partsData.filter((p) => p.status === 'overdue').length;
-    const dueSoon = partsData.filter((p) => p.status === 'due_soon').length;
-    if (overdue) {
-      return { text: `Upkeep · ${overdue} overdue`, className: 'border-rose-300/25 bg-rose-300/10 text-rose-300' };
-    }
-    if (dueSoon) {
-      return { text: `Upkeep · ${dueSoon} due soon`, className: 'border-amber-300/25 bg-amber-300/10 text-amber-300' };
-    }
-    return { text: 'Upkeep · all OK', className: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300' };
-  }, [partsData]);
+  const next = nextScheduledClean(schedulesQuery.data, now);
+  const [nextValue, nextUnit] = next ? splitTime(formatTime(next.at)) : [DASH, undefined];
+  const nextNote = next
+    ? [nextCleanDay(next, now), next.name].filter(Boolean).join(', ')
+    : schedulesQuery.data === undefined
+      ? schedulesQuery.isError ? "Couldn't load the schedules" : 'Checking the schedules'
+      : 'No schedule turned on';
 
-  // Aggregate lifetime stats for a friendly summary line.
-  const totalRuns = runs.length;
-  const completedRuns = runs.filter((r) => r.status === 'COMPLETED').length;
+  // The battery ring sits under the map, beside its legend.
+  const battery = status?.batteryPct ?? null;
+  const bStatus = batteryStatus(battery, status?.phase === 'charge');
+  const batteryRing = status ? (
+    <div className="flex items-center gap-2">
+      <Ring
+        value={(battery ?? 0) / 100}
+        tone={state.offline ? 'graphite' : TONE_TO_CHART[bStatus.tone]}
+        width={22}
+        size={48}
+        label={`Battery ${bStatus.label}${state.offline ? ' when last seen' : ''}`}
+      >
+        <Icon name={status.phase === 'charge' ? 'battery-charging' : battery != null && battery < 30 ? 'battery-low' : 'battery'} className="fp-icon--s" />
+      </Ring>
+      <Num value={battery != null ? String(Math.round(battery)) : DASH} unit={battery != null ? '%' : undefined} size="m" />
+    </div>
+  ) : null;
+
+  const presence = (label: string, present: boolean | null | undefined) =>
+    present == null ? null : (
+      <span className="inline-flex items-center gap-1.5">
+        <Lamp tone={present ? 'ok' : 'headsup'} size="s" />
+        <span className="fp-small">{`${label} ${present ? 'in' : 'out'}`}</span>
+      </span>
+    );
+  const online = onlineStatus(status ? status.online : null);
+
+  // ── Map editing (admin) ────────────────────────────────
+  const modeBanner = isAdmin && (cleanMode || splitMode || mergeMode) ? (
+    cleanMode ? (
+      <Notice tone="info" title="Clean a room" action={<Button size="sm" onClick={exitCleanMode}>Cancel</Button>}>
+        Tap a room on the map to clean just that room. You can pick suction and passes before it starts.
+      </Notice>
+    ) : splitMode ? (
+      <Notice
+        tone="headsup"
+        title="Divide a room"
+        action={
+          <>
+            <Button size="sm" variant="primary" disabled={!splitDraft || splitDraft.pts.length < 2} onClick={finishSplit}>Finish line</Button>
+            <Button size="sm" disabled={!splitDraft} onClick={undoSplitPoint}>Undo corner</Button>
+            <Button size="sm" variant="quiet" onClick={exitSplitMode}>Cancel divide</Button>
+          </>
+        }
+      >
+        Click across a room to drop corners: the first picks the room, and you can add as many bends as you like.
+        Double-click or press Enter to finish; Backspace removes the last corner. Experimental, and not cleanly reversible.{' '}
+        <span className="fp-strong">
+          {splitDraft ? `${plural(splitDraft.pts.length, 'corner')} placed.` : 'No corners yet.'}
+        </span>
+      </Notice>
+    ) : (
+      <Notice
+        tone="headsup"
+        title="Merge rooms"
+        action={
+          <>
+            <Button size="sm" variant="primary" disabled={mergeSelection.length < 2} onClick={finishMerge}>Merge selected</Button>
+            <Button size="sm" disabled={mergeSelection.length === 0} onClick={() => setMergeSelection([])}>Clear</Button>
+            <Button size="sm" variant="quiet" onClick={exitMergeMode}>Cancel merge</Button>
+          </>
+        }
+      >
+        Tap two or more rooms on the map to select them, then combine them into one. Experimental, and not cleanly
+        reversible. <span className="fp-strong">{plural(mergeSelection.length, 'room')} selected.</span>
+      </Notice>
+    )
+  ) : null;
+
+  const instrument = (
+    <div ref={mapRef} className="flex w-full flex-col gap-3">
+      <RoombaMap
+        map={mapQuery.data ?? null}
+        loading={mapQuery.data === undefined && mapQuery.isLoading}
+        error={mapQuery.isError && mapQuery.data === undefined}
+        onRetry={() => void mapQuery.refetch()}
+        retrying={mapQuery.isFetching}
+        robotName={status?.name}
+        aside={batteryRing}
+        running={mapLive}
+        editable={isAdmin}
+        onSelectRoom={setSelectedRoom}
+        splitMode={splitMode}
+        splitDraft={splitDraft?.pts ?? null}
+        splitRoomId={splitDraft?.roomId ?? null}
+        onSplitAddPoint={addSplitPoint}
+        onSplitFinish={finishSplit}
+        onSplitUndo={undoSplitPoint}
+        mergeMode={mergeMode}
+        mergeSelection={mergeSelectionIds}
+        onToggleMergeRoom={toggleMergeRoom}
+        cleanMode={cleanMode}
+        onSelectCleanRoom={handleSelectCleanRoom}
+      />
+      {modeBanner}
+      {isAdmin && !modeBanner && mapQuery.data && cleanRooms.length > 0 && (
+        <p className="fp-small fp-muted">Tap a room on the map to rename it.</p>
+      )}
+    </div>
+  );
 
   return (
-    <div className="space-y-6 sm:space-y-7">
-      {/* ── Hero / live status header ─────────────────────── */}
-      <section className="rounded-[30px] border border-appborder bg-appsurface-raised p-6 shadow-[0_12px_34px_var(--appshadow)] sm:p-7">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-2xl">
-            <p className="text-2xs font-medium uppercase tracking-[0.22em] text-apptext-muted">
-              Robot Vacuum
-            </p>
-            <h2 className="mt-3 flex items-center gap-3 text-2xl font-semibold tracking-[-0.04em] text-apptext sm:text-3xl">
-              {status?.name || 'Roomba'}
-              {running && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-appaccent-border bg-appaccent-soft px-2.5 py-1 text-2xs font-semibold uppercase tracking-[0.12em] text-appaccent-text">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-appaccent opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-appaccent" />
-                  </span>
-                  Live
+    <Screen>
+      <InstrumentPanel
+        className="min-[45rem]:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] min-[45rem]:items-start lg:grid-cols-[minmax(0,11fr)_minmax(0,9fr)]"
+        instrument={instrument}
+        verdict={verdict}
+        readouts={
+          <Readouts count={2}>
+            {firstReadout}
+            <Readout label="Next clean" value={nextValue} unit={nextUnit} note={nextNote} />
+          </Readouts>
+        }
+        foot={
+          status ? (
+            <>
+              <span className="inline-flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
+                {presence('Bin', status.binPresent)}
+                {presence('Tank', status.tankPresent)}
+                <span className="inline-flex items-center gap-1.5">
+                  <Lamp tone={online.tone} size="s" />
+                  <span className="fp-small">{online.label}</span>
                 </span>
-              )}
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-apptext-soft sm:text-base">
-              {status
-                ? `${phaseLabel(status)}${(running || recharging) && status.sqft ? ` · ${status.sqft} sq ft cleaned so far` : ''}.`
-                : 'Live status, cleaning history, and floor map for your robot vacuum.'}
-            </p>
-            {deviceLine && (
-              <p className="mt-1.5 text-xs text-apptext-dim">{deviceLine}</p>
-            )}
-          </div>
-
-          {/* Online + presence chips */}
-          <div className="flex flex-col items-start gap-3 lg:items-end">
-            <div className="flex items-center gap-2">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${
-                  status?.online ? 'bg-emerald-400' : 'bg-amber-400'
-                }`}
-              />
-              <span className="text-sm font-medium text-apptext-soft">
-                {status?.online ? 'Online' : status ? 'Offline' : 'No data'}
               </span>
-              <span className="text-xs text-apptext-dim">
-                · updated {formatRelative(status?.updatedAt)}
-              </span>
-            </div>
-            {status && (
-              <div className="flex flex-wrap gap-2 lg:justify-end">
-                {dockChip && (
-                  <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${dockChip.className}`}>
-                    {dockChip.text}
-                  </span>
-                )}
-                <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${binChip.className}`}>
-                  {binChip.text}
-                </span>
-                <span className={`rounded-full border px-2.5 py-1 text-2xs font-medium ${tankChip.className}`}>
-                  {tankChip.text}
-                </span>
-                {upkeepChip && (
-                  <button
-                    type="button"
-                    onClick={() => setTab('maintenance')}
-                    title="Open the Maintenance view"
-                    className={`rounded-full border px-2.5 py-1 text-2xs font-medium transition-[filter] hover:brightness-110 ${upkeepChip.className}`}
-                  >
-                    {upkeepChip.text}
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {status?.needsAttention && (
-          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-300/30 bg-amber-300/10 px-4 py-3">
-            <span className="mt-0.5 text-lg leading-none">⚠️</span>
-            <div className="text-sm text-amber-200">
-              <p className="font-semibold">Needs attention</p>
-              <p className="mt-0.5 text-amber-200/90">{status.attentionReasons.join(' · ')}</p>
-              {status.attentionReasons.some((r) => r.startsWith('Maintenance overdue')) && (
-                <button
-                  type="button"
-                  onClick={() => setTab('maintenance')}
-                  className="mt-1.5 text-xs font-semibold text-amber-200 underline underline-offset-2 hover:text-apptext"
-                >
-                  View maintenance →
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {statusQuery.isError && (
-          <p className="mt-4 rounded-2xl border border-rose-300/25 bg-rose-300/10 px-4 py-2.5 text-xs text-rose-200">
-            Couldn't reach the robot status service. Showing the last known values if available.
-          </p>
-        )}
-        {!statusLoading && !status && !statusQuery.isError && (
-          <p className="mt-4 rounded-2xl border border-appborder bg-appinset px-4 py-2.5 text-xs text-apptext-muted">
-            Waiting for your Roomba's first check-in. Status appears here once the poller
-            connects to the robot.
-          </p>
-        )}
-      </section>
-
-      {/* Sub-tabs: Overview (live status, map, history) vs Maintenance (parts &
-          upkeep, robot health). Same tablist styling as the Electric tab. */}
-      <div
-        role="tablist"
-        aria-label="Roomba view"
-        className="inline-flex rounded-xl border border-appborder bg-appinset p-1"
+              <span className="fp-mono">Checked in {formatStamp(status.updatedAt)}</span>
+            </>
+          ) : undefined
+        }
       >
-        {ROOMBA_TABS.map((t) => {
-          const active = tab === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              onClick={() => setTab(t.key)}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-appaccent-soft text-appaccent-text shadow-[0_1px_3px_var(--appshadow)]'
-                  : 'text-apptext-soft hover:text-apptext'
-              }`}
-            >
-              <span aria-hidden="true">{t.icon}</span>
-              {t.label}
-            </button>
-          );
-        })}
-      </div>
-
-      {tab === 'overview' && (
-        <>
-      {/* ── Live status stat tiles ────────────────────────── */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-        <StatTile
-          label="Battery"
-          value={status?.batteryPct != null ? String(status.batteryPct) : '—'}
-          unit="%"
-          loading={statusLoading}
-          icon={Icons.Bolt}
-          subtitle={status ? phaseLabel(status) : undefined}
-        />
-        <StatTile
-          label={running ? 'This Run' : 'Last Area'}
-          value={status?.sqft != null ? String(status.sqft) : '—'}
-          unit="sq ft"
-          loading={statusLoading}
-          icon={Icons.Dollar}
-          subtitle={running ? 'cleaning now' : undefined}
-        />
-        <StatTile
-          label={running ? 'Runtime' : 'Lifetime Runs'}
-          value={
-            running
-              ? status?.runtimeMinutes != null
-                ? formatDuration(status.runtimeMinutes)
-                : '—'
-              : status?.lifetimeMissions != null
-                ? String(status.lifetimeMissions)
-                : String(totalRuns || '—')
-          }
-          unit={running ? '' : 'missions'}
-          loading={statusLoading}
-          icon={Icons.Calendar}
-        />
-        <StatTile
-          label="Lifetime Time"
-          value={
-            status?.lifetimeRunMinutes != null
-              ? String(Math.round(status.lifetimeRunMinutes / 60))
-              : '—'
-          }
-          unit="hrs"
-          loading={statusLoading}
-          icon={Icons.Bolt}
-        />
-      </section>
-
-      {/* ── Admin controls ────────────────────────────────── */}
-      {isAdmin && <RoombaControls status={status} onClean={() => setShowClean(true)} />}
-
-      {/* ── Real (robot/cloud-side) schedule, read-only ───── */}
-      <RoombaNativeSchedules isAdmin={isAdmin} />
-
-      {/* ── Live detail strip (what's happening right now; the dock state is
-             already a hero chip, and wear/charge details live on the
-             Maintenance view) ───────────────────────────── */}
-      {status && (status.errorText || (running && status.initiator)) && (
-        <section className="rounded-[24px] border border-appborder bg-appsurface-raised p-4 sm:p-5">
-          <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
-            {status.errorText && <Detail label="Error" value={status.errorText} tone="warn" />}
-            {running && status.initiator && <Detail label="Started by" value={initiatorLabel(status.initiator)} />}
-          </div>
-        </section>
-      )}
-
-      {/* ── Floor-plan map ────────────────────────────────── */}
-      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
-        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              Floor Plan
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">
-              {mapQuery.data?.name || 'Cleaning map'}
-            </h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-apptext-muted">
-              Rooms, walls, and dock location as mapped by the robot. Built up over the first
-              several cleaning runs.
-              {isAdmin && !splitMode && !mergeMode && !cleanMode &&
-                ' Tap a room to rename it or set its type.'}
-            </p>
-          </div>
-          {isAdmin && mapQuery.data && (
-            <div className="flex shrink-0 flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => (cleanMode ? exitCleanMode() : enterCleanMode())}
-                className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
-                  cleanMode
-                    ? 'border-appaccent-border bg-appaccent-soft text-appaccent-text'
-                    : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
-                }`}
-              >
-                {cleanMode ? 'Cancel clean' : '🧹 Clean a room'}
-              </button>
-              <button
-                type="button"
-                onClick={() => (splitMode ? exitSplitMode() : enterSplitMode())}
-                className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
-                  splitMode
-                    ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
-                    : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
-                }`}
-              >
-                {splitMode ? 'Cancel divide' : '✂ Divide a room'}
-              </button>
-              <button
-                type="button"
-                onClick={() => (mergeMode ? exitMergeMode() : enterMergeMode())}
-                className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
-                  mergeMode
-                    ? 'border-amber-300/40 bg-amber-300/15 text-amber-200'
-                    : 'border-appborder bg-appinset text-apptext-soft hover:bg-appinset-strong'
-                }`}
-              >
-                {mergeMode ? 'Cancel merge' : '⛶ Merge rooms'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {isAdmin && cleanMode && (
-          <div className="mb-4 rounded-2xl border border-appaccent-border bg-appaccent-soft px-4 py-3 text-xs leading-5 text-appaccent-text">
-            <span className="font-semibold">Clean mode.</span> Tap a room to send the robot to
-            clean just that room — you can pick suction and passes before it starts.
-          </div>
+        {/* A refresh that failed while a reading is held: the reading stays, with a heads-up. */}
+        {statusQuery.isError && statusQuery.data !== undefined && (
+          <Notice
+            tone="headsup"
+            live="polite"
+            title="Couldn't refresh the robot's status."
+            action={<Button size="sm" icon="refresh" busy={statusQuery.isFetching} busyLabel="Trying again…" onClick={() => void statusQuery.refetch()}>Try again</Button>}
+          >
+            {`Showing what came in at ${formatTime(statusQuery.dataUpdatedAt)}.`}
+          </Notice>
         )}
-
-        {isAdmin && splitMode && (
-          <div className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-200">
-            <p>
-              <span className="font-semibold">Divide mode.</span> Click across a room to drop
-              corners — the first click picks the room, and you can add as many bends as you like.
-              Double-click or press <kbd>Enter</kbd> to finish; <kbd>Backspace</kbd> removes the last
-              corner. This is an experimental, not-cleanly-reversible map edit.
-            </p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <span className="font-medium">
-                {splitDraft ? `${splitDraft.pts.length} corner${splitDraft.pts.length === 1 ? '' : 's'} placed` : 'No corners yet'}
-              </span>
-              <button
-                type="button"
-                disabled={!splitDraft || splitDraft.pts.length < 2}
-                onClick={finishSplit}
-                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-200 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Finish line
-              </button>
-              <button
-                type="button"
-                disabled={!splitDraft}
-                onClick={undoSplitPoint}
-                className="rounded-lg border border-amber-300/25 px-2.5 py-1 transition-colors hover:bg-amber-300/10 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Undo corner
-              </button>
-            </div>
-          </div>
-        )}
-
-        {isAdmin && mergeMode && (
-          <div className="mb-4 rounded-2xl border border-amber-300/25 bg-amber-300/10 px-4 py-3 text-xs leading-5 text-amber-200">
-            <p>
-              <span className="font-semibold">Merge mode.</span> Tap two or more rooms to select
-              them, then combine them into one. This is an experimental, not-cleanly-reversible map
-              edit.
-            </p>
-            <div className="mt-2.5 flex flex-wrap items-center gap-2">
-              <span className="font-medium">
-                {mergeSelection.length} room{mergeSelection.length === 1 ? '' : 's'} selected
-              </span>
-              <button
-                type="button"
-                disabled={mergeSelection.length < 2}
-                onClick={finishMerge}
-                className="rounded-lg border border-amber-300/40 bg-amber-300/15 px-2.5 py-1 font-semibold text-amber-200 transition-colors hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Merge selected
-              </button>
-              <button
-                type="button"
-                disabled={mergeSelection.length === 0}
-                onClick={() => setMergeSelection([])}
-                className="rounded-lg border border-amber-300/25 px-2.5 py-1 transition-colors hover:bg-amber-300/10 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-        )}
-
-        <DeferredRender minHeight={320}>
-          <RoombaMap
-            className="mx-auto max-w-xl"
-            map={mapQuery.data ?? null}
-            loading={mapQuery.isLoading}
-            running={running}
-            editable={isAdmin}
-            onSelectRoom={setSelectedRoom}
-            splitMode={splitMode}
-            splitDraft={splitDraft?.pts ?? null}
-            splitRoomId={splitDraft?.roomId ?? null}
-            onSplitAddPoint={addSplitPoint}
-            onSplitFinish={finishSplit}
-            onSplitUndo={undoSplitPoint}
-            mergeMode={mergeMode}
-            mergeSelection={mergeSelectionIds}
-            onToggleMergeRoom={toggleMergeRoom}
-            cleanMode={cleanMode}
-            onSelectCleanRoom={handleSelectCleanRoom}
-          />
-        </DeferredRender>
-      </section>
-
-      {/* ── Run history ───────────────────────────────────── */}
-      <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)]">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-              History
-            </p>
-            <h3 className="mt-2 text-xl font-semibold text-apptext">Recent runs</h3>
-          </div>
-          {totalRuns > 0 && (
-            <span className="text-xs text-apptext-dim">
-              {completedRuns}/{totalRuns} completed
-            </span>
-          )}
-        </div>
-
-        {runsQuery.isLoading ? (
-          <div className="space-y-2 animate-pulse">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-12 rounded-2xl bg-appinset" />
-            ))}
-          </div>
-        ) : runs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 rounded-[24px] border border-dashed border-appborder bg-appinset p-10 text-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-appaccent-border bg-appaccent-soft text-appaccent-text">
-              {Icons.Calendar}
-            </div>
-            <p className="text-sm font-medium text-apptext-soft">No cleaning runs yet</p>
-            <p className="max-w-xs text-xs leading-5 text-apptext-muted">
-              Once your Roomba finishes its first mission, each run will show up here with its
-              duration, area cleaned, and outcome.
-            </p>
-          </div>
+        {/* The robot's keys are for an admin only, exactly as before; everyone else sees why. */}
+        {isAdmin ? (
+          <RoombaControls state={state} onClean={() => setShowClean(true)} />
         ) : (
-          <div className="overflow-x-auto">
-            <div className="text-sm">
-              <div className="grid grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] border-b border-appborder pb-2 text-left text-apptext-dim">
-                <div className="font-medium">Date</div>
-                <div className="text-right font-medium">Duration</div>
-                <div className="hidden text-right font-medium md:block">Sq Ft</div>
-                <div className="text-right font-medium">Status</div>
-              </div>
-              <VirtualizedList
-                items={runs}
-                height={Math.min(runs.length, 8) * 56 + 8}
-                itemHeight={56}
-                overscan={6}
-                className="mt-1"
-                renderItem={(r) => {
-                  const started = new Date(r.startedAt);
-                  const dateLabel = Number.isNaN(started.getTime())
-                    ? '—'
-                    : started.toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                      });
-                  const timeLabel = Number.isNaN(started.getTime())
-                    ? ''
-                    : started.toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                      });
-                  const st = runStatusStyle(r.status);
-                  // Cleaning time — recharge stops out (a full-house run is ~4 h of
-                  // cleaning across ~11 h); the detail popup has both.
-                  const listDuration = cleaningMinutes(r);
-                  const rooms = r.verified ? roomsSummary(r.rooms) : null;
-                  return (
-                    <button
-                      key={r.id}
-                      type="button"
-                      onClick={() => setSelectedRun(r)}
-                      aria-label={`View details for the run on ${dateLabel}`}
-                      className="grid w-full grid-cols-[1.5fr_1fr_0.9fr] md:grid-cols-[1.5fr_1fr_1fr_1fr] items-center border-b border-appborder-light pr-1 text-left transition-colors hover:bg-appinset"
-                    >
-                      <div className="min-w-0 py-3">
-                        <div className="text-apptext-soft">{dateLabel}</div>
-                        {(timeLabel || rooms) && (
-                          <div className="truncate text-2xs text-apptext-dim">
-                            {[timeLabel, rooms].filter(Boolean).join(' · ')}
-                          </div>
-                        )}
-                      </div>
-                      <div className="py-3 text-right tabular-nums text-apptext">
-                        {formatDuration(listDuration)}
-                      </div>
-                      <div className="hidden py-3 text-right tabular-nums text-apptext-muted md:block">
-                        {r.squareFeet != null ? r.squareFeet.toLocaleString('en-US') : '—'}
-                      </div>
-                      <div className="py-3 text-right">
-                        <span className={`rounded-full px-2.5 py-1 text-xs ${st.className}`}>
-                          {st.label}
-                        </span>
-                      </div>
-                    </button>
-                  );
-                }}
-              />
-            </div>
-          </div>
+          <p className="fp-small fp-muted">Only an admin can start or stop the robot from here.</p>
         )}
-      </section>
+      </InstrumentPanel>
 
-        </>
-      )}
-
-      {tab === 'maintenance' && (
-        <>
-          {/* ── Maintenance counters (filter, brushes, pad, dock bag …) ── */}
-          <RoombaMaintenance
-            parts={partsQuery.data ?? []}
-            loading={partsQuery.isLoading}
-            error={partsQuery.isError}
-          />
-
-          {/* ── Robot health: battery wear, incidents, what's fitted ── */}
-          {status && (
-            <section className="rounded-[24px] border border-appborder bg-appsurface-raised p-4 sm:p-5">
-              <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-                Robot health
-              </p>
-              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-4">
-                {status.chargeCycles != null && (
-                  <Detail label="Charge cycles" value={String(status.chargeCycles)} />
-                )}
-                {status.chargeErrors != null && status.chargeErrors > 0 && (
-                  <Detail label="Charging faults" value={String(status.chargeErrors)} tone="warn" />
-                )}
-                {wearSummary && <Detail label="Recent incidents" value={wearSummary} />}
-                {status.detectedPad && <Detail label="Mop pad fitted" value={status.detectedPad} />}
-                {status.lifetimeMissions != null && (
-                  <Detail label="Lifetime runs" value={`${status.lifetimeMissions} missions`} />
-                )}
-                {status.lifetimeRunMinutes != null && (
-                  <Detail label="Powered-on time" value={`${Math.round(status.lifetimeRunMinutes / 60)} hr`} />
-                )}
-                {device?.firmware && <Detail label="Firmware" value={device.firmware} />}
-              </div>
-            </section>
-          )}
-        </>
-      )}
+      <Seg id="roomba-view" label="Roomba view" value={view} onChange={setView} options={VIEWS} />
+      <SegPanel id="roomba-view" value={view}>
+        {view === 'overview' ? (
+          <Split>
+            <RecentCleans query={runsQuery} onOpen={setSelectedRun} now={now} />
+            <Stack gap="page">
+              <RoombaNativeSchedules isAdmin={isAdmin} />
+              {cleanRooms.length > 0 && (
+                <Panel
+                  title="Rooms"
+                  subtitle={`The ${plural(cleanRooms.length, 'room')} on the map`}
+                  footer={
+                    isAdmin ? (
+                      <>
+                        <span className="fp-small fp-muted">Change the map</span>
+                        <span className="fp-cluster">
+                          <Button size="sm" variant="quiet" onClick={() => (cleanMode ? exitCleanMode() : enterCleanMode())}>
+                            {cleanMode ? 'Cancel clean' : 'Pick on the map'}
+                          </Button>
+                          <Button size="sm" variant="quiet" onClick={() => (splitMode ? exitSplitMode() : enterSplitMode())}>
+                            {splitMode ? 'Cancel divide' : 'Divide a room'}
+                          </Button>
+                          <Button size="sm" variant="quiet" onClick={() => (mergeMode ? exitMergeMode() : enterMergeMode())}>
+                            {mergeMode ? 'Cancel merge' : 'Merge rooms'}
+                          </Button>
+                        </span>
+                      </>
+                    ) : undefined
+                  }
+                >
+                  <List>
+                    {cleanRooms.map((r) => (
+                      <Row
+                        key={r.id}
+                        compact
+                        title={r.name ?? <span className="fp-muted italic">Unnamed room</span>}
+                        meta={lastCleanedLine(r.name ? lastCleaned.get(r.name) : undefined, now)}
+                        trail={
+                          isAdmin ? (
+                            <>
+                              <IconButton icon="edit" variant="quiet" small label={r.name ? `Rename ${r.name}` : 'Name this room'} onClick={() => setSelectedRoom(r)} />
+                              <Button size="sm" disabled={state.offline} onClick={() => setCleanRoom(r)}>
+                                Clean<span className="fp-sr-only"> {r.name ?? 'this room'}</span>
+                              </Button>
+                            </>
+                          ) : undefined
+                        }
+                      />
+                    ))}
+                  </List>
+                </Panel>
+              )}
+            </Stack>
+          </Split>
+        ) : (
+          <>
+            <RoombaMaintenance
+              parts={partsQuery.data ?? []}
+              loading={partsQuery.isLoading}
+              error={partsQuery.isError}
+              onRetry={() => void partsQuery.refetch()}
+              retrying={partsQuery.isFetching}
+            />
+            <RobotHealth status={status} device={device} />
+          </>
+        )}
+      </SegPanel>
 
       {/* Admin room-rename dialog */}
       {isAdmin && selectedRoom && (
@@ -909,7 +613,7 @@ export default memo(function Roomba() {
         <RoomMergeModal rooms={pendingMerge} onClose={() => setPendingMerge(null)} />
       )}
 
-      {/* Admin clean-a-room config */}
+      {/* Admin clean dialogs */}
       {isAdmin && showClean && (
         <CleanModal rooms={cleanRooms} onClose={() => setShowClean(false)} />
       )}
@@ -917,10 +621,130 @@ export default memo(function Roomba() {
         <RoomCleanModal room={cleanRoom} onClose={() => setCleanRoom(null)} />
       )}
 
-      {/* Run detail popup */}
+      {/* Run detail */}
       {selectedRun && (
         <RoomRunDetailModal run={selectedRun} onClose={() => setSelectedRun(null)} />
       )}
-    </div>
+    </Screen>
   );
 });
+
+// ── Recent cleans ─────────────────────────────────────────
+
+function RunRow({ run, onOpen, now }: { run: RoombaRun; onOpen: (r: RoombaRun) => void; now: Date }) {
+  const st = runStatus(run.status);
+  // Cleaning time: the recharge stops are taken out (a whole-house run is ~4 h of cleaning
+  // across ~11 h); the detail dialog has both.
+  const mins = cleaningMinutes(run);
+  const rooms = run.verified ? roomsSummary(run.rooms) : null;
+  return (
+    <Row
+      onClick={() => onOpen(run)}
+      chevron
+      // The row's name is its visible text (day, time, rooms, length, outcome), so two runs on
+      // one day sound different (B-132).
+      title={
+        <>
+          {formatDayName(run.startedAt, now)} <span className="fp-mono fp-muted ml-1 font-normal">{formatTime(run.startedAt)}</span>
+        </>
+      }
+      meta={[rooms, formatDuration(mins)].filter(Boolean).join(' · ')}
+      value={run.squareFeet != null ? formatNumber(run.squareFeet) : undefined}
+      unit={run.squareFeet != null ? 'sq ft' : undefined}
+      trail={run.status !== 'COMPLETED' ? <Badge status={st} /> : <span className="fp-sr-only">{st.label}</span>}
+    />
+  );
+}
+
+function RecentCleans({ query, onOpen, now }: {
+  query: { data: RoombaRun[] | undefined; isError: boolean; isFetching: boolean; dataUpdatedAt: number; refetch: () => unknown };
+  onOpen: (r: RoombaRun) => void;
+  now: Date;
+}) {
+  const runs = query.data ?? [];
+  const finished = runs.filter((r) => r.status === 'COMPLETED').length;
+  return (
+    <Panel
+      title="Recent cleans"
+      subtitle={runs.length ? `${finished} of the last ${runs.length} finished. Tap one for the details` : undefined}
+    >
+      <QueryState
+        query={query}
+        what="the recent cleans"
+        loading={<SkelRows count={4} />}
+        empty={
+          <EmptyState icon="history" title="No cleans yet">
+            Each clean shows here once it ends, with how long it took, the area and how it went.
+          </EmptyState>
+        }
+      >
+        {(list) => (
+          <>
+            <List>
+              {list.slice(0, RUNS_SHOWN).map((r) => <RunRow key={r.id} run={r} onOpen={onOpen} now={now} />)}
+            </List>
+            {list.length > RUNS_SHOWN && (
+              <Disclosure
+                variant="row"
+                summary={`Show ${plural(list.length - RUNS_SHOWN, 'more clean')}`}
+                openSummary="Show fewer cleans"
+              >
+                <List>
+                  {list.slice(RUNS_SHOWN).map((r) => <RunRow key={r.id} run={r} onOpen={onOpen} now={now} />)}
+                </List>
+              </Disclosure>
+            )}
+          </>
+        )}
+      </QueryState>
+    </Panel>
+  );
+}
+
+// ── Robot health (Maintenance view) ───────────────────────
+
+const WEAR_SHOWN = new Set(['nStuck', 'nCliffsF', 'nPicks', 'nCliffsR', 'nMBStll', 'nWStll']);
+
+function RobotHealth({ status, device }: { status: RoombaStatus | null; device: { family: string | null; sku: string | null; series: string | null; firmware: string | null; serialNumber: string | null } | null }) {
+  if (!status) {
+    return (
+      <Panel title="Robot health">
+        <EmptyState compact icon="robot" title="No readings yet">The robot's counters show here once it has checked in.</EmptyState>
+      </Panel>
+    );
+  }
+  const w = status.wear ?? {};
+  const times = (n: number | undefined) => (n == null ? null : n === 0 ? 'Never' : plural(n, 'time'));
+  const model = device ? [device.family || device.sku, device.series && `series ${device.series}`].filter(Boolean).join(', ') : '';
+  const otherWear = Object.entries(w).filter(([k]) => !WEAR_SHOWN.has(k));
+  const stalls = w.nMBStll != null || w.nWStll != null ? `${w.nMBStll ?? 0} main, ${w.nWStll ?? 0} wheel` : null;
+  return (
+    <Panel title="Robot health" subtitle="The robot's own lifetime counters">
+      <KeyValue cols>
+        {/* Lifetime figures straight from the robot; a missing counter is a dash, never the
+            length of the history list (B-128). Powered-on time is named the same everywhere (B-129). */}
+        <KV label="Cleans" value={status.lifetimeMissions != null ? formatNumber(status.lifetimeMissions) : DASH} />
+        <KV label="Powered on" value={status.lifetimeRunMinutes != null ? formatNumber(Math.round(status.lifetimeRunMinutes / 60), { unit: 'hr' }) : DASH} />
+        {status.chargeCycles != null && <KV label="Battery charge cycles" value={formatNumber(status.chargeCycles)} />}
+        {status.chargeErrors != null && (
+          <KV label="Charging faults" value={status.chargeErrors > 0 ? formatNumber(status.chargeErrors) : 'None'} tone={status.chargeErrors > 0 ? 'headsup' : undefined} />
+        )}
+        {times(w.nStuck) && <KV label="Got stuck" value={times(w.nStuck)} />}
+        {times(w.nCliffsF) && <KV label="Stopped at a ledge" value={times(w.nCliffsF)} />}
+        {times(w.nPicks) && <KV label="Picked up mid-clean" value={times(w.nPicks)} />}
+        {status.detectedPad && <KV label="Mop mount" value={padLabel(status.detectedPad)} />}
+      </KeyValue>
+      <Disclosure variant="row" summary="For the curious" openSummary="Hide the details">
+        <KeyValue cols>
+          {model && <KV label="Model" value={model} />}
+          {device?.firmware && <KV label="Firmware" value={device.firmware} mono />}
+          {device?.serialNumber && <KV label="Serial number" value={<span className="fp-code whitespace-normal break-all">{device.serialNumber}</span>} />}
+          {status.mapVersion && <KV label="Map version" value={status.mapVersion} mono />}
+          {times(w.nCliffsR) && <KV label="Rear ledge stops" value={times(w.nCliffsR)} />}
+          {stalls && <KV label="Brush stalls" value={stalls} />}
+          {otherWear.map(([k, n]) => <KV key={k} label={humanize(k.replace(/^n(?=[A-Z])/, ''))} value={formatNumber(n)} />)}
+        </KeyValue>
+      </Disclosure>
+    </Panel>
+  );
+}

@@ -1,0 +1,35 @@
+/* Sign in — the page's own frame (no shell on this route) and its one instrument: the large key set in a recessed bezel. */
+.screen[data-route="login"] .door {
+  /* same frame as Guest welcome (.gp): full width up to 1080px, so the brand bar does not jump between the two doors */
+  display: flex; flex-direction: column; gap: 20px; width: 100%; min-height: 100dvh; max-width: 1080px; margin: 0 auto;
+  padding: calc(env(safe-area-inset-top, 0px) + 8px) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 20px);
+}
+.screen[data-route="login"] .door-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: var(--tap); }
+.screen[data-route="login"] .door-top .mono { font-size: 12.5px; }
+.screen[data-route="login"] .door-brand { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 700; font-stretch: 125%; letter-spacing: .16em; color: var(--ink); }
+.screen[data-route="login"] .door-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px var(--well); }
+.screen[data-route="login"] .door-main { flex: 1; display: grid; place-items: center; }
+
+/* the faceplate */
+.screen[data-route="login"] .door-plate { --panel-pad: 24px; display: flex; flex-direction: column; gap: 20px; width: min(100%, 440px); }
+.screen[data-route="login"] .door-head { display: flex; flex-direction: column; gap: 6px; }
+.screen[data-route="login"] .door-title { font-size: var(--t-title); font-weight: 600; line-height: 1.15; letter-spacing: -.01em; color: var(--ink); }
+.screen[data-route="login"] .door-bezel {
+  padding: 6px; border-radius: calc(var(--r-panel) + 6px); background: var(--well); box-shadow: var(--well-shadow);
+}
+.screen[data-route="login"] .door-bezel > .btn { min-height: 64px; font-size: 17.5px; }
+/* while Home sign-in answers, the key stays pressed into its bezel */
+.screen[data-route="login"] .door-bezel > .btn.is-busy { transform: translateY(1px); cursor: progress; }
+.screen[data-route="login"] .door-status { display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: -8px; }
+.screen[data-route="login"] .door-fallback { margin-top: -6px; }
+.screen[data-route="login"] .door-plate > .list { border-top: 1px solid var(--hairline); }
+
+.screen[data-route="login"] .door-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.screen[data-route="login"] .door-foot .mono { font-size: 12px; }
+.screen[data-route="login"] .door-maker { display: inline-flex; align-items: center; gap: 8px; }
+
+@media (min-width: 1024px) {
+  .screen[data-route="login"] .door { padding-top: 12px; padding-bottom: 28px; }
+  .screen[data-route="login"] .door-plate { --panel-pad: 32px; width: 460px; gap: 22px; }
+  .screen[data-route="login"] .door-title { font-size: var(--t-title-lg); }
+}

@@ -1,0 +1,19 @@
+/* People — only the small layout of an approval request's decision strip. The presence board is the kit .board (KIT §7.19b). */
+
+/* an approval request: the person on top, the decision underneath; side by side on wide screens */
+.screen[data-route="people"] .ppl-decide {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px;
+  padding: 2px var(--panel-pad) 12px calc(var(--panel-pad) + 48px);
+}
+.screen[data-route="people"] .ppl-decide-role { display: flex; align-items: center; gap: 10px; }
+@media (max-width: 479px) {
+  .screen[data-route="people"] .ppl-decide { padding-left: var(--panel-pad); }
+  .screen[data-route="people"] .ppl-decide > .btn-row { flex: 1 1 100%; justify-content: flex-end; }
+}
+@media (min-width: 900px) {
+  .screen[data-route="people"] .ppl-request { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 24px; }
+  .screen[data-route="people"] .ppl-decide { padding: 0 var(--panel-pad) 0 0; }
+}
+
+/* the Guests empty state keeps a full step clear of the "past guests" row under it (as Profile does above its rows) */
+.screen[data-route="people"] [data-ppl="guests-empty"] { margin-bottom: 20px; }

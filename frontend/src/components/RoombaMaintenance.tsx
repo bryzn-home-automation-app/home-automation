@@ -1,39 +1,36 @@
 import { memo } from 'react';
 import type { RoombaPart } from '../types';
+import { plural } from '../utils/format';
+import { relativeInSentence } from '../utils/roombaStatus';
+import type { Tone } from '../utils/status';
+import { Badge, EmptyState, ErrorState, Loading, MeterRow, Panel, Progress, SkelRows } from './ui';
 
 /**
- * Consumable / maintenance counters from the robot's cloud record — the same
- * numbers the iRobot app's Maintenance screen shows (filter, brushes, mop pad,
- * dock bag, routine clean-ups). Read-only: after servicing a part you mark it
- * done in the iRobot app, which resets the counter; the dock resets the bag
- * counter itself when a new bag is fitted.
+ * Consumable / maintenance counters from the robot's cloud record: the same numbers the iRobot
+ * app's Maintenance screen shows (filter, brushes, mop pad, dock bag, routine clean-ups).
+ * Read-only: after servicing a part you mark it done in the iRobot app, which resets the
+ * counter; the dock resets the bag counter itself when a new bag is fitted.
  */
 
-const STATUS_STYLE: Record<string, { label: string; pill: string; bar: string }> = {
-  overdue: {
-    label: 'Overdue',
-    pill: 'border-rose-300/25 bg-rose-300/10 text-rose-300',
-    bar: 'bg-rose-400',
-  },
-  due_soon: {
-    label: 'Due soon',
-    pill: 'border-amber-300/25 bg-amber-300/10 text-amber-300',
-    bar: 'bg-amber-400',
-  },
-  ok: {
-    label: 'OK',
-    pill: 'border-emerald-300/20 bg-emerald-300/10 text-emerald-300',
-    bar: 'bg-emerald-400',
-  },
-  unknown: {
-    label: '—',
-    pill: 'border-appborder bg-appinset text-apptext-muted',
-    bar: 'bg-apptext-dim',
-  },
+const PART_STATUS: Record<string, { tone: Tone; label: string }> = {
+  overdue: { tone: 'headsup', label: 'Overdue' },
+  due_soon: { tone: 'headsup', label: 'Due soon' },
+  ok: { tone: 'ok', label: 'OK' },
 };
+const UNKNOWN = { tone: 'neutral' as Tone, label: 'No reading' };
 
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`;
+/** A part's status as a tone and a word. */
+export function partStatus(status: string | null | undefined): { tone: Tone; label: string } {
+  return (status && PART_STATUS[status]) || UNKNOWN;
+}
+
+const RANK: Record<string, number> = { overdue: 0, due_soon: 1, ok: 2 };
+
+/** Worst first, then least life left: the order people should look at them in. */
+export function sortParts(parts: readonly RoombaPart[]): RoombaPart[] {
+  return [...parts].sort(
+    (a, b) => (RANK[a.status] ?? 3) - (RANK[b.status] ?? 3) || (a.pctRemaining ?? 101) - (b.pctRemaining ?? 101),
+  );
 }
 
 /** "40 hr left", "27 missions left", "Bag full" … per the part's unit. */
@@ -47,7 +44,7 @@ export function remainingText(p: RoombaPart): string {
       return hrs < 1 ? 'Under 1 hr left' : `${Math.round(hrs)} hr left`;
     }
     case 'missions':
-      return n === 0 ? 'Due now' : `${plural(n, 'mission', 'missions')} left`;
+      return n === 0 ? 'Due now' : `${plural(n, 'mission')} left`;
     case 'empties':
       return n === 0 ? 'Bag full' : `${plural(n, 'empty', 'empties')} left`;
     case 'washes':
@@ -64,7 +61,7 @@ export function usedText(p: RoombaPart): string | null {
     case 'hours':
       return `${Math.round(n / 60)} hr used`;
     case 'missions':
-      return `${plural(n, 'mission', 'missions')} used`;
+      return `${plural(n, 'mission')} used`;
     case 'empties':
       return `${plural(n, 'empty', 'empties')} used`;
     case 'washes':
@@ -74,66 +71,34 @@ export function usedText(p: RoombaPart): string | null {
   }
 }
 
-function relative(iso: string): string {
-  const then = new Date(iso).getTime();
-  if (Number.isNaN(then)) return '';
-  const min = Math.round((Date.now() - then) / 60_000);
-  if (min < 1) return 'just now';
-  if (min < 60) return `${min} min ago`;
-  const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} hr ago`;
-  const day = Math.round(hr / 24);
-  return `${day} day${day === 1 ? '' : 's'} ago`;
-}
-
 function actionLabel(action: string | null): string {
   if (action === 'replace') return 'Replace';
   if (action === 'clean') return 'Clean';
   return 'Service';
 }
 
-function PartTile({ part }: { part: RoombaPart }) {
-  const st = STATUS_STYLE[part.status] ?? STATUS_STYLE.unknown;
-  const pct = part.pctRemaining ?? 0;
+function PartItem({ part }: { part: RoombaPart }) {
+  const st = partStatus(part.status);
   const used = usedText(part);
-  const meta = [used, part.lastUpdatedAt ? `updated ${relative(part.lastUpdatedAt)}` : null]
+  const meta = [used, part.lastUpdatedAt ? `updated ${relativeInSentence(part.lastUpdatedAt)}` : null]
     .filter(Boolean)
     .join(' · ');
+  const progressTone: Tone = part.status === 'overdue' || part.status === 'due_soon' ? 'headsup' : st.tone;
   return (
-    <div className="rounded-2xl border border-appborder bg-appinset p-4">
-      <div className="flex items-start justify-between gap-2">
+    <li className="flex flex-col gap-2 px-[var(--apppanel-pad)] py-4">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-apptext">{part.label}</p>
-          <p className="text-2xs text-apptext-dim">
-            {actionLabel(part.action)} · part {part.partId}
-          </p>
+          <p className="fp-strong">{part.label}</p>
+          <p className="fp-small fp-muted">{actionLabel(part.action)} · part {part.partId}</p>
         </div>
-        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-2xs font-medium ${st.pill}`}>
-          {st.label}
-        </span>
+        <Badge status={st} />
       </div>
-      <div
-        className="mt-3 h-2 w-full overflow-hidden rounded-full bg-appsurface"
-        role="progressbar"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={part.pctRemaining ?? undefined}
-        aria-label={`${part.label} life remaining`}
-      >
-        <div
-          className={`h-full rounded-full ${st.bar}`}
-          style={{ width: `${Math.min(100, Math.max(pct > 0 ? 2 : 0, pct))}%` }}
-        />
-      </div>
-      <div className="mt-2 flex items-baseline justify-between gap-2 text-xs">
-        <span className="font-medium text-apptext-soft">{remainingText(part)}</span>
-        {part.pctRemaining != null && (
-          <span className="tabular-nums text-apptext-dim">{part.pctRemaining}%</span>
-        )}
-      </div>
-      {meta && <p className="mt-1 text-2xs text-apptext-dim">{meta}</p>}
-      {part.hint && <p className="mt-2 text-2xs leading-4 text-apptext-muted">{part.hint}</p>}
-    </div>
+      <MeterRow label={remainingText(part)} value={part.pctRemaining != null ? `${part.pctRemaining}%` : '—'}>
+        <Progress value={part.pctRemaining ?? 0} label={`${part.label} life left`} tone={progressTone} />
+      </MeterRow>
+      {meta && <p className="fp-small fp-muted">{meta}</p>}
+      {part.hint && <p className="fp-small">{part.hint}</p>}
+    </li>
   );
 }
 
@@ -141,66 +106,45 @@ interface Props {
   parts: RoombaPart[];
   loading: boolean;
   error?: boolean;
+  onRetry?: () => void;
+  retrying?: boolean;
 }
 
-function RoombaMaintenance({ parts, loading, error }: Props) {
+function RoombaMaintenance({ parts, loading, error, onRetry, retrying }: Props) {
   const overdue = parts.filter((p) => p.status === 'overdue').length;
   const dueSoon = parts.filter((p) => p.status === 'due_soon').length;
-  const summary = overdue
-    ? `${plural(overdue, 'part', 'parts')} overdue`
-    : dueSoon
-      ? `${plural(dueSoon, 'part', 'parts')} due soon`
-      : parts.length
-        ? 'Everything is within its service life'
-        : null;
-  const summaryTone = overdue ? 'text-rose-300' : dueSoon ? 'text-amber-300' : 'text-apptext-muted';
+  const counts = [overdue ? `${plural(overdue, 'part')} overdue` : null, dueSoon ? `${plural(dueSoon, 'part')} due soon` : null]
+    .filter(Boolean)
+    .join(', ');
+  const summary = parts.length ? `${counts || 'Every part is within its service life'}. Life left in each part, worst first` : undefined;
+
+  let body;
+  if (loading && parts.length === 0) {
+    body = <Loading label="Loading the robot's parts"><SkelRows count={3} /></Loading>;
+  } else if (error && parts.length === 0) {
+    body = <ErrorState compact title="Couldn't load the robot's parts" onRetry={onRetry} retrying={retrying} />;
+  } else if (parts.length === 0) {
+    body = (
+      <EmptyState compact icon="tool" title="No maintenance data yet">
+        The robot's part counters are read when it connects, shortly after each clean, and every few hours.
+      </EmptyState>
+    );
+  } else {
+    body = (
+      <ul className="fp-list fp-list--cols">
+        {sortParts(parts).map((p) => <PartItem key={p.partId} part={p} />)}
+      </ul>
+    );
+  }
 
   return (
-    <section className="perf-section rounded-[28px] border border-appborder bg-appsurface-raised p-5 shadow-[0_10px_28px_var(--appshadow)] sm:p-6">
-      <div className="mb-4 flex items-start justify-between gap-4">
-        <div>
-          <p className="text-2xs font-medium uppercase tracking-[0.18em] text-apptext-muted">
-            Maintenance
-          </p>
-          <h3 className="mt-2 text-xl font-semibold text-apptext">Parts &amp; upkeep</h3>
-          {summary && <p className={`mt-1 text-sm ${summaryTone}`}>{summary}</p>}
-        </div>
-        {parts.length > 0 && (
-          <span className="shrink-0 text-xs text-apptext-dim">
-            {parts.length} item{parts.length === 1 ? '' : 's'} tracked
-          </span>
-        )}
-      </div>
-
-      {loading ? (
-        <div className="grid animate-pulse grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-28 rounded-2xl bg-appinset" />
-          ))}
-        </div>
-      ) : error ? (
-        <p className="rounded-2xl border border-rose-300/25 bg-rose-300/10 px-4 py-2.5 text-xs text-rose-200">
-          Couldn't load the maintenance counters. They'll reappear once the service is reachable.
-        </p>
-      ) : parts.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-appborder bg-appinset px-4 py-3 text-xs leading-5 text-apptext-muted">
-          No maintenance data yet — the poller reads the robot's part counters when it connects,
-          shortly after each clean, and every few hours.
-        </p>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {parts.map((p) => (
-            <PartTile key={p.partId} part={p} />
-          ))}
-        </div>
-      )}
-
-      <p className="mt-4 text-xs leading-5 text-apptext-dim">
-        These counters come straight from the robot's cloud record — the same ones the iRobot
-        app's Maintenance screen shows. After replacing or cleaning a part, mark it done in the
-        iRobot app to reset its counter (the dock resets the bag counter itself).
-      </p>
-    </section>
+    <Panel
+      title="Parts and upkeep"
+      subtitle={summary}
+      footer={<span className="fp-small fp-muted">After you replace or clean a part, mark it done in the iRobot app to reset its counter. The dock resets the bag counter itself.</span>}
+    >
+      {body}
+    </Panel>
   );
 }
 

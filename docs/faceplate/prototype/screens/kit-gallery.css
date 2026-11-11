@@ -1,0 +1,23 @@
+/* Kit gallery — specimen layout only. */
+.screen[data-route="kit-gallery"] .kg-name { font-family: var(--mono); font-size: 11.5px; color: var(--graphite); line-height: 1.4; overflow-wrap: anywhere; }
+.screen[data-route="kit-gallery"] .kg-caption { padding: 4px 2px 0; }
+.screen[data-route="kit-gallery"] .kg-spec { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.screen[data-route="kit-gallery"] .kg-title-demo { font-size: var(--t-title); font-weight: 600; line-height: 1.1; }
+@media (min-width: 1024px) { .screen[data-route="kit-gallery"] .kg-title-demo { font-size: var(--t-title-lg); } }
+.screen[data-route="kit-gallery"] .kg-swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
+.screen[data-route="kit-gallery"] .kg-swatch { display: flex; flex-direction: column; gap: 6px; }
+.screen[data-route="kit-gallery"] .kg-swatch > span { height: 44px; border-radius: var(--r-well); background: var(--sw); box-shadow: inset 0 0 0 1px var(--hairline); }
+.screen[data-route="kit-gallery"] .kg-tabpanel { padding: 10px 2px 0; }
+.screen[data-route="kit-gallery"] .kg-ring { width: 72px; }
+.screen[data-route="kit-gallery"] .kg-spark { width: 160px; }
+.screen[data-route="kit-gallery"] .kg-block {
+  display: grid; place-items: center; min-height: 44px; padding: 8px 12px; border-radius: var(--r-well);
+  border: 1px dashed var(--hairline-strong); font-family: var(--mono); font-size: 12px; color: var(--graphite);
+}
+.screen[data-route="kit-gallery"] .kg-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; }
+.screen[data-route="kit-gallery"] .kg-icons li {
+  display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px 4px 10px; border-radius: var(--r-well);
+  font-family: var(--mono); font-size: 10.5px; color: var(--graphite); text-align: center; overflow-wrap: anywhere;
+}
+.screen[data-route="kit-gallery"] .kg-icons li:hover { background: var(--row-hover); color: var(--ink); }
+.screen[data-route="kit-gallery"] .kg-icons .icon { width: 24px; height: 24px; color: var(--ink); }

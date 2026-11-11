@@ -1,0 +1,75 @@
+/* Maintenance — only the page's unique pieces: the next-job odometer, photo tiles and the photo wall, preserved line breaks in notes. */
+
+/* the odometer: three number wheels behind recessed windows; the last one rolls to its value when the page opens */
+.screen[data-route="maintenance"] .maint-odo { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; min-width: 0; }
+.screen[data-route="maintenance"] .maint-odo-window { display: flex; align-items: flex-end; gap: 6px; margin-top: 2px; }
+.screen[data-route="maintenance"] .maint-wheel {
+  --h: 76px;
+  position: relative; display: block; width: 54px; height: var(--h); overflow: hidden;
+  border-radius: var(--r-well); background: var(--well); box-shadow: var(--well-shadow);
+  font-size: 58px; font-weight: 500; font-stretch: var(--stretch-num); line-height: var(--h);
+  font-variant-numeric: tabular-nums lining-nums; color: var(--ink);
+}
+/* drum shading top and bottom + the seam across the middle of the window */
+.screen[data-route="maintenance"] .maint-wheel::before {
+  content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none;
+  background: linear-gradient(var(--well) 0, transparent 22%, transparent 78%, var(--well) 100%);
+}
+.screen[data-route="maintenance"] .maint-wheel::after {
+  content: ""; position: absolute; left: 0; right: 0; top: 50%; z-index: 2; height: 1px; background: var(--hairline);
+}
+.screen[data-route="maintenance"] .maint-wheel--lead { color: var(--graphite); }
+.screen[data-route="maintenance"] .maint-wheel-strip {
+  display: flex; flex-direction: column; text-align: center;
+  transform: translateY(calc(var(--d) * -1 * var(--h)));
+  animation: maint-roll var(--t-sweep) var(--ease) both;
+}
+.screen[data-route="maintenance"] .maint-wheel-strip > span { display: block; height: var(--h); }
+@keyframes maint-roll { from { transform: translateY(0); } }
+.screen[data-route="maintenance"] .maint-odo-unit { font-family: var(--mono); font-size: 14px; color: var(--graphite); padding: 0 0 8px 4px; }
+.screen[data-route="maintenance"] .maint-odo-job { font-size: var(--t-section); font-weight: 600; line-height: 1.3; margin-top: 4px; }
+.screen[data-route="maintenance"] .maint-odo .mono { margin-top: -6px; }
+@media (min-width: 1024px) {
+  .screen[data-route="maintenance"] .maint-wheel { --h: 92px; width: 66px; font-size: 72px; }
+}
+/* the year-spend bar: one recessed track, the year's spending laid in as three parts (two big jobs, everything else) */
+.screen[data-route="maintenance"] .maint-year { display: flex; flex-direction: column; gap: 8px; width: min(100%, 360px); padding-top: 14px; border-top: 1px solid var(--hairline); }
+.screen[data-route="maintenance"] .maint-year-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.screen[data-route="maintenance"] .maint-year-bar {
+  display: flex; gap: 2px; height: 12px; padding: 2px; border-radius: 6px; background: var(--well); box-shadow: var(--well-shadow); overflow: hidden;
+}
+.screen[data-route="maintenance"] .maint-year-bar > span {
+  flex: 0 0 calc(var(--w) - 2px); border-radius: 3px; background: var(--c); transform-origin: left center;
+  animation: maint-fill var(--t-sweep) var(--ease) both;
+}
+@keyframes maint-fill { from { transform: scaleX(0); } }
+.screen[data-route="maintenance"] .maint-year .dial-legend { justify-content: flex-start; }
+@media (prefers-reduced-motion: reduce) {
+  .screen[data-route="maintenance"] .maint-wheel-strip, .screen[data-route="maintenance"] .maint-year-bar > span { animation: none; }
+}
+
+/* photos: square tiles, always dark like footage; a silk-screen tag says when it was taken */
+.screen[data-route="maintenance"] .maint-photos { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.screen[data-route="maintenance"] .maint-photo { display: flex; flex-direction: column; gap: 6px; min-width: 0; margin: 0; padding: 0; border: 0; background: none; text-align: left; color: var(--ink); }
+.screen[data-route="maintenance"] .maint-photo-frame {
+  position: relative; display: grid; place-items: center; aspect-ratio: 1; border-radius: var(--r-well);
+  background: var(--media-bg); color: var(--media-ink-soft); overflow: hidden;
+}
+.screen[data-route="maintenance"] .maint-photo-frame::before {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(to top, var(--scene-ground) 0 34%, var(--scene-near) 34% 58%, var(--scene-sky) 58% 100%);
+}
+.screen[data-route="maintenance"] .maint-photo-frame > .icon { position: relative; width: 26px; height: 26px; }
+.screen[data-route="maintenance"] .maint-photo-tag {
+  position: absolute; left: 6px; top: 6px; padding: 3px 6px; border-radius: 5px; background: var(--media-scrim); color: var(--media-ink);
+  font-size: 9.5px; font-weight: 600; font-stretch: var(--stretch-label); text-transform: uppercase; letter-spacing: .08em; line-height: 1.1;
+}
+.screen[data-route="maintenance"] .maint-photo figcaption,
+.screen[data-route="maintenance"] .maint-photo-cap { font-size: var(--t-small); line-height: 1.3; color: var(--graphite); overflow-wrap: anywhere; }
+.screen[data-route="maintenance"] button.maint-photo { cursor: pointer; }
+.screen[data-route="maintenance"] button.maint-photo:hover .maint-photo-cap { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; text-decoration-color: var(--hairline-strong); }
+.screen[data-route="maintenance"] .maint-wall { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 8px; }
+@media (min-width: 640px) { .screen[data-route="maintenance"] .maint-wall { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+@media (min-width: 1024px) { .screen[data-route="maintenance"] .maint-wall { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+.screen[data-route="maintenance"] .maint-notes { white-space: pre-line; }

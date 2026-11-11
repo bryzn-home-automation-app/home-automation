@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import type { Presence } from '../types';
 
 vi.mock('../api/presence', () => ({
@@ -34,7 +35,8 @@ const PRESENCE: Presence = {
 
 function renderPage() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}><WhosHome /></QueryClientProvider>);
+  const view = render(<QueryClientProvider client={client}><MemoryRouter><WhosHome /></MemoryRouter></QueryClientProvider>);
+  return { ...view, client };
 }
 
 describe("Who's home", () => {
@@ -45,11 +47,17 @@ describe("Who's home", () => {
 
   it('shows each member as home or away, in words', async () => {
     renderPage();
-    expect(await screen.findByText('Kimstabun')).toBeInTheDocument();
-    expect(screen.getByText(/^Home since/)).toBeInTheDocument();
-    expect(screen.getByText('Away · last seen 1 hr ago')).toBeInTheDocument();
+    expect(await screen.findByText('Bryan is home. Kimstabun is out.')).toBeInTheDocument();
+    const board = screen.getByRole('list', { name: "Who's home now" });
+    expect(board).toHaveTextContent(/Bryan\s*Home\s*Since/);
+    expect(board).toHaveTextContent(/Kimstabun\s*Away\s*Last seen 1 hr ago/);
     expect(screen.getByText(/Checked just now · 2 on Wi-Fi/)).toBeInTheDocument();
     expect(screen.getByText('· Mobile · Bryan')).toBeInTheDocument();
+  });
+
+  it('counts the unnamed devices both ways, so the heading matches the list (B-186)', async () => {
+    renderPage();
+    expect(await screen.findByText('Unnamed · 1 on Wi-Fi · 2 total')).toBeInTheDocument();
   });
 
   it('hides unlabeled devices that are off the Wi-Fi until asked', async () => {
@@ -92,6 +100,34 @@ describe("Who's home", () => {
     });
     renderPage();
     expect(await screen.findByText('Scanner offline · last check 1 hr ago')).toBeInTheDocument();
-    expect(screen.getAllByText('Unknown — scanner offline')).toHaveLength(2);
+    expect(screen.getByText("Can't tell who's home: the Wi-Fi scanner is offline.")).toBeInTheDocument();
+    expect(screen.getAllByText('Scanner offline')).toHaveLength(2);
+    expect(screen.getAllByText('Unknown', { selector: '.fp-label' })).toHaveLength(2);
+  });
+
+  it('keeps the page and its last data when a refresh fails (B-187)', async () => {
+    const { client } = renderPage();
+    await screen.findByText('Bryan is home. Kimstabun is out.');
+    vi.mocked(presenceApi.fetchPresence).mockRejectedValueOnce(new Error('offline'));
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['admin-presence'] });
+    });
+    expect(await screen.findByText("Couldn't refresh who's home.")).toBeInTheDocument();
+    expect(screen.getByText('Bryan is home. Kimstabun is out.')).toBeInTheDocument();
+  });
+
+  it('opens Edit with the device as it is now, not as it was when the page loaded (B-185)', async () => {
+    const { client } = renderPage();
+    await screen.findByText('Bryan is home. Kimstabun is out.');
+    vi.mocked(presenceApi.fetchPresence).mockResolvedValue({
+      ...PRESENCE,
+      devices: PRESENCE.devices.map((d) => (d.id === 1 ? { ...d, ownerUserId: 2, owner: 'Kimstabun' } : d)),
+    });
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['admin-presence'] });
+    });
+    await waitFor(() => expect(screen.getByText('· Mobile · Kimstabun')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Owner')).toHaveValue('2');
   });
 });

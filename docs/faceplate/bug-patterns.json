@@ -1,0 +1,139 @@
+[
+  {
+    "name": "Loading and failed requests shown as if they were real answers",
+    "summary": "Screens branch on 'is it loading?' and then 'is there data?', but never on 'did it fail?'. A failed first load therefore reads as 'nothing here yet', '$0.00' or 'Offline/Healthy', a filter with no matches reads as an empty history, and loading reads as 'no data' or 'updated never'. The app already does this right in Cameras, Climate, NUC Health, TabUsage and Updates.",
+    "bugIds": [
+      "B-005",
+      "B-004",
+      "B-011",
+      "B-014",
+      "B-139",
+      "B-078",
+      "B-083",
+      "B-089",
+      "B-090",
+      "B-187",
+      "B-127",
+      "B-036",
+      "B-174",
+      "B-094",
+      "B-155"
+    ],
+    "oneFix": "Add one shared wrapper, e.g. <QueryState query={q} what='bills' empty={...} filtered={isFiltering}>, that renders a skeleton while pending, a 'Couldn't load {what}' card with Retry when `isError && !data`, a 'nothing matches — Clear filters' line when filtered, and the 'nothing yet' copy only for a successful unfiltered empty result (keeping last good data visible on a failed background refresh). Use it on every list/chart/tile query, show '—' instead of defaulting numbers to 0, and give mutations the same treatment (show `mutation.error` text)."
+  },
+  {
+    "name": "Pop-ups are hand-built one by one instead of using one shared dialog",
+    "summary": "Each overlay re-implements Escape, scroll lock and its panel styling, so focus handling, back-swipe, dialog semantics, scrolling on small screens, backdrop behaviour and panel opacity all vary from window to window.",
+    "bugIds": [
+      "B-043",
+      "B-008",
+      "B-136",
+      "B-141",
+      "B-154"
+    ],
+    "oneFix": "Create components/Dialog.tsx (backdrop with modal-overlay, opaque bg-appsurface modal-panel, role='dialog' + aria-modal + aria-labelledby on the panel, useFocusTrap with focus restore on unmount, useBackToClose, useScrollLock, close only on a deliberate backdrop press) and move every overlay onto it: ReleaseNotes, BillPdf, WeatherForecast, the six Roomba modals, CleanModal, UserEditModal, the two Maintenance modals, the Wi-Fi QR viewer, the recordings player, the Debug event modal and ConfirmThermostatChange."
+  },
+  {
+    "name": "Fixed-height virtual lists for short lists",
+    "summary": "VirtualizedList needs every row to be one fixed height inside a fixed-height scroll box. Real rows are taller than the constant (Maintenance, Roomba runs), text has to be clamped (Notifications), boxes end mid-row and nest inside the phone's own page scroller, and an empty list leaves a tall blank box. None of these lists exceeds about 100 rows.",
+    "bugIds": [
+      "B-002",
+      "B-150",
+      "B-006",
+      "B-131",
+      "B-025",
+      "B-089"
+    ],
+    "oneFix": "For lists capped at about 100 rows (Maintenance, Notifications, Roomba runs, Electric usage log, Audit Logs) drop VirtualizedList and render rows at their natural height inside the page scroller; keep virtualization only where a list is genuinely long, and then measure row heights or virtualize against [data-page-scroller]."
+  },
+  {
+    "name": "Raw values printed straight from the API",
+    "summary": "ISO dates, unsigned/suffixed money, ungrouped numbers, enum names, route keys, robot codes, browser strings and naive plurals are shown as-is instead of going through a formatter or label map, so the same thing is written differently on different screens.",
+    "bugIds": [
+      "B-040",
+      "B-095",
+      "B-097",
+      "B-098",
+      "B-068",
+      "B-086",
+      "B-120",
+      "B-126",
+      "B-053",
+      "B-180",
+      "B-172",
+      "B-177",
+      "B-066",
+      "B-163",
+      "B-170",
+      "B-092",
+      "B-079"
+    ],
+    "oneFix": "Add one src/utils/format.ts (formatShortDate/formatPeriod from LocalDate strings via parseLocalDate, formatMoney with the sign first, formatNumber with grouping, formatDuration for minutes, plural(n, 'alert')) plus a labels module (role, notification category, Roomba command/status/pad/cycle, tab keys) and route every display through it; a unit test per helper keeps them honest."
+  },
+  {
+    "name": "Text that vanishes on user-picked colours or tinted fills",
+    "summary": "White text is laid over whatever accent a person picks, muted grey text sits on 30%-tinted tiles, and some light-theme colours use opacity that undoes the theme's contrast remap, so text drops to 1.2-3.5:1.",
+    "bugIds": [
+      "B-158",
+      "B-167",
+      "B-084",
+      "B-027",
+      "B-088",
+      "B-096",
+      "B-110",
+      "B-154"
+    ],
+    "oneFix": "Add a readableOn(hex) helper (dark #0f172a ink on light colours, white on dark) and use it wherever text sits on a user colour (Avatar, guest buttons); keep fills opaque; use text-apptext-soft rather than -muted on tinted tiles; drop the /70 opacity on remapped text colours; and add a contrast unit test over the 32 swatches and the tile tokens in both themes."
+  },
+  {
+    "name": "Controls without names or state for screen readers",
+    "summary": "Labels aren't linked to fields, icon buttons and selects have no names, toggle pills and tab bars don't expose which option is selected, and nothing checks this automatically: the documented lint step can't run at all.",
+    "bugIds": [
+      "B-042",
+      "B-041",
+      "B-074",
+      "B-108",
+      "B-049",
+      "B-132",
+      "B-060",
+      "B-147",
+      "B-160",
+      "B-121",
+      "B-055",
+      "B-188"
+    ],
+    "oneFix": "Install ESLint (flat config) with eslint-plugin-jsx-a11y and react-hooks so `npm run lint` works and flags these, and add two small shared components: Field (label + control paired via useId) and ToggleGroup (buttons with aria-pressed, or a proper tablist with arrow keys) to replace the hand-rolled pills and tab bars."
+  },
+  {
+    "name": "Roomba status worked out separately on Home and on the Roomba page",
+    "summary": "Home and the Roomba tab each derive 'what is the robot doing' from running/phase/online with different rules and orders, so the IDLE pill, Cleaning-while-emptying, stale-but-LIVE, recharge tiles and 'Last cleaned' wording disagree with each other and with the data.",
+    "bugIds": [
+      "B-140",
+      "B-065",
+      "B-070",
+      "B-138",
+      "B-130",
+      "B-069"
+    ],
+    "oneFix": "Put one roombaDisplayState(status, lastRun) helper in utils/roomba.ts that checks, in order, offline/stale -> emptying (phase 'evac') -> cleaning -> recharging mid-clean -> charging/docked -> idle, and returns the chip text, pill, tile labels and last-run wording; use it in HomeSummary and Roomba.tsx and unit-test each state."
+  },
+  {
+    "name": "Clearing a field is ignored on save",
+    "summary": "Edit forms send undefined for an emptied field, and the backend treats a missing field as 'leave unchanged', so removing a phone number, date, cost or note looks saved but isn't.",
+    "bugIds": [
+      "B-028",
+      "B-024"
+    ],
+    "oneFix": "Adopt one convention for edit endpoints: forms always send every field they show ('' for cleared text, null for cleared dates/numbers) and UserService.updateProfile / MaintenanceService.update apply them as a full replace for those fields (keeping skip-if-absent only for fields the form doesn't own, like photo lists); add a backend test that clears a value."
+  },
+  {
+    "name": "Calendar days taken from UTC or the phone's zone instead of the home's local day",
+    "summary": "Comparisons use new Date().toISOString().slice(0, 10) (a UTC date that rolls over at 6-7 PM Central) or device-local getHours(), although utils/localDate.ts exists to avoid exactly this.",
+    "bugIds": [
+      "B-093",
+      "B-076",
+      "B-073"
+    ],
+    "oneFix": "Route every 'today' / 'N days ago' / 'this hour' through utils/localDate.ts (localTodayIso, a home-zone America/Chicago key builder) and add a test that runs with now = 7 PM Central; a grep for toISOString().slice(0, 10) finds the remaining cases."
+  }
+]

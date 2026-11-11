@@ -1,0 +1,351 @@
+<section class="screen" data-route="admin-nuc" data-title="Server health" data-eyebrow="Admin" data-subtitle="Checked 5:00&nbsp;PM">
+
+  <!-- 1–3. The answer: six vital signs + verdict + what needs a look -->
+  <section class="ip" aria-labelledby="admin-nuc-verdict">
+    <div class="ip-instrument">
+      <ul class="nuc-gauges" aria-label="Vital signs">
+        <li class="nuc-gauge">
+          <div class="dial" data-chart="dial" data-start="-135" data-sweep="270" data-rings='[{"r":90,"w":13,"min":0,"max":100,"ticks":10,"major":5,"segments":[{"from":0,"to":23,"tone":"ink"}],"marks":[{"at":85,"tone":"warn","inset":0,"out":3},{"at":95,"tone":"problem","inset":0,"out":3}]}]'>
+            <div class="dial-centre"><span class="num num--m">23<span class="unit">%</span></span></div>
+          </div>
+          <span class="label">Processor</span>
+          <span class="nuc-sub">Last minute</span>
+        </li>
+        <li class="nuc-gauge">
+          <div class="dial" data-chart="dial" data-start="-135" data-sweep="270" data-rings='[{"r":90,"w":13,"min":0,"max":100,"ticks":10,"major":5,"segments":[{"from":0,"to":71,"tone":"ink"}],"marks":[{"at":90,"tone":"warn","inset":0,"out":3},{"at":95,"tone":"problem","inset":0,"out":3}]}]'>
+            <div class="dial-centre"><span class="num num--m">71<span class="unit">%</span></span></div>
+          </div>
+          <span class="label">Memory</span>
+          <span class="nuc-sub">11.3 of 15.8 GB</span>
+        </li>
+        <li class="nuc-gauge">
+          <div class="dial" data-chart="dial" data-start="-135" data-sweep="270" data-rings='[{"r":90,"w":13,"min":0,"max":100,"ticks":10,"major":5,"segments":[{"from":0,"to":92,"tone":"problem"}],"marks":[{"at":80,"tone":"warn","inset":0,"out":3},{"at":90,"tone":"problem","inset":0,"out":3}]}]'>
+            <div class="dial-centre"><span class="num num--m">92<span class="unit">%</span></span></div>
+          </div>
+          <span class="label"><span class="lamp lamp--problem lamp--s"></span>Drive C:</span>
+          <span class="nuc-sub">19 GB free</span>
+        </li>
+        <li class="nuc-gauge">
+          <div class="dial" data-chart="dial" data-start="-135" data-sweep="270" data-rings='[{"r":90,"w":13,"min":86,"max":212,"ticks":10,"major":5,"segments":[{"from":86,"to":135,"tone":"ink"}],"marks":[{"at":185,"tone":"warn","inset":0,"out":3},{"at":203,"tone":"problem","inset":0,"out":3}]}]'>
+            <div class="dial-centre"><span class="num num--m">135<span class="unit">°F</span></span></div>
+          </div>
+          <span class="label">Temperature</span>
+          <span class="nuc-sub">SSD 106°F</span>
+        </li>
+        <li class="nuc-gauge">
+          <div class="dial" data-chart="dial" data-start="-135" data-sweep="270" data-rings='[{"r":90,"w":13,"min":0,"max":10,"ticks":10,"major":5,"segments":[{"from":0,"to":2.5,"tone":"ink"}],"marks":[]}]'>
+            <div class="dial-centre"><span class="num num--m">2.5<span class="unit">Mbps</span></span></div>
+          </div>
+          <span class="label">Network</span>
+          <span class="nuc-sub">Up 770 kbps</span>
+        </li>
+        <li class="nuc-gauge">
+          <div class="dial" data-chart="dial" data-start="-135" data-sweep="270" data-rings='[{"r":90,"w":13,"min":0,"max":14,"ticks":10,"major":5,"segments":[{"from":0,"to":3.5,"tone":"ink"}],"marks":[]}]'>
+            <div class="dial-centre"><span class="num num--m">3<span class="unit">d</span> 12<span class="unit">h</span></span></div>
+          </div>
+          <span class="label">Up for</span>
+          <span class="nuc-sub">Since Fri, 4:52&nbsp;AM</span>
+        </li>
+      </ul>
+      <div class="dial-legend" aria-hidden="true">
+        <span class="lg-item"><span class="lg-key lg-key--mark" style="--c: var(--lamp-warn)"></span>Heads-up</span>
+        <span class="lg-item"><span class="lg-key lg-key--mark" style="--c: var(--lamp-problem)"></span>Problem</span>
+      </div>
+    </div>
+    <div class="ip-body">
+      <div class="verdict">
+        <span class="lamp lamp--problem"></span>
+        <p class="verdict-text" id="admin-nuc-verdict">Drive C: is almost full.</p>
+        <p class="verdict-note">19 GB free of 237 GB. The database and Docker live on C:, so clear space before it fills. Everything else is running.</p>
+      </div>
+      <ul class="list list--inset" aria-label="Also worth a look">
+        <li><div class="row row--compact">
+          <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+          <span class="row-main"><span class="row-title">The camera bridge is unhealthy</span><span class="row-meta">Up 14 hours, failing its health check</span></span>
+        </div></li>
+        <li><div class="row row--compact">
+          <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+          <span class="row-main"><span class="row-title">Windows wants to restart</span><span class="row-meta">An update is waiting. It takes the app down for a few minutes</span></span>
+        </div></li>
+        <li><div class="row row--compact">
+          <span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span>
+          <span class="row-main"><span class="row-title">Froze or lost power last week</span><span class="row-meta">Mon, Nov 2, 9:11&nbsp;PM: the shutdown was unexpected</span></span>
+        </div></li>
+      </ul>
+      <div class="readouts">
+        <div class="readout">
+          <span class="label"><span class="lamp lamp--problem lamp--s"></span>Free on C:</span>
+          <span class="readout-value"><span class="num">19<span class="unit">GB</span></span></span>
+          <span class="readout-note">Of 237 GB. A problem past 90% full</span>
+        </div>
+        <div class="readout">
+          <span class="label">Containers</span>
+          <span class="readout-value"><span class="num">8<span class="unit">of 9</span></span></span>
+          <span class="readout-note">Running. Portainer is off on purpose</span>
+        </div>
+        <div class="readout">
+          <span class="label">Restarts</span>
+          <span class="readout-value"><span class="num">4</span></span>
+          <span class="readout-note">Last 30 days, 1 unexpected</span>
+        </div>
+      </div>
+      <div class="ip-foot">
+        <span class="cluster"><span class="lamp lamp--ok lamp--s"></span><span class="mono">Reported 5:00&nbsp;PM · every minute</span></span>
+        <span class="mono">Report took 5.4 s</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Trends -->
+  <section class="panel" aria-labelledby="admin-nuc-hist-title">
+    <header class="panel-head">
+      <div><h2 class="panel-title" id="admin-nuc-hist-title">History</h2><p class="panel-sub">Drag across any chart to read the same moment on all four</p></div>
+    </header>
+    <div class="chips nuc-range" data-tabs="admin-nuc-range" role="tablist" aria-label="Range">
+      <button class="chip is-active" type="button" role="tab" data-tab="h24">24 hours</button>
+      <button class="chip" type="button" role="tab" data-tab="d7">7 days</button>
+      <button class="chip" type="button" role="tab" data-tab="d30">30 days</button>
+    </div>
+    <div class="stack stack--l mt-m" data-tab-panel="admin-nuc-range:h24">
+          <div class="grid-2 nuc-charts">
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Processor</p><span class="mono small muted">avg 18% · busiest minute 77%</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="%" data-decimals="0" data-y-min="0" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-labels='["Sun 5:30&nbsp;PM","Sun 6&nbsp;PM","Sun 6:30&nbsp;PM","Sun 7&nbsp;PM","Sun 7:30&nbsp;PM","Sun 8&nbsp;PM","Sun 8:30&nbsp;PM","Sun 9&nbsp;PM","Sun 9:30&nbsp;PM","Sun 10&nbsp;PM","Sun 10:30&nbsp;PM","Sun 11&nbsp;PM","Sun 11:30&nbsp;PM","Mon 12&nbsp;AM","Mon 12:30&nbsp;AM","Mon 1&nbsp;AM","Mon 1:30&nbsp;AM","Mon 2&nbsp;AM","Mon 2:30&nbsp;AM","Mon 3&nbsp;AM","Mon 3:30&nbsp;AM","Mon 4&nbsp;AM","Mon 4:30&nbsp;AM","Mon 5&nbsp;AM","Mon 5:30&nbsp;AM","Mon 6&nbsp;AM","Mon 6:30&nbsp;AM","Mon 7&nbsp;AM","Mon 7:30&nbsp;AM","Mon 8&nbsp;AM","Mon 8:30&nbsp;AM","Mon 9&nbsp;AM","Mon 9:30&nbsp;AM","Mon 10&nbsp;AM","Mon 10:30&nbsp;AM","Mon 11&nbsp;AM","Mon 11:30&nbsp;AM","Mon Noon","Mon 12:30&nbsp;PM","Mon 1&nbsp;PM","Mon 1:30&nbsp;PM","Mon 2&nbsp;PM","Mon 2:30&nbsp;PM","Mon 3&nbsp;PM","Mon 3:30&nbsp;PM","Mon 4&nbsp;PM","Mon 4:30&nbsp;PM","Mon 5&nbsp;PM"]' data-short='["","6&nbsp;PM","","","","","","","","","","","","12&nbsp;AM","","","","","","","","","","","","6&nbsp;AM","","","","","","","","","","","","Noon","","","","","","","","","",""]' data-sync="nuc-h24" data-readout="47"
+              data-series='[{"name":"Processor","tone":"ink","area":true,"thin":true,"values":[22.7,26,27.1,27.4,28.7,30.5,34.2,31.3,25.3,27.3,21.1,19,15.3,14.9,9.5,8.8,10,8.3,9.2,9.2,null,9.6,9.9,11,17.3,19.3,21.7,24.1,25.6,24.5,22.4,19.9,17.2,16.7,20.1,15.2,13,15.9,16.2,13.6,14.8,18.9,11.6,16.1,18.2,16.9,16.7,23]}]'><figcaption class="sr-only">Processor use, mostly under 30%.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Memory in use</p><span class="mono small muted">avg 70% · peak 74%</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="%" data-decimals="0" data-y-min="0" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-labels='["Sun 5:30&nbsp;PM","Sun 6&nbsp;PM","Sun 6:30&nbsp;PM","Sun 7&nbsp;PM","Sun 7:30&nbsp;PM","Sun 8&nbsp;PM","Sun 8:30&nbsp;PM","Sun 9&nbsp;PM","Sun 9:30&nbsp;PM","Sun 10&nbsp;PM","Sun 10:30&nbsp;PM","Sun 11&nbsp;PM","Sun 11:30&nbsp;PM","Mon 12&nbsp;AM","Mon 12:30&nbsp;AM","Mon 1&nbsp;AM","Mon 1:30&nbsp;AM","Mon 2&nbsp;AM","Mon 2:30&nbsp;AM","Mon 3&nbsp;AM","Mon 3:30&nbsp;AM","Mon 4&nbsp;AM","Mon 4:30&nbsp;AM","Mon 5&nbsp;AM","Mon 5:30&nbsp;AM","Mon 6&nbsp;AM","Mon 6:30&nbsp;AM","Mon 7&nbsp;AM","Mon 7:30&nbsp;AM","Mon 8&nbsp;AM","Mon 8:30&nbsp;AM","Mon 9&nbsp;AM","Mon 9:30&nbsp;AM","Mon 10&nbsp;AM","Mon 10:30&nbsp;AM","Mon 11&nbsp;AM","Mon 11:30&nbsp;AM","Mon Noon","Mon 12:30&nbsp;PM","Mon 1&nbsp;PM","Mon 1:30&nbsp;PM","Mon 2&nbsp;PM","Mon 2:30&nbsp;PM","Mon 3&nbsp;PM","Mon 3:30&nbsp;PM","Mon 4&nbsp;PM","Mon 4:30&nbsp;PM","Mon 5&nbsp;PM"]' data-short='["","6&nbsp;PM","","","","","","","","","","","","12&nbsp;AM","","","","","","","","","","","","6&nbsp;AM","","","","","","","","","","","","Noon","","","","","","","","","",""]' data-sync="nuc-h24" data-readout="47"
+              data-series='[{"name":"Memory","tone":"ink","area":true,"thin":true,"values":[72.1,72.5,72.8,73.3,73.4,72.8,72.5,71.9,70.3,69.9,68.5,67.6,67.2,66.7,66.2,66.2,66.4,66.2,66.3,66.7,null,66.8,67.4,67.6,68.4,68.9,69.7,70.1,71,71.2,71.2,70.9,70.5,69.8,68.2,68.7,68.9,69,68.7,69.2,69.4,70,70.3,70.2,70.5,70.4,70.9,71]}]'><figcaption class="sr-only">Memory steady around 70%.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Temperature</p><span class="mono small muted">hottest minute 158°F</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-labels='["Sun 5:30&nbsp;PM","Sun 6&nbsp;PM","Sun 6:30&nbsp;PM","Sun 7&nbsp;PM","Sun 7:30&nbsp;PM","Sun 8&nbsp;PM","Sun 8:30&nbsp;PM","Sun 9&nbsp;PM","Sun 9:30&nbsp;PM","Sun 10&nbsp;PM","Sun 10:30&nbsp;PM","Sun 11&nbsp;PM","Sun 11:30&nbsp;PM","Mon 12&nbsp;AM","Mon 12:30&nbsp;AM","Mon 1&nbsp;AM","Mon 1:30&nbsp;AM","Mon 2&nbsp;AM","Mon 2:30&nbsp;AM","Mon 3&nbsp;AM","Mon 3:30&nbsp;AM","Mon 4&nbsp;AM","Mon 4:30&nbsp;AM","Mon 5&nbsp;AM","Mon 5:30&nbsp;AM","Mon 6&nbsp;AM","Mon 6:30&nbsp;AM","Mon 7&nbsp;AM","Mon 7:30&nbsp;AM","Mon 8&nbsp;AM","Mon 8:30&nbsp;AM","Mon 9&nbsp;AM","Mon 9:30&nbsp;AM","Mon 10&nbsp;AM","Mon 10:30&nbsp;AM","Mon 11&nbsp;AM","Mon 11:30&nbsp;AM","Mon Noon","Mon 12:30&nbsp;PM","Mon 1&nbsp;PM","Mon 1:30&nbsp;PM","Mon 2&nbsp;PM","Mon 2:30&nbsp;PM","Mon 3&nbsp;PM","Mon 3:30&nbsp;PM","Mon 4&nbsp;PM","Mon 4:30&nbsp;PM","Mon 5&nbsp;PM"]' data-short='["","6&nbsp;PM","","","","","","","","","","","","12&nbsp;AM","","","","","","","","","","","","6&nbsp;AM","","","","","","","","","","","","Noon","","","","","","","","","",""]' data-sync="nuc-h24" data-readout="47"
+              data-series='[{"name":"Processor","tone":"heat","thin":true,"values":[140,141,143,143,144,145,147,146,141,143,139,137,133,133,129,129,129,129,130,129,null,129,130,130,135,136,139,140,141,141,139,137,135,135,137,133,132,135,134,132,134,136,130,135,136,134,135,135]},{"name":"SSD","tone":"cool","thin":true,"values":[104,105,106,106,107,107,106,106,105,104,103,102,101,101,100,100,101,100,100,100,null,101,101,101,101,101,101,102,103,102,102,102,102,101,100,100,100,100,100,101,100,100,101,101,101,101,102,106]}]'><figcaption class="sr-only">Processor and SSD temperatures, well under the warning level.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Home network</p><span class="mono small muted">↓ 16.4 GB · ↑ 6.1 GB</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="Mbps" data-decimals="2" data-zero="true" data-y-ticks="3" data-labels='["Sun 5:30&nbsp;PM","Sun 6&nbsp;PM","Sun 6:30&nbsp;PM","Sun 7&nbsp;PM","Sun 7:30&nbsp;PM","Sun 8&nbsp;PM","Sun 8:30&nbsp;PM","Sun 9&nbsp;PM","Sun 9:30&nbsp;PM","Sun 10&nbsp;PM","Sun 10:30&nbsp;PM","Sun 11&nbsp;PM","Sun 11:30&nbsp;PM","Mon 12&nbsp;AM","Mon 12:30&nbsp;AM","Mon 1&nbsp;AM","Mon 1:30&nbsp;AM","Mon 2&nbsp;AM","Mon 2:30&nbsp;AM","Mon 3&nbsp;AM","Mon 3:30&nbsp;AM","Mon 4&nbsp;AM","Mon 4:30&nbsp;AM","Mon 5&nbsp;AM","Mon 5:30&nbsp;AM","Mon 6&nbsp;AM","Mon 6:30&nbsp;AM","Mon 7&nbsp;AM","Mon 7:30&nbsp;AM","Mon 8&nbsp;AM","Mon 8:30&nbsp;AM","Mon 9&nbsp;AM","Mon 9:30&nbsp;AM","Mon 10&nbsp;AM","Mon 10:30&nbsp;AM","Mon 11&nbsp;AM","Mon 11:30&nbsp;AM","Mon Noon","Mon 12:30&nbsp;PM","Mon 1&nbsp;PM","Mon 1:30&nbsp;PM","Mon 2&nbsp;PM","Mon 2:30&nbsp;PM","Mon 3&nbsp;PM","Mon 3:30&nbsp;PM","Mon 4&nbsp;PM","Mon 4:30&nbsp;PM","Mon 5&nbsp;PM"]' data-short='["","6&nbsp;PM","","","","","","","","","","","","12&nbsp;AM","","","","","","","","","","","","6&nbsp;AM","","","","","","","","","","","","Noon","","","","","","","","","",""]' data-sync="nuc-h24" data-readout="47"
+              data-series='[{"name":"Download","tone":"ink","thin":true,"values":[2.36,2.87,3.49,10.19,4.09,4.08,3.88,3.55,2.98,2.35,3.11,1.39,1.01,0.74,0.38,0.34,1.56,0.39,1.61,0.36,null,0.34,0.38,0.47,2.74,0.63,0.9,1.15,1.21,1.25,1.24,0.84,3.07,0.56,0.44,0.27,0.38,0.34,2.74,0.31,0.3,0.39,0.44,2.05,0.73,1.03,1.35,2.5]},{"name":"Upload","tone":"graphite","dash":true,"thin":true,"values":[1.11,1.42,1.66,1.91,2.03,2.04,1.89,2.24,1.91,1.13,0.88,0.67,0.45,0.33,0.13,0.13,0.12,0.54,0.12,0.9,null,0.09,0.1,0.15,0.16,0.21,1.05,0.36,0.4,0.42,0.35,0.31,0.22,0.16,0.17,0.13,0.13,0.12,0.11,0.1,0.12,0.14,0.18,0.25,0.31,0.46,0.62,0.77]}]'><figcaption class="sr-only">Network traffic in megabits per second.</figcaption></figure>
+            </div>
+          </div>
+          <div class="stack stack--s">
+            <p class="label">Times it went quiet</p>
+            <ul class="list list--inset">
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Mon, Nov 9, 3:05 – 3:20&nbsp;AM</span><span class="row-meta">The monitor missed its checks; the app kept running</span></span><span class="row-trail"><span class="mono small">15 min</span></span></div></li>
+            </ul>
+          </div>
+        </div>
+    <div class="stack stack--l mt-m" data-tab-panel="admin-nuc-range:d7" hidden>
+          <div class="grid-2 nuc-charts">
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Processor</p><span class="mono small muted">avg 18% · busiest minute 81%</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="%" data-decimals="0" data-y-min="0" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-labels='["Mon, Nov 2, 7&nbsp;PM","Mon, Nov 2, 9&nbsp;PM","Mon, Nov 2, 11&nbsp;PM","Tue, Nov 3, 1&nbsp;AM","Tue, Nov 3, 3&nbsp;AM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 7&nbsp;AM","Tue, Nov 3, 9&nbsp;AM","Tue, Nov 3, 11&nbsp;AM","Tue, Nov 3, 1&nbsp;PM","Tue, Nov 3, 3&nbsp;PM","Tue, Nov 3, 5&nbsp;PM","Tue, Nov 3, 7&nbsp;PM","Tue, Nov 3, 9&nbsp;PM","Tue, Nov 3, 11&nbsp;PM","Wed, Nov 4, 1&nbsp;AM","Wed, Nov 4, 3&nbsp;AM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 7&nbsp;AM","Wed, Nov 4, 9&nbsp;AM","Wed, Nov 4, 11&nbsp;AM","Wed, Nov 4, 1&nbsp;PM","Wed, Nov 4, 3&nbsp;PM","Wed, Nov 4, 5&nbsp;PM","Wed, Nov 4, 7&nbsp;PM","Wed, Nov 4, 9&nbsp;PM","Wed, Nov 4, 11&nbsp;PM","Thu, Nov 5, 1&nbsp;AM","Thu, Nov 5, 3&nbsp;AM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 7&nbsp;AM","Thu, Nov 5, 9&nbsp;AM","Thu, Nov 5, 11&nbsp;AM","Thu, Nov 5, 1&nbsp;PM","Thu, Nov 5, 3&nbsp;PM","Thu, Nov 5, 5&nbsp;PM","Thu, Nov 5, 7&nbsp;PM","Thu, Nov 5, 9&nbsp;PM","Thu, Nov 5, 11&nbsp;PM","Fri, Nov 6, 1&nbsp;AM","Fri, Nov 6, 3&nbsp;AM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 7&nbsp;AM","Fri, Nov 6, 9&nbsp;AM","Fri, Nov 6, 11&nbsp;AM","Fri, Nov 6, 1&nbsp;PM","Fri, Nov 6, 3&nbsp;PM","Fri, Nov 6, 5&nbsp;PM","Fri, Nov 6, 7&nbsp;PM","Fri, Nov 6, 9&nbsp;PM","Fri, Nov 6, 11&nbsp;PM","Sat, Nov 7, 1&nbsp;AM","Sat, Nov 7, 3&nbsp;AM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 7&nbsp;AM","Sat, Nov 7, 9&nbsp;AM","Sat, Nov 7, 11&nbsp;AM","Sat, Nov 7, 1&nbsp;PM","Sat, Nov 7, 3&nbsp;PM","Sat, Nov 7, 5&nbsp;PM","Sat, Nov 7, 7&nbsp;PM","Sat, Nov 7, 9&nbsp;PM","Sat, Nov 7, 11&nbsp;PM","Sun, Nov 8, 1&nbsp;AM","Sun, Nov 8, 3&nbsp;AM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 7&nbsp;AM","Sun, Nov 8, 9&nbsp;AM","Sun, Nov 8, 11&nbsp;AM","Sun, Nov 8, 1&nbsp;PM","Sun, Nov 8, 3&nbsp;PM","Sun, Nov 8, 5&nbsp;PM","Sun, Nov 8, 7&nbsp;PM","Sun, Nov 8, 9&nbsp;PM","Sun, Nov 8, 11&nbsp;PM","Mon, Nov 9, 1&nbsp;AM","Mon, Nov 9, 3&nbsp;AM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 7&nbsp;AM","Mon, Nov 9, 9&nbsp;AM","Mon, Nov 9, 11&nbsp;AM","Mon, Nov 9, 1&nbsp;PM","Mon, Nov 9, 3&nbsp;PM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","","Tue","","","","","","","","","","","","Wed","","","","","","","","","","","","Thu","","","","","","","","","","","","Fri","","","","","","","","","","","","Sat","","","","","","","","","","","","Sun","","","","","","","","","","","","Mon","","","","","","","",""]' data-sync="nuc-d7" data-readout="83"
+              data-series='[{"name":"Processor","tone":"ink","area":true,"thin":true,"values":[31.5,28.8,20.9,11.7,9,9.1,18.8,24.8,15.7,14.4,14.5,17.8,25.8,30.2,21.6,13.3,16.3,9.1,19.5,24.1,15.9,13.9,14.9,16.8,23.8,28,29,13.9,10.2,8.6,18.8,24.7,15.8,14.4,14.7,18.1,32.4,29.6,21.3,12.4,9.5,8.7,18,23.3,17.5,15,12.8,17.5,26.5,28.1,22.8,null,null,null,null,22.4,16.9,13.9,15.3,17.7,24,28.4,23.4,11.9,9.7,10.8,19.5,25.6,15.9,15.8,15.3,15.9,24.3,29.1,22.4,13.2,9.8,8.4,19,23,15.9,15.8,15.3,23]}]'><figcaption class="sr-only">Processor use, mostly under 30%.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Memory in use</p><span class="mono small muted">avg 70% · peak 75%</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="%" data-decimals="0" data-y-min="0" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-labels='["Mon, Nov 2, 7&nbsp;PM","Mon, Nov 2, 9&nbsp;PM","Mon, Nov 2, 11&nbsp;PM","Tue, Nov 3, 1&nbsp;AM","Tue, Nov 3, 3&nbsp;AM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 7&nbsp;AM","Tue, Nov 3, 9&nbsp;AM","Tue, Nov 3, 11&nbsp;AM","Tue, Nov 3, 1&nbsp;PM","Tue, Nov 3, 3&nbsp;PM","Tue, Nov 3, 5&nbsp;PM","Tue, Nov 3, 7&nbsp;PM","Tue, Nov 3, 9&nbsp;PM","Tue, Nov 3, 11&nbsp;PM","Wed, Nov 4, 1&nbsp;AM","Wed, Nov 4, 3&nbsp;AM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 7&nbsp;AM","Wed, Nov 4, 9&nbsp;AM","Wed, Nov 4, 11&nbsp;AM","Wed, Nov 4, 1&nbsp;PM","Wed, Nov 4, 3&nbsp;PM","Wed, Nov 4, 5&nbsp;PM","Wed, Nov 4, 7&nbsp;PM","Wed, Nov 4, 9&nbsp;PM","Wed, Nov 4, 11&nbsp;PM","Thu, Nov 5, 1&nbsp;AM","Thu, Nov 5, 3&nbsp;AM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 7&nbsp;AM","Thu, Nov 5, 9&nbsp;AM","Thu, Nov 5, 11&nbsp;AM","Thu, Nov 5, 1&nbsp;PM","Thu, Nov 5, 3&nbsp;PM","Thu, Nov 5, 5&nbsp;PM","Thu, Nov 5, 7&nbsp;PM","Thu, Nov 5, 9&nbsp;PM","Thu, Nov 5, 11&nbsp;PM","Fri, Nov 6, 1&nbsp;AM","Fri, Nov 6, 3&nbsp;AM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 7&nbsp;AM","Fri, Nov 6, 9&nbsp;AM","Fri, Nov 6, 11&nbsp;AM","Fri, Nov 6, 1&nbsp;PM","Fri, Nov 6, 3&nbsp;PM","Fri, Nov 6, 5&nbsp;PM","Fri, Nov 6, 7&nbsp;PM","Fri, Nov 6, 9&nbsp;PM","Fri, Nov 6, 11&nbsp;PM","Sat, Nov 7, 1&nbsp;AM","Sat, Nov 7, 3&nbsp;AM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 7&nbsp;AM","Sat, Nov 7, 9&nbsp;AM","Sat, Nov 7, 11&nbsp;AM","Sat, Nov 7, 1&nbsp;PM","Sat, Nov 7, 3&nbsp;PM","Sat, Nov 7, 5&nbsp;PM","Sat, Nov 7, 7&nbsp;PM","Sat, Nov 7, 9&nbsp;PM","Sat, Nov 7, 11&nbsp;PM","Sun, Nov 8, 1&nbsp;AM","Sun, Nov 8, 3&nbsp;AM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 7&nbsp;AM","Sun, Nov 8, 9&nbsp;AM","Sun, Nov 8, 11&nbsp;AM","Sun, Nov 8, 1&nbsp;PM","Sun, Nov 8, 3&nbsp;PM","Sun, Nov 8, 5&nbsp;PM","Sun, Nov 8, 7&nbsp;PM","Sun, Nov 8, 9&nbsp;PM","Sun, Nov 8, 11&nbsp;PM","Mon, Nov 9, 1&nbsp;AM","Mon, Nov 9, 3&nbsp;AM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 7&nbsp;AM","Mon, Nov 9, 9&nbsp;AM","Mon, Nov 9, 11&nbsp;AM","Mon, Nov 9, 1&nbsp;PM","Mon, Nov 9, 3&nbsp;PM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","","Tue","","","","","","","","","","","","Wed","","","","","","","","","","","","Thu","","","","","","","","","","","","Fri","","","","","","","","","","","","Sat","","","","","","","","","","","","Sun","","","","","","","","","","","","Mon","","","","","","","",""]' data-sync="nuc-d7" data-readout="83"
+              data-series='[{"name":"Memory","tone":"ink","area":true,"thin":true,"values":[72.1,73.6,71.3,69.7,69.1,69.3,70.5,71.6,70.3,69.7,69.8,70.7,73.2,74.4,72.3,70.1,69.7,69.5,70.3,70.8,69.4,68.5,68.7,69.5,71.8,72.7,70.5,68.4,67.6,67.2,67.7,68.8,67.2,66.7,66.5,67.3,69.6,70.9,68.6,66.6,66.2,66.2,67.2,68.2,67,66.5,66.5,67.9,70.5,71.8,70.4,null,null,null,null,69.6,68.9,68.6,68.9,69.6,72.3,73.8,72,69.6,69.4,69.6,70.4,71.7,70.4,69.8,70,70.7,72.9,74.2,72.2,69.9,69.3,69,69.8,70.7,69.5,69.8,70,71]}]'><figcaption class="sr-only">Memory steady around 70%.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Temperature</p><span class="mono small muted">hottest minute 158°F</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-labels='["Mon, Nov 2, 7&nbsp;PM","Mon, Nov 2, 9&nbsp;PM","Mon, Nov 2, 11&nbsp;PM","Tue, Nov 3, 1&nbsp;AM","Tue, Nov 3, 3&nbsp;AM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 7&nbsp;AM","Tue, Nov 3, 9&nbsp;AM","Tue, Nov 3, 11&nbsp;AM","Tue, Nov 3, 1&nbsp;PM","Tue, Nov 3, 3&nbsp;PM","Tue, Nov 3, 5&nbsp;PM","Tue, Nov 3, 7&nbsp;PM","Tue, Nov 3, 9&nbsp;PM","Tue, Nov 3, 11&nbsp;PM","Wed, Nov 4, 1&nbsp;AM","Wed, Nov 4, 3&nbsp;AM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 7&nbsp;AM","Wed, Nov 4, 9&nbsp;AM","Wed, Nov 4, 11&nbsp;AM","Wed, Nov 4, 1&nbsp;PM","Wed, Nov 4, 3&nbsp;PM","Wed, Nov 4, 5&nbsp;PM","Wed, Nov 4, 7&nbsp;PM","Wed, Nov 4, 9&nbsp;PM","Wed, Nov 4, 11&nbsp;PM","Thu, Nov 5, 1&nbsp;AM","Thu, Nov 5, 3&nbsp;AM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 7&nbsp;AM","Thu, Nov 5, 9&nbsp;AM","Thu, Nov 5, 11&nbsp;AM","Thu, Nov 5, 1&nbsp;PM","Thu, Nov 5, 3&nbsp;PM","Thu, Nov 5, 5&nbsp;PM","Thu, Nov 5, 7&nbsp;PM","Thu, Nov 5, 9&nbsp;PM","Thu, Nov 5, 11&nbsp;PM","Fri, Nov 6, 1&nbsp;AM","Fri, Nov 6, 3&nbsp;AM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 7&nbsp;AM","Fri, Nov 6, 9&nbsp;AM","Fri, Nov 6, 11&nbsp;AM","Fri, Nov 6, 1&nbsp;PM","Fri, Nov 6, 3&nbsp;PM","Fri, Nov 6, 5&nbsp;PM","Fri, Nov 6, 7&nbsp;PM","Fri, Nov 6, 9&nbsp;PM","Fri, Nov 6, 11&nbsp;PM","Sat, Nov 7, 1&nbsp;AM","Sat, Nov 7, 3&nbsp;AM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 7&nbsp;AM","Sat, Nov 7, 9&nbsp;AM","Sat, Nov 7, 11&nbsp;AM","Sat, Nov 7, 1&nbsp;PM","Sat, Nov 7, 3&nbsp;PM","Sat, Nov 7, 5&nbsp;PM","Sat, Nov 7, 7&nbsp;PM","Sat, Nov 7, 9&nbsp;PM","Sat, Nov 7, 11&nbsp;PM","Sun, Nov 8, 1&nbsp;AM","Sun, Nov 8, 3&nbsp;AM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 7&nbsp;AM","Sun, Nov 8, 9&nbsp;AM","Sun, Nov 8, 11&nbsp;AM","Sun, Nov 8, 1&nbsp;PM","Sun, Nov 8, 3&nbsp;PM","Sun, Nov 8, 5&nbsp;PM","Sun, Nov 8, 7&nbsp;PM","Sun, Nov 8, 9&nbsp;PM","Sun, Nov 8, 11&nbsp;PM","Mon, Nov 9, 1&nbsp;AM","Mon, Nov 9, 3&nbsp;AM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 7&nbsp;AM","Mon, Nov 9, 9&nbsp;AM","Mon, Nov 9, 11&nbsp;AM","Mon, Nov 9, 1&nbsp;PM","Mon, Nov 9, 3&nbsp;PM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","","Tue","","","","","","","","","","","","Wed","","","","","","","","","","","","Thu","","","","","","","","","","","","Fri","","","","","","","","","","","","Sat","","","","","","","","","","","","Sun","","","","","","","","","","","","Mon","","","","","","","",""]' data-sync="nuc-d7" data-readout="83"
+              data-series='[{"name":"Processor","tone":"heat","thin":true,"values":[148,144,139,133,130,130,137,142,134,134,134,136,143,146,140,133,135,129,138,141,135,133,135,135,140,144,145,133,131,129,137,142,135,133,133,137,148,145,140,133,130,130,136,141,135,135,132,136,143,144,140,null,null,null,null,141,135,133,135,137,141,144,141,132,131,130,138,142,135,136,135,135,141,145,140,133,131,129,137,140,135,136,135,135]},{"name":"SSD","tone":"cool","thin":true,"values":[105,106,103,101,100,100,102,102,100,100,101,102,104,106,104,100,100,100,101,102,101,100,101,102,105,106,104,101,101,100,101,102,101,100,100,102,104,106,104,101,100,100,101,102,101,101,101,102,105,107,104,null,null,null,null,102,101,101,101,101,105,106,104,101,101,100,101,102,100,101,100,101,104,106,104,101,101,100,101,103,101,101,100,106]}]'><figcaption class="sr-only">Processor and SSD temperatures, well under the warning level.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Home network</p><span class="mono small muted">↓ 109 GB · ↑ 41 GB</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="Mbps" data-decimals="2" data-zero="true" data-y-ticks="3" data-labels='["Mon, Nov 2, 7&nbsp;PM","Mon, Nov 2, 9&nbsp;PM","Mon, Nov 2, 11&nbsp;PM","Tue, Nov 3, 1&nbsp;AM","Tue, Nov 3, 3&nbsp;AM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 7&nbsp;AM","Tue, Nov 3, 9&nbsp;AM","Tue, Nov 3, 11&nbsp;AM","Tue, Nov 3, 1&nbsp;PM","Tue, Nov 3, 3&nbsp;PM","Tue, Nov 3, 5&nbsp;PM","Tue, Nov 3, 7&nbsp;PM","Tue, Nov 3, 9&nbsp;PM","Tue, Nov 3, 11&nbsp;PM","Wed, Nov 4, 1&nbsp;AM","Wed, Nov 4, 3&nbsp;AM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 7&nbsp;AM","Wed, Nov 4, 9&nbsp;AM","Wed, Nov 4, 11&nbsp;AM","Wed, Nov 4, 1&nbsp;PM","Wed, Nov 4, 3&nbsp;PM","Wed, Nov 4, 5&nbsp;PM","Wed, Nov 4, 7&nbsp;PM","Wed, Nov 4, 9&nbsp;PM","Wed, Nov 4, 11&nbsp;PM","Thu, Nov 5, 1&nbsp;AM","Thu, Nov 5, 3&nbsp;AM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 7&nbsp;AM","Thu, Nov 5, 9&nbsp;AM","Thu, Nov 5, 11&nbsp;AM","Thu, Nov 5, 1&nbsp;PM","Thu, Nov 5, 3&nbsp;PM","Thu, Nov 5, 5&nbsp;PM","Thu, Nov 5, 7&nbsp;PM","Thu, Nov 5, 9&nbsp;PM","Thu, Nov 5, 11&nbsp;PM","Fri, Nov 6, 1&nbsp;AM","Fri, Nov 6, 3&nbsp;AM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 7&nbsp;AM","Fri, Nov 6, 9&nbsp;AM","Fri, Nov 6, 11&nbsp;AM","Fri, Nov 6, 1&nbsp;PM","Fri, Nov 6, 3&nbsp;PM","Fri, Nov 6, 5&nbsp;PM","Fri, Nov 6, 7&nbsp;PM","Fri, Nov 6, 9&nbsp;PM","Fri, Nov 6, 11&nbsp;PM","Sat, Nov 7, 1&nbsp;AM","Sat, Nov 7, 3&nbsp;AM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 7&nbsp;AM","Sat, Nov 7, 9&nbsp;AM","Sat, Nov 7, 11&nbsp;AM","Sat, Nov 7, 1&nbsp;PM","Sat, Nov 7, 3&nbsp;PM","Sat, Nov 7, 5&nbsp;PM","Sat, Nov 7, 7&nbsp;PM","Sat, Nov 7, 9&nbsp;PM","Sat, Nov 7, 11&nbsp;PM","Sun, Nov 8, 1&nbsp;AM","Sun, Nov 8, 3&nbsp;AM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 7&nbsp;AM","Sun, Nov 8, 9&nbsp;AM","Sun, Nov 8, 11&nbsp;AM","Sun, Nov 8, 1&nbsp;PM","Sun, Nov 8, 3&nbsp;PM","Sun, Nov 8, 5&nbsp;PM","Sun, Nov 8, 7&nbsp;PM","Sun, Nov 8, 9&nbsp;PM","Sun, Nov 8, 11&nbsp;PM","Mon, Nov 9, 1&nbsp;AM","Mon, Nov 9, 3&nbsp;AM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 7&nbsp;AM","Mon, Nov 9, 9&nbsp;AM","Mon, Nov 9, 11&nbsp;AM","Mon, Nov 9, 1&nbsp;PM","Mon, Nov 9, 3&nbsp;PM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","","Tue","","","","","","","","","","","","Wed","","","","","","","","","","","","Thu","","","","","","","","","","","","Fri","","","","","","","","","","","","Sat","","","","","","","","","","","","Sun","","","","","","","","","","","","Mon","","","","","","","",""]' data-sync="nuc-d7" data-readout="83"
+              data-series='[{"name":"Download","tone":"ink","thin":true,"values":[5.39,4.01,2.07,0.74,0.38,0.33,0.7,1.15,3.04,0.33,0.52,1.09,2.92,3.98,4.7,0.64,0.37,0.29,0.75,1.14,0.59,0.33,0.4,1.1,2.93,3.96,2.38,0.67,0.34,0.3,3.12,1.18,0.55,0.4,0.44,1.1,3.04,3.98,2.31,0.7,0.38,0.41,3.36,1.11,0.55,0.34,0.42,1.1,2.92,4.01,2.67,null,null,null,null,1.15,0.55,0.41,4.07,1.02,6.41,4.04,2.36,0.69,0.31,0.35,0.69,1.13,0.54,0.31,2.43,1.14,2.99,6.25,2.36,3.23,0.38,0.34,0.75,1.11,0.72,0.31,2.43,2.5]},{"name":"Upload","tone":"graphite","dash":true,"thin":true,"values":[2.36,1.93,0.97,0.31,0.14,0.15,0.76,0.38,0.19,0.13,0.18,0.49,1.4,1.92,1.1,0.28,0.14,0.12,0.23,0.39,0.19,0.14,0.14,0.5,1.45,1.92,2.65,0.28,0.13,0.11,0.23,0.37,0.17,0.1,0.15,0.48,1.45,1.93,1.13,0.31,0.15,0.13,0.25,0.38,0.21,0.14,0.2,0.51,1.43,1.92,1.26,null,null,null,null,0.39,0.21,0.12,0.14,0.49,1.44,1.94,1.12,0.26,0.13,0.88,0.25,0.35,0.19,0.13,0.14,0.47,1.44,1.94,1.1,0.3,0.14,0.11,0.26,0.38,0.21,0.13,0.14,0.77]}]'><figcaption class="sr-only">Network traffic in megabits per second.</figcaption></figure>
+            </div>
+          </div>
+          <div class="stack stack--s">
+            <p class="label">Times it went quiet</p>
+            <ul class="list list--inset">
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Mon, Nov 9, 3:05 – 3:20&nbsp;AM</span><span class="row-meta">The monitor missed its checks; the app kept running</span></span><span class="row-trail"><span class="mono small">15 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span></span><span class="row-main"><span class="row-title row-title--regular">Fri, Nov 6, 10:40&nbsp;PM – Sat, 7:25&nbsp;AM</span><span class="row-meta">Docker stopped answering overnight</span></span><span class="row-trail"><span class="mono small">8 h 45 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Fri, Nov 6, 4:50 – 4:58&nbsp;AM</span><span class="row-meta">Restarted for a Windows update</span></span><span class="row-trail"><span class="mono small">8 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span></span><span class="row-main"><span class="row-title row-title--regular">Mon, Nov 2, 9:06 – 9:13&nbsp;PM</span><span class="row-meta">Froze or lost power, then started again</span></span><span class="row-trail"><span class="mono small">7 min</span></span></div></li>
+            </ul>
+          </div>
+        </div>
+    <div class="stack stack--l mt-m" data-tab-panel="admin-nuc-range:d30" hidden>
+          <div class="grid-2 nuc-charts">
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Processor</p><span class="mono small muted">avg 18% · busiest minute 83%</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="%" data-decimals="0" data-y-min="0" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-labels='["Sun, Oct 11, 5&nbsp;AM","Sun, Oct 11, 5&nbsp;PM","Mon, Oct 12, 5&nbsp;AM","Mon, Oct 12, 5&nbsp;PM","Tue, Oct 13, 5&nbsp;AM","Tue, Oct 13, 5&nbsp;PM","Wed, Oct 14, 5&nbsp;AM","Wed, Oct 14, 5&nbsp;PM","Thu, Oct 15, 5&nbsp;AM","Thu, Oct 15, 5&nbsp;PM","Fri, Oct 16, 5&nbsp;AM","Fri, Oct 16, 5&nbsp;PM","Sat, Oct 17, 5&nbsp;AM","Sat, Oct 17, 5&nbsp;PM","Sun, Oct 18, 5&nbsp;AM","Sun, Oct 18, 5&nbsp;PM","Mon, Oct 19, 5&nbsp;AM","Mon, Oct 19, 5&nbsp;PM","Tue, Oct 20, 5&nbsp;AM","Tue, Oct 20, 5&nbsp;PM","Wed, Oct 21, 5&nbsp;AM","Wed, Oct 21, 5&nbsp;PM","Thu, Oct 22, 5&nbsp;AM","Thu, Oct 22, 5&nbsp;PM","Fri, Oct 23, 5&nbsp;AM","Fri, Oct 23, 5&nbsp;PM","Sat, Oct 24, 5&nbsp;AM","Sat, Oct 24, 5&nbsp;PM","Sun, Oct 25, 5&nbsp;AM","Sun, Oct 25, 5&nbsp;PM","Mon, Oct 26, 5&nbsp;AM","Mon, Oct 26, 5&nbsp;PM","Tue, Oct 27, 5&nbsp;AM","Tue, Oct 27, 5&nbsp;PM","Wed, Oct 28, 5&nbsp;AM","Wed, Oct 28, 5&nbsp;PM","Thu, Oct 29, 5&nbsp;AM","Thu, Oct 29, 5&nbsp;PM","Fri, Oct 30, 5&nbsp;AM","Fri, Oct 30, 5&nbsp;PM","Sat, Oct 31, 5&nbsp;AM","Sat, Oct 31, 5&nbsp;PM","Sun, Nov 1, 5&nbsp;AM","Sun, Nov 1, 5&nbsp;PM","Mon, Nov 2, 5&nbsp;AM","Mon, Nov 2, 5&nbsp;PM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 5&nbsp;PM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 5&nbsp;PM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 5&nbsp;PM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 5&nbsp;PM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 5&nbsp;PM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 5&nbsp;PM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","Oct 12","","","","","","","","","","","","","","Oct 19","","","","","","","","","","","","","","Oct 26","","","","","","","","","","","","","","Nov 2","","","","","","","","","","","","","","Nov 9",""]' data-sync="nuc-d30" data-readout="59"
+              data-series='[{"name":"Processor","tone":"ink","area":true,"thin":true,"values":[19.2,16.7,19.2,16.3,18.5,16.9,18.5,15.2,19.3,16.2,18.7,16.5,23.7,16.6,18.2,15.5,19,16.4,19.2,15.9,19.1,16.4,18.1,21.1,18.7,15.4,19.3,15.2,18.8,15.7,19.1,16.4,18.2,16.5,18.6,16.9,23.4,16.8,19.1,21.3,18.2,15.9,17,17.1,22.3,17.9,17.5,17.8,17.1,17.3,17.6,17.6,18.7,17.3,null,17.7,22.9,17.1,17.3,23]}]'><figcaption class="sr-only">Processor use, mostly under 30%.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Memory in use</p><span class="mono small muted">avg 70% · peak 75%</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="%" data-decimals="0" data-y-min="0" data-y-max="100" data-y-ticks="2" data-tick-unit="%" data-labels='["Sun, Oct 11, 5&nbsp;AM","Sun, Oct 11, 5&nbsp;PM","Mon, Oct 12, 5&nbsp;AM","Mon, Oct 12, 5&nbsp;PM","Tue, Oct 13, 5&nbsp;AM","Tue, Oct 13, 5&nbsp;PM","Wed, Oct 14, 5&nbsp;AM","Wed, Oct 14, 5&nbsp;PM","Thu, Oct 15, 5&nbsp;AM","Thu, Oct 15, 5&nbsp;PM","Fri, Oct 16, 5&nbsp;AM","Fri, Oct 16, 5&nbsp;PM","Sat, Oct 17, 5&nbsp;AM","Sat, Oct 17, 5&nbsp;PM","Sun, Oct 18, 5&nbsp;AM","Sun, Oct 18, 5&nbsp;PM","Mon, Oct 19, 5&nbsp;AM","Mon, Oct 19, 5&nbsp;PM","Tue, Oct 20, 5&nbsp;AM","Tue, Oct 20, 5&nbsp;PM","Wed, Oct 21, 5&nbsp;AM","Wed, Oct 21, 5&nbsp;PM","Thu, Oct 22, 5&nbsp;AM","Thu, Oct 22, 5&nbsp;PM","Fri, Oct 23, 5&nbsp;AM","Fri, Oct 23, 5&nbsp;PM","Sat, Oct 24, 5&nbsp;AM","Sat, Oct 24, 5&nbsp;PM","Sun, Oct 25, 5&nbsp;AM","Sun, Oct 25, 5&nbsp;PM","Mon, Oct 26, 5&nbsp;AM","Mon, Oct 26, 5&nbsp;PM","Tue, Oct 27, 5&nbsp;AM","Tue, Oct 27, 5&nbsp;PM","Wed, Oct 28, 5&nbsp;AM","Wed, Oct 28, 5&nbsp;PM","Thu, Oct 29, 5&nbsp;AM","Thu, Oct 29, 5&nbsp;PM","Fri, Oct 30, 5&nbsp;AM","Fri, Oct 30, 5&nbsp;PM","Sat, Oct 31, 5&nbsp;AM","Sat, Oct 31, 5&nbsp;PM","Sun, Nov 1, 5&nbsp;AM","Sun, Nov 1, 5&nbsp;PM","Mon, Nov 2, 5&nbsp;AM","Mon, Nov 2, 5&nbsp;PM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 5&nbsp;PM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 5&nbsp;PM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 5&nbsp;PM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 5&nbsp;PM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 5&nbsp;PM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 5&nbsp;PM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","Oct 12","","","","","","","","","","","","","","Oct 19","","","","","","","","","","","","","","Oct 26","","","","","","","","","","","","","","Nov 2","","","","","","","","","","","","","","Nov 9",""]' data-sync="nuc-d30" data-readout="59"
+              data-series='[{"name":"Memory","tone":"ink","area":true,"thin":true,"values":[70.1,69.1,70.8,69.6,71.3,70.1,71.6,70.4,71.9,70.3,71.7,70.4,71.5,69.9,71.3,69.4,70.8,68.9,70.2,68.4,69.5,67.6,69.2,67.4,68.6,67.1,68.4,67,68.3,66.8,68.1,67,68.6,67.5,68.9,67.6,69.3,68.3,70.3,68.9,70.8,69.5,70.7,70.1,71.3,70.4,71.6,70.6,71.5,70.5,71.4,70.1,71.5,69.8,null,69.2,70,68.7,69.6,71]}]'><figcaption class="sr-only">Memory steady around 70%.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Temperature</p><span class="mono small muted">hottest minute 158°F</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="°F" data-decimals="0" data-y-ticks="3" data-tick-unit="°" data-labels='["Sun, Oct 11, 5&nbsp;AM","Sun, Oct 11, 5&nbsp;PM","Mon, Oct 12, 5&nbsp;AM","Mon, Oct 12, 5&nbsp;PM","Tue, Oct 13, 5&nbsp;AM","Tue, Oct 13, 5&nbsp;PM","Wed, Oct 14, 5&nbsp;AM","Wed, Oct 14, 5&nbsp;PM","Thu, Oct 15, 5&nbsp;AM","Thu, Oct 15, 5&nbsp;PM","Fri, Oct 16, 5&nbsp;AM","Fri, Oct 16, 5&nbsp;PM","Sat, Oct 17, 5&nbsp;AM","Sat, Oct 17, 5&nbsp;PM","Sun, Oct 18, 5&nbsp;AM","Sun, Oct 18, 5&nbsp;PM","Mon, Oct 19, 5&nbsp;AM","Mon, Oct 19, 5&nbsp;PM","Tue, Oct 20, 5&nbsp;AM","Tue, Oct 20, 5&nbsp;PM","Wed, Oct 21, 5&nbsp;AM","Wed, Oct 21, 5&nbsp;PM","Thu, Oct 22, 5&nbsp;AM","Thu, Oct 22, 5&nbsp;PM","Fri, Oct 23, 5&nbsp;AM","Fri, Oct 23, 5&nbsp;PM","Sat, Oct 24, 5&nbsp;AM","Sat, Oct 24, 5&nbsp;PM","Sun, Oct 25, 5&nbsp;AM","Sun, Oct 25, 5&nbsp;PM","Mon, Oct 26, 5&nbsp;AM","Mon, Oct 26, 5&nbsp;PM","Tue, Oct 27, 5&nbsp;AM","Tue, Oct 27, 5&nbsp;PM","Wed, Oct 28, 5&nbsp;AM","Wed, Oct 28, 5&nbsp;PM","Thu, Oct 29, 5&nbsp;AM","Thu, Oct 29, 5&nbsp;PM","Fri, Oct 30, 5&nbsp;AM","Fri, Oct 30, 5&nbsp;PM","Sat, Oct 31, 5&nbsp;AM","Sat, Oct 31, 5&nbsp;PM","Sun, Nov 1, 5&nbsp;AM","Sun, Nov 1, 5&nbsp;PM","Mon, Nov 2, 5&nbsp;AM","Mon, Nov 2, 5&nbsp;PM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 5&nbsp;PM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 5&nbsp;PM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 5&nbsp;PM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 5&nbsp;PM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 5&nbsp;PM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 5&nbsp;PM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","Oct 12","","","","","","","","","","","","","","Oct 19","","","","","","","","","","","","","","Oct 26","","","","","","","","","","","","","","Nov 2","","","","","","","","","","","","","","Nov 9",""]' data-sync="nuc-d30" data-readout="59"
+              data-series='[{"name":"Processor","tone":"heat","thin":true,"values":[136,135,137,134,136,135,136,134,137,134,136,134,140,134,136,134,136,134,136,134,137,135,136,138,136,134,137,134,136,134,136,134,136,134,136,135,140,135,136,138,136,134,135,135,138,135,135,135,135,135,135,135,136,135,null,135,140,135,135,135]},{"name":"SSD","tone":"cool","thin":true,"values":[103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,103,101,102,101,103,101,103,101,103,101,103,101,103,101,null,101,103,101,103,106]}]'><figcaption class="sr-only">Processor and SSD temperatures, well under the warning level.</figcaption></figure>
+            </div>
+            <div class="stack stack--s">
+              <div class="spread"><p class="label">Home network</p><span class="mono small muted">↓ 467 GB · ↑ 182 GB</span></div>
+              <figure class="chart" data-chart="line" data-height="140" data-unit="Mbps" data-decimals="2" data-zero="true" data-y-ticks="3" data-labels='["Sun, Oct 11, 5&nbsp;AM","Sun, Oct 11, 5&nbsp;PM","Mon, Oct 12, 5&nbsp;AM","Mon, Oct 12, 5&nbsp;PM","Tue, Oct 13, 5&nbsp;AM","Tue, Oct 13, 5&nbsp;PM","Wed, Oct 14, 5&nbsp;AM","Wed, Oct 14, 5&nbsp;PM","Thu, Oct 15, 5&nbsp;AM","Thu, Oct 15, 5&nbsp;PM","Fri, Oct 16, 5&nbsp;AM","Fri, Oct 16, 5&nbsp;PM","Sat, Oct 17, 5&nbsp;AM","Sat, Oct 17, 5&nbsp;PM","Sun, Oct 18, 5&nbsp;AM","Sun, Oct 18, 5&nbsp;PM","Mon, Oct 19, 5&nbsp;AM","Mon, Oct 19, 5&nbsp;PM","Tue, Oct 20, 5&nbsp;AM","Tue, Oct 20, 5&nbsp;PM","Wed, Oct 21, 5&nbsp;AM","Wed, Oct 21, 5&nbsp;PM","Thu, Oct 22, 5&nbsp;AM","Thu, Oct 22, 5&nbsp;PM","Fri, Oct 23, 5&nbsp;AM","Fri, Oct 23, 5&nbsp;PM","Sat, Oct 24, 5&nbsp;AM","Sat, Oct 24, 5&nbsp;PM","Sun, Oct 25, 5&nbsp;AM","Sun, Oct 25, 5&nbsp;PM","Mon, Oct 26, 5&nbsp;AM","Mon, Oct 26, 5&nbsp;PM","Tue, Oct 27, 5&nbsp;AM","Tue, Oct 27, 5&nbsp;PM","Wed, Oct 28, 5&nbsp;AM","Wed, Oct 28, 5&nbsp;PM","Thu, Oct 29, 5&nbsp;AM","Thu, Oct 29, 5&nbsp;PM","Fri, Oct 30, 5&nbsp;AM","Fri, Oct 30, 5&nbsp;PM","Sat, Oct 31, 5&nbsp;AM","Sat, Oct 31, 5&nbsp;PM","Sun, Nov 1, 5&nbsp;AM","Sun, Nov 1, 5&nbsp;PM","Mon, Nov 2, 5&nbsp;AM","Mon, Nov 2, 5&nbsp;PM","Tue, Nov 3, 5&nbsp;AM","Tue, Nov 3, 5&nbsp;PM","Wed, Nov 4, 5&nbsp;AM","Wed, Nov 4, 5&nbsp;PM","Thu, Nov 5, 5&nbsp;AM","Thu, Nov 5, 5&nbsp;PM","Fri, Nov 6, 5&nbsp;AM","Fri, Nov 6, 5&nbsp;PM","Sat, Nov 7, 5&nbsp;AM","Sat, Nov 7, 5&nbsp;PM","Sun, Nov 8, 5&nbsp;AM","Sun, Nov 8, 5&nbsp;PM","Mon, Nov 9, 5&nbsp;AM","Mon, Nov 9, 5&nbsp;PM"]' data-short='["","","Oct 12","","","","","","","","","","","","","","Oct 19","","","","","","","","","","","","","","Oct 26","","","","","","","","","","","","","","Nov 2","","","","","","","","","","","","","","Nov 9",""]' data-sync="nuc-d30" data-readout="59"
+              data-series='[{"name":"Download","tone":"ink","thin":true,"values":[4.07,0.6,3.02,0.62,1.87,0.58,1.87,0.57,1.87,0.59,4.08,0.63,1.9,0.58,3.5,0.64,1.87,0.59,1.85,0.6,1.9,0.61,1.87,0.61,1.87,0.58,1.87,0.61,1.87,0.56,1.88,0.61,1.9,2.74,4.38,0.55,1.86,2.89,1.88,1.68,1.84,2.53,1.65,2.11,1.74,0.75,1.74,0.76,1.74,0.75,1.73,0.75,2.01,0.73,null,0.75,2.76,0.73,1.72,2.5]},{"name":"Upload","tone":"graphite","dash":true,"thin":true,"values":[0.88,0.2,0.88,0.22,0.88,0.21,1.67,0.2,0.9,0.19,1.33,0.21,0.87,0.22,0.88,0.95,0.88,0.2,0.88,0.21,0.88,0.92,0.89,0.2,0.88,0.2,0.87,0.21,1.22,0.21,1.3,0.22,0.87,0.19,0.88,0.21,0.88,0.2,0.88,0.21,0.89,0.19,0.76,0.27,0.81,0.85,0.8,0.28,0.82,0.28,0.81,0.27,0.95,0.28,null,0.26,0.81,0.27,0.81,0.77]}]'><figcaption class="sr-only">Network traffic in megabits per second.</figcaption></figure>
+            </div>
+          </div>
+          <div class="stack stack--s">
+            <p class="label">Times it went quiet</p>
+            <ul class="list list--inset">
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Mon, Nov 9, 3:05 – 3:20&nbsp;AM</span><span class="row-meta">The monitor missed its checks; the app kept running</span></span><span class="row-trail"><span class="mono small">15 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span></span><span class="row-main"><span class="row-title row-title--regular">Fri, Nov 6, 10:40&nbsp;PM – Sat, 7:25&nbsp;AM</span><span class="row-meta">Docker stopped answering overnight</span></span><span class="row-trail"><span class="mono small">8 h 45 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Fri, Nov 6, 4:50 – 4:58&nbsp;AM</span><span class="row-meta">Restarted for a Windows update</span></span><span class="row-trail"><span class="mono small">8 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span></span><span class="row-main"><span class="row-title row-title--regular">Mon, Nov 2, 9:06 – 9:13&nbsp;PM</span><span class="row-meta">Froze or lost power, then started again</span></span><span class="row-trail"><span class="mono small">7 min</span></span></div></li>
+              <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Tue, Oct 27, 4:10 – 4:18&nbsp;AM</span><span class="row-meta">Restarted by Bryan</span></span><span class="row-trail"><span class="mono small">8 min</span></span></div></li>
+            </ul>
+          </div>
+        </div>
+  </section>
+
+  <div class="split split--even">
+    <section class="panel" aria-labelledby="admin-nuc-ctr-title">
+      <header class="panel-head">
+        <div><h2 class="panel-title" id="admin-nuc-ctr-title">Containers</h2><p class="panel-sub">8 of 9 running · Docker 29.7.2 · 6.8 GB set aside</p></div>
+      </header>
+      <ul class="list">
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Backend</span><span class="row-meta"><span class="mono">homeplatform-backend</span> · 4.2% processor · 912 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Healthy</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Home Assistant</span><span class="row-meta"><span class="mono">homeplatform-homeassistant</span> · 1.6% processor · 486 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Running</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Database</span><span class="row-meta"><span class="mono">homeplatform-postgres</span> · 0.9% processor · 214 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Healthy</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Camera streams</span><span class="row-meta"><span class="mono">homeplatform-go2rtc</span> · 6.8% processor · 148 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Running</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Camera bridge</span><span class="row-meta"><span class="mono">homeplatform-eufy-bridge</span> · 0.7% processor · 121 MB</span></span>
+              <span class="row-trail"><span class="badge badge--warn">Unhealthy</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Roomba poller</span><span class="row-meta"><span class="mono">homeplatform-roomba-poller</span> · 0.3% processor · 64 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Running</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Web server</span><span class="row-meta"><span class="mono">homeplatform-nginx</span> · 0.1% processor · 18 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Healthy</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Cache</span><span class="row-meta"><span class="mono">homeplatform-redis</span> · 0.2% processor · 11 MB</span></span>
+              <span class="row-trail"><span class="badge badge--ok">Healthy</span></span></div></li>
+        <li><div class="row row--compact">
+              <span class="row-main"><span class="row-title">Portainer</span><span class="row-meta"><span class="mono">portainer</span> · exited 2 weeks ago, on purpose</span></span>
+              <span class="row-trail"><span class="badge">Stopped</span></span></div></li>
+      </ul>
+    </section>
+
+    <section class="panel" aria-labelledby="admin-nuc-store-title">
+        <header class="panel-head">
+          <div><h2 class="panel-title" id="admin-nuc-store-title">Storage</h2><p class="panel-sub">Two SSDs, both healthy</p></div>
+        </header>
+        <div class="stack">
+          <div class="meter-row"><span class="small strong">Drive C: · Windows</span><span class="mono t-problem">92% full</span>
+            <div class="meter meter--problem" style="--v: .92; --n: 20" role="meter" aria-label="Drive C:" aria-valuenow="92" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+            <span class="small muted nuc-meter-sub">19 GB free of 237 GB · reading 369 KB/s, writing 1.3 MB/s</span></div>
+          <div class="meter-row"><span class="small strong">Drive D: · Recordings</span><span class="mono">39% full</span>
+            <div class="meter" style="--v: .39; --n: 20" role="meter" aria-label="Drive D:" aria-valuenow="39" aria-valuemin="0" aria-valuemax="100"><span></span></div>
+            <span class="small muted nuc-meter-sub">570 GB free of 932 GB</span></div>
+        </div>
+        <dl class="kv mt-m">
+          <div class="kv-row"><dt>SSD, SK hynix 256 GB</dt><dd>106°F · 3% worn</dd></div>
+          <div class="kv-row"><dt>SSD, Samsung 1 TB</dt><dd>93°F · 1% worn</dd></div>
+          <div class="kv-row kv-row--group"><dt>This app’s database</dt><dd>53 MB</dd></div>
+          <div class="kv-row kv-row--sub"><dt class="mono">hourly_electric_usage</dt><dd>4.1 MB</dd></div>
+          <div class="kv-row kv-row--sub"><dt class="mono">host_metrics</dt><dd>3.8 MB</dd></div>
+          <div class="kv-row kv-row--sub"><dt class="mono">app_events</dt><dd>2.9 MB</dd></div>
+        </dl>
+    </section>
+  </div>
+
+  <section class="panel" aria-labelledby="admin-nuc-power-title">
+    <header class="panel-head">
+      <div><h2 class="panel-title" id="admin-nuc-power-title">Power and restarts</h2><p class="panel-sub">From the Windows event log</p></div>
+    </header>
+    <dl class="kv kv--cols">
+      <div class="kv-row"><dt>Last started</dt><dd>Fri, Nov 6, 4:52&nbsp;AM</dd></div>
+      <div class="kv-row"><dt>Power plan</dt><dd>Balanced</dd></div>
+      <div class="kv-row"><dt>Sleeps after</dt><dd>Never</dd></div>
+      <div class="kv-row"><dt>Windows updates</dt><dd class="t-warn">Waiting on a restart</dd></div>
+    </dl>
+    <p class="label mt-m">Last 30 days</p>
+    <ul class="list list--inset list--cols mt-s">
+      <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Started</span><span class="row-meta">After the Windows update · <span class="mono">Fri, Nov 6, 4:52&nbsp;AM</span></span></span></div></li>
+        <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Restart requested</span><span class="row-meta">By Windows Update · planned upgrade · <span class="mono">Fri, Nov 6, 4:51&nbsp;AM</span></span></span></div></li>
+        <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp lamp--warn"></span><span class="sr-only">Heads-up</span></span><span class="row-main"><span class="row-title">Froze or lost power</span><span class="row-meta">The shutdown at 9:06&nbsp;PM was unexpected · <span class="mono">Mon, Nov 2, 9:11&nbsp;PM</span></span></span></div></li>
+        <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Started</span><span class="row-meta">After a restart · <span class="mono">Tue, Oct 27, 4:14&nbsp;AM</span></span></span></div></li>
+        <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Restart requested</span><span class="row-meta">By Bryan · planned · <span class="mono">Tue, Oct 27, 4:12&nbsp;AM</span></span></span></div></li>
+    </ul>
+    <details class="disclosure mt-s">
+      <summary><span class="when-closed">Show 4 older</span><span class="when-open">Hide older</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+      <div class="disclosure-body"><ul class="list list--inset list--cols">
+        <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Woke up</span><span class="row-meta">From sleep · <span class="mono">Mon, Oct 19, 7:40&nbsp;AM</span></span></span></div></li>
+          <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Went to sleep</span><span class="row-meta"><span class="mono">Mon, Oct 19, 1:02&nbsp;AM</span></span></span></div></li>
+          <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Started</span><span class="row-meta"><span class="mono">Wed, Oct 14, 3:33&nbsp;AM</span></span></span></div></li>
+          <li><div class="row row--compact"><span class="row-lead row-lead--lamp"><span class="lamp"></span></span><span class="row-main"><span class="row-title row-title--regular">Shut down</span><span class="row-meta"><span class="mono">Wed, Oct 14, 3:31&nbsp;AM</span></span></span></div></li>
+      </ul></div>
+    </details>
+  </section>
+
+  <div class="split split--even nuc-folds">
+    <section class="panel panel--flush" aria-label="What's using it">
+      <details class="disclosure disclosure--row">
+        <summary><span class="when-closed">What's using it</span><span class="when-open">Hide the busiest programs</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="disclosure-body">
+          <div class="grid-2 nuc-use">
+        <div>
+          <p class="label">Busiest · last minute</p>
+          <dl class="kv mt-s">
+            <div class="kv-row"><dt>Docker’s Linux VM</dt><dd>10.4%</dd></div>
+            <div class="kv-row"><dt>Windows services ×89</dt><dd>3.2%</dd></div>
+            <div class="kv-row"><dt>Microsoft Defender</dt><dd>2.7%</dd></div>
+            <div class="kv-row"><dt>Docker Desktop engine ×2</dt><dd>1.9%</dd></div>
+            <div class="kv-row"><dt>Windows</dt><dd>1.1%</dd></div>
+            <div class="kv-row"><dt>PowerShell</dt><dd>0.8%</dd></div>
+          </dl>
+        </div>
+        <div>
+          <p class="label">Most memory</p>
+          <dl class="kv mt-s">
+            <div class="kv-row"><dt>Docker’s Linux VM</dt><dd>6.6 GB</dd></div>
+            <div class="kv-row"><dt>Windows services ×89</dt><dd>1.5 GB</dd></div>
+            <div class="kv-row"><dt>Windows memory compression</dt><dd>700 MB</dd></div>
+            <div class="kv-row"><dt>Microsoft Defender</dt><dd>384 MB</dd></div>
+            <div class="kv-row"><dt>Docker Desktop engine ×2</dt><dd>304 MB</dd></div>
+            <div class="kv-row"><dt>File Explorer</dt><dd>179 MB</dd></div>
+          </dl>
+        </div>
+      </div>
+        </div>
+      </details>
+    </section>
+
+    <section class="panel panel--flush" aria-label="About this machine">
+      <details class="disclosure disclosure--row">
+        <summary><span class="when-closed">About this machine</span><span class="when-open">Hide machine details</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+        <div class="disclosure-body">
+          <dl class="kv kv--cols">
+            <div class="kv-row"><dt>Model</dt><dd>Intel NUC10i5FNH</dd></div>
+            <div class="kv-row"><dt>Windows</dt><dd>11 Pro · 10.0.26200</dd></div>
+            <div class="kv-row"><dt>Processor</dt><dd>Core i5-10210U, 4 cores</dd></div>
+            <div class="kv-row"><dt>Memory</dt><dd>15.8 GB</dd></div>
+            <div class="kv-row"><dt>Drive C:</dt><dd>SK hynix 256 GB NVMe</dd></div>
+            <div class="kv-row"><dt>Drive D:</dt><dd>Samsung 870 EVO 1 TB</dd></div>
+            <div class="kv-row"><dt>Network</dt><dd>Wi-Fi · <span class="mono">192.168.1.10</span></dd></div>
+            <div class="kv-row"><dt>Wi-Fi</dt><dd>NguyenHome · 5 GHz · 92%</dd></div>
+            <div class="kv-row"><dt>Link</dt><dd>1,201 Mbps · channel 149</dd></div>
+            <div class="kv-row"><dt>Remote access</dt><dd><span class="t-ok">Tailscale connected</span></dd></div>
+            <div class="kv-row"><dt>App server</dt><dd>412 MB of 1 GB</dd></div>
+            <div class="kv-row"><dt>Readings stored</dt><dd>43,180</dd></div>
+          </dl>
+        </div>
+      </details>
+    </section>
+  </div>
+</section>

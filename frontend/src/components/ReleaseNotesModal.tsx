@@ -5,6 +5,9 @@ import { useAuth } from '../context/AuthContext';
 import { fetchReleases } from '../api/releases';
 import ReleaseChangeList from './ReleaseChangeList';
 import { useScrollLock } from '../hooks/useScrollLock';
+import { useFocusTrap } from '../hooks/useFocusTrap';
+import { useBackToClose } from '../hooks/useBackToClose';
+import { Icon } from './ui/Icon';
 
 const SEEN_KEY_PREFIX = 'homeos:seenReleaseVersion:';
 
@@ -13,10 +16,16 @@ const SEEN_KEY_PREFIX = 'homeos:seenReleaseVersion:';
  * in after a new version ships. Dismissing it records the version (per user, in
  * localStorage), so it won't reappear until an even newer version lands. Mounted
  * once in the authenticated app shell; renders nothing until it has a reason to.
+ *
+ * A kit dialog (a sheet on a phone): focus moves into it and is trapped there,
+ * Escape and the phone's back gesture close it, and focus goes back to wherever it
+ * was when it opened (B-043: it used to leave focus on the page behind).
  */
 export default function ReleaseNotesModal() {
   const { user } = useAuth();
   const panelRef = useRef<HTMLDivElement | null>(null);
+  // It opens on its own, so there is no trigger to return to: remember what had focus.
+  const returnRef = useRef<HTMLElement | null>(null);
   const decidedRef = useRef(false);
   const [open, setOpen] = useState(false);
 
@@ -28,7 +37,7 @@ export default function ReleaseNotesModal() {
   });
 
   const latest = releasesQuery.data?.[0];
-  useScrollLock(open && !!latest);
+  const shown = open && !!latest;
   const seenKey = user ? `${SEEN_KEY_PREFIX}${user.userId}` : null;
 
   // Decide once per mount (i.e. once per login/app load): open only if the newest
@@ -36,7 +45,10 @@ export default function ReleaseNotesModal() {
   useEffect(() => {
     if (decidedRef.current || !latest || !seenKey) return;
     decidedRef.current = true;
-    if (localStorage.getItem(seenKey) !== latest.version) setOpen(true);
+    if (localStorage.getItem(seenKey) !== latest.version) {
+      returnRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setOpen(true);
+    }
   }, [latest, seenKey]);
 
   const close = useCallback(() => {
@@ -44,68 +56,49 @@ export default function ReleaseNotesModal() {
     setOpen(false);
   }, [latest, seenKey]);
 
-  // Escape-to-close, matching the app's other modals.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [open, close]);
+  useScrollLock(shown);
+  useFocusTrap(shown, panelRef, returnRef, close);
+  useBackToClose(close, shown);
 
-  if (!open || !latest) return null;
+  if (!shown) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 modal-overlay"
-      role="dialog"
-      aria-modal="true"
-      aria-label="What's New"
-      onClick={close}
+      className="fp-dialog"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
     >
       <div
         ref={panelRef}
-        className="flex max-h-[85vh] w-full max-w-lg flex-col overflow-hidden rounded-[24px] border border-appborder bg-appsurface-raised shadow-[0_20px_60px_var(--appshadow)]"
-        onClick={(e) => e.stopPropagation()}
+        className="fp-dialog-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="release-notes-title"
       >
-        <div className="flex items-start justify-between gap-3 border-b border-appborder p-6 pb-4">
-          <div>
-            <p className="text-2xs font-semibold uppercase tracking-[0.18em] text-appaccent-text">
-              What's New · v{latest.version}
-            </p>
-            <h3 className="mt-2 text-lg font-semibold tracking-[-0.02em] text-apptext">{latest.title}</h3>
-            {latest.summary && (
-              <p className="mt-1.5 text-sm leading-6 text-apptext-soft">{latest.summary}</p>
-            )}
+        <header className="fp-dialog-head">
+          <div className="fp-dialog-heading">
+            <p className="fp-label">What's new · v{latest.version}</p>
+            <h2 id="release-notes-title" className="fp-dialog-title">
+              {latest.title}
+            </h2>
+            {latest.summary && <p className="fp-dialog-sub">{latest.summary}</p>}
           </div>
-          <button
-            type="button"
-            onClick={close}
-            aria-label="Close"
-            className="shrink-0 rounded-lg p-1.5 text-apptext-muted transition-colors hover:bg-appinset hover:text-apptext"
-          >
-            ✕
+          <button type="button" onClick={close} aria-label="Close" className="fp-icon-btn fp-icon-btn--quiet">
+            <Icon name="x" />
           </button>
-        </div>
+        </header>
 
-        <div className="overflow-y-auto p-6 pt-4">
+        <div className="fp-dialog-body">
           <ReleaseChangeList changes={latest.changes} />
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-appborder p-6 pt-4">
-          <Link
-            to="/updates"
-            onClick={close}
-            className="text-sm font-medium text-appaccent-text transition-colors hover:text-appaccent"
-          >
+        <div className="fp-dialog-foot fp-dialog-foot--split">
+          {/* replace: the dialog's Back entry becomes /updates (see MoreSheet). */}
+          <Link to="/updates" replace onClick={close} className="fp-btn fp-btn--quiet">
             See all updates
           </Link>
-          <button
-            type="button"
-            onClick={close}
-            className="rounded-xl border border-appaccent-border bg-appaccent-soft px-4 py-2 text-sm font-semibold text-appaccent-text transition-colors hover:bg-appaccent-soft/70"
-          >
+          <button type="button" onClick={close} className="fp-btn fp-btn--primary">
             Got it
           </button>
         </div>

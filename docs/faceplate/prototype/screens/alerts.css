@@ -1,0 +1,33 @@
+/* Alerts — only the page's unique pieces: the annunciator (unread counter + a lamp per severity),
+   the day groups and the message that opens under an alert. */
+.screen[data-route="alerts"] .al-annun {
+  display: grid; grid-template-columns: minmax(112px, 5fr) minmax(0, 7fr); gap: 16px; align-items: stretch;
+  width: 100%; max-width: 380px;
+}
+.screen[data-route="alerts"] .al-counter {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px;
+  padding: 16px 10px 14px; border-radius: var(--r-well); background: var(--well); box-shadow: var(--well-shadow);
+}
+.screen[data-route="alerts"] .al-counter .num--xl { font-size: 56px; }
+.screen[data-route="alerts"] .al-counter-note { font-size: 11.5px; color: var(--graphite); text-align: center; line-height: 1.35; white-space: pre-line; }
+.screen[data-route="alerts"] .al-tally { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.screen[data-route="alerts"] .al-tally ul { display: flex; flex-direction: column; }
+.screen[data-route="alerts"] .al-tally li {
+  display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 10px;
+  min-height: 30px; border-top: 1px solid var(--hairline);
+}
+.screen[data-route="alerts"] .al-tally li .label { color: var(--ink); }
+.screen[data-route="alerts"] .al-tally li .mono { font-size: 14px; color: var(--ink); }
+.screen[data-route="alerts"] .al-tally li.is-zero .label,
+.screen[data-route="alerts"] .al-tally li.is-zero .mono { color: var(--graphite); }
+
+/* the inbox: day groups, and the message that opens under a row */
+.screen[data-route="alerts"] .al-days { display: flex; flex-direction: column; gap: 20px; margin-top: 18px; }
+.screen[data-route="alerts"] .al-older .al-days { margin-top: 12px; }
+.screen[data-route="alerts"] .al-day .tl-day { margin-bottom: 2px; }
+.screen[data-route="alerts"] .al-day .row[aria-expanded="true"] { padding-bottom: 6px; }
+.screen[data-route="alerts"] .al-msg { padding: 0 4px 14px 32px; }
+.screen[data-route="alerts"] .al-msg p { font-size: 15px; line-height: 1.5; color: var(--ink); max-width: 62ch; text-wrap: pretty; }
+.screen[data-route="alerts"] .al-msg .btn-row { margin-top: 10px; }
+.screen[data-route="alerts"] .al-filters > summary { gap: 8px; }
+.screen[data-route="alerts"] [data-al="empty"] { margin-top: 18px; }

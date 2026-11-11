@@ -208,17 +208,18 @@ describe('ThermostatCard', () => {
   it('shows the live reading, status chip and attribution', () => {
     renderCard({ ...upstairs, lastChange: change({ actor: 'ecobee', by: 'ecobee', byUserId: null }) });
     expect(screen.getByText('Upstairs')).toBeTruthy();
-    expect(screen.getByText('72.4')).toBeTruthy();
+    expect(screen.getByRole('img', { name: /^Upstairs is 72\.4 degrees/ })).toBeTruthy();
     expect(screen.getByText('Idle · holding 72°')).toBeTruthy();
+    expect(screen.getByText('72° and holding.')).toBeTruthy();
     expect(screen.getByText('Cool to')).toBeTruthy();
-    expect(screen.getByText(/^Set at ecobee · /)).toBeTruthy();
+    expect(screen.getByText('Set at the thermostat')).toBeTruthy();
   });
 
   it('is view-only for guests', () => {
     renderCard({ ...upstairs, lastChange: change() }, false, null);
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByText('View only')).toBeTruthy();
-    expect(screen.getByText(/^Set by Bryan · /)).toBeTruthy();
+    expect(screen.getByText('Set by Bryan')).toBeTruthy();
   });
 
   it('batches setpoint taps into one command', async () => {
@@ -297,10 +298,51 @@ describe('ThermostatCard', () => {
   it('marks controls unavailable when the thermostat is offline', () => {
     renderCard({ ...upstairs, available: false });
     expect(screen.getByText('Offline')).toBeTruthy();
-    expect(screen.getByText('Offline — showing the last reading.')).toBeTruthy();
+    expect(screen.getByText("Upstairs isn't answering.")).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Raise Upstairs cool-to temperature' }).getAttribute('aria-disabled')).toBe('true');
     fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
     expect(climate.setThermostatMode).not.toHaveBeenCalled();
+  });
+
+  it('marks the key at a limit unavailable on the side that is there (B-105)', () => {
+    vi.useFakeTimers();
+    // Heat to at the 45° floor: − is marked unavailable and says nothing misleading.
+    renderCard({ ...auto, heatSetpoint: 45, coolSetpoint: 75, lastChange: change({ actor: 'schedule', by: 'schedule', byUserId: null }) });
+    expect(screen.getByRole('button', { name: 'Lower Upstairs heat-to temperature' }).getAttribute('aria-disabled')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Raise Upstairs cool-to temperature' }).getAttribute('aria-disabled')).toBe('false');
+  });
+
+  it('a blocked push says which side is at its limit, then clears (B-104, B-105)', async () => {
+    vi.useFakeTimers();
+    renderCard({ ...auto, heatSetpoint: 90, coolSetpoint: 93, maxTemp: 93 });
+    fireEvent.click(screen.getByRole('button', { name: 'Raise Upstairs heat-to temperature' }));
+    expect(screen.getByText("Can't go higher: cool to is at the 93° limit.")).toBeTruthy();
+    await act(async () => {
+      vi.advanceTimersByTime(4_100);
+    });
+    expect(screen.queryByText(/Can't go higher/)).toBeNull();
+  });
+
+  it('holds the mode keys while a temperature is waiting to go out (B-107)', async () => {
+    vi.useFakeTimers();
+    renderCard(upstairs);
+    fireEvent.click(screen.getByRole('button', { name: 'Raise Upstairs cool-to temperature' }));
+    const heat = screen.getByRole('radio', { name: 'Heat' }) as HTMLButtonElement;
+    expect(heat.disabled).toBe(true);
+    fireEvent.click(heat);
+    expect(climate.setThermostatMode).not.toHaveBeenCalled();
+    await act(async () => {
+      vi.advanceTimersByTime(1300);
+    });
+    expect(climate.setThermostatTemperature).toHaveBeenCalledWith('a1b2', { temperature: 73 });
+  });
+
+  it('the current mode is checked, not dimmed, and the arrow keys move the choice (B-108)', () => {
+    renderCard(upstairs);
+    const cool = screen.getByRole('radio', { name: 'Cool' });
+    expect(cool.getAttribute('aria-disabled')).toBeNull();
+    expect(cool.getAttribute('tabindex')).toBe('0');
+    expect(screen.getByRole('radio', { name: 'Heat' }).getAttribute('tabindex')).toBe('-1');
   });
 });
 
@@ -329,12 +371,12 @@ describe('recent change by someone else', () => {
   it('asks before overriding, then runs the tapped action once confirmed', async () => {
     renderCard({ ...upstairs, lastChange: byKim(4) });
     fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
-    const dialog = screen.getByRole('dialog', { name: 'Change Upstairs?' });
+    const dialog = screen.getByRole('alertdialog', { name: 'Change Upstairs?' });
     expect(dialog.textContent).toContain('Kim changed the Upstairs thermostat 4 minutes ago');
     expect(climate.setThermostatMode).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'Change anyway' }));
     await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('a1b2', 'heat'));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   it('does not ask twice for the same change', () => {
@@ -345,7 +387,7 @@ describe('recent change by someone else', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Change anyway' }));
     expect(screen.getByText('73')).toBeTruthy();
     fireEvent.click(raise);
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(screen.getByText('74')).toBeTruthy();
     vi.useRealTimers();
   });
@@ -354,7 +396,7 @@ describe('recent change by someone else', () => {
     renderCard({ ...upstairs, presetMode: 'temp', lastChange: byKim(2) });
     fireEvent.click(screen.getByRole('button', { name: 'Resume schedule' }));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(climate.resumeThermostat).not.toHaveBeenCalled();
   });
 
@@ -368,7 +410,7 @@ describe('recent change by someone else', () => {
   it('no popup for your own change or an older one', async () => {
     renderCard({ ...upstairs, lastChange: byKim(12) });
     fireEvent.click(screen.getByRole('radio', { name: 'Heat' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('alertdialog')).toBeNull();
     await waitFor(() => expect(climate.setThermostatMode).toHaveBeenCalledWith('a1b2', 'heat'));
   });
 });

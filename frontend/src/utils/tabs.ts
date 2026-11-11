@@ -1,25 +1,17 @@
 // Tab names for usage tracking: a route's first segment ("/utility?view=gas" →
 // "utility"), or its first two under /admin. Matches TabActivityService's pattern.
+// The names come from the route registry (routes.ts), so a new page is named in
+// App usage the moment it has a route (Server health once showed as "admin/nuc").
+
+import { routeById } from '../routes';
 
 const TAB = /^[a-z][a-z0-9-]{0,24}(\/[a-z][a-z0-9-]{0,12})?$/;
 
-const LABELS: Record<string, string> = {
-  home: 'Home',
-  utility: 'Utility',
-  climate: 'AC/Heat Ecobee',
-  cameras: 'Cameras',
-  roomba: 'Roomba',
-  wifi: 'WiFi',
-  notifications: 'Alerts',
-  users: 'Users',
-  maintenance: 'Maintenance',
-  updates: "What's New",
-  profile: 'Profile',
-  'admin/guests': 'Guests',
-  'admin/debug': 'Debug',
-  'admin/logs': 'Audit Logs',
-  'admin/usage': 'Usage',
-  'admin/presence': "Who's Home",
+/** Keys the backend may still hold from before Utilities was one tab (they now redirect). */
+const RETIRED: Record<string, string> = {
+  electric: 'Electric',
+  gas: 'Gas',
+  water: 'Water',
 };
 
 /** "/" → "home", "/cameras" → "cameras", "/admin/debug" → "admin/debug"; null for anything odd. */
@@ -31,7 +23,7 @@ export function tabKey(pathname: string): string | null {
 }
 
 export function tabLabel(key: string): string {
-  return LABELS[key] ?? key;
+  return routeById(key)?.label ?? RETIRED[key] ?? key;
 }
 
 /** "45 min", "3 h 5 min". */

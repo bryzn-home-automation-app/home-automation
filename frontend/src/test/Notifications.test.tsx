@@ -7,6 +7,7 @@ import type { Notification } from '../api/notifications';
 
 vi.mock('../api/notifications', () => ({
   fetchNotifications: vi.fn(),
+  fetchUnreadCount: vi.fn(),
   markRead: vi.fn(),
   markAllRead: vi.fn(),
 }));
@@ -60,20 +61,65 @@ async function renderNotifications() {
 describe('Notifications page — Roomba', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (notificationsApi.fetchUnreadCount as any).mockResolvedValue(3);
+    (notificationsApi.markRead as any).mockResolvedValue({ updated: 1, unread: 2 });
   });
 
-  it('renders Roomba notifications with the 🤖 category label and severities', async () => {
+  it('renders Roomba notifications with their category and plain severity words', async () => {
     (notificationsApi.fetchNotifications as any).mockResolvedValue([...ROOMBA_NOTIFS, ELECTRIC_NOTIF]);
     await renderNotifications();
 
     await waitFor(() => expect(screen.getByText('Cleaning complete — #42')).toBeInTheDocument());
-    expect(screen.getByText('Cleaned 250 sq ft in 42 min.')).toBeInTheDocument();
     expect(screen.getByText('Roomba error — Roomba is stuck')).toBeInTheDocument();
     // Roomba category label is shown on each Roomba row.
     expect(screen.getAllByText(/Roomba/).length).toBeGreaterThan(0);
-    // SUCCESS + CRITICAL severity chips render for the Roomba rows.
-    expect(screen.getByText('SUCCESS')).toBeInTheDocument();
-    expect(screen.getByText('CRITICAL')).toBeInTheDocument();
+    // SUCCESS + CRITICAL read as words people use, not enum names.
+    expect(screen.getAllByText('OK').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Problem').length).toBeGreaterThan(0);
+    expect(screen.queryByText('SUCCESS')).toBeNull();
+  });
+
+  it('opens an alert to read its whole message, and marks it read (B-025)', async () => {
+    (notificationsApi.fetchNotifications as any).mockResolvedValue(ROOMBA_NOTIFS);
+    await renderNotifications();
+
+    const row = await screen.findByRole('button', { name: /Cleaning complete — #42/ });
+    expect(row).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByText('Cleaned 250 sq ft in 42 min.')).not.toBeVisible();
+    fireEvent.click(row);
+    expect(row).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByText('Cleaned 250 sq ft in 42 min.')).toBeVisible();
+    await waitFor(() => expect(notificationsApi.markRead).toHaveBeenCalledWith(1));
+  });
+
+  it('counts every unread alert, not just the filtered page (B-026)', async () => {
+    (notificationsApi.fetchNotifications as any).mockResolvedValue([ELECTRIC_NOTIF]);
+    (notificationsApi.fetchUnreadCount as any).mockResolvedValue(7);
+    await renderNotifications();
+
+    expect(await screen.findByRole('button', { name: 'Mark all 7 read' })).toBeEnabled();
+    expect(screen.getByText('7 unread alerts.')).toBeInTheDocument();
+  });
+
+  it('says nothing matches, with a way back, when a filter empties the list (B-004)', async () => {
+    (notificationsApi.fetchNotifications as any).mockImplementation((params?: { category?: string }) =>
+      Promise.resolve(params?.category === 'WEATHER' ? [] : ROOMBA_NOTIFS),
+    );
+    await renderNotifications();
+    await screen.findByText('Cleaning complete — #42');
+
+    fireEvent.click(screen.getByRole('button', { name: /^\S*\s*Weather$/ }));
+    expect(await screen.findByText('Nothing matches these filters')).toBeInTheDocument();
+    expect(screen.queryByText('No alerts yet')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    expect(await screen.findByText('Cleaning complete — #42')).toBeInTheDocument();
+  });
+
+  it('says the load failed instead of claiming there are no alerts (B-005)', async () => {
+    (notificationsApi.fetchNotifications as any).mockRejectedValue(new Error('down'));
+    await renderNotifications();
+    expect(await screen.findByText("Couldn't load your alerts")).toBeInTheDocument();
+    expect(screen.queryByText('No alerts yet')).toBeNull();
   });
 
   it('filters to only Roomba notifications when the Roomba category pill is clicked', async () => {

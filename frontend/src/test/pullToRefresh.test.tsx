@@ -65,6 +65,17 @@ describe('pull to refresh', () => {
     dialog.remove();
   });
 
+  it('ignores drags anywhere while an overlay is open, even one not marked as a dialog', async () => {
+    const refetch = setup();
+    const overlay = document.body.appendChild(document.createElement('div'));
+    overlay.className = 'fixed inset-0 modal-overlay';
+    await act(async () => drag(240));
+    expect(refetch).not.toHaveBeenCalled();
+    overlay.remove();
+    await act(async () => drag(240));
+    expect(refetch).toHaveBeenCalledTimes(1);
+  });
+
   it("on a phone, where the page scrolls in its own box, only pulls from the box's top", async () => {
     const refetch = setup();
     const box = document.body.appendChild(document.createElement('div'));

@@ -1,0 +1,6 @@
+/* Who's home — the presence board is the kit .board (KIT §7.19b); only the device rows' small layout lives here. */
+
+/* device rows: status line carries its own small lamp; unnamed devices not on Wi-Fi are hidden until asked */
+.screen[data-route="admin-presence"] .presence-status { gap: 7px; flex-wrap: nowrap; }
+.screen[data-route="admin-presence"] .presence-unnamed:not(.is-all) > li[data-offline] { display: none; }
+.screen[data-route="admin-presence"] .presence-addr { display: flex; flex-wrap: wrap; column-gap: 12px; }

@@ -1,0 +1,58 @@
+/* Home — only the page's unique pieces: the dial's centre icon + legend keys, the hour strip, the hour-by-hour list. */
+.screen[data-route="home"] .home-dial-icon { width: 24px; height: 24px; color: var(--graphite); margin-bottom: 2px; }
+.screen[data-route="home"] .home-key { flex: none; display: inline-block; width: 16px; border-radius: 3px; }
+.screen[data-route="home"] .home-key-day { height: 7px; background: var(--dial-day); box-shadow: inset 0 0 0 1px var(--hairline-strong); }
+.screen[data-route="home"] .home-key-rain { height: 4px; background: var(--chart-cool); }
+
+/* hour strip: six hours on a phone, eight on a tablet, twelve on a desktop */
+.screen[data-route="home"] .hours {
+  display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px;
+}
+.screen[data-route="home"] .hour {
+  display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 10px 2px 10px;
+  border-radius: var(--r-well); min-width: 0;
+}
+.screen[data-route="home"] .hour.is-now { background: var(--well); box-shadow: var(--well-shadow); }
+.screen[data-route="home"] .hour-time { font-family: var(--mono); font-size: 11.5px; color: var(--graphite); white-space: nowrap; }
+.screen[data-route="home"] .hour.is-now .hour-time { color: var(--ink); font-weight: 500; }
+.screen[data-route="home"] .hour > .icon { width: 24px; height: 24px; color: var(--ink); }
+.screen[data-route="home"] .hour-rain { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; }
+.screen[data-route="home"] .hour-rain .mono { font-size: 11px; color: var(--graphite); }
+.screen[data-route="home"] .hour-bar {
+  position: relative; display: block; width: 70%; max-width: 40px; height: 4px; border-radius: 2px; background: var(--well); overflow: hidden;
+}
+.screen[data-route="home"] .hour-bar::after { content: ""; position: absolute; inset: 0 auto 0 0; width: var(--p); background: var(--chart-cool); border-radius: 2px; }
+.screen[data-route="home"] .hour--more { display: none; }
+@media (min-width: 560px) {
+  .screen[data-route="home"] .hours { grid-template-columns: repeat(8, minmax(0, 1fr)); }
+  .screen[data-route="home"] .hour--more:not(.hour--wide) { display: flex; }
+}
+@media (min-width: 1024px) {
+  .screen[data-route="home"] .hours { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  .screen[data-route="home"] .hour--wide { display: flex; }
+}
+
+/* hour-by-hour list inside the forecast dialog */
+.screen[data-route="home"] .hourlist { display: flex; flex-direction: column; margin-inline: -4px; }
+.screen[data-route="home"] .hl-row {
+  display: grid; grid-template-columns: 52px 28px minmax(0, 1fr) 52px 60px; align-items: center; gap: 8px;
+  min-height: 40px; padding: 0 4px; border-bottom: 1px solid var(--hairline); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.screen[data-route="home"] .hl-row .icon { width: 20px; height: 20px; }
+.screen[data-route="home"] .hl-row b { font-weight: 600; }
+.screen[data-route="home"] .hl-row .muted { font-size: 12.5px; }
+.screen[data-route="home"] .hl-row .is-num { text-align: right; white-space: nowrap; }
+.screen[data-route="home"] .hl-time { font-family: var(--mono); font-size: 12px; color: var(--graphite); }
+.screen[data-route="home"] .hl-row.is-now { background: var(--well); border-radius: var(--r-well); border-bottom-color: transparent; }
+.screen[data-route="home"] .hl-row.is-now .hl-time { color: var(--ink); font-weight: 500; }
+.screen[data-route="home"] .hl-row.is-rain .icon { color: var(--chart-cool); }
+.screen[data-route="home"] .hl-head { min-height: 30px; border-bottom-color: var(--hairline-strong); }
+.screen[data-route="home"] .hl-head span {
+  font-size: 10.5px; font-weight: 600; font-stretch: var(--stretch-label); text-transform: uppercase; letter-spacing: .08em; color: var(--graphite);
+}
+.screen[data-route="home"] .hl-day { padding: 16px 4px 6px; border-bottom: 1px solid var(--hairline-strong); }
+.screen[data-route="home"] .hl-wide { display: none; }
+@media (min-width: 640px) {
+  .screen[data-route="home"] .hl-row { grid-template-columns: 60px 32px minmax(0, 1fr) 96px 72px 64px; }
+  .screen[data-route="home"] .hl-wide { display: block; }
+}

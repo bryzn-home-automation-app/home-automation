@@ -1,0 +1,49 @@
+/* Diagnostics — only the page's unique pieces: the 14-day coverage LED strip with its pipeline lamps,
+   the event's raw details block, and a five-key view switch that still fits a 390px phone. */
+.screen[data-route="admin-debug"] .dbg-instrument { align-items: stretch; gap: 18px; }
+.screen[data-route="admin-debug"] .dbg-matrix-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.screen[data-route="admin-debug"] .dbg-matrix { width: 100%; }
+/* each day is a column of 24 lights, one per hour, lit from the bottom (96px = 24 × 4px pitch) */
+.screen[data-route="admin-debug"] .dbg-matrix .heat { gap: 5px; }
+.screen[data-route="admin-debug"] .dbg-matrix .heat-cell {
+  --lit: var(--lamp-ok);
+  position: relative; border-radius: 3px; box-shadow: none;
+  background: linear-gradient(to top, var(--lit) calc(var(--fill, 1) * 100%), var(--lamp-off) calc(var(--fill, 1) * 100%));
+}
+.screen[data-route="admin-debug"] .dbg-matrix .heat-cell.is-warn { --lit: var(--lamp-warn); }
+.screen[data-route="admin-debug"] .dbg-matrix .heat-cell.is-problem { --lit: var(--lamp-problem); }
+.screen[data-route="admin-debug"] .dbg-matrix .heat-cell.is-off { --fill: 0; }
+.screen[data-route="admin-debug"] .dbg-matrix .heat-cell::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: repeating-linear-gradient(to bottom, transparent 0 3px, var(--panel) 3px 4px);
+}
+
+/* pipeline: CoServ → Sync → Forecast, then the side feeds after a hairline */
+.screen[data-route="admin-debug"] .dbg-pipe { align-self: center; padding-top: 14px; border-top: 1px solid var(--hairline); max-width: none; }
+.screen[data-route="admin-debug"] .dbg-pipe > li { position: relative; }
+.screen[data-route="admin-debug"] .dbg-pipe > li:nth-child(-n+2)::after {
+  content: ""; position: absolute; top: 15px; right: -4px; width: 6px; height: 6px;
+  border-top: 1.5px solid var(--graphite); border-right: 1.5px solid var(--graphite); transform: rotate(45deg);
+}
+.screen[data-route="admin-debug"] .dbg-pipe > .dbg-pipe-side::before {
+  content: ""; position: absolute; left: -1px; top: 8px; bottom: 8px; width: 1px; background: var(--hairline-strong);
+}
+
+/* the raw details of one event (stack traces, request notes) */
+.screen[data-route="admin-debug"] .dbg-pre {
+  margin: 0; padding: 12px 14px; border-radius: var(--r-well); background: var(--well); box-shadow: var(--well-shadow);
+  font-family: var(--mono); font-size: 12.5px; line-height: 1.6; color: var(--ink);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+
+.screen[data-route="admin-debug"] .dbg-wrap,
+.screen[data-route="admin-debug"] .dbg-tname { overflow-wrap: anywhere; }
+.screen[data-route="admin-debug"] .dbg-sql { min-height: 150px; }
+/* on a phone the statement wraps to ~8 lines: show all of it without scrolling the editor */
+@media (max-width: 639px) { .screen[data-route="admin-debug"] .dbg-sql { min-height: 228px; } }
+@media (min-width: 640px) { .screen[data-route="admin-debug"] .dbg-result .dbg-ts { white-space: nowrap; } }
+
+/* five view keys on a phone: let each key take its own width */
+@media (max-width: 639px) {
+  .screen[data-route="admin-debug"] .dbg-tabs .seg-key { flex: 1 1 auto; padding: 0 6px; gap: 4px; }
+}

@@ -1,0 +1,11 @@
+/* App usage — only the page's unique element: the ranked bar meter (LED rows, busiest tab first). */
+.screen[data-route="admin-usage"] .usage-meter { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 440px; }
+.screen[data-route="admin-usage"] .usage-meter > .label { color: var(--graphite); }
+.screen[data-route="admin-usage"] .usage-tab { gap: 8px; flex-wrap: nowrap; min-width: 0; }
+.screen[data-route="admin-usage"] .usage-tab .icon { width: 16px; height: 16px; flex: none; color: var(--graphite); }
+.screen[data-route="admin-usage"] .usage-meter .usage-tab .small { color: var(--ink); font-weight: 500; }
+/* "Every tab" on a phone: visits sit under the tab name instead of taking their own stacked row */
+@media (max-width: 639px) {
+  .screen[data-route="admin-usage"] td .usage-tab { flex-wrap: wrap; row-gap: 2px; }
+  .screen[data-route="admin-usage"] td .usage-tab .hide-wide { flex-basis: 100%; padding-left: 24px; font-weight: 400; }
+}

@@ -281,17 +281,6 @@ export function recentChangeByOther(
   return { name: change.by, ago };
 }
 
-/** "Updated just now" / "Updated 4 min ago" / … from an ISO timestamp. */
-export function updatedText(iso: string | null, now = Date.now()): string {
-  if (!iso) return 'No reading yet';
-  const diffMin = Math.round((now - new Date(iso).getTime()) / 60_000);
-  if (!Number.isFinite(diffMin)) return 'No reading yet';
-  if (diffMin < 1) return 'Updated just now';
-  if (diffMin < 60) return `Updated ${diffMin} min ago`;
-  const h = Math.round(diffMin / 60);
-  return h < 24 ? `Updated ${h} hr ago` : `Updated ${Math.round(h / 24)} d ago`;
-}
-
 export function isStale(iso: string | null, now = Date.now()): boolean {
   if (!iso) return false;
   const t = new Date(iso).getTime();

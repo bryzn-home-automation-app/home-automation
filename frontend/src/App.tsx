@@ -1,63 +1,34 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { NavLink, Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { useTheme } from './context/ThemeContext';
 import { useAuth } from './context/AuthContext';
 import api from './api/client';
 import { fetchUnreadCount } from './api/notifications';
 import { useJitteredInterval } from './hooks/useJitteredInterval';
-import { useFocusTrap } from './hooks/useFocusTrap';
-import { useScrollLock } from './hooks/useScrollLock';
 import { useDocumentTitle } from './hooks/useDocumentTitle';
-import Avatar from './components/profile/Avatar';
-import OnlineDot from './components/profile/OnlineDot';
 import { PageHeader } from './components/PageHeader';
-import { HeaderPixelScene } from './components/PixelScene';
 import ReleaseNotesModal from './components/ReleaseNotesModal';
 import { useAppPresence } from './hooks/useAppPresence';
 import { useAppSleep } from './hooks/useAppSleep';
 import { SleepScreen, SleepWarning } from './components/SleepScreen';
 import PullToRefresh from './components/PullToRefresh';
 import ErrorBoundary from './components/ErrorBoundary';
-
-/**
- * Live date/time for the sidebar. Isolated so its per-minute tick re-renders
- * only this leaf, never the whole app shell. Aligns to the minute boundary
- * rather than polling every second, so there are no wasted renders.
- */
-function SidebarClock() {
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    const timeout = setTimeout(() => {
-      setNow(new Date());
-      interval = setInterval(() => setNow(new Date()), 60_000);
-    }, 60_000 - (Date.now() % 60_000));
-    return () => {
-      clearTimeout(timeout);
-      clearInterval(interval);
-    };
-  }, []);
-
-  const weekday = now.toLocaleDateString(undefined, { weekday: 'short' });
-  const monthDay = now.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const time = now.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-
-  return (
-    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-      <p className="truncate text-3xs uppercase tracking-[0.14em] text-apptext-muted">
-        {weekday} {monthDay}
-      </p>
-      <p className="mt-1 text-xs font-semibold text-apptext tabular-nums">{time}</p>
-    </div>
-  );
-}
+import TopStrip from './components/shell/TopStrip';
+import KeyColumn from './components/shell/KeyColumn';
+import KeyRow from './components/shell/KeyRow';
+import MoreSheet from './components/shell/MoreSheet';
+import { PageMetaProvider, type PageMeta } from './components/shell/PageMeta';
+import { houseStatus } from './components/shell/houseStatus';
+import { GROUP_LABEL, routeForPath } from './routes';
 
 /**
  * Fetch the chart-heavy tabs (and recharts with them) once the shell is idle, so
- * the first tap on Utility or Climate doesn't wait on ~110 KB gz of JS — noticeable
+ * the first tap on Utilities or Climate doesn't wait on ~110 KB gz of JS — noticeable
  * over LTE. The same import() calls React.lazy makes, so the routes then resolve
- * instantly. Data-saver connections skip it.
+ * instantly. Utilities' three views are chunks of their own, so they come too: the
+ * first tap on Gas or Water used to flash a loading placeholder (B-051). Data-saver
+ * connections skip it.
  */
 function usePrefetchTabs() {
   useEffect(() => {
@@ -65,7 +36,10 @@ function usePrefetchTabs() {
     if (conn?.saveData) return;
     const warm = () => {
       void import('./pages/Utility');
+      void import('./pages/ElectricalUsage');
       void import('./pages/Climate');
+      void import('./pages/GasUsage');
+      void import('./pages/WaterUsage');
     };
     const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number };
     if (w.requestIdleCallback) {
@@ -77,6 +51,14 @@ function usePrefetchTabs() {
   }, []);
 }
 
+/** While the home server isn't answering, look again sooner than the usual two minutes. */
+const HEALTH_RETRY_MS = 30_000;
+
+/**
+ * The Faceplate shell: the top strip, the desktop key column, the page header, and
+ * on phones the key row and its More sheet. Every name and icon comes from the route
+ * registry (routes.ts). See docs/faceplate/IMPLEMENTATION.md, "Shell and routes".
+ */
 export default memo(function App() {
   const { toggleTheme, isDark, mode: themeMode, setSunLocation } = useTheme();
   const { user, isAdmin, logout } = useAuth();
@@ -96,16 +78,11 @@ export default memo(function App() {
     }
   }, [appConfig.data, setSunLocation]);
   const themeToggleLabel = `${themeMode === 'auto' ? 'Auto (sunset) is on — ' : ''}Switch to ${isDark ? 'light' : 'dark'} mode`;
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
-  const mobileSidebarRef = useRef<HTMLElement | null>(null);
 
-  // The shell header is shared across routes, so its title must follow the
-  // active tab (otherwise every page reads "Home"). Exact match, else the
-  // longest matching path prefix, else the home default.
   const { pathname, hash } = useLocation();
   // On a phone or tablet the page scrolls inside this box, not the window (see the shell below).
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const mainRef = useRef<HTMLElement | null>(null);
   // A new page starts at the top. Keyed on pathname only, so sub-tab (?view=) changes keep their
   // scroll; anchor links (#hash) are left to the browser.
   useLayoutEffect(() => {
@@ -113,32 +90,14 @@ export default memo(function App() {
     window.scrollTo(0, 0);
     if (scrollerRef.current) scrollerRef.current.scrollTop = 0;
   }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
-  const welcomeName = user?.displayName || user?.username || 'there';
-  const PAGE_HEADERS: Record<string, { eyebrow: string; title: string; subtitle?: string }> = {
-    '/': { eyebrow: 'Operations Console', title: 'Home Dashboard', subtitle: `Welcome ${welcomeName}!` },
-    '/utility': { eyebrow: 'Utilities', title: 'Utility' },
-    '/climate': { eyebrow: 'Thermostats', title: 'AC/Heat Ecobee' },
-    '/cameras': { eyebrow: 'Security', title: 'Cameras' },
-    '/roomba': { eyebrow: 'Robot Vacuum', title: 'Roomba' },
-    '/wifi': { eyebrow: 'Guest Access', title: 'Guest Wi‑Fi' },
-    '/notifications': { eyebrow: 'Alerts', title: 'Notifications' },
-    '/users': { eyebrow: 'Household', title: 'Users' },
-    '/maintenance': { eyebrow: 'Upkeep', title: 'Maintenance' },
-    '/updates': { eyebrow: 'Release Notes', title: "What's New", subtitle: "A plain-language rundown of everything that's changed, most recent first." },
-    '/profile': { eyebrow: 'Account', title: 'Profile' },
-    '/admin/guests': { eyebrow: 'Admin', title: 'Guests' },
-    '/admin/debug': { eyebrow: 'Admin', title: 'Debug' },
-    '/admin/logs': { eyebrow: 'Admin', title: 'Audit Logs' },
-    '/admin/usage': { eyebrow: 'Admin', title: 'Usage', subtitle: 'Which tabs house members use the most.' },
-    '/admin/presence': { eyebrow: 'Admin', title: "Who's Home", subtitle: 'From the phones on the home Wi-Fi.' },
-    '/admin/nuc': { eyebrow: 'Admin', title: 'NUC Health', subtitle: 'The home server itself: load, storage, temperature and restarts.' },
-  };
-  const pageHeader =
-    PAGE_HEADERS[pathname] ??
-    Object.entries(PAGE_HEADERS)
-      .filter(([k]) => k !== '/' && pathname.startsWith(k))
-      .sort((a, b) => b[0].length - a[0].length)[0]?.[1] ??
-    PAGE_HEADERS['/'];
+
+  // The header: the registry names the page; the page may add a freshness line (usePageMeta).
+  const route = routeForPath(pathname);
+  const [meta, setMeta] = useState<PageMeta | null>(null);
+  const title = meta?.title ?? route?.title ?? 'HomeOS';
+  const eyebrow = route ? GROUP_LABEL[route.group] : undefined;
+  const subtitle = meta?.subtitle;
+  useDocumentTitle(title === 'Home' || title === 'HomeOS' ? 'HomeOS' : `${title} · HomeOS`);
 
   // Left open and untouched for 10 minutes, the app sleeps: the page unmounts (live
   // video stops), and so do the camera warm-up, active minutes and shell polling.
@@ -146,16 +105,6 @@ export default memo(function App() {
 
   // Members: record tab visits/active minutes, and keep the cameras warm while they're here.
   useAppPresence(pathname, !!user && user.role !== 'GUEST', asleep);
-
-  // Default document title; per-page pages should override with their own useDocumentTitle call.
-  useDocumentTitle(pageHeader.title);
-
-  // Mobile sidebar focus trap + Escape-to-close + focus return.
-  useFocusTrap(mobileMenuOpen, mobileSidebarRef, hamburgerButtonRef, () => {
-    setMobileMenuOpen(false);
-  });
-  // The page behind the open menu stays put: a swipe on the menu scrolls the menu.
-  useScrollLock(mobileMenuOpen);
 
   // Memoized once per query lifecycle so the RQ poll timer isn't reset on every
   // App re-render.
@@ -166,7 +115,7 @@ export default memo(function App() {
     queryKey: ['health'],
     queryFn: () => api.get('/health').then((r) => r.data),
     staleTime: 120_000,
-    refetchInterval: healthInterval,
+    refetchInterval: (q) => (q.state.status === 'error' ? HEALTH_RETRY_MS : healthInterval),
     refetchIntervalInBackground: false,
     enabled: !asleep,
   });
@@ -180,383 +129,110 @@ export default memo(function App() {
     enabled: !!user && !asleep,
   });
 
-  const backendUp = health.data?.status === 'UP';
+  const house = houseStatus(health);
   const unreadCount = unread.data ?? 0;
+  const role = user?.role ?? null;
 
-  const closeMenu = useCallback(() => setMobileMenuOpen(false), []);
+  // The phone's More sheet. It closes itself on a page key; a route change from
+  // anywhere else (a link in a notification, Back) closes it too.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreButtonRef = useRef<HTMLButtonElement | null>(null);
+  const closeMore = useCallback(() => setMoreOpen(false), []);
+  const openMore = useCallback(() => setMoreOpen(true), []);
+  useEffect(() => setMoreOpen(false), [pathname]);
+  // Asleep, nothing may sit over the night-light: an open sheet would keep a bright panel
+  // on the wall screen, and a tap on its scrim would close it without waking the app.
+  useEffect(() => {
+    if (asleep) setMoreOpen(false);
+  }, [asleep]);
+  // From lg the sheet is hidden by CSS (the key column has all of it), but hidden isn't closed:
+  // its scroll lock, focus trap and Back entry would stay live behind nothing (an iPad turned
+  // to landscape with the sheet open couldn't scroll). Crossing the breakpoint closes it.
+  useEffect(() => {
+    const mq = window.matchMedia?.('(min-width: 64rem)');
+    if (!mq) return;
+    const onChange = () => {
+      if (mq.matches) setMoreOpen(false);
+    };
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
-  const mainTabs = [
-    { path: '/', label: 'Home', icon: '🏠', end: true },
-    { path: '/utility', label: 'Utility', icon: '⚡', end: false },
-    { path: '/climate', label: 'AC/Heat Ecobee', icon: '🌡️', end: false },
-    { path: '/cameras', label: 'Cameras', icon: '📷', end: false, guestHidden: true },
-    { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
-    { path: '/wifi', label: 'WiFi', icon: '📶', end: false },
-    { path: '/users', label: 'Users', icon: '👥', end: false },
-    { path: '/maintenance', label: 'Maintenance', icon: '🔧', end: false, guestHidden: true },
-    { path: '/updates', label: "What's New", icon: '✨', end: false },
-  ];
-
-  const visibleTabs = mainTabs.filter((t: any) => !t.guestHidden || (user && user.role !== 'GUEST'));
-
-  const adminTabs = [
-    { path: '/admin/guests', label: 'Guests', icon: '🪪', end: false },
-    { path: '/admin/debug', label: 'Debug', icon: '🔧', end: false },
-    { path: '/admin/logs', label: 'Logs', icon: '📋', end: false },
-    { path: '/admin/usage', label: 'Usage', icon: '📊', end: false },
-    { path: '/admin/presence', label: "Who's Home", icon: '🏡', end: false },
-    { path: '/admin/nuc', label: 'NUC Health', icon: '🖥️', end: false },
-  ];
-
-  // ── Sidebar content (shared between desktop and mobile overlay) ──
-  const sidebarContent = (
-    <>
-      <div className="flex items-center justify-between gap-3 border-b border-appborder pb-4">
-        <div>
-          <p className="text-3xs font-semibold uppercase tracking-[0.22em] text-apptext-warning/90">
-            bryzncode
-          </p>
-          <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em] text-apptext">
-            HomeOS
-          </h1>
-          <p className="text-xs text-apptext-muted">Home Intelligence Dashboard</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className="theme-toggle shrink-0"
-            aria-label={themeToggleLabel}
-            title={themeToggleLabel}
-          >
-            <span className={`theme-toggle-thumb ${isDark ? '' : 'light'}`}>
-              {isDark ? '🌙' : '☀️'}
-            </span>
-          </button>
-          {/* Close button — only visible on mobile overlay */}
-          <button
-            type="button"
-            onClick={closeMenu}
-            className="rounded-lg p-1.5 text-apptext-muted hover:bg-appinset hover:text-apptext lg:hidden"
-            aria-label="Close menu"
-          >
-            ✕
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <SidebarClock />
-        <div className="rounded-xl border border-appborder bg-appinset px-3 py-2">
-          <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Role</p>
-          <p className="mt-1 text-xs font-semibold text-apptext">{user ? user.role : 'Guest'}</p>
-        </div>
-      </div>
-
-      {/* On the desktop rail only the tab list scrolls, between the pinned header and
-          profile. The phone menu scrolls as a whole instead, so a swipe anywhere on it works. */}
-      <nav className="mt-4 flex flex-col gap-1 lg:mt-5 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
-        {visibleTabs.map((tab: any) => (
-          <NavLink
-            key={tab.path}
-            to={tab.path}
-            end={tab.end}
-            onClick={closeMenu}
-            className={({ isActive }) =>
-              `group relative flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-sm transition-colors w-full ${
-                isActive
-                  ? 'border-appaccent-border bg-appaccent-soft text-apptext'
-                  : 'border-transparent text-apptext-soft hover:border-appborder hover:bg-appinset hover:text-apptext'
-              }`
-            }
-          >
-            <span className="flex items-center gap-2.5">
-              <span className="text-base">{tab.icon}</span>
-              <span className="font-medium">{tab.label}</span>
-            </span>
-            {tab.path === '/notifications' && unreadCount > 0 && (
-              <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-appdanger px-1.5 text-3xs font-bold text-appdanger-fg shadow-[0_0_10px_var(--appdanger)]">
-                {unreadCount > 99 ? '99+' : unreadCount}
-              </span>
-            )}
-          </NavLink>
-        ))}
-
-        {isAdmin && (
-          <div className="pt-2">
-            <p className="px-3 pb-2 text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">
-              Admin
-            </p>
-            <div className="flex flex-col gap-1">
-              {adminTabs.map((tab) => (
-                <NavLink
-                  key={tab.path}
-                  to={tab.path}
-                  end={tab.end}
-                  onClick={closeMenu}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2.5 rounded-xl border px-3 py-2.5 text-sm transition-colors w-full ${
-                      isActive
-                        ? 'border-amber-300/40 bg-amber-300/15 text-apptext'
-                        : 'border-transparent text-apptext-soft hover:border-appborder hover:bg-appinset hover:text-apptext'
-                    }`
-                  }
-                >
-                  <span className="text-base">{tab.icon}</span>
-                  <span className="font-medium">{tab.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          </div>
-        )}
-      </nav>
-
-      {/* Profile shortcut */}
-      {user ? (
-        <div className="mt-auto shrink-0 border-t border-appborder pt-4">
-          <div className="flex items-center justify-between px-3 pb-2">
-            <p className="text-3xs font-semibold uppercase tracking-[0.2em] text-apptext-muted">Settings</p>
-            <NavLink
-              to="/notifications"
-              onClick={closeMenu}
-              aria-label={`Alerts${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
-              className={({ isActive }) =>
-                `relative rounded-lg p-1.5 transition-colors ${
-                  isActive
-                    ? 'bg-appaccent-soft text-appaccent-text'
-                    : 'text-apptext-muted hover:bg-appinset hover:text-apptext'
-                }`
-              }
-            >
-              <span className="text-base">🔔</span>
-              {unreadCount > 0 && (
-                <span className="absolute -top-1 -right-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-appdanger-fg">
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </NavLink>
-          </div>
-          <Link
-            to="/profile"
-            onClick={closeMenu}
-            className="group flex items-center gap-3 rounded-xl border border-transparent px-2 py-2 transition-colors hover:border-appborder hover:bg-appinset"
-          >
-            <div className="shrink-0">
-              <Avatar
-                displayName={user.displayName}
-                avatarUrl={user.avatarUrl}
-                accentColor={user.accentColor || '#34d399'}
-                size={36}
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="flex items-center gap-1.5 text-sm font-semibold text-apptext">
-                <span className="truncate">{user.displayName}</span>
-                <OnlineDot className="shrink-0" />
-              </p>
-              <p className="truncate text-xs text-apptext-dim">@{user.username}</p>
-            </div>
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-appborder bg-appinset text-sm transition-colors group-hover:border-appborder-hover group-hover:bg-appinset-strong">⚙️</span>
-          </Link>
-          <button
-            type="button"
-            onClick={logout}
-            className="mt-2 w-full rounded-xl border border-appdanger/30 bg-appdanger/10 px-4 py-2 text-sm font-semibold text-apptext-danger transition-colors hover:bg-appdanger/20"
-          >
-            Sign Out
-          </button>
-        </div>
-      ) : (
-        <div className="mt-4 border-t border-appborder pt-4">
-          <p className="text-sm text-apptext-soft">
-            <a href="/login" className="font-semibold text-appaccent-text hover:text-appaccent">Sign in</a> for full access
-          </p>
-        </div>
-      )}
-    </>
-  );
-
-  // ── Bottom nav tabs (mobile only) — the primary destinations + a "Menu"
-  //    button (rendered separately) that opens the full menu, so every
-  //    section is reachable from the bottom bar. Alerts live in the menu (the
-  //    bell by Settings); the Menu button carries their unread badge. ──
-  const bottomTabs = [
-    { path: '/', label: 'Home', icon: '🏠', end: true },
-    { path: '/utility', label: 'Utility', icon: '⚡', end: false },
-    { path: '/climate', label: 'AC/Heat Ecobee', icon: '🌡️', end: false },
-    { path: '/cameras', label: 'Cameras', icon: '📷', end: false, guestHidden: true },
-    { path: '/roomba', label: 'Roomba', icon: '🤖', end: false },
-  ].filter((t) => !t.guestHidden || (user && user.role !== 'GUEST'));
+  const skipToContent = (e: MouseEvent) => {
+    e.preventDefault();
+    mainRef.current?.focus();
+  };
 
   return (
-    <div className="min-h-[100dvh]">
-      {/* Backdrop gradients live on a fixed, non-scrolling layer so they paint
-          once instead of repainting on every scroll frame (desktop jank fix). */}
-      <div
-        className="pointer-events-none fixed inset-0 -z-10"
-        style={{
-          background: isDark
-            ? 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #07111f 0%, #08101c 42%, #050913 100%)'
-            : 'radial-gradient(circle at top left, var(--appglow), transparent 24%), radial-gradient(circle at top right, var(--appglow-accent), transparent 30%), linear-gradient(180deg, #f8fafc 0%, #f1f5f9 42%, #e2e8f0 100%)',
-        }}
-      />
-      {/* Bottom padding clears the fixed phone/tablet nav (hidden at lg), which
-          grows by the iOS safe-area inset via its pb-safe. Only top padding is
-          responsive: a py-* here would override the bottom value from sm up.
-          The top keeps clear of the status bar the Home Screen app draws over.
-          Below lg the page scrolls inside this box and the window never moves.
-          With the window scrolling, the iOS 26 Home Screen app let the fixed bottom
-          nav drift up the screen by its own height mid-scroll, on every tab. */}
-      <div
-        ref={scrollerRef}
-        data-page-scroller
-        className="relative w-full px-2 pt-[max(0.5rem,env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] max-lg:h-[100dvh] max-lg:overflow-y-auto max-lg:overscroll-y-contain sm:px-5 sm:pt-[max(1.25rem,env(safe-area-inset-top))] lg:px-6 lg:pt-[max(1.5rem,env(safe-area-inset-top))] lg:pb-0 2xl:px-8"
-      >
+    <PageMetaProvider value={setMeta}>
+      <div className="fp-app">
+        <a
+          href="#main"
+          onClick={skipToContent}
+          className="fp-btn fp-btn--primary sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-[max(0.75rem,env(safe-area-inset-top))] focus:z-[80]"
+        >
+          Skip to content
+        </a>
+
+        {/* Below lg the page scrolls inside this box and the window never moves. With the
+            window scrolling, the iOS 26 Home Screen app let the fixed bottom key row drift up
+            the screen by its own height mid-scroll, on every tab. The strip is sticky inside
+            the box (from lg, inside the window), and draws the status-bar inset itself, since
+            the Home Screen app draws under the status bar. fp-content's bottom padding clears
+            the fixed key row and the home indicator. */}
         <div
-          className="absolute inset-x-0 top-0 -z-10 h-[32rem]"
-          style={{
-            background: isDark
-              ? 'linear-gradient(180deg, rgba(148,163,184,0.04), transparent)'
-              : 'linear-gradient(180deg, rgba(0,0,0,0.02), transparent)',
-          }}
-        />
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)] xl:grid-cols-[19rem_minmax(0,1fr)]">
-          {/* ── Desktop sidebar (sticky left rail) ── */}
-          {/* translateZ(0) + will-change promote the sticky rail (and its large
-              blurred shadow) to its own compositor layer, so scrolling doesn't
-              repaint the shadow every frame at desktop sizes. */}
-          <aside className="hidden lg:flex lg:flex-col overflow-hidden rounded-2xl border border-appborder bg-appsurface-raised p-4 shadow-[0_12px_36px_var(--appshadow)] lg:sticky lg:top-4 lg:h-[calc(100dvh-2rem)] lg:rounded-[28px] lg:p-5 lg:[transform:translateZ(0)] lg:will-change-transform">
-            {sidebarContent}
-          </aside>
-
-          {/* ── Mobile sidebar overlay ── */}
-          {mobileMenuOpen && (
-            <>
-              {/* Backdrop — a swipe on it neither scrolls nor pull-to-refreshes the page. */}
-              <div
-                data-no-pull
-                className="fixed inset-0 z-40 touch-none bg-black/60 lg:hidden"
-                onClick={closeMenu}
-              />
-              {/* Slide-in panel. Its padding clears the status bar and home indicator (the
-                  Home Screen app draws under both), and overscroll-contain keeps a swipe
-                  past either end from reaching the page. */}
-              <aside
-                id="mobile-sidebar"
-                ref={mobileSidebarRef}
-                role="dialog"
-                aria-modal="true"
-                aria-label="Main navigation"
-                className="fixed inset-y-0 left-0 z-50 flex w-72 flex-col overflow-y-auto overscroll-contain rounded-r-2xl border-r border-appborder bg-appsurface px-4 pt-[calc(1rem+env(safe-area-inset-top))] pb-[calc(1rem+env(safe-area-inset-bottom))] shadow-2xl lg:hidden"
-              >
-                {sidebarContent}
-              </aside>
-            </>
-          )}
-
-          <div className="min-w-0">
-            <header className="rounded-2xl border border-appborder bg-appsurface-raised px-4 py-4 shadow-[0_10px_30px_var(--appshadow)] sm:px-6 sm:py-5 lg:rounded-[28px] lg:px-7 lg:py-6">
-              {/* Mobile brand row — replaces the standalone hamburger (nav is
-                  now on the bottom bar, incl. a "More" tab for the full menu). */}
-              <div className="mb-3 flex items-center justify-between lg:hidden">
-                <span className="text-sm font-semibold tracking-[-0.02em] text-apptext">HomeOS</span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-appborder bg-appinset px-2.5 py-1 text-3xs font-medium text-apptext-muted">
-                  <span className={`inline-block h-1.5 w-1.5 rounded-full ${backendUp ? 'bg-appsuccess' : 'bg-appdanger'}`} />
-                  {backendUp ? 'Healthy' : 'Offline'}
-                </span>
-              </div>
-              <PageHeader
-                title={pageHeader.title}
-                subtitle={pageHeader.subtitle}
-                eyebrow={pageHeader.eyebrow}
-                art={<HeaderPixelScene path={pathname} />}
-                artMobile={<HeaderPixelScene path={pathname} compact />}
-                actions={
-                  <div className="grid w-full grid-cols-3 gap-2 sm:w-auto sm:gap-3">
-                    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                      <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Backend</p>
-                      <p className="mt-1 text-sm font-semibold text-apptext">{backendUp ? 'Healthy' : 'Offline'}</p>
-                    </div>
-                    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                      <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Unread</p>
-                      <p className="mt-1 text-sm font-semibold text-apptext">{unreadCount}</p>
-                    </div>
-                    <div className="rounded-xl border border-appborder bg-appinset px-3 py-2.5">
-                      <p className="text-3xs uppercase tracking-[0.18em] text-apptext-muted">Access</p>
-                      <p className="mt-1 text-sm font-semibold text-apptext">{isAdmin ? 'Admin' : user ? 'Member' : 'Guest'}</p>
-                    </div>
-                  </div>
-                }
-              />
-            </header>
-
-            <main className="mt-4 lg:mt-5">
-              {!asleep && (
-                <ErrorBoundary key={pathname}>
-                  <Outlet />
-                </ErrorBoundary>
-              )}
-            </main>
-            {!asleep && <PullToRefresh />}
-
-            <footer className="mt-10 border-t border-appborder px-1 pt-5 text-center text-xs text-apptext-dim">
-              Home Automation Platform · Phase 1 · CoServ Integration
-            </footer>
+          ref={scrollerRef}
+          data-page-scroller
+          className="relative w-full max-lg:h-[100dvh] max-lg:overflow-y-auto max-lg:overscroll-y-contain"
+        >
+          {user ? (
+            <TopStrip
+              title={title}
+              subtitle={subtitle}
+              house={house}
+              houseHref={isAdmin ? '/admin/nuc' : '/'}
+              unread={unreadCount}
+              user={user}
+              isDark={isDark}
+              themeTitle={themeToggleLabel}
+              onToggleTheme={toggleTheme}
+            />
+          ) : null}
+          <div className="fp-frame">
+            <KeyColumn role={role} unread={unreadCount} onSignOut={logout} />
+            <div className="fp-content">
+              <PageHeader eyebrow={eyebrow} title={title} subtitle={subtitle} />
+              <main id="main" ref={mainRef} tabIndex={-1} className="focus:outline-none">
+                {!asleep && (
+                  <ErrorBoundary key={pathname}>
+                    <Outlet />
+                  </ErrorBoundary>
+                )}
+              </main>
+            </div>
           </div>
         </div>
+        {!asleep && <PullToRefresh />}
+
+        <KeyRow ref={moreButtonRef} role={role} unread={unreadCount} moreOpen={moreOpen} onMore={openMore} />
+        <MoreSheet
+          open={moreOpen && !asleep}
+          onClose={closeMore}
+          returnFocusRef={moreButtonRef}
+          role={role}
+          unread={unreadCount}
+          onSignOut={logout}
+        />
+
+        {asleep && <SleepScreen onWake={wake} testing={sleepTesting} />}
+        <SleepWarning secondsLeft={asleep ? null : secondsLeft} totalSeconds={warningSeconds} onStay={wake} />
+
+        {/* One-time "What's new" popup shown after a new version ships. Not while asleep: a
+            deploy reloads the wall tablet, and the sheet would cover the night-light. It
+            records the version only when closed, so after waking it simply opens then. */}
+        {!asleep && <ReleaseNotesModal />}
       </div>
-
-      {/* ── Mobile bottom nav ── */}
-      {/* touch-none: the window has nothing to scroll, so a swipe here would only bounce it. */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 touch-none border-t border-appborder bg-appsurface lg:hidden pb-safe">
-        <div className="mx-auto flex max-w-lg items-start justify-around gap-0.5 px-1 py-1.5">
-          {/* Menu — leftmost, so the trigger sits on the same side as the
-              left-anchored sidebar it opens. Hamburger (☰) reads as "menu". */}
-          <button
-            ref={hamburgerButtonRef}
-            type="button"
-            onClick={() => setMobileMenuOpen(true)}
-            aria-label={`Open menu${unreadCount > 0 ? ` (${unreadCount} unread alerts)` : ''}`}
-            aria-expanded={mobileMenuOpen}
-            aria-controls="mobile-sidebar"
-            className="flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-2xs font-medium text-apptext-muted transition-colors hover:text-apptext-soft"
-          >
-            <span className="relative flex h-[1.5rem] items-center text-lg leading-none">
-              ☰
-              {unreadCount > 0 && (
-                <span className="absolute -top-1.5 -right-2.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-appdanger px-1 text-[9px] font-bold text-appdanger-fg">
-                  {unreadCount > 9 ? '9+' : unreadCount}
-                </span>
-              )}
-            </span>
-            <span className="text-center leading-tight">Menu</span>
-          </button>
-          {bottomTabs.map((tab) => (
-            <NavLink
-              key={tab.path}
-              to={tab.path}
-              end={tab.end}
-              className={({ isActive }) =>
-                `flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 text-2xs font-medium transition-colors ${
-                  isActive
-                    ? 'text-appaccent-text'
-                    : 'text-apptext-muted hover:text-apptext-soft'
-                }`
-              }
-            >
-              <span className="text-lg">{tab.icon}</span>
-              <span className="text-center leading-tight">{tab.label}</span>
-            </NavLink>
-          ))}
-        </div>
-      </nav>
-
-      {asleep && <SleepScreen onWake={wake} testing={sleepTesting} />}
-      <SleepWarning secondsLeft={asleep ? null : secondsLeft} totalSeconds={warningSeconds} onStay={wake} />
-
-      {/* One-time "What's New" popup shown after a new version ships. */}
-      <ReleaseNotesModal />
-    </div>
+    </PageMetaProvider>
   );
 });

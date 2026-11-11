@@ -64,6 +64,13 @@ describe('averageCompleteDailyKwh', () => {
     expect(averageCompleteDailyKwh(points, 7, COMPLETE_DAY_MIN_HOURS, now)).toBe(25);
   });
 
+  it('keeps all seven days in the evening, counting days on the home clock (B-076)', () => {
+    // 7:30 PM Central on Aug 31 is already Sep 1 in UTC; the window still starts Aug 24.
+    const evening = new Date('2026-09-01T00:30:00Z');
+    const points = [day('2026-08-24', 40, 24), day('2026-08-30', 20, 24)];
+    expect(averageCompleteDailyKwh(points, 7, COMPLETE_DAY_MIN_HOURS, evening)).toBe(30);
+  });
+
   it('returns 0 when no complete days fall in the window', () => {
     expect(averageCompleteDailyKwh([day('2026-08-31', 5, 3)], 7, COMPLETE_DAY_MIN_HOURS, now)).toBe(0);
     expect(averageCompleteDailyKwh([], 30, COMPLETE_DAY_MIN_HOURS, now)).toBe(0);

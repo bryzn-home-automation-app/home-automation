@@ -1,0 +1,595 @@
+<section class="screen" data-route="profile" data-title="Profile" data-eyebrow="You">
+
+  <!-- 1–3. The answer: you (avatar on your colour) + the appearance switchgear, then the verdict and readouts -->
+  <section class="ip" aria-labelledby="profile-verdict">
+    <div class="ip-instrument">
+      <div class="pf-id">
+        <span class="avatar avatar--xl" style="--who: var(--person-bryan)" data-pf="avatar" aria-hidden="true">BR</span>
+        <div class="pf-id-text">
+          <p class="pf-name"><span data-pf="name">Bryan</span> <span class="tag" data-pf="role">Admin</span></p>
+          <p class="mono pf-id-line" data-pf="handle">@bryan</p>
+          <p class="mono pf-id-line" data-pf="email">bryan@example.com</p>
+          <p class="mono pf-id-line" data-pf="phone">214-555-0142</p>
+        </div>
+      </div>
+
+      <div class="pf-gear" role="group" aria-label="Appearance">
+        <div class="pf-gear-row">
+          <span class="label" id="profile-theme-label">Theme</span>
+          <div class="seg seg--fill" data-tabs="profile-theme" role="tablist" aria-labelledby="profile-theme-label">
+            <button class="seg-key" type="button" role="tab" data-tab="light"><svg class="icon" aria-hidden="true"><use href="#i-sun"/></svg>Light</button>
+            <button class="seg-key" type="button" role="tab" data-tab="dark"><svg class="icon" aria-hidden="true"><use href="#i-moon"/></svg>Dark</button>
+            <button class="seg-key is-active" type="button" role="tab" data-tab="auto"><svg class="icon" aria-hidden="true"><use href="#i-contrast"/></svg>Auto</button>
+          </div>
+          <p class="pf-gear-help" data-pf="theme-help" aria-live="polite">Follows sunrise and sunset at home. Dark from 5:31 PM today.</p>
+        </div>
+        <div class="pf-gear-row">
+          <span class="label" id="profile-palette-label">Palette · <span data-pf="palette-name">Default</span></span>
+          <div class="swatches" data-tabs="profile-palette" role="tablist" aria-labelledby="profile-palette-label">
+            <button class="swatch-key is-active" type="button" role="tab" data-tab="default" style="--sw: var(--finish-default)" aria-label="Default"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="ocean" style="--sw: var(--finish-ocean)" aria-label="Ocean"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="sunset" style="--sw: var(--finish-sunset)" aria-label="Sunset"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="violet" style="--sw: var(--finish-violet)" aria-label="Violet"></button>
+          </div>
+          <p class="pf-gear-help">Tints the enamel in light and dark. Status colours never change. Saved on this device.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="ip-body">
+      <div class="verdict">
+        <span class="lamp lamp--ok"></span>
+        <p class="verdict-text" id="profile-verdict" data-pf="verdict">Alerts reach this iPhone.</p>
+        <p class="verdict-note" data-pf="verdict-note">7 kinds of alert and 3 weather checks can buzz it, and it tells the house when you're home.</p>
+      </div>
+      <div class="readouts" data-role-only="member">
+        <div class="readout">
+          <span class="label"><span class="lamp lamp--ok lamp--s"></span>Phone alerts</span>
+          <span class="readout-value"><span class="num">2<span class="unit">devices</span></span></span>
+          <span class="readout-note">This iPhone and one more</span>
+        </div>
+        <a class="readout" href="#profile" data-pf-goto="alerts">
+          <span class="label">On your phone</span>
+          <span class="readout-value"><span class="num">7<span class="unit">of 12</span></span></span>
+          <span class="readout-note">Kinds of alert that buzz you</span>
+        </a>
+        <a class="readout" href="#profile" data-pf-goto="weather">
+          <span class="label">Weather</span>
+          <span class="readout-value"><span class="num">4<span class="unit">checks</span></span></span>
+          <span class="readout-note">3 buzz your phone. Next: freeze, 6 PM</span>
+        </a>
+      </div>
+      <div class="btn-row">
+        <button class="btn" type="button" data-open-modal="profile-edit"><svg class="icon" aria-hidden="true"><use href="#i-edit"/></svg>Edit profile</button>
+        <a class="btn btn--quiet" href="#login" data-nav="login"><svg class="icon" aria-hidden="true"><use href="#i-log-out"/></svg>Sign out</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. View switch: three kinds of setting, so the page is never one endless column -->
+  <div class="seg" data-tabs="profile-view" role="tablist" aria-label="Settings" data-role-only="member">
+    <button class="seg-key is-active" type="button" role="tab" data-tab="alerts">Alerts</button>
+    <button class="seg-key" type="button" role="tab" data-tab="weather">Weather</button>
+    <button class="seg-key" type="button" role="tab" data-tab="device">This device</button>
+  </div>
+
+  <!-- ===================== ALERTS ===================== -->
+  <div class="stack stack--page" data-tab-panel="profile-view:alerts" role="tabpanel" aria-label="Alerts" data-role-only="member">
+        <section class="panel" aria-labelledby="profile-push-title">
+          <header class="panel-head">
+            <div>
+              <h2 class="panel-title" id="profile-push-title">Phone alerts</h2>
+              <p class="panel-sub">Alerts on this iPhone, even when the app is closed</p>
+            </div>
+          </header>
+          <div class="grid-2 pf-push pf-above-row">
+            <ul class="list list--inset">
+              <li><button class="switch" type="button" role="switch" aria-checked="true" data-toggle data-pf-device>
+                <span class="switch-text"><span class="switch-label">Alerts on this iPhone</span><span class="switch-help" data-pf="device-help">On. Your alerts go to 2 devices</span></span>
+                <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+              </button></li>
+            </ul>
+            <div class="stack stack--s">
+              <div class="btn-row">
+                <button class="btn" type="button" data-toast="Test alert sent to 2 devices. It should arrive in a few seconds"><svg class="icon" aria-hidden="true"><use href="#i-bell"/></svg>Send a test alert</button>
+              </div>
+              <p class="small muted">Which alerts buzz your phone is up to you, under Alert types. Camera alerts and Roomba errors are on to start with.</p>
+            </div>
+          </div>
+          <details class="disclosure disclosure--row">
+            <summary><span class="when-closed">Not getting alerts?</span><span class="when-open">Hide the help</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+            <div class="disclosure-body">
+              <ul class="list list--cols">
+                <li><div class="row">
+                  <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg></span>
+                  <span class="row-main"><span class="row-title">Opened in Safari, not the Home Screen app</span>
+                    <span class="row-meta">1. Tap the Share button, then Add to Home Screen. 2. Open HomeOS from the new icon. 3. Come back to Profile and turn alerts on.</span></span>
+                </div></li>
+                <li><div class="row">
+                  <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-eye-off"/></svg></span>
+                  <span class="row-main"><span class="row-title">Notifications are blocked</span>
+                    <span class="row-meta">Allow them in Settings → Notifications → HomeOS, then come back here.</span></span>
+                </div></li>
+                <li><div class="row">
+                  <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-lock"/></svg></span>
+                  <span class="row-main"><span class="row-title">Opened at the plain address</span>
+                    <span class="row-meta">Phone alerts need the secure address. With Tailscale on, open <span class="code">home.example.net</span> and turn alerts on from there.</span></span>
+                </div></li>
+                <li><div class="row">
+                  <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-alert-circle"/></svg></span>
+                  <span class="row-main"><span class="row-title">An older iPhone or browser</span>
+                    <span class="row-meta">This browser can't receive alerts. On iPhone, use the Home Screen app (iOS 16.4 or later).</span></span>
+                </div></li>
+              </ul>
+            </div>
+          </details>
+        </section>
+
+        <section class="panel" aria-labelledby="profile-types-title">
+          <header class="panel-head">
+            <div>
+              <h2 class="panel-title" id="profile-types-title">Alert types</h2>
+              <p class="panel-sub">What shows up in your Alerts, and what also buzzes your phone. Only affects you</p>
+            </div>
+            <div class="panel-action"><button class="btn btn--sm btn--quiet" type="button" data-pf-reset><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Reset</button></div>
+          </header>
+
+          <div class="pf-matrix-cols">
+          <div class="pf-matrix">
+            <div class="pf-cols" aria-hidden="true">
+              <span class="pf-col"><svg class="icon icon--s"><use href="#i-bell"/></svg><span class="label">Alerts</span></span>
+              <span class="pf-col"><svg class="icon icon--s"><use href="#i-phone"/></svg><span class="label">Phone</span></span>
+            </div>
+
+            <h3 class="label pf-group">Cameras</h3>
+            <ul class="list">
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Person outside</span><span class="row-meta">Someone seen by an outdoor camera</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Person outside: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Person outside: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Person inside while away</span><span class="row-meta">The indoor camera sees someone while everyone's phone is away</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Person inside while away: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Person inside while away: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Noise while away</span><span class="row-meta">A few minutes of sound at the indoor camera while everyone's away</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Noise while away: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Noise while away: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Camera battery low</span><span class="row-meta">An outdoor camera at 30% or less and not charging</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Camera battery low: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Camera battery low: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Camera not charging</span><span class="row-meta">No solar charge after two sunny days</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Camera not charging: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Camera not charging: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Camera offline</span><span class="row-meta">A camera unreachable for 30 minutes</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Camera offline: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Camera offline: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+            </ul>
+          </div>
+
+          <div class="pf-matrix">
+            <div class="pf-cols" aria-hidden="true">
+              <span class="pf-col"><svg class="icon icon--s"><use href="#i-bell"/></svg><span class="label">Alerts</span></span>
+              <span class="pf-col"><svg class="icon icon--s"><use href="#i-phone"/></svg><span class="label">Phone</span></span>
+            </div>
+
+            <h3 class="label pf-group">Roomba</h3>
+            <ul class="list">
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Roomba error</span><span class="row-meta">Rosie stopped with an error</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Roomba error: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Roomba error: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Roomba needs attention</span><span class="row-meta">Bin full, stuck, or battery low</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Roomba needs attention: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Roomba needs attention: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Cleaning complete</span><span class="row-meta">A clean finished</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Cleaning complete: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Cleaning complete: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+            </ul>
+
+            <h3 class="label pf-group">Electricity</h3>
+            <ul class="list">
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Daily usage report</span><span class="row-meta">Yesterday's electricity use, each morning</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Daily usage report: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Daily usage report: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Usage spikes</span><span class="row-meta">A day 30% above average, or an hour over 5 kWh</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Usage spikes: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Usage spikes: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+              <li><div class="row pf-type">
+                <span class="row-main"><span class="row-title row-title--regular">Monthly bill estimate</span><span class="row-meta">Early each month</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Monthly bill estimate: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Monthly bill estimate: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div></li>
+            </ul>
+          </div>
+          </div>
+          <footer class="panel-foot"><span class="small muted">Phone alerts also need Alerts on this iPhone turned on.</span></footer>
+        </section>
+  </div>
+
+  <!-- ===================== WEATHER ===================== -->
+  <div class="stack stack--page" data-tab-panel="profile-view:weather" role="tabpanel" aria-label="Weather alerts" data-role-only="member" hidden>
+    <div class="split split--wide">
+      <section class="panel" aria-labelledby="profile-wx-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="profile-wx-title">Weather alerts</h2>
+            <p class="panel-sub">A heads-up about the weather at home. Turn on the ones you want, then choose when each is checked and what counts. Only affects you</p>
+          </div>
+        </header>
+
+        <div class="pf-matrix">
+          <div class="pf-cols" aria-hidden="true">
+            <span class="pf-col"><svg class="icon icon--s"><use href="#i-bell"/></svg><span class="label">Alerts</span></span>
+            <span class="pf-col"><svg class="icon icon--s"><use href="#i-phone"/></svg><span class="label">Phone</span></span>
+          </div>
+          <ul class="list">
+            <!-- Rain -->
+            <li class="pf-rule" data-pf-rule="rain">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-rain"/></svg>Rain</span><span class="row-meta">Rain likely in the hours you pick, so you can pause the sprinklers</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Rain: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Rain: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit>
+                <div class="pf-rule-fields">
+                  <label class="field"><span class="label">Check at</span><span class="select"><select data-pf-time="20:00"><option>8:00 PM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Look ahead to</span><span class="select"><select data-pf-time="08:00"><option>8:00 AM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Chance of rain</span><span class="select"><select><option>20%</option><option>30%</option><option>40%</option><option selected>50%</option><option>60%</option><option>70%</option><option>80%</option><option>90%</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Checked every day at <b>8 PM</b>, looking ahead to <b>8 AM</b> (12 hours).</p>
+                <div class="notice pf-preview" role="status" data-pf-preview>
+                  <svg class="icon" aria-hidden="true"><use href="#i-rain"/></svg>
+                  <div><p class="label">Tonight at 8 PM · 8 PM – 8 AM</p>
+                    <p class="notice-title">You'd get: Rain likely tonight through 8 AM</p>
+                    <p class="notice-text">Up to 90% chance between 1 and 8 AM, about 0.6 in in all. Enough to skip watering.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check the forecast now</button>
+              </div>
+            </li>
+            <!-- Weather warnings -->
+            <li class="pf-rule" data-pf-rule="nws">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-alert-triangle"/></svg>Weather warnings</span><span class="row-meta">Official National Weather Service warnings for home, as soon as they're issued</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Weather warnings: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Weather warnings: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit>
+                <div class="pf-rule-fields">
+                  <label class="field pf-wide"><span class="label">Send</span><span class="select"><select><option>Warnings</option><option selected>Warnings and watches</option><option>Warnings, watches and advisories</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Sent as soon as the National Weather Service issues one for home.</p>
+                <div class="notice notice--plain pf-preview" role="status" data-pf-preview hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+                  <div><p class="label">As soon as they're issued</p><p class="notice-text">No alert right now. None in effect for home right now.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check now</button>
+              </div>
+            </li>
+            <!-- Thunderstorms -->
+            <li class="pf-rule" data-pf-rule="storms">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-storm"/></svg>Thunderstorms</span><span class="row-meta">Thunderstorms in the forecast</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Thunderstorms: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Thunderstorms: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit>
+                <div class="pf-rule-fields">
+                  <label class="field"><span class="label">Check at</span><span class="select"><select data-pf-time="07:00"><option>7:00 AM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Look ahead to</span><span class="select"><select data-pf-time="07:00"><option>7:00 AM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Checked every day at <b>7 AM</b>, looking ahead to <b>7 AM</b> (24 hours).</p>
+                <div class="notice notice--plain pf-preview" role="status" data-pf-preview hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+                  <div><p class="label">Tomorrow at 7 AM · 7 AM – 7 AM</p><p class="notice-text">No alert right now. Showers, but no thunder in the forecast.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check the forecast now</button>
+              </div>
+            </li>
+            <!-- Freeze -->
+            <li class="pf-rule" data-pf-rule="freeze">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-snowflake"/></svg>Freeze</span><span class="row-meta">At or below your limit: pipes, plants, sprinklers</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-in aria-label="Freeze: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="true" data-toggle data-pf-push aria-label="Freeze: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit>
+                <div class="pf-rule-fields">
+                  <label class="field"><span class="label">Check at</span><span class="select"><select data-pf-time="18:00"><option>6:00 PM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Look ahead to</span><span class="select"><select data-pf-time="10:00"><option>10:00 AM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">At or below</span><span class="select"><select><option>20°F</option><option>22°F</option><option>24°F</option><option>26°F</option><option>28°F</option><option>30°F</option><option selected>32°F</option><option>34°F</option><option>36°F</option><option>38°F</option><option>40°F</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Checked every day at <b>6 PM</b>, looking ahead to <b>10 AM</b> (16 hours).</p>
+                <div class="notice notice--plain pf-preview" role="status" data-pf-preview hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+                  <div><p class="label">Tonight at 6 PM · 6 PM – 10 AM</p><p class="notice-text">No alert right now. Low of 47°F, around 2 AM.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check the forecast now</button>
+              </div>
+            </li>
+            <!-- Extreme heat (off) -->
+            <li class="pf-rule" data-pf-rule="heat">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-sun"/></svg>Extreme heat</span><span class="row-meta">A high at or above your limit</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-in aria-label="Extreme heat: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Extreme heat: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit hidden>
+                <div class="pf-rule-fields">
+                  <label class="field"><span class="label">Check at</span><span class="select"><select data-pf-time="07:00"><option>7:00 AM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Look ahead to</span><span class="select"><select data-pf-time="21:00"><option>9:00 PM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">At or above</span><span class="select"><select><option>90°F</option><option>92°F</option><option>94°F</option><option>96°F</option><option>98°F</option><option selected>100°F</option><option>102°F</option><option>104°F</option><option>106°F</option><option>108°F</option><option>110°F</option><option>112°F</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Checked every day at <b>7 AM</b>, looking ahead to <b>9 PM</b> (14 hours).</p>
+                <div class="notice notice--plain pf-preview" role="status" data-pf-preview hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+                  <div><p class="label">Tomorrow at 7 AM · 7 AM – 9 PM</p><p class="notice-text">No alert right now. High of 61°F tomorrow.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check the forecast now</button>
+              </div>
+            </li>
+            <!-- High wind (off) -->
+            <li class="pf-rule" data-pf-rule="wind">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-wind"/></svg>High wind</span><span class="row-meta">Gusts at or above your limit</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-in aria-label="High wind: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="High wind: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit hidden>
+                <div class="pf-rule-fields">
+                  <label class="field"><span class="label">Check at</span><span class="select"><select data-pf-time="07:00"><option>7:00 AM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Look ahead to</span><span class="select"><select data-pf-time="21:00"><option>9:00 PM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Gusts of</span><span class="select"><select><option>25 mph</option><option>30 mph</option><option>35 mph</option><option selected>40 mph</option><option>45 mph</option><option>50 mph</option><option>55 mph</option><option>60 mph</option><option>65 mph</option><option>70 mph</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Checked every day at <b>7 AM</b>, looking ahead to <b>9 PM</b> (14 hours).</p>
+                <div class="notice notice--plain pf-preview" role="status" data-pf-preview hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+                  <div><p class="label">Tomorrow at 7 AM · 7 AM – 9 PM</p><p class="notice-text">No alert right now. Gusts up to 22 mph around noon.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check the forecast now</button>
+              </div>
+            </li>
+            <!-- Snow or ice (off) -->
+            <li class="pf-rule" data-pf-rule="winter">
+              <div class="row pf-type">
+                <span class="row-main"><span class="row-title"><svg class="icon icon--s" aria-hidden="true"><use href="#i-snowflake"/></svg>Snow or ice</span><span class="row-meta">Snow, sleet or freezing rain in the forecast</span></span>
+                <span class="pf-pair">
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-in aria-label="Snow or ice: in your Alerts"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                  <button class="switch switch--bare" type="button" role="switch" aria-checked="false" data-toggle data-pf-push aria-label="Snow or ice: on your phone"><span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span></button>
+                </span></div>
+              <div class="pf-rule-edit" data-pf-edit hidden>
+                <div class="pf-rule-fields">
+                  <label class="field"><span class="label">Check at</span><span class="select"><select data-pf-time="18:00"><option>6:00 PM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                  <label class="field"><span class="label">Look ahead to</span><span class="select"><select data-pf-time="18:00"><option>6:00 PM</option></select><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span></label>
+                </div>
+                <p class="pf-rule-when">Checked every day at <b>6 PM</b>, looking ahead to <b>6 PM</b> (24 hours).</p>
+                <div class="notice notice--plain pf-preview" role="status" data-pf-preview hidden>
+                  <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+                  <div><p class="label">Tonight at 6 PM · 6 PM – 6 PM</p><p class="notice-text">No alert right now. Rain only, with a low of 47°F.</p></div>
+                </div>
+                <button class="btn btn--sm btn--quiet self-start" type="button" data-pf-check><svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>Check the forecast now</button>
+              </div>
+            </li>
+          </ul>
+        </div>
+        <footer class="panel-foot"><span class="small muted">Times are Central. Forecasts from Open-Meteo, warnings from the National Weather Service.</span></footer>
+      </section>
+
+      <section class="panel" aria-labelledby="profile-next-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="profile-next-title">Next checks</h2>
+            <p class="panel-sub">What the house will look at for you</p>
+          </div>
+        </header>
+        <div class="timeline">
+          <section>
+            <h3 class="tl-day"><span class="label">Today</span><span class="mono">Mon, Nov 9</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item"><span class="tl-time">6:00 PM</span><span class="lamp lamp--off"></span>
+                <div class="tl-body"><p class="tl-title">Freeze</p><p class="tl-meta">Quiet so far: a low of 47° around 2 AM</p></div></li>
+              <li class="tl-item"><span class="tl-time">8:00 PM</span><span class="lamp lamp--info"></span>
+                <div class="tl-body"><p class="tl-title">Rain</p><p class="tl-meta">Likely to alert: up to 90% chance from 1 AM</p></div></li>
+            </ol>
+          </section>
+          <section>
+            <h3 class="tl-day"><span class="label">Tomorrow</span><span class="mono">Tue, Nov 10</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item"><span class="tl-time">7:00 AM</span><span class="lamp lamp--off"></span>
+                <div class="tl-body"><p class="tl-title">Thunderstorms</p><p class="tl-meta">In your Alerts only, not your phone</p></div></li>
+            </ol>
+          </section>
+          <section>
+            <h3 class="tl-day"><span class="label">Any time</span><span class="mono">As issued</span></h3>
+            <ol class="tl-list">
+              <li class="tl-item"><span class="tl-time">—</span><span class="lamp lamp--off"></span>
+                <div class="tl-body"><p class="tl-title">Weather warnings</p><p class="tl-meta">None in effect for home right now</p></div></li>
+            </ol>
+          </section>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- ===================== THIS DEVICE ===================== -->
+  <div class="stack stack--page" data-tab-panel="profile-view:device" role="tabpanel" aria-label="This device" data-role-only="member" hidden>
+    <div class="split split--even">
+      <section class="panel" aria-labelledby="profile-device-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="profile-device-title">This device</h2>
+            <p class="panel-sub">Link the phone you're holding, so the house knows you're home while it's on the Wi-Fi</p>
+          </div>
+        </header>
+        <div class="stack pf-above-row">
+          <div class="notice notice--ok">
+            <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+            <div><p class="notice-title">Linked: Bryan's iPhone</p><p class="notice-text">You'll show as home while it's on the Wi-Fi.</p></div>
+          </div>
+          <dl class="kv">
+            <div class="kv-row"><dt>Device</dt><dd>Bryan's iPhone</dd></div>
+            <div class="kv-row"><dt>Kind</dt><dd>Phone</dd></div>
+            <div class="kv-row"><dt>Counts toward home</dt><dd>Yes</dd></div>
+            <div class="kv-row"><dt>On the home Wi-Fi</dt><dd>Since Sun, 6:12 PM</dd></div>
+          </dl>
+          <div class="btn-row">
+            <button class="btn" type="button" data-open-modal="profile-link"><svg class="icon" aria-hidden="true"><use href="#i-phone"/></svg>Link again</button>
+          </div>
+        </div>
+        <details class="disclosure disclosure--row">
+          <summary><span class="when-closed">For the curious</span><span class="when-open">Hide the details</span><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></summary>
+          <div class="disclosure-body">
+            <dl class="kv">
+              <div class="kv-row"><dt>Wi-Fi hardware address</dt><dd><span class="code">A4:83:E7:00:5B:1C</span></dd></div>
+              <div class="kv-row"><dt>Last link code</dt><dd><span class="code">lnk_4f9a2c71d3</span></dd></div>
+              <div class="kv-row"><dt>Found by</dt><dd>Home server, 192.168.1.20</dd></div>
+            </dl>
+          </div>
+        </details>
+      </section>
+
+      <section class="panel" aria-labelledby="profile-home-title">
+        <header class="panel-head">
+          <div>
+            <h2 class="panel-title" id="profile-home-title">How the house knows you're home</h2>
+          </div>
+          <div class="panel-action" data-role-only="admin"><a class="btn btn--sm btn--quiet" href="#admin-presence" data-nav="admin-presence">Who's home<svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></a></div>
+        </header>
+        <ul class="list">
+          <li><div class="row">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg></span>
+            <span class="row-main"><span class="row-title row-title--regular">It looks for linked phones on the home Wi-Fi</span><span class="row-meta">Every few minutes, from the home server</span></span>
+          </div></li>
+          <li><div class="row">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-watch"/></svg></span>
+            <span class="row-main"><span class="row-title row-title--regular">Only phones and watches count</span><span class="row-meta">A laptop left at home doesn't make you home</span></span>
+          </div></li>
+          <li><div class="row">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-key"/></svg></span>
+            <span class="row-main"><span class="row-title row-title--regular">Each phone links once</span><span class="row-meta">Join the home Wi-Fi first, then tap Link</span></span>
+          </div></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+
+  <!-- Dialog: edit profile -->
+  <div class="dialog" data-modal="profile-edit" hidden role="dialog" aria-modal="true" aria-labelledby="profile-edit-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">Profile</p>
+          <h2 class="dialog-title" id="profile-edit-title">Edit profile</h2>
+          <p class="dialog-sub">Your name, photo and colour show wherever the app shows you</p>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack stack--l">
+        <div class="pf-photo">
+          <button class="pf-photo-key" type="button" data-toast="Choose a photo from this iPhone" aria-label="Change photo">
+            <span class="avatar avatar--xl" style="--who: var(--person-bryan)" data-pf="edit-avatar" aria-hidden="true">BR</span>
+            <span class="pf-photo-badge" aria-hidden="true"><svg class="icon"><use href="#i-camera"/></svg></span>
+          </button>
+          <span class="small muted">Tap to add a photo. JPG or PNG, up to 5 MB</span>
+        </div>
+        <div class="form-grid">
+          <label class="field"><span class="label">Display name</span><input class="input" type="text" value="Bryan" autocomplete="name" data-pf-namefield></label>
+          <label class="field"><span class="label">Phone number</span><input class="input input--mono" type="tel" value="214-555-0142" placeholder="214-555-0199" autocomplete="tel"><span class="field-help">Optional</span></label>
+        </div>
+        <div class="field">
+          <span class="label" id="profile-colour-label">Your colour · <span data-pf="colour-name">Sky blue</span></span>
+          <div class="swatches" data-tabs="profile-colour" role="tablist" aria-labelledby="profile-colour-label">
+            <button class="swatch-key is-active" type="button" role="tab" data-tab="sky" data-pf-who="--person-bryan" style="--sw: var(--person-bryan)" aria-label="Sky blue"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="ocean" data-pf-who="--chart-cool" style="--sw: var(--chart-cool)" aria-label="Ocean blue"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="cornflower" data-pf-who="--person-danny" style="--sw: var(--person-danny)" aria-label="Cornflower"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="cyan" data-pf-who="--chart-water" style="--sw: var(--chart-water)" aria-label="Cyan"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="teal" data-pf-who="--person-alex" style="--sw: var(--person-alex)" aria-label="Teal"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="emerald" data-pf-who="--lamp-ok" style="--sw: var(--lamp-ok)" aria-label="Emerald"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="gold" data-pf-who="--chart-gas" style="--sw: var(--chart-gas)" aria-label="Gold"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="amber" data-pf-who="--person-jordan" style="--sw: var(--person-jordan)" aria-label="Amber"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="orange" data-pf-who="--chart-heat" style="--sw: var(--chart-heat)" aria-label="Orange"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="crimson" data-pf-who="--lamp-problem" style="--sw: var(--lamp-problem)" aria-label="Crimson"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="rose" data-pf-who="--person-mai" style="--sw: var(--person-mai)" aria-label="Rose"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="purple" data-pf-who="--person-linh" style="--sw: var(--person-linh)" aria-label="Purple"></button>
+            <button class="swatch-key" type="button" role="tab" data-tab="slate" data-pf-who="--person-kim" style="--sw: var(--person-kim)" aria-label="Slate"></button>
+          </div>
+          <span class="field-help">Rose and Purple are taken by Mai and Linh, but you can share.</span>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal>Cancel</button>
+        <button class="btn btn--primary" type="button" data-close-modal data-pf-save data-toast="Profile saved">Save changes</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Dialog: link this device -->
+  <div class="dialog dialog--narrow" data-modal="profile-link" hidden role="dialog" aria-modal="true" aria-labelledby="profile-link-title">
+    <div class="dialog-panel">
+      <header class="dialog-head">
+        <div class="dialog-heading">
+          <p class="label">This device</p>
+          <h2 class="dialog-title" id="profile-link-title">Link this iPhone</h2>
+        </div>
+        <button class="icon-btn icon-btn--quiet" type="button" data-close-modal aria-label="Close"><svg class="icon" aria-hidden="true"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="dialog-body stack">
+        <ol class="list list--inset">
+          <li><div class="row row--compact">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-wifi"/></svg></span>
+            <span class="row-main"><span class="row-title row-title--regular">Join the home Wi-Fi</span><span class="row-meta">Not the guest network</span></span>
+            <span class="badge badge--ok">Done</span>
+          </div></li>
+          <li><div class="row row--compact">
+            <span class="row-lead"><svg class="icon" aria-hidden="true"><use href="#i-external-link"/></svg></span>
+            <span class="row-main"><span class="row-title row-title--regular">Confirm on the home server's page</span><span class="row-meta">It opens in a new tab and says “Device found”</span></span>
+          </div></li>
+        </ol>
+        <button class="btn btn--primary btn--block" type="button" data-toast="Opening the home server's page"><svg class="icon" aria-hidden="true"><use href="#i-external-link"/></svg>Tap to confirm this device</button>
+        <div class="notice" role="status">
+          <svg class="icon" aria-hidden="true"><use href="#i-clock"/></svg>
+          <div><p class="notice-title">Waiting for the home server…</p><p class="notice-text">Come back here once its page says “Device found”. This checks every 2 seconds.</p></div>
+        </div>
+      </div>
+      <footer class="dialog-foot">
+        <button class="btn btn--quiet" type="button" data-close-modal data-toast="Linking cancelled">Cancel</button>
+      </footer>
+    </div>
+  </div>
+</section>
