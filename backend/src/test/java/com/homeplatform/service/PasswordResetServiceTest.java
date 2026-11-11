@@ -338,6 +338,32 @@ class PasswordResetServiceTest {
         assertEquals(Outcome.RESET, service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, "10.1.1.1").outcome());
     }
 
+    @Test
+    @DisplayName("twenty tries on ONE made-up username (fifteen of them refused by its own pause) still tell the admin everyone is paused")
+    void addressPauseNoticeForOneMadeUpName() {
+        for (int i = 0; i < 20; i++) attempt("made-up", PAT_BIRTHDAY);
+        assertEquals("20", redis.values.get("reset-pw:ip:" + IP));
+        assertEquals(List.of("Password resets paused for everyone"), notices(), "unknown names get no other notice");
+        assertTrue(logged().stream().anyMatch(m -> m.contains("Password resets paused for an hour for every username")));
+        assertEquals(Outcome.THROTTLED, attempt("pat", PAT_BIRTHDAY));
+        assertEquals(1, notices().size(), "sent once, when the count fills");
+    }
+
+    @Test
+    @DisplayName("an admin lifts a member's pause by clearing their counts; the per-address pause is left alone")
+    void clearWrongTries() {
+        for (int i = 0; i < 5; i++) attempt("pat", PAT_BIRTHDAY.minusYears(1));
+        assertEquals(Outcome.THROTTLED, service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, "10.2.2.2").outcome());
+
+        service.clearWrongTries(2L, "sam");
+        assertNull(redis.values.get(userKey("pat")));
+        assertNull(redis.values.get(dayKey("pat")));
+        assertNotNull(redis.values.get("reset-pw:ip:" + IP));
+        assertTrue(logged().stream().anyMatch(m -> m.equals("sam cleared the password reset tries for 'pat'")));
+        assertEquals(Outcome.RESET, service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, "10.2.2.2").outcome());
+        assertThrows(NoSuchElementException.class, () -> service.clearWrongTries(99L, "sam"));
+    }
+
     /** Runs {@code n} resets at once (released together) and counts the outcomes. */
     private Map<Outcome, Integer> burst(int n, java.util.function.IntFunction<String> username,
                                         java.util.function.IntFunction<LocalDate> birthday) throws Exception {

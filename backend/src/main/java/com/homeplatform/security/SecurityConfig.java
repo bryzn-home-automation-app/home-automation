@@ -15,6 +15,15 @@ public class SecurityConfig {
         this.jwtAuthFilter = jwtAuthFilter;
     }
 
+    /** Before JwtAuthFilter (order 1): no request with ";" in its path gets that far. */
+    @Bean
+    public FilterRegistrationBean<PathParameterFilter> pathParameterFilter() {
+        FilterRegistrationBean<PathParameterFilter> registration = new FilterRegistrationBean<>(new PathParameterFilter());
+        registration.addUrlPatterns("/*");
+        registration.setOrder(0);
+        return registration;
+    }
+
     @Bean
     public FilterRegistrationBean<JwtAuthFilter> jwtFilter() {
         FilterRegistrationBean<JwtAuthFilter> registration = new FilterRegistrationBean<>();

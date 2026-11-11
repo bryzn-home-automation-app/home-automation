@@ -148,6 +148,32 @@ class BirthdayPrivacyTest {
     }
 
     @Test
+    @DisplayName("only an admin can clear a member's wrong reset tries")
+    void clearTriesAdminOnly() throws Exception {
+        String url = "/api/admin/users/" + member.getId() + "/reset-tries";
+        body(delete(url), memberToken, 403);
+        body(delete(url), guestToken, 403);
+        assertEquals(401, mvc.perform(delete(url)).andReturn().getResponse().getStatus());
+        assertEquals("{\"status\":\"cleared\"}", body(delete(url), adminToken, 200));
+        body(delete("/api/admin/users/999999/reset-tries"), adminToken, 404);
+    }
+
+    @Test
+    @DisplayName("paths with ';' are refused before JwtAuthFilter, with the real controllers behind (Tomcat itself would drop ';x' and route to them)")
+    void pathParametersRefused() throws Exception {
+        String body = "{\"username\":\"leaktest\",\"birthDate\":\"1991-04-27\",\"newPassword\":\"fresh-password-9\"}";
+        MockMvc guarded = MockMvcBuilders.webAppContextSetup(context)
+                .addFilters(new com.homeplatform.security.PathParameterFilter(), jwtAuthFilter).build();
+        for (String path : new String[]{"/api/auth/reset-password;jsessionid=x", "/api/auth;x/reset-password", "/api;x/admin/users"}) {
+            var resp = guarded.perform(post(path).contentType(MediaType.APPLICATION_JSON).content(body)).andReturn().getResponse();
+            assertEquals(400, resp.getStatus(), path);
+            assertEquals("{\"error\":\"Bad request path\"}", resp.getContentAsString(), path);
+        }
+        assertEquals(404, guarded.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andReturn().getResponse().getStatus(), "the plain path still reaches the handler");
+    }
+
+    @Test
     @DisplayName("without a Home users file (AUTHELIA_USERS_FILE unset) the app boots with Forgot password off: not offered, 404")
     void offWithoutUsersFile() throws Exception {
         String config = mvc.perform(get("/api/auth/oidc/config")).andReturn().getResponse().getContentAsString();

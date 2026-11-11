@@ -85,6 +85,11 @@ server:
   # https://nuc.<tailnet>.ts.net. Without it, every POST from that origin looked
   # cross-origin and was refused by CORS. nginx sets these headers itself.
   forward-headers-strategy: framework
+  # Sessions (none are used) by cookie only, so Tomcat never writes ";jsessionid=" into a URL:
+  # PathParameterFilter refuses every path with a ";".
+  servlet:
+    session:
+      tracking-modes: cookie
 
 springdoc:
   api-docs:

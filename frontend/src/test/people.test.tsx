@@ -19,6 +19,7 @@ vi.mock('../api/auth', () => ({
   reactivateUser: vi.fn(),
   fetchBirthdays: vi.fn(),
   setBirthday: vi.fn(),
+  clearResetTries: vi.fn(),
   oidcConfig: vi.fn(),
 }));
 
@@ -160,6 +161,17 @@ describe('People page', () => {
       const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
       expect(await within(dialog).findByText('Password reset is switched off.')).toBeInTheDocument();
       expect(within(dialog).getByText(/AUTHELIA_USERS_FILE/)).toBeInTheDocument();
+    });
+
+    it('an admin clears a member’s wrong tries, lifting a reset pause', async () => {
+      (authApi.clearResetTries as any).mockResolvedValue(undefined);
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Manage Mai' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Manage Mai' });
+      expect(within(dialog).getByText(/Too many wrong birthdays pause Mai’s resets/)).toBeInTheDocument();
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Clear wrong tries' }));
+      await waitFor(() => expect(authApi.clearResetTries).toHaveBeenCalledWith(2));
+      expect(await within(dialog).findByText('Cleared. Mai can try again now.')).toBeInTheDocument();
     });
 
     it('members never load anyone’s birthday', async () => {

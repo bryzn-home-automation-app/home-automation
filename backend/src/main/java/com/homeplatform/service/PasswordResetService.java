@@ -176,6 +176,7 @@ public class PasswordResetService {
         long ipCount = limiter.countAttempt(ipKey, IP_WINDOW, IP_MAX, IP_LOCKOUT);
         if (ipCount < 0) return redisDown(who);
         if (ipCount > IP_MAX) return throttled(ipKey, "reset-pw:logged:ip", who);
+        if (ipCount == IP_MAX) addressPaused(who); // this try still goes ahead; the next ones won't
 
         // From the account lookup on, every answer takes the same minimum time.
         long started = System.nanoTime();
@@ -191,7 +192,7 @@ public class PasswordResetService {
             long dayCount = limiter.countAttempt(keys.day, DAY, USER_DAY_MAX, DAY);
             if (dayCount < 0) return redisDown(who);
             if (dayCount > USER_DAY_MAX) return throttled(keys.day, keys.logged, who);
-            return attempt(user, birthDate, newPassword, home, keys, new Counts(ipCount, userCount, dayCount), who);
+            return attempt(user, birthDate, newPassword, home, keys, new Counts(userCount, dayCount), who);
         } finally {
             padTo(started);
         }
@@ -211,8 +212,8 @@ public class PasswordResetService {
         return null;
     }
 
-    /** This attempt's place in each count (each at most its max: it got this far). */
-    private record Counts(long ip, long user, long day) {}
+    /** This attempt's place in its username's counts (each at most its max: it got this far). */
+    private record Counts(long user, long day) {}
 
     private Result attempt(User user, LocalDate birthDate, String newPassword, Accounts home, Keys keys,
                            Counts counts, String who) {
@@ -251,20 +252,27 @@ public class PasswordResetService {
         String why = refusal != null ? refusal : "birthday didn't match";
         String paused = counts.day() == USER_DAY_MAX ? "a day" : counts.user() == USER_MAX ? "an hour" : null;
         events.warn(CATEGORY, SOURCE, "Password reset refused for " + who + ": " + why
-                + (paused != null ? ". Resets for this username are now paused for " + paused : "")
-                + (counts.ip() == IP_MAX ? ". Resets from this address (every client, behind Docker) are now paused for an hour" : ""));
+                + (paused != null ? ". Resets for this username are now paused for " + paused : ""));
         if (paused != null && user != null) {
             String name = nameOf(user);
             notifyAdmins(Severity.WARNING, "Password resets paused for " + name,
                     "Someone entered the wrong birthday for " + name + "'s account too many times, so resetting their Home password is paused for "
-                            + paused + ". If it wasn't " + name + ", you can clear the birthday in People.");
-        }
-        if (counts.ip() == IP_MAX) {
-            notifyAdmins(Severity.WARNING, "Password resets paused for everyone",
-                    IP_MAX + " password reset tries in " + IP_WINDOW.toMinutes() + " minutes came through the home server, so "
-                            + "Forgot password is paused for everyone for an hour. The Debug page's Sign-in log shows which usernames were tried.");
+                            + paused + ". If it wasn't " + name + ", clear their wrong tries or their birthday in People.");
         }
         return Result.of(Outcome.NO_MATCH);
+    }
+
+    /**
+     * The try that fills the per-address count: every try after it, for any username, is turned
+     * away for an hour. Sent from here, before any account is looked up, so it goes out whatever
+     * this try was (tries refused by a username's own pause count here too).
+     */
+    private void addressPaused(String who) {
+        events.warn(CATEGORY, SOURCE, "Password resets paused for an hour for every username: " + IP_MAX + " tries in "
+                + IP_WINDOW.toMinutes() + " minutes from one address (every client, behind Docker); the last from " + who);
+        notifyAdmins(Severity.WARNING, "Password resets paused for everyone",
+                IP_MAX + " password reset tries in " + IP_WINDOW.toMinutes() + " minutes came through the home server, so "
+                        + "Forgot password is paused for everyone for an hour. The Debug page's Sign-in log shows which usernames were tried.");
     }
 
     private Result succeeded(User user, AutheliaUsersFile.Changed changed, Keys keys, String who) {
@@ -375,6 +383,21 @@ public class PasswordResetService {
         events.info(CATEGORY, SOURCE, printable(byAdmin) + (birthDate == null ? " cleared" : " set")
                 + " the reset birthday for '" + user.getUsername() + "'");
         return new Birthday(user.getId(), user.getBirthDate());
+    }
+
+    /**
+     * Lifts a member's pause: clears their per-username and per-day counts, so their next try is
+     * checked again. Clearing a birthday doesn't do this, and anyone who knows a username can keep
+     * it paused with about ten requests a day. The pause for everyone (per address) is left alone.
+     *
+     * @throws NoSuchElementException no such user
+     */
+    public void clearWrongTries(Long userId, String byAdmin) {
+        User user = users.findById(userId).orElseThrow(() -> new NoSuchElementException("User not found"));
+        Keys keys = Keys.of(user.getUsername());
+        limiter.clear(keys.user);
+        limiter.clear(keys.day);
+        events.info(CATEGORY, SOURCE, printable(byAdmin) + " cleared the password reset tries for '" + user.getUsername() + "'");
     }
 
     // ═══════════════════════════════════════════════════════════

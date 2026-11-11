@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveUser,
+  clearResetTries,
   denyUser,
   disableUser,
   fetchAllUsers,
@@ -589,6 +590,27 @@ function ResetBirthday({ user, birthday }: { user: AdminUser; birthday: string |
       </span>
       {saved && !error && <p className="fp-small fp-muted" role="status">{saved}</p>}
       {error && <Notice tone="problem" live="assertive">{error}</Notice>}
+      <ClearResetTries userId={user.id} name={name} />
+    </Stack>
+  );
+}
+
+/**
+ * Lifts a member's pause after too many wrong birthdays (an hour, or a day). Clearing the
+ * birthday doesn't, and anyone who knows the username can cause one.
+ */
+function ClearResetTries({ userId, name }: { userId: number; name: string }) {
+  const clear = useMutation({ mutationFn: () => clearResetTries(userId) });
+  return (
+    <Stack gap="xs">
+      <p className="fp-small fp-muted">
+        Too many wrong birthdays pause {name}’s resets for an hour, or a day.{' '}
+        <Button variant="quiet" size="sm" busy={clear.isPending} busyLabel="Clearing…" onClick={() => clear.mutate()}>
+          Clear wrong tries
+        </Button>
+      </p>
+      {clear.isSuccess && <p className="fp-small fp-muted" role="status">Cleared. {name} can try again now.</p>}
+      {clear.isError && <Notice tone="problem" live="assertive">Couldn’t clear the wrong tries. Try again.</Notice>}
     </Stack>
   );
 }

@@ -153,6 +153,19 @@ public class AdminController {
         }
     }
 
+    /** Lifts a member's "Forgot password?" pause (their wrong-try counts). */
+    @DeleteMapping("/users/{userId}/reset-tries")
+    public ResponseEntity<?> clearResetTries(@PathVariable Long userId, HttpServletRequest request) {
+        requireAdmin(request);
+        String admin = request.getAttribute("username") instanceof String u ? u : "An admin";
+        try {
+            passwordReset.clearWrongTries(userId, admin);
+            return ResponseEntity.ok(Map.of("status", "cleared"));
+        } catch (NoSuchElementException e) {
+            return ResponseEntity.status(404).body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ── Guest sessions ──
 
     @GetMapping("/guest-sessions")

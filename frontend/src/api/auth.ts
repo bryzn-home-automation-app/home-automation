@@ -215,6 +215,11 @@ export async function setBirthday(userId: number, birthDate: string | null): Pro
   return data;
 }
 
+/** Lifts a member's "Forgot password?" pause: clears their wrong-try counts (admins only). */
+export async function clearResetTries(userId: number): Promise<void> {
+  await api.delete(`/admin/users/${userId}/reset-tries`);
+}
+
 export async function fetchGuestSessions(): Promise<GuestSession[]> {
   const { data } = await api.get('/admin/guest-sessions');
   return data;
