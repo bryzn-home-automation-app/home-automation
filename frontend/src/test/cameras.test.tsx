@@ -13,6 +13,7 @@ import {
   batteryTone,
   chargeLabel,
   chargeState,
+  combinedBatterySeries,
   dailySummary,
   latestEvent,
   nightWindows,
@@ -62,6 +63,7 @@ vi.mock('../api/cameras', () => ({
 
 import * as camerasApi from '../api/cameras';
 import CameraTile, { PRESET_NOTE_MS } from '../components/CameraTile';
+import CameraBatteryChart, { type BatteryTrackInput } from '../components/CameraBatteryChart';
 
 const driveway: Camera = {
   id: 'cam-1',
@@ -131,6 +133,34 @@ describe('battery helpers', () => {
     // Reported charging wins over the trend.
     const reported = batterySeries([reading('2026-10-20T10:00:00Z', 50), reading('2026-10-20T11:00:00Z', 50, true)]);
     expect(reported[1].charge).toBe(50);
+  });
+
+  it('puts several cameras on one time axis, filling between readings so no line has holes', () => {
+    const rows = combinedBatterySeries([
+      [reading('2026-10-20T10:00:00Z', 50), reading('2026-10-20T12:00:00Z', 60), reading('2026-10-20T14:00:00Z', 56)],
+      [reading('2026-10-20T11:00:00Z', 80), reading('2026-10-20T13:00:00Z', 70)],
+    ]);
+    expect(rows.map((r) => r.t)).toEqual(
+      ['10', '11', '12', '13', '14'].map((h) => new Date(`2026-10-20T${h}:00:00Z`).getTime()),
+    );
+    // Camera 0 rose 10:00→12:00 (charging) and fell after; camera 1 only fell.
+    expect(rows.map((r) => [r.v0, r.c0])).toEqual([
+      [50, 50],
+      [55, 55], // between its readings, on the straight line, inside a charging stretch
+      [60, 60], // the top of the charge carries both, so the band ends on the line
+      [58, null],
+      [56, null],
+    ]);
+    expect(rows.map((r) => [r.v1, r.c1])).toEqual([
+      [null, null], // before its first reading
+      [80, null],
+      [75, null],
+      [70, null],
+      [null, null], // after its last
+    ]);
+    // A reported charge wins over the trend, and an empty track stays empty.
+    const reported = combinedBatterySeries([[reading('2026-10-20T10:00:00Z', 50), reading('2026-10-20T11:00:00Z', 50, true)], []]);
+    expect(reported.map((r) => [r.c0, r.v1])).toEqual([[50, null], [50, null]]);
   });
 
   it("sums gains and use per day at home, newest first", () => {
@@ -434,5 +464,80 @@ describe('CameraTile', () => {
   it('highlights a recent person detection', () => {
     renderTile({ ...driveway, lastPersonAt: new Date(Date.now() - 10_000).toISOString() });
     expect(screen.getByText(/Person · just now/)).toBeInTheDocument();
+  });
+});
+
+describe('CameraBatteryChart', () => {
+  const backyard: Camera = { ...driveway, id: 'cam-3', name: 'Backyard', batteryPercent: 41, charging: false, chargingStatus: null };
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const history = (levels: number[]) => ({
+    readings: levels.map((p, i) => reading(hoursAgo(levels.length - i), p)),
+    daylight: [],
+  });
+  const track = (camera: Camera, over: Partial<BatteryTrackInput> = {}): BatteryTrackInput => ({
+    camera,
+    history: history([50, 55, 60]),
+    loading: false,
+    failed: false,
+    refetch: vi.fn(),
+    ...over,
+  });
+
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('draws every battery camera on one chart, each named with its level, under one range', () => {
+    const onRange = vi.fn();
+    render(<CameraBatteryChart tracks={[track(driveway), track(backyard, { history: history([60, 50, 41]) })]} range={24} onRangeChange={onRange} />);
+    const legend = screen.getByRole('list', { name: 'Cameras on the chart' });
+    expect(legend).toHaveTextContent('Driveway 64% · Solar charging');
+    expect(legend).toHaveTextContent('Backyard 41% · On battery');
+    expect(screen.getAllByRole('img', { name: /Battery level over the last 24 hours/ })).toHaveLength(1);
+    expect(screen.getByRole('img', { name: /Driveway \(solid line\) now 64%.*Backyard \(dashed line\) now 41%/ })).toBeInTheDocument();
+    expect(screen.getByText(/Charging \(wide band under the line\)/)).toBeInTheDocument();
+    expect(screen.getAllByRole('group', { name: 'Battery range' })).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: '7 days' }));
+    expect(onRange).toHaveBeenCalledWith(168);
+  });
+
+  it('keeps the day-by-day detail, grouped per camera', () => {
+    render(<CameraBatteryChart tracks={[track(driveway), track(backyard, { history: history([60, 50, 41]) })]} range={24} onRangeChange={() => {}} />);
+    expect(screen.getByRole('region', { name: 'Driveway, day by day' })).toHaveTextContent(/\+10% charged/);
+    expect(screen.getByRole('region', { name: 'Backyard, day by day' })).toHaveTextContent(/−19% used/);
+  });
+
+  it('shows the cameras that loaded and names the one that did not', () => {
+    const refetch = vi.fn();
+    render(
+      <CameraBatteryChart
+        tracks={[track(driveway), track(backyard, { history: undefined, failed: true, refetch })]}
+        range={24}
+        onRangeChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("Couldn't load the Backyard battery history")).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Cameras on the chart' })).toHaveTextContent('Backyard 41% · not loaded');
+    expect(screen.getByRole('img', { name: /Driveway/ })).not.toHaveAccessibleName(/Backyard/);
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('loads, fails and waits through the kit states', () => {
+    const { rerender } = render(
+      <CameraBatteryChart tracks={[track(driveway, { history: undefined, loading: true }), track(backyard)]} range={24} onRangeChange={() => {}} />,
+    );
+    expect(screen.getByText('Loading the battery history')).toBeInTheDocument();
+    rerender(
+      <CameraBatteryChart
+        tracks={[track(driveway, { history: undefined, failed: true }), track(backyard, { history: undefined, failed: true })]}
+        range={24}
+        onRangeChange={() => {}}
+      />,
+    );
+    expect(screen.getByText("Couldn't load the battery history")).toBeInTheDocument();
+    rerender(<CameraBatteryChart tracks={[track(driveway, { history: history([50]) })]} range={24} onRangeChange={() => {}} />);
+    expect(screen.getByText('Collecting data')).toBeInTheDocument();
   });
 });

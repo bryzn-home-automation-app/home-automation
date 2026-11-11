@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import Roomba from '../pages/Roomba';
+import * as roombaApi from '../api/roomba';
 
 // The Roomba page with its APIs mocked: the keys stay admin-only, members get the state and
 // a reason, a failed load says so, the run list opens the kit dialog, and the view is a tab.
@@ -17,6 +18,8 @@ const state = {
   role: 'ADMIN' as 'ADMIN' | 'USER',
   runsFail: false,
   status: {} as Record<string, unknown>,
+  /** What the commands list returns (newest first). */
+  commands: [] as Array<Record<string, unknown>>,
 };
 
 vi.mock('../context/AuthContext', () => ({
@@ -43,7 +46,7 @@ const run = {
 };
 
 vi.mock('../api/roomba', () => ({
-  fetchRoombaStatus: async () => ({ ...docked, ...state.status }),
+  fetchRoombaStatus: vi.fn(async () => ({ ...docked, ...state.status })),
   fetchRoombaRuns: async () => {
     if (state.runsFail) throw new Error('down');
     return [run, { ...run, id: 8, startedAt: '2026-11-05T15:00:00Z', status: 'STUCK' }];
@@ -51,7 +54,7 @@ vi.mock('../api/roomba', () => ({
   fetchRoombaMap: async () => null,
   fetchRoombaDevice: async () => null,
   fetchRoombaParts: async () => [],
-  fetchRoombaCommands: async () => [],
+  fetchRoombaCommands: async () => state.commands,
   fetchRoombaPosition: async () => null,
   fetchRoombaCoverage: async () => null,
   fetchRoombaNativeSchedules: async () => [],
@@ -80,6 +83,9 @@ describe('Roomba page', () => {
     state.role = 'ADMIN';
     state.runsFail = false;
     state.status = {};
+    state.commands = [];
+    vi.mocked(roombaApi.sendRoombaCommand).mockClear();
+    vi.mocked(roombaApi.fetchRoombaStatus).mockClear();
   });
 
   it('gives an admin the Clean key, which opens the kit dialog', async () => {
@@ -130,5 +136,94 @@ describe('Roomba page', () => {
     expect(tab.getAttribute('aria-selected')).toBe('true');
     await waitFor(() => expect(screen.getByText('Powered on')).toBeTruthy());
     expect(screen.getByText('Pad plate only (no pad)')).toBeTruthy();
+  });
+
+  // ─── The admin keys ─────────────────────────────────────────────────
+  const cmdRow = (over: Record<string, unknown>) => ({
+    id: 1, command: 'pause', arg: null, status: 'PENDING', detail: null, requestedBy: 'bryan',
+    createdAt: new Date().toISOString(), processedAt: null, ...over,
+  });
+  const mission = { cycle: 'clean', sqft: 300, runtimeMinutes: 20 };
+
+  it.each([
+    ['cleaning', { ...mission, phase: 'run', running: true }, 'Pause'],
+    ['emptying the bin mid-clean', { ...mission, phase: 'evac', running: true }, 'Pause'],
+    ['recharging mid-clean', { ...mission, phase: 'charge', running: false }, 'Pause'],
+    ['heading home mid-clean', { ...mission, phase: 'hmMidMsn', running: false }, 'Pause'],
+    ['paused', { ...mission, phase: 'stop', running: false }, 'Resume'],
+    ['docked', {}, 'Clean'],
+  ])('leads with the right key while %s', async (_what, status, key) => {
+    state.status = status;
+    renderPage();
+    expect(await screen.findByRole('button', { name: new RegExp(`^${key}$`) })).toBeTruthy();
+    for (const other of ['Pause', 'Resume', 'Clean'].filter((k) => k !== key)) {
+      expect(screen.queryByRole('button', { name: new RegExp(`^${other}$`) })).toBeNull();
+    }
+  });
+
+  it('gives a member no keys mid-clean either', async () => {
+    state.role = 'USER';
+    state.status = { ...mission, phase: 'evac', running: true };
+    renderPage();
+    expect(await screen.findByText(/Only an admin can start or stop the robot/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Pause$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Stop here/ })).toBeNull();
+  });
+
+  it('shows a failed command as a failure, with the reason', async () => {
+    state.status = { ...mission, phase: 'run', running: true };
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /^Pause$/ }));
+    state.commands = [cmdRow({ status: 'FAILED', detail: 'robot unreachable' })];
+    const notice = await screen.findByText('Pause failed: robot unreachable', {}, { timeout: 5000 });
+    expect(notice.closest('.fp-notice')?.className).toMatch(/fp-notice--problem/);
+    expect(screen.queryByText(/sent to the robot/i)).toBeNull();
+    // A failure frees the key to try again.
+    expect(screen.getByRole('button', { name: /^Pause$/ }).getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('says "sent to the robot", not that it worked, once the poller hands it over', async () => {
+    state.status = { ...mission, phase: 'run', running: true };
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /^Pause$/ }));
+    state.commands = [cmdRow({ status: 'OK', detail: 'accepted by broker' })];
+    const notice = await screen.findByText(/Pause: sent to the robot\. The status above shows when it acts\./, {}, { timeout: 5000 });
+    expect(notice.closest('.fp-notice')?.className).toMatch(/fp-notice--ok/);
+  });
+
+  it('holds the same key while the command is on its way, but not the others', async () => {
+    state.status = { ...mission, phase: 'run', running: true };
+    state.commands = [];
+    renderPage();
+    const pause = await screen.findByRole('button', { name: /^Pause$/ });
+    fireEvent.click(pause);
+    state.commands = [cmdRow({ status: 'SENT' })];
+    await waitFor(() => expect(pause.getAttribute('aria-busy')).toBe('true'));
+    expect(screen.getByText('Sending to the robot…')).toBeTruthy();
+    fireEvent.click(pause);
+    fireEvent.click(pause);
+    expect(roombaApi.sendRoombaCommand).toHaveBeenCalledTimes(1);
+    const find = screen.getByRole('button', { name: /Find it/ });
+    await waitFor(() => expect((find as HTMLButtonElement).disabled).toBe(false));
+    expect(find.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('re-reads the status right away and again about 10 s and 25 s after a command', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      state.status = { ...mission, phase: 'run', running: true };
+      renderPage();
+      const pause = await screen.findByRole('button', { name: /^Pause$/ });
+      const status = vi.mocked(roombaApi.fetchRoombaStatus);
+      const before = status.mock.calls.length;
+      fireEvent.click(pause);
+      await waitFor(() => expect(status.mock.calls.length).toBe(before + 1));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await waitFor(() => expect(status.mock.calls.length).toBe(before + 2));
+      await vi.advanceTimersByTimeAsync(15_000);
+      await waitFor(() => expect(status.mock.calls.length).toBe(before + 3));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

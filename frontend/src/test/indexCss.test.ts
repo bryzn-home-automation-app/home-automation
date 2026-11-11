@@ -14,7 +14,7 @@ import { compile } from 'tailwindcss';
  * comment terminator, which ended the comment early. Tailwind read the leftover
  * text (it began with "--") as a custom property running to the end of the file,
  * and the first !important further down truncated it. Every rule after that
- * point (the Light Ocean palette, pb-safe, all @keyframes, the pixel-scene
+ * point (the Light Ocean finish, pb-safe, all @keyframes, the pixel-scene
  * animations) was missing from production CSS while the build stayed green.
  */
 
@@ -149,12 +149,12 @@ describe('index.css compiles completely', () => {
     expect(preludes).toContain('.roomba-roomhit:hover > polygon');
   });
 
-  it('keeps every palette block, including Light Ocean', () => {
-    for (const theme of ['light', 'dark']) {
-      for (const palette of ['ocean', 'sunset', 'violet']) {
-        expect(preludes).toContain(`[data-theme="${theme}"][data-palette="${palette}"]`);
-      }
-    }
+  it('keeps the rules that follow the old palette section (where the 2026 truncation began)', () => {
+    // The finish blocks became the app colour (inline tokens from utils/appColour.ts); what came
+    // after them in the file must still all be there.
+    expect(preludes).toContain('.theme-switching *, .theme-switching *::before, .theme-switching *::after');
+    expect(preludes).toContain('.app-wheel-handle:focus-visible::before');
+    expect(css).toMatch(/--appradius-panel:\s*12px/);
   });
 
   it('emits the Roomba halo keyframes and the Tailwind animate-* ones', () => {

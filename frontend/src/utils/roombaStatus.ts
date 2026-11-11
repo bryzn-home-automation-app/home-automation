@@ -56,12 +56,17 @@ export function roombaState(s: RoombaStatusInput | null | undefined, now: Date |
   }
   const st = roombaPhaseStatus(s);
   const cleaning = s.running && phase !== 'evac';
+  // A clean is under way (the controls lead with Pause, not Clean) through every leg of it:
+  // cleaning, the dock emptying the bin mid-clean, heading back mid-clean (hmMidMsn) and
+  // recharging to finish. A stand-alone bin empty (cycle "evac", or no cycle) isn't a mission.
+  const missionCycle = cycleOn && s.cycle !== 'evac' && s.cycle !== 'dock';
+  const emptyingMidClean = phase === 'evac' && missionCycle;
   const homing = phase === 'hmmidmsn';
   return {
     label: st.label,
     tone: st.tone,
     cleaning,
-    inMission: s.running || recharging || paused || homing,
+    inMission: cleaning || phase === 'run' || emptyingMidClean || recharging || paused || homing,
     offline: false,
     paused,
     lastSeen: null,
@@ -293,11 +298,12 @@ export function commandLabel(command: string | null | undefined): string {
 const COMMAND_STATE: Record<string, { tone: Tone; label: string }> = {
   PENDING: { tone: 'neutral', label: 'Queued' },
   SENT: { tone: 'info', label: 'Sending' },
-  OK: { tone: 'ok', label: 'Accepted' },
+  // OK is the backend's "accepted by broker": the command reached the robot, not proof it acted.
+  OK: { tone: 'ok', label: 'Sent to the robot' },
   FAILED: { tone: 'problem', label: 'Failed' },
 };
 
-/** A command's progress: Queued → Sending → Accepted (the robot took it) or Failed. */
+/** A command's progress: Queued → Sending → Sent to the robot (not proof it acted) or Failed. */
 export function commandState(status: string | null | undefined): { tone: Tone; label: string } {
   if (!status) return { tone: 'neutral', label: '' };
   return COMMAND_STATE[status.toUpperCase()] ?? { tone: 'neutral', label: humanize(status) };

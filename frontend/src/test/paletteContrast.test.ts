@@ -3,13 +3,16 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CHART_SERIES, DATA_SERIES, KPI_TONES } from '../context/ThemeContext';
+import { APP_COLOUR_TOKENS } from '../utils/appColour';
 
 /*
  * WCAG contrast guard for the theme tokens in index.css. Light mode used to map
  * the dark-tuned pastel classes (text-amber-300, …) to 500/600 shades that
  * measured 1.2-3.8:1 on white; this keeps the semantic text/fill/chart tokens
  * from drifting back under the minimums (4.5:1 text, 3:1 chart marks) on the
- * Faceplate surfaces (enamel, panel, wells) in both themes and every finish.
+ * Faceplate surfaces (enamel, panel, wells) in both themes. This file checks the
+ * stylesheet (Enamel); appColour.test.ts checks the same rules on every surface an
+ * app colour generates.
  */
 
 const css = readFileSync(fileURLToPath(new URL('../index.css', import.meta.url)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
@@ -25,16 +28,15 @@ function block(selector: string): Record<string, string> {
 
 const THEMES = ['dark', 'light'] as const;
 type Theme = (typeof THEMES)[number];
-const PALETTES = ['default', 'ocean', 'sunset', 'violet'];
+const PALETTES = ['default'];
 
 // :root carries the light theme, so dark is the light block with the dark block on top.
 const LIGHT = block(':root, [data-theme="light"]');
 const BASE: Record<Theme, Record<string, string>> = { light: LIGHT, dark: { ...LIGHT, ...block('[data-theme="dark"]') } };
-const finish = (theme: Theme, palette: string) => (palette === 'default' ? {} : block(`[data-theme="${theme}"][data-palette="${palette}"]`));
 
-/** Every token for a theme + finish, with var() aliases resolved. */
-function tokens(theme: Theme, palette = 'default'): Record<string, string> {
-  const raw = { ...BASE[theme], ...finish(theme, palette) };
+/** Every token for a theme, with var() aliases resolved. */
+function tokens(theme: Theme, _palette = 'default'): Record<string, string> {
+  const raw = { ...BASE[theme] };
   const resolve = (v: string, depth = 0): string => {
     expect(depth, `alias loop in ${v}`).toBeLessThan(10);
     return v.replace(/var\((--[a-z0-9-]+)\)/g, (_, name: string) => {
@@ -137,18 +139,23 @@ describe('theme token contrast (WCAG 2.2)', () => {
   });
 });
 
-describe('palettes are finishes', () => {
-  // A finish may tint the surfaces and the hairlines drawn on them, nothing else:
-  // never ink, status, lamps or chart colours.
-  const SURFACE_ONLY = new Set([
-    '--appbg', '--appsurface', '--appsurface-raised', '--appinset', '--appinset-strong', '--appkey', '--appkey-hover',
+describe('the app colour changes surfaces and selection only', () => {
+  // An app colour may tint the surfaces and the hairlines drawn on them and colour the
+  // selection (accent, focus), nothing else: never ink, status text, lit lamps or chart
+  // colours, so status reads the same in every colour.
+  const ALLOWED = new Set([
+    '--appbg', '--appsurface', '--appinset', '--appinset-strong', '--appkey', '--appkey-hover', '--approw-hover',
     '--appmap-floor', '--applamp-off', '--appborder', '--appborder-light', '--appborder-strong',
+    '--appaccent', '--appaccent-fg', '--appaccent-soft', '--appaccent-border', '--appfocus',
   ]);
 
-  it.each(CASES.filter(([, p]) => p !== 'default'))('%s/%s tints surfaces only', (th, p) => {
-    const declared = Object.keys(finish(th, p));
-    expect(declared.length).toBeGreaterThan(0);
-    for (const name of declared) expect(SURFACE_ONLY.has(name), `${name} in ${th}/${p}`).toBe(true);
+  it('sets only surface, hairline and selection tokens', () => {
+    expect(APP_COLOUR_TOKENS.length).toBeGreaterThan(0);
+    for (const name of APP_COLOUR_TOKENS) expect(ALLOWED.has(name), name).toBe(true);
+  });
+
+  it('left no finish blocks behind in the stylesheet', () => {
+    expect(css).not.toMatch(/data-palette/);
   });
 
   it('the JS chart colours are the same for every palette', () => {

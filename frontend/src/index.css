@@ -115,8 +115,8 @@
   --color-appfocus:           var(--appfocus);
 
   /* ── Accent & status ──
-     Faceplate has no accent colour: the accent tokens are ink, so every old
-     "accent" fill becomes the ink-on-enamel selection. */
+     The accent tokens are the selection: ink in Enamel (so every old "accent" fill
+     is the ink-on-enamel key), the app colour's strong shade when one is chosen. */
   --color-appaccent:          var(--appaccent);
   --color-appaccent-soft:     var(--appaccent-soft);
   --color-appaccent-border:   var(--appaccent-border);
@@ -239,8 +239,9 @@
    Light theme (the default): a matte enamel faceplate.
    Page = enamel, cards = flat panels with a hairline, recessed
    readouts / inputs / tracks = wells, text = ink and graphite.
-   No accent colour: selection is ink-on-enamel inversion; hue is
-   only for status lamps and chart data.
+   Selection is ink-on-enamel inversion (--appaccent, ink here);
+   an app colour (below) gives it the colour's strong shade. Hue is
+   otherwise only for status lamps and chart data.
    :root carries it too, so the page is light before (or without)
    a data-theme attribute.
    ═══════════════════════════════════════════════════════════════ */
@@ -269,9 +270,9 @@
   --apptext-dim:        #52595e;
   --appink-faint:       #8a9196;   /* ticks and disabled marks only, never text */
 
-  /* Status text: >= 4.5:1 on every surface and well of every finish, and inside a
-     10% tint of its own hue (a badge). The brief's lamp-text hexes, each darkened
-     just enough to hold that on the tinted finishes' wells. */
+  /* Status text: >= 4.5:1 on every surface and well (Enamel and every app colour),
+     and inside a 10% tint of its own hue (a badge). The brief's lamp-text hexes, each
+     darkened just enough to hold that on tinted wells. */
   --apptext-success:    #0e6637;
   --apptext-warning:    #794f00;
   --apptext-danger:     #aa241d;
@@ -283,8 +284,9 @@
   --appborder-hover:    var(--appborder-strong);
   --appfocus:           var(--apptext);
 
-  /* Accent = ink. A solid accent fill is the ink key with panel-coloured text;
-     the soft accent is a neutral wash with a strong hairline. */
+  /* Accent = ink in Enamel. A solid accent fill is the ink key with panel-coloured
+     text; the soft accent is a neutral wash with a strong hairline. An app colour
+     replaces all five with its own shade (utils/appColour.ts). */
   --appaccent:          var(--apptext);
   --appaccent-soft:     rgba(21, 24, 26, 0.08);
   --appaccent-border:   rgba(21, 24, 26, 0.34);
@@ -389,7 +391,7 @@
    violet, whose 700 already clears 4.5:1 on the darkest well), so text, the 10%
    tint behind it and the border all stay one recognisable hue. The four status hues route through the
    semantic --apptext-* tokens so there is one place to tune. paletteContrast.test
-   checks every step on the enamel, panel and wells of every finish.
+   checks every step on the enamel, panel and wells; appColour.test on every app colour.
    100 is left alone on purpose: it is only used as text on top of solid
    -400/-600 gradient fills (UserManagement role rail), where a dark 100 would
    vanish. Kept until the last old page is converted. */
@@ -535,107 +537,18 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Palettes are enamel FINISHES. A finish tints the page, panels,
-   wells, keys and hairlines only. Ink, lamps, status text and chart
-   colours never change, so status reads the same in every finish
-   and a user never has to relearn what colour means a problem.
-   Applied via a `data-palette` attribute alongside `data-theme`
-   (ThemeContext, and the start-up script in index.html), e.g.
-   [data-theme="light"][data-palette="ocean"]. No block is needed
-   for "default": the theme blocks above already are the default.
-   ids stay ocean / sunset / violet (saved on people's phones);
-   the names people see are Sea glass / Sandstone / Lilac.
+   The app colour. The two theme blocks above are Enamel, the
+   neutral faceplate. A colour chosen in Profile > Appearance is
+   turned (utils/appColour.ts) into the surface family (page,
+   panel, wells, keys, hairlines, row hover, unlit lamp, map floor)
+   and the selection colour (--appaccent / -fg / -soft / -border,
+   --appfocus) for the theme showing, and ThemeContext sets those
+   as inline custom properties on <html>, which beat these blocks.
+   The start-up script in index.html paints a cached copy before
+   the first frame. Ink, status text, lamps, chart colours, the
+   white plate and the media scrims are never generated, so status
+   reads the same in every colour. A grey gives exactly Enamel.
    ═══════════════════════════════════════════════════════════════ */
-
-/* ── Light: Sea glass ── */
-[data-theme="light"][data-palette="ocean"] {
-  --appbg:              #e5eaee;
-  --appsurface:         #f6f8fa;
-  --appinset:           #dae2e8;
-  --appinset-strong:    #cdd7df;
-  --appkey:             #fcfdfe;
-  --appkey-hover:       #eff3f6;
-  --appmap-floor:       #eef2f5;
-  --applamp-off:        #c5ced5;
-  --appborder:          rgba(20, 38, 54, 0.15);
-  --appborder-light:    rgba(20, 38, 54, 0.08);
-  --appborder-strong:   rgba(20, 38, 54, 0.27);
-}
-
-/* ── Light: Sandstone ── */
-[data-theme="light"][data-palette="sunset"] {
-  --appbg:              #ede9e3;
-  --appsurface:         #faf8f5;
-  --appinset:           #e4ded6;
-  --appinset-strong:    #d8d1c7;
-  --appkey:             #fefdfb;
-  --appkey-hover:       #f4f1ec;
-  --appmap-floor:       #f4f1ec;
-  --applamp-off:        #d3cbc0;
-  --appborder:          rgba(46, 32, 18, 0.15);
-  --appborder-light:    rgba(46, 32, 18, 0.08);
-  --appborder-strong:   rgba(46, 32, 18, 0.27);
-}
-
-/* ── Light: Lilac ── */
-[data-theme="light"][data-palette="violet"] {
-  --appbg:              #e9e7ee;
-  --appsurface:         #f8f7fa;
-  --appinset:           #dfdce6;
-  --appinset-strong:    #d3cfdc;
-  --appkey:             #fdfdfe;
-  --appkey-hover:       #f2f0f5;
-  --appmap-floor:       #f1eff5;
-  --applamp-off:        #cdc8d6;
-  --appborder:          rgba(34, 26, 54, 0.15);
-  --appborder-light:    rgba(34, 26, 54, 0.08);
-  --appborder-strong:   rgba(34, 26, 54, 0.27);
-}
-
-/* ── Dark: Sea glass ── */
-[data-theme="dark"][data-palette="ocean"] {
-  --appbg:              #10151a;
-  --appsurface:         #192026;
-  --appinset:           #0a0e12;
-  --appinset-strong:    #05080a;
-  --appkey:             #232c33;
-  --appkey-hover:       #2b353d;
-  --appmap-floor:       #141a1f;
-  --applamp-off:        #303a42;
-  --appborder:          rgba(224, 236, 246, 0.13);
-  --appborder-light:    rgba(224, 236, 246, 0.07);
-  --appborder-strong:   rgba(224, 236, 246, 0.24);
-}
-
-/* ── Dark: Sandstone ── */
-[data-theme="dark"][data-palette="sunset"] {
-  --appbg:              #16130f;
-  --appsurface:         #211d19;
-  --appinset:           #0f0c0a;
-  --appinset-strong:    #080605;
-  --appkey:             #2d2823;
-  --appkey-hover:       #36302a;
-  --appmap-floor:       #1b1714;
-  --applamp-off:        #3d362f;
-  --appborder:          rgba(246, 236, 224, 0.13);
-  --appborder-light:    rgba(246, 236, 224, 0.07);
-  --appborder-strong:   rgba(246, 236, 224, 0.24);
-}
-
-/* ── Dark: Lilac ── */
-[data-theme="dark"][data-palette="violet"] {
-  --appbg:              #131219;
-  --appsurface:         #1c1b23;
-  --appinset:           #0d0c12;
-  --appinset-strong:    #07060a;
-  --appkey:             #282631;
-  --appkey-hover:       #302e3a;
-  --appmap-floor:       #17161d;
-  --applamp-off:        #36333f;
-  --appborder:          rgba(236, 230, 248, 0.13);
-  --appborder-light:    rgba(236, 230, 248, 0.07);
-  --appborder-strong:   rgba(236, 230, 248, 0.24);
-}
 
 /* ═══════════════════════════════════════════════════════════════
    Theme-independent scale: type, radii, sizes, motion
@@ -679,7 +592,7 @@
   --appstrip-h-phone: 52px;
   --appkeycol-w:     96px;
   --appkeyrow-h:     64px;
-  --appcontent-max:  1240px;
+  --appcontent-max:  none;     /* desktop pages use the full width beside the key column */
   --appgutter:       16px;
   --apppanel-pad:    16px;
   --appgap:          12px;   /* space between panels on a page */
@@ -695,11 +608,6 @@
   /* a person with no colour of their own */
   --appavatar-default: #94a3b8;
 
-  /* finish swatches shown on the Profile palette keys (same in both themes) */
-  --appfinish-default: #c9cfcb;
-  --appfinish-ocean:   #b7c7d4;
-  --appfinish-sunset:  #d8c6b0;
-  --appfinish-violet:  #c8c1d8;
 }
 
 @media (width >= 40rem) {
@@ -732,7 +640,8 @@ body {
 }
 
 @layer base {
-  /* Focus is visible by default: an ink outline (light ink in dark). A utility on
+  /* Focus is visible by default: an ink outline (light ink in dark; the app
+     colour's selection shade when one is chosen). A utility on
      the element (focus:outline-none + a ring) still wins over this. */
   :focus-visible {
     outline: 2px solid var(--appfocus);
@@ -740,7 +649,7 @@ body {
   }
 
   ::selection {
-    background: var(--apptext);
+    background: var(--appaccent);
     color: var(--appaccent-fg);
   }
 }
@@ -777,7 +686,7 @@ body {
   }
 }
 
-/* While a theme/palette swap is in flight (class toggled by ThemeProvider),
+/* While a theme or app-colour swap is in flight (class toggled by ThemeProvider),
    kill all transitions so the page repaints once instead of animating every
    card's `transition-colors` for 300ms simultaneously. */
 .theme-switching *,
@@ -820,6 +729,64 @@ body {
 .roomba-roomhit-editable:hover > polygon {
   fill: var(--appaccent);
   fill-opacity: 0.18;
+}
+
+/* ── The app colour wheel (components/ui/ColourWheel.tsx) ──
+   A hue ring (conic gradient, red at the top, clockwise like the hue angle) around
+   a saturation/brightness square. Each handle is a 44px slider with a 24px puck
+   drawn in the colour it holds, ringed white and dark so it shows on any hue.
+   touch-action: none keeps a drag on the wheel from scrolling the page. */
+.app-wheel {
+  position: relative;
+  width: 16rem;
+  max-width: 100%;
+  aspect-ratio: 1;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.app-wheel-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(#ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--wheel-ring) - 0.5px), #000 calc(100% - var(--wheel-ring) + 0.5px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - var(--wheel-ring) - 0.5px), #000 calc(100% - var(--wheel-ring) + 0.5px));
+  cursor: crosshair;
+}
+.app-wheel-square {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc((50% - var(--wheel-ring)) * 1.4142 - 16px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 6px;
+  background: linear-gradient(to top, #000000, transparent), linear-gradient(to right, #ffffff, var(--wheel-hue));
+  box-shadow: inset 0 0 0 1px var(--appborder);
+  cursor: crosshair;
+}
+.app-wheel-handle {
+  position: absolute;
+  width: var(--apptap);
+  height: var(--apptap);
+  margin: calc(var(--apptap) / -2) 0 0 calc(var(--apptap) / -2);
+  border-radius: 50%;
+  outline: none;
+  cursor: grab;
+}
+.app-wheel-handle::before {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  background: var(--wheel-swatch);
+  border: 3px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.app-wheel-handle:focus-visible::before {
+  inset: 8px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 0 3px #ffffff, 0 0 0 5px #15181a;
 }
 
 #root {

@@ -50,6 +50,27 @@ describe('roombaState', () => {
     expect(s.cleaning).toBe(false);
   });
 
+  it('counts every leg of a clean as a mission, so the controls lead with Pause (evac, heading back, recharging)', () => {
+    const legs = [
+      { phase: 'evac', cycle: 'clean', running: true },
+      { phase: 'evac', cycle: 'quick', running: true },
+      { phase: 'hmMidMsn', cycle: 'clean', running: false },
+      { phase: 'charge', cycle: 'clean', running: false },
+      { phase: 'run', cycle: 'spot', running: true },
+    ];
+    for (const leg of legs) {
+      const s = roombaState({ ...base, ...leg }, NOW);
+      expect(s, leg.phase).toMatchObject({ inMission: true, paused: false });
+    }
+  });
+
+  it("doesn't call a stand-alone bin empty or an idle dock a mission", () => {
+    expect(roombaState({ ...base, phase: 'evac', cycle: 'evac', running: true }, NOW).inMission).toBe(false);
+    expect(roombaState({ ...base, phase: 'evac', cycle: 'none', running: true }, NOW).inMission).toBe(false);
+    expect(roombaState({ ...base, phase: 'hmPostMsn', cycle: 'none' }, NOW).inMission).toBe(false);
+    expect(roombaState({ ...base, phase: 'stop', cycle: 'none' }, NOW)).toMatchObject({ inMission: false, paused: false });
+  });
+
   it('cleans, pauses and docks', () => {
     expect(roombaState({ ...base, phase: 'run', cycle: 'clean', running: true }, NOW)).toMatchObject({ label: 'Cleaning', cleaning: true, inMission: true });
     expect(roombaState({ ...base, phase: 'stop', cycle: 'clean' }, NOW)).toMatchObject({ label: 'Paused', paused: true, inMission: true });
@@ -106,12 +127,16 @@ describe('robot words', () => {
     expect(commandLabel('clean_rooms')).toBe('Clean rooms');
     expect(commandLabel('dock')).toBe('Send home');
     expect(commandState('PENDING').label).toBe('Queued');
-    expect(commandState('OK').label).toBe('Accepted');
+    // OK is "accepted by broker": it reached the robot, which isn't proof it acted.
+    expect(commandState('OK').label).toBe('Sent to the robot');
+    expect(commandState('FAILED')).toEqual({ tone: 'problem', label: 'Failed' });
   });
 
   it('writes the last command with its state and when', () => {
     const line = lastCommandLine({ command: 'clean_rooms', status: 'OK', createdAt: '2026-11-09T16:39:00Z', processedAt: '2026-11-09T16:40:10Z' }, NOW);
-    expect(line).toBe('Clean rooms · accepted 2 min ago');
+    expect(line).toBe('Clean rooms · sent to the robot 2 min ago');
+    const failed = lastCommandLine({ command: 'pause', status: 'FAILED', detail: 'robot unreachable', createdAt: '2026-11-09T16:39:00Z', processedAt: '2026-11-09T16:40:10Z' }, NOW);
+    expect(failed).toBe('Pause · failed 2 min ago: robot unreachable');
   });
 });
 

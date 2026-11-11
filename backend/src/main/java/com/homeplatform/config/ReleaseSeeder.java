@@ -37,6 +37,14 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("2.1.0", "stable", LocalDate.of(2026, 11, 10),
+                    "Pick your own colour",
+                    "Choose any colour for the app, see both cameras' batteries on one chart, and get clearer Roomba controls.",
+                    List.of(
+                            change("new", "Profile, Appearance has a colour wheel. Pick any colour or type its code, and the whole app takes it on."),
+                            change("improved", "Cameras: every battery camera is on one chart, so you can compare how they charge."),
+                            change("improved", "On a computer, pages now use the full width of the window."),
+                            change("fixed", "Roomba: Pause is offered for the whole clean, and each command now says whether it was sent or failed."))),
             define("2.0.0", "stable", LocalDate.of(2026, 11, 10),
                     "A new look",
                     "Every tab except Maintenance has a new design: one dial, a plain answer and a few numbers at the top of each page.",

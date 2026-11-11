@@ -1,7 +1,7 @@
 import { Suspense, lazy, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import CameraTile from '../components/CameraTile';
-import CameraBatteryChart, { type BatteryRange } from '../components/CameraBatteryChart';
+import CameraBatteryChart, { type BatteryRange, type BatteryTrackInput } from '../components/CameraBatteryChart';
 import { fetchCameraBattery, fetchCameras } from '../api/cameras';
 import { discoverHomeDevices, errorMessage, errorStatus } from '../api/climate';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
@@ -103,7 +103,8 @@ export default memo(function Cameras() {
   const queryClient = useQueryClient();
   const pageVisible = usePageVisible();
   const { idle, wake } = useIdle(IDLE_STOP_MS);
-  const [ranges, setRanges] = useState<Record<string, BatteryRange>>({});
+  // One range for the battery chart: every battery camera is drawn on it together.
+  const [batteryRange, setBatteryRange] = useState<BatteryRange>(24);
 
   // Live / Recordings lives in the URL (?view=recordings: a reload, Back or the sleep screen
   // come back to it). A visit without one still opens on the view used last.
@@ -154,18 +155,26 @@ export default memo(function Cameras() {
     [batteryCameras],
   );
   const battery = useQueries({
-    queries: batteryCameras.map((c) => {
-      const range = ranges[c.id] ?? 24;
-      return {
-        queryKey: ['camera-battery', c.id, range],
-        queryFn: () => fetchCameraBattery(c.id, range),
-        staleTime: 60_000,
-        refetchInterval: batteryInterval,
-        refetchIntervalInBackground: false,
-      };
-    }),
+    queries: batteryCameras.map((c) => ({
+      queryKey: ['camera-battery', c.id, batteryRange],
+      queryFn: () => fetchCameraBattery(c.id, batteryRange),
+      staleTime: 60_000,
+      refetchInterval: batteryInterval,
+      refetchIntervalInBackground: false,
+    })),
     combine: combineBattery,
   });
+  const batteryTracks = useMemo<BatteryTrackInput[]>(
+    () =>
+      batteryCameras.map((c) => ({
+        camera: c,
+        history: battery[c.id]?.data,
+        loading: !!battery[c.id]?.loading,
+        failed: !!battery[c.id]?.failed,
+        refetch: () => battery[c.id]?.refetch(),
+      })),
+    [batteryCameras, battery],
+  );
 
   const discover = useMutation({
     mutationFn: discoverHomeDevices,
@@ -321,23 +330,11 @@ export default memo(function Cameras() {
                   )}
 
                   {batteryCameras.length > 0 && (
-                    <Panel title="Battery and solar" subtitle="How each battery camera is holding up">
-                      <div className="fp-stack fp-stack--l">
-                        {batteryCameras.map((c, i) => (
-                          <div key={c.id} className={i > 0 ? 'border-t border-appborder pt-6' : undefined}>
-                            <CameraBatteryChart
-                              camera={c}
-                              history={battery[c.id]?.data}
-                              loading={!!battery[c.id]?.loading}
-                              failed={!!battery[c.id]?.failed}
-                              onRetry={() => battery[c.id]?.refetch()}
-                              range={ranges[c.id] ?? 24}
-                              onRangeChange={(r) => setRanges((prev) => ({ ...prev, [c.id]: r }))}
-                              charge={chargeState(c, battery[c.id]?.data?.readings)}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                    <Panel
+                      title="Battery and solar"
+                      subtitle={batteryCameras.length > 1 ? 'Every battery camera on one chart, to compare their charging' : 'How the battery camera is holding up'}
+                    >
+                      <CameraBatteryChart tracks={batteryTracks} range={batteryRange} onRangeChange={setBatteryRange} />
                     </Panel>
                   )}
 

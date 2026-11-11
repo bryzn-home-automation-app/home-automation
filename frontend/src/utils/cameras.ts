@@ -187,6 +187,67 @@ export function batterySeries(readings: CameraBatteryReading[]): BatteryPoint[] 
   return pts.filter((p) => Number.isFinite(p.t));
 }
 
+/**
+ * A row of the combined battery chart: the time, then for each camera track `i` its level
+ * (`v{i}`, continuous across the whole of that camera's readings) and its level again on
+ * charging stretches only (`c{i}`, null elsewhere; boundary points carry both, so a charging
+ * stretch starts and ends on the line). Null outside the camera's own readings.
+ */
+export type CombinedBatteryRow = { t: number } & Record<string, number | null>;
+
+/** The data keys of track `i` in a CombinedBatteryRow. */
+export const levelKey = (i: number) => `v${i}`;
+export const chargeKey = (i: number) => `c${i}`;
+
+/**
+ * Several cameras' readings on one time axis, for one chart with a line per camera. Rows are
+ * the union of every camera's reading times; a camera with no reading at a row's time gets
+ * the value on its straight line between its neighbouring readings, so its line and its
+ * charging stretches have no holes where another camera reported. A stretch from reading
+ * i-1 to i is charging when the camera said so at i, or, when it doesn't say, when the level rose
+ * (the same rule as batterySeries).
+ */
+export function combinedBatterySeries(tracks: CameraBatteryReading[][]): CombinedBatteryRow[] {
+  const clean = tracks.map((readings) =>
+    readings
+      .map((r) => ({ t: toInstant(r.at) ?? NaN, p: r.percent, charging: r.charging }))
+      .filter((r) => Number.isFinite(r.t) && Number.isFinite(r.p))
+      .sort((a, b) => a.t - b.t),
+  );
+  // charging[i] = the stretch ending at reading i is a charge (index 0 unused).
+  const charging = clean.map((rs) => rs.map((r, i) => i > 0 && (r.charging ?? r.p > rs[i - 1].p)));
+  const times = [...new Set(clean.flatMap((rs) => rs.map((r) => r.t)))].sort((a, b) => a - b);
+  const cursor = clean.map(() => 0);
+  return times.map((t) => {
+    const row: CombinedBatteryRow = { t };
+    clean.forEach((rs, k) => {
+      const v = levelKey(k);
+      const c = chargeKey(k);
+      row[v] = null;
+      row[c] = null;
+      if (!rs.length || t < rs[0].t || t > rs[rs.length - 1].t) return;
+      // Advance to the first reading at or after t (rows and readings are both sorted).
+      while (cursor[k] < rs.length - 1 && rs[cursor[k]].t < t) cursor[k]++;
+      const j = cursor[k];
+      if (rs[j].t === t) {
+        // The last reading at this time (duplicates collapse onto it).
+        let last = j;
+        while (last + 1 < rs.length && rs[last + 1].t === t) last++;
+        row[v] = rs[last].p;
+        const charged = (j > 0 && charging[k][j]) || (last + 1 < rs.length && charging[k][last + 1]);
+        if (charged) row[c] = rs[last].p;
+        return;
+      }
+      const a = rs[j - 1];
+      const b = rs[j];
+      const value = a.p + ((b.p - a.p) * (t - a.t)) / (b.t - a.t);
+      row[v] = value;
+      if (charging[k][j]) row[c] = value;
+    });
+    return row;
+  });
+}
+
 /** Night = the gaps between daylight windows, within [from, to]. */
 export function nightWindows(
   daylight: Array<{ from: string; to: string }>,

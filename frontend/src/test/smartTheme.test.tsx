@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import { isDaytime, nextSunChange, sunTimes } from '../utils/sun';
 import { ThemeProvider, resolveTheme, useTheme } from '../context/ThemeContext';
+import { deriveAppTokens } from '../utils/appColour';
 
 // Dallas, TX — the home.
 const LAT = 32.78;
@@ -100,7 +101,7 @@ describe('theme choice', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.removeAttribute('data-theme');
-    document.documentElement.removeAttribute('data-palette');
+    document.documentElement.removeAttribute('style');
   });
 
   function Probe() {
@@ -157,10 +158,10 @@ describe('theme choice', () => {
   it('sets the attributes as it mounts and saves the theme it showed for the start-up script', () => {
     device(false);
     localStorage.setItem('theme', 'dark');
-    localStorage.setItem('palette', 'violet');
+    localStorage.setItem('app-colour', '#7b68b5');
     render(<ThemeProvider><Probe /></ThemeProvider>);
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
-    expect(document.documentElement.getAttribute('data-palette')).toBe('violet');
+    expect(document.documentElement.style.getPropertyValue('--appbg')).toBe(deriveAppTokens('#7b68b5', 'dark')['--appbg']);
     expect(localStorage.getItem('theme-resolved')).toBe('dark');
   });
 
@@ -171,14 +172,16 @@ describe('theme choice', () => {
     meta.content = '#e9ecea';
     document.head.appendChild(meta);
     // Stands in for index.css, which tests don't load: the dark enamel.
-    document.documentElement.style.setProperty('--appbg', '#121416');
+    const sheet = document.createElement('style');
+    sheet.textContent = '[data-theme="dark"] { --appbg: #121416; }';
+    document.head.appendChild(sheet);
     try {
       localStorage.setItem('theme', 'dark');
       render(<ThemeProvider><Probe /></ThemeProvider>);
       expect(meta.content).toBe('#121416');
     } finally {
       meta.remove();
-      document.documentElement.style.removeProperty('--appbg');
+      sheet.remove();
     }
   });
 });

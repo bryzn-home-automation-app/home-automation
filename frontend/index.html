@@ -12,15 +12,19 @@
     <meta name="apple-mobile-web-app-title" content="HomeOS" />
     <!-- iOS draws a white clock on this bar; index.css backs it with ink in the light theme. -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <!-- The light enamel; ThemeContext keeps it in step with the theme and finish. -->
+    <!-- The light enamel; ThemeContext keeps it in step with the theme and app colour. -->
     <meta name="theme-color" content="#e9ecea" />
     <!--
-      Paint the saved theme and finish before the first frame. Without this the page
-      drew the stylesheet's default until the JavaScript loaded and only then flipped,
-      so a dark choice flashed light (and, before Faceplate, a light choice flashed
-      navy). Mirrors ThemeContext: same localStorage keys, no choice = light, Auto =
-      the theme it last showed (the sun maths lives in the bundle), Device = the
-      phone's setting. themeBoot.test.ts runs this script against ThemeProvider.
+      Paint the saved theme and app colour before the first frame. Without this the
+      page drew the stylesheet's default until the JavaScript loaded and only then
+      flipped, so a dark choice flashed light (and, before Faceplate, a light choice
+      flashed navy). Mirrors ThemeContext: same localStorage keys, no choice = light,
+      Auto = the theme it last showed (the sun maths lives in the bundle), Device = the
+      phone's setting. The colour maths lives in the bundle too, so ThemeContext saves
+      the derived tokens for both themes ('app-colour-tokens') and this paints them.
+      A finish saved by an older build (no tokens yet) gets its colour's page tone,
+      the only thing on screen before the bundle runs. themeBoot.test.tsx runs this
+      script against ThemeProvider.
     -->
     <script id="theme-boot">
       (function () {
@@ -31,6 +35,12 @@
         function deviceDark() {
           try { return window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) { return false; }
         }
+        function hex(value) {
+          var m = /^\s*#?([0-9a-f]{3}|[0-9a-f]{6})\s*$/i.exec(value || '');
+          if (!m) return null;
+          var s = m[1].toLowerCase();
+          return '#' + (s.length === 3 ? s.charAt(0) + s.charAt(0) + s.charAt(1) + s.charAt(1) + s.charAt(2) + s.charAt(2) : s);
+        }
         var mode = read('theme');
         var last = read('theme-resolved');
         var dark =
@@ -38,16 +48,35 @@
           mode === 'auto' ? (last ? last === 'dark' : deviceDark()) :
           mode === 'system' ? deviceDark() :
           false;
-        var palette = 'default';
-        var keys = ['palette', 'palette-dark', 'palette-light'];
-        for (var i = 0; i < keys.length; i++) {
-          var p = read(keys[i]);
-          if (p === 'ocean' || p === 'sunset' || p === 'violet') { palette = p; break; }
+        var theme = dark ? 'dark' : 'light';
+        root.setAttribute('data-theme', theme);
+        var page = dark ? '#121416' : null;
+        var colour = hex(read('app-colour'));
+        if (colour) {
+          var cached = null;
+          try { cached = JSON.parse(read('app-colour-tokens')); } catch (e) { cached = null; }
+          var tokens = cached && cached.hex === colour ? cached[theme] : null;
+          if (tokens) {
+            for (var name in tokens) {
+              if (name.indexOf('--app') === 0 && typeof tokens[name] === 'string') root.style.setProperty(name, tokens[name]);
+            }
+            page = tokens['--appbg'] || page;
+          }
+        } else {
+          // [light, dark] page tone of each old finish's preset colour (appColour.ts).
+          var legacy = { ocean: ['#d8efff', '#001624'], sunset: ['#ffe7d4', '#220f00'], violet: ['#ede9ff', '#160f29'] };
+          var keys = ['palette', 'palette-dark', 'palette-light'];
+          for (var i = 0; i < keys.length; i++) {
+            var tone = legacy.hasOwnProperty(read(keys[i])) ? legacy[read(keys[i])] : null;
+            if (tone) {
+              page = tone[dark ? 1 : 0];
+              root.style.setProperty('--appbg', page);
+              break;
+            }
+          }
         }
-        root.setAttribute('data-theme', dark ? 'dark' : 'light');
-        root.setAttribute('data-palette', palette);
         var meta = document.querySelector('meta[name="theme-color"]');
-        if (meta && dark) meta.setAttribute('content', '#121416');
+        if (meta && page) meta.setAttribute('content', page);
       })();
     </script>
     <title>HomeOS</title>

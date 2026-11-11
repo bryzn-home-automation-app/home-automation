@@ -1,68 +1,166 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchRoombaCommands, sendRoombaCommand } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
+import type { RoombaCommand } from '../types';
 import { commandLabel, commandState, relativeInSentence, type RoombaState } from '../utils/roombaStatus';
+import { CommandNotice, type QueuedCommand } from './roomba/useQueuedCommand';
 import { Button, ButtonRow, Stack } from './ui';
 
-/** "Clean rooms · accepted 2 min ago" for the last command (B-120: words, not "clean_rooms · OK"). */
-export function lastCommandLine(cmd: { command: string; status: string; createdAt: string; processedAt: string | null }, now?: Date): string {
+/** "Clean rooms · sent to the robot 2 min ago" for the last command (B-120: words, not "clean_rooms · OK"). */
+export function lastCommandLine(cmd: { command: string; status: string; createdAt: string; processedAt: string | null; detail?: string | null }, now?: Date): string {
   const word = commandState(cmd.status).label.toLowerCase();
   const when = relativeInSentence(cmd.processedAt ?? cmd.createdAt, now);
-  return `${commandLabel(cmd.command)} · ${word} ${when}`;
+  const why = cmd.status === 'FAILED' && cmd.detail ? `: ${cmd.detail}` : '';
+  return `${commandLabel(cmd.command)} · ${word} ${when}${why}`;
 }
+
+/** The status query the Roomba page reads (pages/Roomba.tsx); re-read after a command lands. */
+export const ROOMBA_STATUS_KEY = ['roomba-status'] as const;
+/** Re-read the status right away, then at these delays: the robot takes a few seconds to act. */
+export const STATUS_REFETCH_DELAYS_MS = [10_000, 25_000] as const;
+/** How long a sent command holds its key if the status hasn't moved. */
+export const COMMAND_SETTLE_MS = 30_000;
+
+const isTerminal = (s: string | null | undefined) => s === 'OK' || s === 'FAILED';
+
+/** The command sent from these keys and what the robot looked like when it was sent. */
+interface Sent {
+  seq: number;
+  command: string;
+  id: number | null;
+  /** The robot's state when the key was pressed; a change means the robot reacted. */
+  stateKey: string;
+  /** COMMAND_SETTLE_MS passed without the status moving. */
+  expired: boolean;
+}
+
+const stateKeyOf = (s: RoombaState) => `${s.label}|${s.paused}|${s.inMission}|${s.offline}`;
 
 /**
  * ADMIN-only keys under the verdict. Commands are queued server-side and the poller sends them;
  * Clean opens the clean dialog (scope and options) rather than firing a bare start. The key that
- * leads changes with what the robot is doing: Clean when it's free, Pause while it cleans,
- * Resume while it's paused. Send home, Stop and Find are always there.
+ * leads changes with what the robot is doing: Clean when no clean is under way, Pause through the
+ * whole mission (cleaning, emptying the bin, heading back or recharging to finish), Resume while
+ * it's paused. Send home, Stop and Find are always there.
+ *
+ * A pressed key reports its command's progress (Sending → Sent to the robot / Failed) and holds
+ * that same key until the status moves or COMMAND_SETTLE_MS passes, so it can't be sent twice.
+ * "Sent to the robot" (the backend's OK, "accepted by broker") is not proof it acted; the status
+ * line above confirms that, so it is re-read right away and twice more.
  */
 export default function RoombaControls({ state, onClean }: { state: RoombaState; onClean: () => void }) {
   const qc = useQueryClient();
-  const [note, setNote] = useState<string | null>(null);
   const commandsInterval = useJitteredInterval(8000);
+  const [sent, setSent] = useState<Sent | null>(null);
+  const seqRef = useRef(0);
+  const timersRef = useRef<number[]>([]);
+  const settleTimerRef = useRef<number | null>(null);
+
+  useEffect(() => () => {
+    timersRef.current.forEach((t) => window.clearTimeout(t));
+    if (settleTimerRef.current != null) window.clearTimeout(settleTimerRef.current);
+  }, []);
 
   const commandsQuery = useQuery({
     queryKey: ['roomba', 'commands'],
     queryFn: fetchRoombaCommands,
-    refetchInterval: commandsInterval,
+    // Quick while the command just sent is on its way, the usual cadence otherwise.
+    refetchInterval: (query) => {
+      if (sent?.id == null) return commandsInterval;
+      const row = (query.state.data ?? []).find((c) => c.id === sent.id);
+      return isTerminal(row?.status) ? commandsInterval : 2500;
+    },
     refetchIntervalInBackground: false,
   });
 
+  const refetchStatus = () => qc.invalidateQueries({ queryKey: ROOMBA_STATUS_KEY });
+
   const mutation = useMutation({
     mutationFn: (command: string) => sendRoombaCommand(command),
-    onSuccess: (cmd) => {
-      // Queued is what this means: the poller picks it up on its next tick (B-120).
-      setNote(`${commandLabel(cmd.command)}: queued. The robot picks it up within a few seconds.`);
+    onSuccess: (row: RoombaCommand, command: string) => {
+      setSent((s) => (s && s.command === command && s.id == null ? { ...s, id: row.id } : s));
       qc.invalidateQueries({ queryKey: ['roomba', 'commands'] });
+      refetchStatus();
+      for (const ms of STATUS_REFETCH_DELAYS_MS) timersRef.current.push(window.setTimeout(refetchStatus, ms));
     },
-    onError: () => setNote("Couldn't queue the command. Try again."),
   });
 
-  const last = (commandsQuery.data ?? [])[0];
-  const disabled = mutation.isPending || state.offline;
-  const send = (command: string) => mutation.mutate(command);
+  const send = (command: string) => {
+    const seq = ++seqRef.current;
+    setSent({ seq, command, id: null, stateKey: stateKeyOf(state), expired: false });
+    if (settleTimerRef.current != null) window.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = window.setTimeout(
+      () => setSent((s) => (s && s.seq === seq ? { ...s, expired: true } : s)),
+      COMMAND_SETTLE_MS,
+    );
+    mutation.mutate(command);
+  };
+
+  const commands = commandsQuery.data ?? [];
+  const last = commands[0];
+  const row = sent?.id != null ? commands.find((c) => c.id === sent.id) ?? null : null;
+  const sendFailed = sent != null && mutation.isError;
+  const status = sent == null || sendFailed ? null : row?.status ?? 'PENDING';
+  const stateMoved = sent != null && stateKeyOf(state) !== sent.stateKey;
+  // Sent to the robot and then the status moved (or time ran out): back to the last-command line.
+  const okSettled = status === 'OK' && (sent?.expired || stateMoved);
+  // The same key waits: in flight, or sent and the robot hasn't visibly reacted yet.
+  const waiting = sent != null && !sendFailed && status !== 'FAILED' && !sent.expired && !(status === 'OK' && stateMoved);
+  const inFlight = mutation.isPending || (status != null && !isTerminal(status));
+
+  const queued: QueuedCommand = {
+    send: () => {},
+    status,
+    detail: row?.detail ?? null,
+    submitting: inFlight,
+    done: status === 'OK',
+    sendFailed,
+  };
+  const label = commandLabel(sent?.command);
+
+  const keyProps = (command: string) => {
+    const busy = waiting && sent?.command === command;
+    return {
+      disabled: state.offline || (mutation.isPending && !busy),
+      busy,
+      busyLabel: inFlight ? 'Sending…' : 'Waiting for the robot…',
+      onClick: () => send(command),
+    };
+  };
 
   const primary = state.paused
-    ? <Button variant="primary" size="lg" block icon="play" disabled={disabled} onClick={() => send('resume')}>Resume</Button>
-    : state.cleaning
-      ? <Button variant="primary" size="lg" block icon="pause" disabled={disabled} onClick={() => send('pause')}>Pause</Button>
+    ? <Button variant="primary" size="lg" block icon="play" {...keyProps('resume')}>Resume</Button>
+    : state.inMission
+      ? <Button variant="primary" size="lg" block icon="pause" {...keyProps('pause')}>Pause</Button>
       : <Button variant="primary" size="lg" block icon="play" disabled={state.offline} onClick={onClean}>Clean</Button>;
 
   return (
     <Stack gap="s">
       {primary}
       <ButtonRow className="justify-center">
-        <Button variant={state.inMission ? 'secondary' : 'quiet'} icon="dock" disabled={disabled} onClick={() => send('dock')}>Send home</Button>
-        {state.inMission && <Button variant="quiet" icon="stop" disabled={disabled} onClick={() => send('stop')}>Stop here</Button>}
-        <Button variant="quiet" icon="bell" disabled={disabled} onClick={() => send('find')}>Find it</Button>
+        <Button variant={state.inMission ? 'secondary' : 'quiet'} icon="dock" {...keyProps('dock')}>Send home</Button>
+        {state.inMission && <Button variant="quiet" icon="stop" {...keyProps('stop')}>Stop here</Button>}
+        <Button variant="quiet" icon="bell" {...keyProps('find')}>Find it</Button>
       </ButtonRow>
-      <p className="fp-small fp-muted text-center" aria-live="polite">
-        {state.offline
-          ? "The robot is offline, so the keys wait until it checks in again."
-          : note ?? (last ? `Last: ${lastCommandLine(last)}` : 'Accepted means the robot took the command, not that it ran. The status above confirms it.')}
-      </p>
+      {state.offline ? (
+        <p className="fp-small fp-muted text-center" aria-live="polite">
+          The robot is offline, so the keys wait until it checks in again.
+        </p>
+      ) : sent != null && !okSettled ? (
+        <CommandNotice
+          cmd={queued}
+          accepted={`${label}: sent to the robot. The status above shows when it acts.`}
+          refused={`${label} failed`}
+          notQueued={`Couldn't send ${label}`}
+        />
+      ) : (
+        <p className={`fp-small text-center ${last?.status === 'FAILED' ? 'fp-t-problem' : 'fp-muted'}`} aria-live="polite">
+          {last
+            ? `Last: ${lastCommandLine(last)}`
+            : 'Sent to the robot means it got the command, not that it acted. The status above confirms it.'}
+        </p>
+      )}
     </Stack>
   );
 }

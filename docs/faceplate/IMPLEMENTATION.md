@@ -91,21 +91,25 @@ page is done when the last one passes.
 
 | file | holds |
 |---|---|
-| `frontend/src/index.css` | every `--app*` token (light on `:root`, dark, the four finishes, the scale), the Tailwind `@theme` mapping, global base rules, the old app's utilities and keyframes |
+| `frontend/src/index.css` | every `--app*` token (light on `:root` and dark: Enamel; the scale), the Tailwind `@theme` mapping, global base rules, the colour wheel's styles, the old app's utilities and keyframes |
 | `frontend/src/styles/faceplate.css` | the kit: every `fp-*` component class, ported from `prototype/kit.css`. Imported by index.css into Tailwind's **components** layer |
 | `frontend/src/components/ui/Icon.tsx` | `<Icon name="…" />`, `<IconSprite />`, the `IconName` union (106 icons from `prototype/shell.html`) |
 | `frontend/src/components/ui/*` (index.ts) | the React kit (1b): every shared component over the `fp-` classes. Import from `components/ui`. Cheat-sheet at the end of this file |
 | `frontend/src/utils/format.ts` | every date, time, range, money, number, duration and plural people read, in the **home's** time zone |
 | `frontend/src/utils/status.ts` | the one map from server enums to a tone (ok / headsup / problem / info / neutral) and a plain label; role labels |
-| `frontend/src/context/ThemeContext.tsx` | theme mode, finish (palette), Auto/sunset, the JS chart colour constants |
-| `frontend/src/components/ThemePicker.tsx` | the appearance switchgear (Profile), already on the kit: a worked example of kit markup in JSX |
+| `frontend/src/context/ThemeContext.tsx` | theme mode, Auto/sunset, the app colour (apply, preview, save, migrate), the JS chart colour constants |
+| `frontend/src/utils/appColour.ts` | the app colour maths: hex parse, OKLCH/HSV, WCAG contrast, `deriveAppTokens(hex, theme)`, `ENAMEL`, the presets |
+| `frontend/src/components/ui/ColourWheel.tsx` | the hue ring + saturation/brightness square used by the picker |
+| `frontend/src/components/ThemePicker.tsx` | the appearance switchgear (Profile): theme switch, colour wheel, hex field, system picker, presets, reset |
 | `frontend/index.html` | the start-up theme script, `theme-color` |
 | `frontend/src/assets/fonts/*.woff2` | Archivo (variable weight + width) and DM Mono 400/500, Latin and Latin Extended, self-hosted since 1d. `@font-face` rules at the top of `index.css`; Vite fingerprints them into `/assets/` (cached a year by nginx) |
 
 Tests that guard this layer: `indexCss.test.ts` (the stylesheet compiles completely, every kit class is `fp-`, no literal
-colours in the kit, no stray comment terminator), `paletteContrast.test.ts` (contrast of every token in both themes and
-every finish; finishes tint surfaces only), `smartTheme.test.tsx`, `ThemePalette.test.tsx`, `themeBoot.test.tsx` (runs
-the real start-up script and compares it with ThemeProvider), `themePicker.test.tsx`.
+colours in the kit, no stray comment terminator), `paletteContrast.test.ts` (contrast of every Enamel token in both
+themes; the app colour may set surface, hairline and selection tokens only), `appColour.test.ts` (the contrast guarantees
+over ~680 colours x 2 themes; greys = Enamel), `smartTheme.test.tsx`, `ThemePalette.test.tsx` (apply, preview, save,
+migrate, reset), `themeBoot.test.tsx` (runs the real start-up script and compares it with ThemeProvider),
+`themePicker.test.tsx`.
 
 ---
 
@@ -159,9 +163,8 @@ All `--app*`, all mapped into `@theme` where a utility makes sense.
 - **Map**: `--appmap-floor / -wall / -room / -dot`. **People**: `--appavatar-ink` (initials are always ink on the person's colour), `--appavatar-ring`, `--appavatar-default`. `--appmask` (alpha masks).
 - **Type**: `--appfont` (Archivo), `--appfont-mono` (DM Mono); sizes `--appfs-label` 11.5 · `-key` 11 · `-small` 13 · `-body` 15 · `-lead` 18 (21 from lg) · `-section` 16 · `-title` 22 · `-title-lg` 28 · `-num-xl` 44 · `-num-l` 28 · `-num-m` 18 · `-mono-s` 11.5 · `-mono` 13; `--applh-tight / -body`; `--appstretch-label` 112% · `-num` 88% · `-key` 94%.
 - **Radius**: `--appradius-panel` 12 · `-key` 10 · `-well` 8 · `-chip` 8 · `-tag` 6.
-- **Sizes**: `--apptap` 44 · `--apptap-sm` 36 · `--appstrip-h` 48 · `--appstrip-h-phone` 52 · `--appkeycol-w` 96 · `--appkeyrow-h` 64 · `--appcontent-max` 1240 · `--appgutter` / `--apppanel-pad` / `--appgap` (16/16/12, 24/20/16 from 40rem, 40/24/20 from 64rem) · `--appicon` 20 · `--applamp-size` 9 · `--appdial-max` 240 (300 from 64rem).
+- **Sizes**: `--apptap` 44 · `--apptap-sm` 36 · `--appstrip-h` 48 · `--appstrip-h-phone` 52 · `--appkeycol-w` 96 · `--appkeyrow-h` 64 · `--appcontent-max` none (desktop pages fill the width) · `--appgutter` / `--apppanel-pad` / `--appgap` (16/16/12, 24/20/16 from 40rem, 40/24/20 from 64rem) · `--appicon` 20 · `--applamp-size` 9 · `--appdial-max` 240 (300 from 64rem).
 - **Motion**: `--appease`, `--appdur-fast` 120ms, `--appdur-sweep` 500ms.
-- **Finish swatches**: `--appfinish-default / -ocean / -sunset / -violet`.
 
 New Tailwind utilities: `bg-appkey`, `bg-applamp-ok`, `bg-apptint-warn`, `border-appedge-problem`, `text-appchart-heat`,
 `border-appborder-strong`, `rounded-panel / -key / -well / -chip / -tag`, `text-label / -small / -body / -lead /
@@ -278,24 +281,56 @@ The sprite symbols are `#fp-i-<name>`. Names and the nav icon for each page are 
 
 ---
 
-## 5. Palettes are finishes
+## 5. The app colour
 
-`data-palette` still exists with the same ids (people's phones have them saved; `index.css`, the start-up script and
-ThemeContext key on them). A palette is now an **enamel finish**: it may change only the page, panel, well, key faces,
-the unlit lamp, the map floor and the hairlines. Never ink, lamps, status text or chart colours, so status reads
-the same in every finish. `paletteContrast.test.ts` enforces that list.
+The owner picks **one colour** (Profile > Appearance > App colour: a hue ring with a saturation/brightness square, a
+hex field taking `#RGB`/`#RRGGBB` typed or pasted, the system colour picker, presets, Reset to Enamel). From that one
+hex, `utils/appColour.ts` derives at runtime, for the theme showing:
 
-| id | label people see | swatch |
+- **the surface family**, clearly in the hue: page, panel, wells, strong well, key faces, unlit lamp, map floor (each at
+  Enamel's luminance with an OKLCH chroma per surface; page and wells carry most, panels and key faces less), the three
+  hairlines and the row hover (a tinted ink, as opaque as needed to show at least as well as Enamel's);
+- **the selection**: `--appaccent` / `-fg` / `-soft` / `-border` and `--appfocus`. The kit's selected keys, primary
+  buttons, the lit key in the key column and row, the selected segment, switches, checks and radios when on, counters and
+  `fp-badge--ink` / `fp-tag--ink` all fill with `--appaccent` and letter with `--appaccent-fg` (they used `--apptext`).
+  The fill is the chosen hex itself when it can carry a label and stand off its grounds; otherwise its hue and chroma
+  at the nearest lightness that can (deeper in light, with white lettering; lighter in dark, usually with ink).
+
+Never generated: ink and graphite text, status text, lit lamps, chart data hues, the white plate, media scrims. Status
+means the same in every colour. Ink that is a drawing rather than a selection (dial needles, progress bar, unread dot,
+map dots) stays `--apptext`.
+
+**Contrast by construction.** Each generated value is checked against the fixed colours drawn on it and moved (lighter
+in light, darker in dark) until it passes, falling back to the Enamel value: every text token >= 4.5:1 on page, panel and
+wells (ink steps also on key faces); status text >= 4.5:1 inside its 10% badge; chart marks >= 3:1 on the panel; the
+selection fill >= 4.5:1 with its label and >= 3:1 on page, panel and both wells; hairlines at least Enamel's contrast.
+`appColour.test.ts` asserts all of it over ~680 colours (edges like black, white, neon yellow and greys, the hue
+circle, a seeded random spread) in both themes, reading the fixed colours from `index.css` with its own maths. A grey
+(OKLCH chroma < 0.02) gives `ENAMEL` exactly, which the test checks against the stylesheet token by token.
+
+**Applying.** ThemeContext sets the tokens as inline custom properties on `<html>` (they beat the theme blocks) in a
+layout effect, re-derives when the theme flips (Light/Dark/Auto/Device), and clears them for Enamel. While a wheel handle
+is dragged the picker calls `previewAppColour` at most once per animation frame: tokens are painted directly, nothing
+re-renders, nothing is saved, and `.theme-switching` is pushed back a frame; letting go calls `setAppColour`, which saves.
+
+**Storage** (per device): `app-colour` (`#rrggbb`; absent = Enamel) and `app-colour-tokens` (`{ hex, light, dark }`, the
+derived tokens, for the start-up script). A finish an older build saved (`palette`, `palette-dark`, `palette-light`)
+moves to its preset colour on first load and those keys are removed.
+
+| preset | hex | was finish id |
 |---|---|---|
-| `default` | Enamel | `--appfinish-default` |
-| `ocean` | Sea glass | `--appfinish-ocean` |
-| `sunset` | Sandstone | `--appfinish-sunset` |
-| `violet` | Lilac | `--appfinish-violet` |
+| Enamel | none | `default` |
+| Sea glass | `#3a7ca5` | `ocean` |
+| Sandstone | `#b07a4a` | `sunset` |
+| Lilac | `#7b68b5` | `violet` |
+| Cobalt / Fern / Rose / Terracotta | `#1f4fbf` / `#2b7a4b` / `#c23a6b` / `#c75b2a` | |
 
-The JS chart constants follow: `CHART_SERIES` (usage = ink, temperature = heat), `DATA_SERIES` (actual = ink,
-predicted = graphite via the new `predicted` key and `predictedColor()`, heads-up amber, gas/water hues), and the
-Maintenance-only `KPI_TONES` are the **same for every palette**. Their per-palette shapes stay so callers compile.
-They are hex (Recharts writes SVG attributes, where `var()` is unreliable) and mirror the `--appchart-*` tokens.
+To tune the look, change `CHROMA` in `appColour.ts` (per surface, per theme) and rerun `appColour.test.ts`; the
+guarantees hold whatever the numbers, the test fails only if a recipe can't keep them. If you change a preset that was a
+finish, update the page tones in the start-up script's `legacy` map (`themeBoot.test.tsx` says which).
+
+The JS chart constants (`CHART_SERIES`, `DATA_SERIES`, `KPI_TONES`) are the same for every colour; their old
+per-palette shape stays so callers compile, and `useTheme().palette` is always `'default'`.
 
 ---
 
@@ -307,20 +342,24 @@ They are hex (Recharts writes SVG attributes, where `var()` is unreliable) and m
   A choice is saved only when someone makes one (`setMode`), `system` included, under `localStorage.theme`.
 - **Back to the device (B-057)**: the Profile switch has a fourth key, Device. The old toggle in the shell (`toggleTheme`)
   is still an explicit light/dark choice.
-- **No flash on start (B-056)**: an inline script at the top of `index.html` sets `data-theme` and `data-palette`
-  before the first paint, from the same keys ThemeContext reads. Auto has no sun maths there, so ThemeProvider saves
-  `localStorage['theme-resolved']` (the theme it last showed) and the script paints that. ThemeProvider sets the
-  attributes in layout effects, so its first frame is also right. `themeBoot.test.tsx` runs the real script against
-  ThemeProvider for each case; keep them in step if you add a mode or finish.
-- **Browser chrome (B-012)**: ThemeProvider writes the resolved `--appbg` into `<meta name="theme-color">` (Safari tab
-  bar, Android status bar, desktop PWA title bar); the start-up script sets the dark value early.
+- **No flash on start (B-056)**: an inline script at the top of `index.html` sets `data-theme` and paints the app
+  colour's tokens before the first paint, from the same keys ThemeContext reads. Auto has no sun maths there, so
+  ThemeProvider saves `localStorage['theme-resolved']` (the theme it last showed) and the script paints that; the colour
+  maths isn't there either, so it paints the cached `app-colour-tokens` for that theme (only when its `hex` matches
+  `app-colour`). A finish saved by an older build has no cache yet: the script paints its colour's page tone (the only
+  thing visible before the bundle) from a small `legacy` map. ThemeProvider applies everything in layout effects, so its
+  first frame is also right. `themeBoot.test.tsx` runs the real script against ThemeProvider for each case; keep them in
+  step if you add a mode or change a legacy preset.
+- **Browser chrome (B-012)**: ThemeProvider writes the resolved `--appbg` (the app colour's page when one is chosen) into
+  `<meta name="theme-color">` (Safari tab bar, Android status bar, desktop PWA title bar); the start-up script sets the
+  dark or coloured value early.
 - **iPhone status bar (B-012)**: `apple-mobile-web-app-status-bar-style` stays `black-translucent` (the app draws
   under the bar and handles the inset itself). iOS then always draws a white clock and battery and reads the meta only at
   launch, so in the light theme, as a Home Screen app (`display-mode: standalone`), `index.css` lays an ink band
   exactly the height of `env(safe-area-inset-top)` over the top of the screen. It is 0px in a browser tab and on desktop.
   **Not yet seen on a real iPhone.** The alternative is the `default` status-bar style plus removing the manual top
   inset everywhere, which needs device testing.
-- `.theme-switching` still suppresses transitions for the frame a theme or finish flips.
+- `.theme-switching` still suppresses transitions for the frames a theme or app colour flips (and through a wheel drag).
 
 ---
 

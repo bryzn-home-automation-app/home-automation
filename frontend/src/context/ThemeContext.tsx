@@ -1,5 +1,6 @@
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback, type ReactNode } from 'react';
 import { isDaytime, nextSunChange } from '../utils/sun';
+import { APP_COLOUR_TOKENS, deriveAppTokens, legacyFinishColour, parseHex } from '../utils/appColour';
 
 type Theme = 'dark' | 'light';
 /**
@@ -12,38 +13,22 @@ export type ThemeMode = 'light' | 'dark' | 'auto' | 'system';
 /** The theme someone who has never chosen gets: the light enamel faceplate. */
 export const DEFAULT_MODE: ThemeMode = 'light';
 
-export interface PaletteOption {
-  id: string;
-  label: string;
-  /**
-   * Swatch shown in the picker UI, per mode. A palette is an enamel finish (it
-   * tints the surfaces only), so the swatch is a sample of that enamel and is
-   * the same in both modes.
-   */
-  swatch: { light: string; dark: string };
-}
-
 /**
- * The finishes. The ids are what people's phones have saved (and what index.css
- * and the start-up script in index.html key on), so they keep their old names;
- * the labels are what people see. Swatches match --appfinish-* in index.css.
+ * The finish ids older builds saved. The app colour replaced finishes (a saved
+ * finish moves to its preset colour, see utils/appColour.ts); the ids only key the
+ * chart constants below, which are the same for all of them, so callers that still
+ * index by `palette` keep working.
  */
-export const PALETTES: PaletteOption[] = [
-  { id: 'default', label: 'Enamel', swatch: { light: '#c9cfcb', dark: '#c9cfcb' } },
-  { id: 'ocean', label: 'Sea glass', swatch: { light: '#b7c7d4', dark: '#b7c7d4' } },
-  { id: 'sunset', label: 'Sandstone', swatch: { light: '#d8c6b0', dark: '#d8c6b0' } },
-  { id: 'violet', label: 'Lilac', swatch: { light: '#c8c1d8', dark: '#c8c1d8' } },
-];
-const PALETTE_IDS = PALETTES.map((p) => p.id);
+const PALETTE_IDS = ['default', 'ocean', 'sunset', 'violet'];
 const DEFAULT_PALETTE = 'default';
 
 /**
  * Six decorative tones, in a consistent role order: [warm-1, cool-1, success,
  * warm-2, cool-2, distinct]. Only the Maintenance summary cards use them, and
  * that page has not been converted to Faceplate yet. A palette used to re-hue
- * them; a palette is now an enamel finish and never changes a hue, so every
- * palette has the same tones. The per-palette shape stays so callers keep
- * working; drop this once Maintenance is converted.
+ * them; the app colour never changes a data hue, so every entry has the same
+ * tones. The per-palette shape stays so callers keep working; drop this once
+ * Maintenance is converted.
  */
 const DEFAULT_KPI_TONES = {
   light: ['#f59e0b', '#0ea5e9', '#10b981', '#f59e0b', '#0ea5e9', '#a855f7'],
@@ -136,10 +121,21 @@ interface ThemeContextValue {
   toggleTheme: () => void;
   isLight: boolean;
   isDark: boolean;
-  /** The active palette (finish) id. */
+  /**
+   * The app colour ('#rrggbb'), shared by light and dark; null is Enamel, the
+   * neutral faceplate. Saved on this device.
+   */
+  appColour: string | null;
+  /** Choose (and save) the app colour; null goes back to Enamel. */
+  setAppColour: (hex: string | null) => void;
+  /**
+   * Paint a colour without choosing it: the picker calls this while a wheel handle
+   * is dragged (once per animation frame), then setAppColour when it is let go.
+   * Nothing re-renders and nothing is saved.
+   */
+  previewAppColour: (hex: string | null) => void;
+  /** Always 'default': finishes became the app colour. Kept for the chart constants' callers. */
   palette: string;
-  /** Set the palette (shared by light and dark mode). */
-  setPalette: (id: string) => void;
 }
 
 const ThemeContext = createContext<ThemeContextValue>({
@@ -151,8 +147,10 @@ const ThemeContext = createContext<ThemeContextValue>({
   toggleTheme: () => {},
   isLight: true,
   isDark: false,
+  appColour: null,
+  setAppColour: () => {},
+  previewAppColour: () => {},
   palette: DEFAULT_PALETTE,
-  setPalette: () => {},
 });
 
 const MODE_KEY = 'theme';
@@ -198,29 +196,91 @@ export function resolveTheme(mode: ThemeMode, loc: { lat: number; lon: number } 
   return systemTheme();
 }
 
-const PALETTE_KEY = 'palette';
+/** The app colour ('#rrggbb'); absent = Enamel. index.html reads the same keys. */
+const COLOUR_KEY = 'app-colour';
+/**
+ * The derived tokens for the saved colour, both themes, as JSON ({ hex, light, dark }).
+ * The start-up script in index.html paints from this before the bundle (and the
+ * colour maths) has loaded. Written when a colour is chosen, never while dragging.
+ */
+const COLOUR_TOKENS_KEY = 'app-colour-tokens';
+/** Where older builds saved a finish id (one for both modes, or one per mode). */
+const LEGACY_PALETTE_KEYS = ['palette', 'palette-dark', 'palette-light'];
 
 /**
- * One palette for both modes. Older builds stored one per mode, so a palette
- * picked in dark mode left light mode (e.g. daytime under Auto) on Default;
- * adopt whichever of those was actually chosen. index.html reads the same keys.
+ * The saved app colour. A phone that saved a finish (Sea glass, Sandstone, Lilac)
+ * before the app colour existed gets that finish's preset colour; of the old
+ * per-mode keys, whichever was actually chosen wins, as it did for finishes.
  */
-function readStoredPalette(): string {
-  if (typeof window === 'undefined') return DEFAULT_PALETTE;
+function readStoredColour(): string | null {
+  if (typeof window === 'undefined') return null;
   try {
-    const candidates = [PALETTE_KEY, 'palette-dark', 'palette-light'].map((k) => localStorage.getItem(k));
-    const chosen = candidates.find((id) => id && id !== DEFAULT_PALETTE && PALETTE_IDS.includes(id));
-    if (chosen) return chosen;
+    const saved = parseHex(localStorage.getItem(COLOUR_KEY));
+    if (saved) return saved;
+    for (const key of LEGACY_PALETTE_KEYS) {
+      const legacy = legacyFinishColour(localStorage.getItem(key));
+      if (legacy) return legacy;
+    }
   } catch { /* localStorage blocked */ }
-  return DEFAULT_PALETTE;
+  return null;
+}
+
+/** Save the colour (and the start-up script's copy of its tokens); retire the old finish keys. */
+function storeColour(hex: string | null) {
+  try {
+    if (hex) {
+      localStorage.setItem(COLOUR_KEY, hex);
+      localStorage.setItem(COLOUR_TOKENS_KEY, JSON.stringify({
+        hex,
+        light: deriveAppTokens(hex, 'light'),
+        dark: deriveAppTokens(hex, 'dark'),
+      }));
+    } else {
+      localStorage.removeItem(COLOUR_KEY);
+      localStorage.removeItem(COLOUR_TOKENS_KEY);
+    }
+    for (const key of LEGACY_PALETTE_KEYS) localStorage.removeItem(key);
+  } catch { /* quota exceeded */ }
+}
+
+/**
+ * Set the colour's tokens as inline custom properties on <html>, which beat the
+ * stylesheet's theme blocks. No colour clears them, so index.css (Enamel) shows.
+ */
+function paintAppColour(hex: string | null, theme: Theme) {
+  const style = document.documentElement.style;
+  if (!hex) {
+    for (const name of APP_COLOUR_TOKENS) style.removeProperty(name);
+    return;
+  }
+  const tokens = deriveAppTokens(hex, theme);
+  for (const name of APP_COLOUR_TOKENS) style.setProperty(name, tokens[name]);
+}
+
+/**
+ * Suppress transitions while the colours flip so the whole page repaints once
+ * instead of animating every card's `transition-colors` for 300ms at once (which
+ * read as a laggy full-page repaint). The double rAF re-enables them only after
+ * the new colours have painted. A second call (the next frame of a wheel drag)
+ * just pushes the end back: one class toggle and two rAFs per frame.
+ */
+const switchFrames: [number, number] = [0, 0];
+function suppressTransitions() {
+  const el = document.documentElement;
+  el.classList.add('theme-switching');
+  cancelAnimationFrame(switchFrames[0]);
+  cancelAnimationFrame(switchFrames[1]);
+  switchFrames[0] = requestAnimationFrame(() => {
+    switchFrames[1] = requestAnimationFrame(() => el.classList.remove('theme-switching'));
+  });
 }
 
 /**
  * Point the browser chrome at the page colour: Safari's tab bar, Android's status
  * bar and the desktop PWA title bar tint from <meta name="theme-color">. It was a
  * fixed dark navy, so a light page sat under a navy toolbar. Read from the
- * resolved --appbg so it follows the theme and the finish without a second copy
- * of the colours here. (The iPhone Home Screen app ignores it while the status
+ * resolved --appbg so it follows the theme and the app colour without a second
+ * copy of the colours here. (The iPhone Home Screen app ignores it while the status
  * bar is "black-translucent"; index.css handles that bar.)
  */
 function syncThemeColorMeta() {
@@ -235,40 +295,43 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [sunLocation, setSunLocationState] = useState(readSunLocation);
   const [theme, setTheme] = useState<Theme>(() => resolveTheme(readStoredMode(), readSunLocation()));
   const [nextThemeChange, setNextThemeChange] = useState<Date | null>(null);
-  const [palette, setPaletteState] = useState(readStoredPalette);
+  const [appColour, setAppColourState] = useState(readStoredColour);
+  // The theme a wheel-drag preview paints for, without making the preview callback change.
+  const themeRef = useRef(theme);
 
-  // Suppress transitions during a theme/palette swap so the whole page repaints
-  // once instead of animating every card's `transition-colors` for 300ms at
-  // once (which read as a laggy full-page repaint). Declared BEFORE the attribute
-  // effects below so the guard class is applied before the CSS vars flip; the
-  // double-rAF re-enables transitions only after the new colors have painted.
+  // Declared BEFORE the paint effects below so the guard class is on before the
+  // CSS vars flip.
   useLayoutEffect(() => {
-    const el = document.documentElement;
-    el.classList.add('theme-switching');
-    let inner = 0;
-    const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => el.classList.remove('theme-switching'));
-    });
+    suppressTransitions();
     return () => {
-      cancelAnimationFrame(outer);
-      cancelAnimationFrame(inner);
-      el.classList.remove('theme-switching');
+      cancelAnimationFrame(switchFrames[0]);
+      cancelAnimationFrame(switchFrames[1]);
+      document.documentElement.classList.remove('theme-switching');
     };
-  }, [theme, palette]);
+  }, [theme, appColour]);
 
-  // Layout effects, not effects: the attributes land before the browser paints
-  // the first React frame. The start-up script in index.html set them before the
-  // first paint of all; these keep them right from then on.
+  // Layout effects, not effects: the attribute and the colour land before the
+  // browser paints the first React frame. The start-up script in index.html set
+  // them before the first paint of all; these keep them right from then on.
   useLayoutEffect(() => {
+    themeRef.current = theme;
     document.documentElement.setAttribute('data-theme', theme);
     try { localStorage.setItem(RESOLVED_KEY, theme); } catch { /* quota exceeded */ }
   }, [theme]);
 
+  // Re-derived whenever the theme flips (light, dark, Auto at sunset, the device).
   useLayoutEffect(() => {
-    document.documentElement.setAttribute('data-palette', palette);
-  }, [palette]);
+    paintAppColour(appColour, theme);
+    syncThemeColorMeta();
+  }, [theme, appColour]);
 
-  useLayoutEffect(syncThemeColorMeta, [theme, palette]);
+  // A finish saved by an older build becomes a saved colour (with the start-up
+  // script's copy of its tokens), and the old keys go.
+  useEffect(() => {
+    try {
+      if (LEGACY_PALETTE_KEYS.some((k) => localStorage.getItem(k) != null)) storeColour(readStoredColour());
+    } catch { /* localStorage blocked */ }
+  }, []);
 
   // Auto: resolve now, then wake exactly at the next sunrise/sunset. Also re-check
   // when the app comes back to the foreground — a phone asleep through sunset
@@ -330,18 +393,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setPalette = useCallback((id: string) => {
-    if (!PALETTE_IDS.includes(id)) return;
-    setPaletteState(id);
-    try {
-      localStorage.setItem(PALETTE_KEY, id);
-      localStorage.removeItem('palette-light');
-      localStorage.removeItem('palette-dark');
-    } catch { /* quota exceeded */ }
+  const setAppColour = useCallback((hex: string | null) => {
+    const next = hex == null ? null : parseHex(hex);
+    if (hex != null && !next) return;
+    setAppColourState(next);
+    storeColour(next);
+  }, []);
+
+  const previewAppColour = useCallback((hex: string | null) => {
+    const next = hex == null ? null : parseHex(hex);
+    if (hex != null && !next) return;
+    suppressTransitions();
+    paintAppColour(next, themeRef.current);
   }, []);
 
   // Stable context value — otherwise a fresh object every render forces all
-  // consumers to re-render. toggleTheme/setPalette are already useCallback'd.
+  // consumers to re-render. The setters are already useCallback'd.
   const value = useMemo<ThemeContextValue>(
     () => ({
       theme,
@@ -352,10 +419,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       toggleTheme,
       isLight: theme === 'light',
       isDark: theme === 'dark',
-      palette,
-      setPalette,
+      appColour,
+      setAppColour,
+      previewAppColour,
+      palette: DEFAULT_PALETTE,
     }),
-    [theme, mode, setMode, nextThemeChange, setSunLocation, palette, toggleTheme, setPalette],
+    [theme, mode, setMode, nextThemeChange, setSunLocation, toggleTheme, appColour, setAppColour, previewAppColour],
   );
 
   return (
