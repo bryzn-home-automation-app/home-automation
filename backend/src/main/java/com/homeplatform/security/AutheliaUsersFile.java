@@ -254,8 +254,17 @@ public class AutheliaUsersFile {
 
     /** After the rename: the file must be what was written, or at least still a whole users file. */
     private void checkReplaced(AutheliaUsers.Parsed doc, byte[] before, byte[] written, Path backup)
-            throws IOException, UsersFileException {
-        byte[] now = Files.readAllBytes(file);
+            throws UsersFileException {
+        byte[] now;
+        try {
+            now = Files.readAllBytes(file);
+        } catch (IOException e) {
+            // Replaced, but can't be read: its state is unknown, so say so rather than "unchanged".
+            log.error("Home users file {} couldn't be read back after a password reset ({}); the previous file is {}",
+                    file, e.getClass().getSimpleName(), backup);
+            throw new UsersFileException("was replaced but couldn't be read back (" + e.getClass().getSimpleName()
+                    + "). Check that Home sign-in works; the previous file is " + backup, true, e);
+        }
         if (Arrays.equals(now, written)) return;
         boolean whole;
         try {
