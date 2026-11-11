@@ -17,8 +17,14 @@ export function lastCommandLine(cmd: { command: string; status: string; createdA
 
 /** The status query the Roomba page reads (pages/Roomba.tsx); re-read after a command lands. */
 export const ROOMBA_STATUS_KEY = ['roomba-status'] as const;
-/** Re-read the status right away, then at these delays: the robot takes a few seconds to act. */
-export const STATUS_REFETCH_DELAYS_MS = [10_000, 25_000] as const;
+/**
+ * While a pressed key waits on the robot, re-read the status this often. After a send the
+ * poller reads the robot back about once a second and writes each reading, so the page sees
+ * the robot act within a second or so of it happening, not at the next 30 s poll.
+ */
+export const STATUS_WATCH_MS = 1000;
+/** Re-read the command row this often while it's queued or sent. */
+export const COMMAND_WATCH_MS = 1000;
 /** How long a sent command holds its key if the status hasn't moved. */
 export const COMMAND_SETTLE_MS = 30_000;
 
@@ -44,21 +50,21 @@ const stateKeyOf = (s: RoombaState) => `${s.label}|${s.paused}|${s.inMission}|${
  * whole mission (cleaning, emptying the bin, heading back or recharging to finish), Resume while
  * it's paused. Send home, Stop and Find are always there.
  *
- * A pressed key reports its command's progress (Sending → Sent to the robot / Failed) and holds
- * that same key until the status moves or COMMAND_SETTLE_MS passes, so it can't be sent twice.
- * "Sent to the robot" (the backend's OK, "accepted by broker") is not proof it acted; the status
- * line above confirms that, so it is re-read right away and twice more.
+ * A pressed key reports its command's progress (Sending → waiting for the robot → Sent to the
+ * robot / Failed) and holds that same key until the status moves or COMMAND_SETTLE_MS passes, so
+ * it can't be sent twice. The poller keeps a command it can check (pause, resume, stop, dock, a
+ * clean from the dock) at SENT until it reads the robot reacting, then OK; one the robot never
+ * reacts to comes back FAILED with the reason. While the key waits, the status above is re-read
+ * every STATUS_WATCH_MS, so it shows the robot acting as soon as the poller sees it.
  */
 export default function RoombaControls({ state, onClean }: { state: RoombaState; onClean: () => void }) {
   const qc = useQueryClient();
   const commandsInterval = useJitteredInterval(8000);
   const [sent, setSent] = useState<Sent | null>(null);
   const seqRef = useRef(0);
-  const timersRef = useRef<number[]>([]);
   const settleTimerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
-    timersRef.current.forEach((t) => window.clearTimeout(t));
     if (settleTimerRef.current != null) window.clearTimeout(settleTimerRef.current);
   }, []);
 
@@ -69,20 +75,17 @@ export default function RoombaControls({ state, onClean }: { state: RoombaState;
     refetchInterval: (query) => {
       if (sent?.id == null) return commandsInterval;
       const row = (query.state.data ?? []).find((c) => c.id === sent.id);
-      return isTerminal(row?.status) ? commandsInterval : 2500;
+      return isTerminal(row?.status) ? commandsInterval : COMMAND_WATCH_MS;
     },
     refetchIntervalInBackground: false,
   });
-
-  const refetchStatus = () => qc.invalidateQueries({ queryKey: ROOMBA_STATUS_KEY });
 
   const mutation = useMutation({
     mutationFn: (command: string) => sendRoombaCommand(command),
     onSuccess: (row: RoombaCommand, command: string) => {
       setSent((s) => (s && s.command === command && s.id == null ? { ...s, id: row.id } : s));
       qc.invalidateQueries({ queryKey: ['roomba', 'commands'] });
-      refetchStatus();
-      for (const ms of STATUS_REFETCH_DELAYS_MS) timersRef.current.push(window.setTimeout(refetchStatus, ms));
+      qc.invalidateQueries({ queryKey: ROOMBA_STATUS_KEY });
     },
   });
 
@@ -108,6 +111,20 @@ export default function RoombaControls({ state, onClean }: { state: RoombaState;
   // The same key waits: in flight, or sent and the robot hasn't visibly reacted yet.
   const waiting = sent != null && !sendFailed && status !== 'FAILED' && !sent.expired && !(status === 'OK' && stateMoved);
   const inFlight = mutation.isPending || (status != null && !isTerminal(status));
+  const landed = isTerminal(status);
+  const sentSeq = sent?.seq;
+
+  // Watch the robot while the key waits: the status line above is the proof it acted.
+  useEffect(() => {
+    if (!waiting) return;
+    const timer = window.setInterval(() => qc.invalidateQueries({ queryKey: ROOMBA_STATUS_KEY }), STATUS_WATCH_MS);
+    return () => window.clearInterval(timer);
+  }, [waiting, qc]);
+
+  // And once more the moment the command row lands (OK or FAILED).
+  useEffect(() => {
+    if (landed) qc.invalidateQueries({ queryKey: ROOMBA_STATUS_KEY });
+  }, [landed, sentSeq, qc]);
 
   const queued: QueuedCommand = {
     send: () => {},
@@ -124,7 +141,7 @@ export default function RoombaControls({ state, onClean }: { state: RoombaState;
     return {
       disabled: state.offline || (mutation.isPending && !busy),
       busy,
-      busyLabel: inFlight ? 'Sending…' : 'Waiting for the robot…',
+      busyLabel: status == null || status === 'PENDING' ? 'Sending…' : 'Waiting for the robot…',
       onClick: () => send(command),
     };
   };

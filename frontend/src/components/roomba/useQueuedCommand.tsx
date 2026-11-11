@@ -1,17 +1,23 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchRoombaCommands } from '../../api/roomba';
-import { jitteredInterval } from '../../hooks/useJitteredInterval';
 import type { RoombaCommand } from '../../types';
 import { Notice } from '../ui';
 
 /*
  * The Roomba dialogs (clean, clean a room, rename, divide, merge) all queue a command on the
- * server and then watch it: the poller picks it up (SENT) and the robot accepts it (OK) or
- * refuses it (FAILED). This is that watch, once, plus the notice that reports it.
+ * server and then watch it: the poller picks it up and sends it (SENT), and it ends OK or FAILED.
+ * A clean started from the dock stays SENT until the poller reads the robot setting off, so OK
+ * there means it started; a robot that never reacts comes back FAILED with the reason. This is
+ * that watch, once, plus the notice that reports it.
  */
 
 const isTerminal = (s: string | undefined) => s === 'OK' || s === 'FAILED';
+
+/** Re-read the command row this often while it's queued or sent (the poller picks it up at once). */
+const COMMAND_WATCH_MS = 1000;
+/** The status query the Roomba page reads; refreshed the moment a command lands. */
+const ROOMBA_STATUS_KEY = ['roomba-status'] as const;
 
 export interface QueuedCommand {
   /** Queue the command (ignored while one is in flight). */
@@ -29,6 +35,7 @@ export interface QueuedCommand {
 }
 
 export function useQueuedCommand(queue: () => Promise<RoombaCommand>): QueuedCommand {
+  const qc = useQueryClient();
   const [commandId, setCommandId] = useState<number | null>(null);
   const mutation = useMutation({ mutationFn: queue, onSuccess: (cmd) => setCommandId(cmd.id) });
 
@@ -40,7 +47,7 @@ export function useQueuedCommand(queue: () => Promise<RoombaCommand>): QueuedCom
     enabled: commandId != null,
     refetchInterval: (query) => {
       const c = (query.state.data ?? []).find((x) => x.id === commandId);
-      return isTerminal(c?.status) ? false : jitteredInterval(2500);
+      return isTerminal(c?.status) ? false : COMMAND_WATCH_MS;
     },
     refetchIntervalInBackground: false,
   });
@@ -51,6 +58,12 @@ export function useQueuedCommand(queue: () => Promise<RoombaCommand>): QueuedCom
   );
   const status = queued?.status ?? (mutation.isPending || commandId != null ? 'PENDING' : null);
   const submitting = mutation.isPending || (commandId != null && !isTerminal(status ?? undefined));
+  const landed = isTerminal(status ?? undefined);
+
+  // The page behind the dialog shows the robot's state: re-read it the moment the command lands.
+  useEffect(() => {
+    if (landed) qc.invalidateQueries({ queryKey: ROOMBA_STATUS_KEY });
+  }, [landed, commandId, qc]);
 
   return {
     send: () => { if (!submitting) mutation.mutate(); },
@@ -94,6 +107,9 @@ export function CommandNotice({ cmd, accepted, refused, notQueued }: {
   if (cmd.status === 'OK') return <Notice tone="ok" live="polite">{accepted}</Notice>;
   if (cmd.status === 'FAILED') {
     return <Notice tone="problem" live="polite">{refused}{cmd.detail ? `: ${cmd.detail}` : '.'}</Notice>;
+  }
+  if (cmd.status === 'SENT') {
+    return <Notice tone="info" live="polite" icon="refresh">Sent. Waiting for the robot…</Notice>;
   }
   return <Notice tone="info" live="polite" icon="refresh">Sending to the robot…</Notice>;
 }
