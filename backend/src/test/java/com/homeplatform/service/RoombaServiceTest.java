@@ -156,6 +156,50 @@ class RoombaServiceTest {
         }
 
         @Test
+        @DisplayName("includes the twice-over area when it is this mission's")
+        void passesForThisMission() {
+            RoombaCoverage c = RoombaCoverage.builder()
+                    .robotId("BLID").missionId("1794409217")
+                    .coverage("{\"type\":\"FeatureCollection\",\"features\":[]}")
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(5))
+                    .passes("{\"v\":1,\"cell\":0.05,\"rects\":[[10,20,30,4]]}")
+                    .passesMissionId("1794409217")
+                    .build();
+            when(coverageRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(c));
+            var passes = service.getCoverage().orElseThrow().passes();
+            assertNotNull(passes);
+            assertEquals(0.05, passes.get("cell").asDouble());
+            assertEquals(30, passes.get("rects").get(0).get(2).asInt());
+        }
+
+        @Test
+        @DisplayName("leaves out a previous mission's twice-over area")
+        void passesFromAnotherMission() {
+            RoombaCoverage c = RoombaCoverage.builder()
+                    .robotId("BLID").missionId("1794500000")
+                    .coverage("{\"type\":\"FeatureCollection\",\"features\":[]}")
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusSeconds(5))
+                    .passes("{\"v\":1,\"cell\":0.05,\"rects\":[[10,20,30,4]]}")
+                    .passesMissionId("1794409217")
+                    .build();
+            when(coverageRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(c));
+            var out = service.getCoverage().orElseThrow();
+            assertNull(out.passes());
+            assertNotNull(out.coverage());
+        }
+
+        @Test
+        @DisplayName("matches a pass count to its mission by start time, allowing a few seconds")
+        void sameMission() {
+            assertTrue(RoombaService.sameMission("1794409217", "1794409217"));
+            assertTrue(RoombaService.sameMission("1794409217", "1794409219"));
+            assertFalse(RoombaService.sameMission("1794409217", "1794409317"));
+            assertFalse(RoombaService.sameMission("261111T161221.284", "1794409217"));
+            assertFalse(RoombaService.sameMission(null, "1794409217"));
+            assertFalse(RoombaService.sameMission("1794409217", null));
+        }
+
+        @Test
         @DisplayName("empty when coverage is stale (mission ended)")
         void staleCoverage() {
             RoombaCoverage c = RoombaCoverage.builder()

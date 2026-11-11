@@ -199,7 +199,8 @@ describe('Roomba page', () => {
     fireEvent.click(pause);
     state.commands = [cmdRow({ status: 'SENT' })];
     await waitFor(() => expect(pause.getAttribute('aria-busy')).toBe('true'));
-    expect(screen.getByText('Sending to the robot…')).toBeTruthy();
+    // SENT: the poller has sent it and is reading the robot back.
+    expect(await screen.findByText('Sent. Waiting for the robot…', {}, { timeout: 5000 })).toBeTruthy();
     fireEvent.click(pause);
     fireEvent.click(pause);
     expect(roombaApi.sendRoombaCommand).toHaveBeenCalledTimes(1);
@@ -208,7 +209,32 @@ describe('Roomba page', () => {
     expect(find.getAttribute('aria-busy')).toBeNull();
   });
 
-  it('re-reads the status right away and again about 10 s and 25 s after a command', async () => {
+  it('holds the key for as long as the poller is still on it, then says there is no word after 90 s', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      state.status = { ...mission, phase: 'run', running: true };
+      renderPage();
+      const pause = await screen.findByRole('button', { name: /^Pause$/ });
+      fireEvent.click(pause);
+      state.commands = [cmdRow({ status: 'SENT' })];
+      // Past the old 30 s release: a resent pause can take ~35 s, and a second press then would
+      // supersede the first.
+      await vi.advanceTimersByTimeAsync(40_000);
+      expect(pause.getAttribute('aria-busy')).toBe('true');
+      expect(screen.queryByText('No word from the robot yet')).toBeNull();
+      await vi.advanceTimersByTimeAsync(55_000);
+      expect(await screen.findByText('No word from the robot yet')).toBeTruthy();
+      expect(pause.getAttribute('aria-busy')).toBeNull();
+      // A late outcome still shows.
+      state.commands = [cmdRow({ status: 'FAILED', detail: 'the robot didn\'t react' })];
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(await screen.findByText("Pause failed: the robot didn't react")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('re-reads the status right away and every second while the robot has not reacted, then stops', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       state.status = { ...mission, phase: 'run', running: true };
@@ -218,10 +244,17 @@ describe('Roomba page', () => {
       const before = status.mock.calls.length;
       fireEvent.click(pause);
       await waitFor(() => expect(status.mock.calls.length).toBe(before + 1));
-      await vi.advanceTimersByTimeAsync(10_000);
-      await waitFor(() => expect(status.mock.calls.length).toBe(before + 2));
-      await vi.advanceTimersByTimeAsync(15_000);
-      await waitFor(() => expect(status.mock.calls.length).toBe(before + 3));
+      await vi.advanceTimersByTimeAsync(3_000);
+      await waitFor(() => expect(status.mock.calls.length).toBeGreaterThanOrEqual(before + 4));
+      // The robot pauses: the status moves, the row lands, and the fast re-reads stop.
+      state.status = { ...mission, phase: 'stop', running: false };
+      state.commands = [cmdRow({ status: 'OK', detail: 'the robot reacted 1.2 s after it was sent' })];
+      await vi.advanceTimersByTimeAsync(2_000);
+      expect(await screen.findByRole('button', { name: /^Resume$/ })).toBeTruthy();
+      await vi.advanceTimersByTimeAsync(1_000);
+      const settled = status.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(status.mock.calls.length).toBe(settled);
     } finally {
       vi.useRealTimers();
     }

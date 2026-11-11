@@ -50,6 +50,17 @@ export async function fetchRoombaPosition(): Promise<RoombaPosition | null> {
   return res.data as RoombaPosition;
 }
 
+/**
+ * Ground cleaned twice or more this mission, counted by the poller from the live
+ * position stream (the cloud's coverage has no pass count). `rects` are
+ * [ix, iy, w, h] in grid cells: metres = value * cell, y up as in the map.
+ */
+export interface RoombaPasses {
+  v: number;
+  cell: number;
+  rects: [number, number, number, number][];
+}
+
 /** Live cleaning-coverage for the map overlay. Features carry an operatingModes
  *  property ("vacuuming" = cleaned, "traveling" = passed through). Null when
  *  stale/none (204). Poll only while the robot is running. */
@@ -58,6 +69,8 @@ export interface RoombaCoverage {
   missionId: string | null;
   coverage: GeoFeatureCollection;
   updatedAt: string;
+  /** This mission's twice-over ground, or null/absent before any is counted. */
+  passes?: RoombaPasses | null;
 }
 export async function fetchRoombaCoverage(): Promise<RoombaCoverage | null> {
   const res = await api.get<RoombaCoverage | ''>('/roomba/coverage');

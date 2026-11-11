@@ -6,10 +6,14 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 /**
- * A queued control command. The backend enqueues (ADMIN only); the poller — which
- * owns the single robot connection — picks up PENDING rows, sends them, and updates
- * status (SENT → OK/FAILED). "OK" means the broker accepted it, not that the robot
- * necessarily acted (see the poller / ENHANCEMENTS.md "accepted ≠ done").
+ * A queued control command. The backend enqueues (ADMIN only); an insert trigger NOTIFYs
+ * the poller — which owns the single robot connection — and it picks up PENDING rows,
+ * sends them, and updates status (SENT → OK/FAILED). A robot command whose effect shows in
+ * the robot's state (pause, resume, stop, dock, a clean from idle) stays SENT until the
+ * poller reads the robot reacting, then OK; if it never does, FAILED with the reason. For
+ * the rest "OK" means the broker accepted it, not that the robot necessarily acted (see
+ * roomba-poller/command_flow.py and ENHANCEMENTS.md "accepted ≠ done").
+ * {@code processedAt} is when the command was sent.
  */
 @Entity
 @Table(name = "roomba_commands")

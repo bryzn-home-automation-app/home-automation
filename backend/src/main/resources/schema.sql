@@ -194,6 +194,8 @@ CREATE TABLE IF NOT EXISTS roomba_map (
 
 -- Control command queue. Backend enqueues (ADMIN only); the poller executes each
 -- against the robot and updates status. Append-only-ish (status transitions in place).
+-- SENT = picked up; a robot command whose effect can be seen stays SENT until the robot
+-- reacts (then OK) or doesn't (FAILED, with the reason). processed_at = when it was sent.
 CREATE TABLE IF NOT EXISTS roomba_commands (
     id            SERIAL PRIMARY KEY,
     robot_id      VARCHAR(64),
@@ -206,6 +208,22 @@ CREATE TABLE IF NOT EXISTS roomba_commands (
     processed_at  TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_roomba_commands_status ON roomba_commands (status, id);
+
+-- Wake the poller the moment a command is queued: it LISTENs on channel roomba_commands,
+-- so a command no longer waits for its next 5 s tick. A trigger rather than a NOTIFY from
+-- the backend, so every inserter wakes it. Postgres-only (plpgsql), and this file also
+-- runs against H2 in the backend tests, so it is APPLIED by UsageStorageMigration
+-- (createCommandNotifyTrigger, on every backend start) and only recorded here:
+--
+--   CREATE OR REPLACE FUNCTION roomba_commands_notify() RETURNS trigger AS $$
+--   BEGIN
+--       PERFORM pg_notify('roomba_commands', NEW.id::text);
+--       RETURN NEW;
+--   END;
+--   $$ LANGUAGE plpgsql;
+--   CREATE OR REPLACE TRIGGER trg_roomba_commands_notify
+--       AFTER INSERT ON roomba_commands
+--       FOR EACH ROW EXECUTE FUNCTION roomba_commands_notify();
 
 -- Static device identity + firmware per robot. Poller UPSERTs once per connect.
 CREATE TABLE IF NOT EXISTS roomba_device (
@@ -258,12 +276,26 @@ CREATE TABLE IF NOT EXISTS roomba_position (
 -- from the live-map bundle while a mission runs, UNIQUE robot_id). `coverage` is
 -- a GeoJSON FeatureCollection; features carry an operatingModes property
 -- (vacuuming = cleaned, traveling = passed through). Read-only + staleness-gated.
+-- mission_id is the mission's start, epoch seconds (the bundle's missionStartTime).
+-- The cloud gives no pass count, so the poller counts passes from the live position
+-- stream (roomba-poller/coverage_passes.py) and UPDATEs them onto this row:
+--   passes            the area cleaned twice or more, {"v":1,"cell":0.05,
+--                     "rects":[[ix,iy,w,h],...]} in grid cells (metres = value*cell)
+--   pass_grid         every visited cell with its count, {"v":1,"cell":0.05,
+--                     "runs":[[iy,ix0,n,count],...]}; poller-only, read back after a
+--                     restart mid-clean (not mapped in the JPA entity)
+--   passes_mission_id the mission both belong to (its start, epoch seconds); the API
+--                     shows passes only when it matches mission_id
 CREATE TABLE IF NOT EXISTS roomba_coverage (
-    id            SERIAL PRIMARY KEY,
-    robot_id      VARCHAR(64)  NOT NULL UNIQUE,
-    mission_id    VARCHAR(64),
-    coverage      JSONB        NOT NULL,
-    updated_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+    id                 SERIAL PRIMARY KEY,
+    robot_id           VARCHAR(64)  NOT NULL UNIQUE,
+    mission_id         VARCHAR(64),
+    coverage           JSONB        NOT NULL,
+    updated_at         TIMESTAMP    NOT NULL DEFAULT NOW(),
+    passes             JSONB,
+    pass_grid          JSONB,
+    passes_mission_id  VARCHAR(64),
+    passes_updated_at  TIMESTAMP
 );
 
 -- App release notes for the "What's New" tab. Authored in code and upserted by

@@ -1,5 +1,7 @@
 package com.homeplatform.config;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -8,6 +10,8 @@ import org.springframework.stereotype.Component;
 @Component
 @org.springframework.context.annotation.Profile("!test")
 public class UsageStorageMigration implements ApplicationRunner {
+
+    private static final Logger log = LoggerFactory.getLogger(UsageStorageMigration.class);
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -257,6 +261,7 @@ public class UsageStorageMigration implements ApplicationRunner {
         // not a bare id; a multi-corner divide can be long). Metadata-only length
         // increase — cheap + idempotent.
         jdbcTemplate.execute("ALTER TABLE roomba_commands ALTER COLUMN arg TYPE VARCHAR(1024)");
+        createCommandNotifyTrigger();
 
         // Static device identity + firmware (poller UPSERTs once per connect).
         jdbcTemplate.execute("""
@@ -286,6 +291,28 @@ public class UsageStorageMigration implements ApplicationRunner {
             )
             """);
 
+        // Live cleaning coverage (poller UPSERTs the live bundle's coverage.geojson,
+        // UNIQUE robot_id) plus the poller's own pass count over it (see schema.sql).
+        // Hibernate creates the table and the mapped columns first; pass_grid is
+        // poller-only and unmapped, so this is what creates it on an existing table.
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_coverage (
+                id                 SERIAL PRIMARY KEY,
+                robot_id           VARCHAR(64)  NOT NULL UNIQUE,
+                mission_id         VARCHAR(64),
+                coverage           JSONB        NOT NULL,
+                updated_at         TIMESTAMP    NOT NULL DEFAULT NOW(),
+                passes             JSONB,
+                pass_grid          JSONB,
+                passes_mission_id  VARCHAR(64),
+                passes_updated_at  TIMESTAMP
+            )
+            """);
+        for (String col : new String[]{
+                "passes JSONB", "pass_grid JSONB", "passes_mission_id VARCHAR(64)", "passes_updated_at TIMESTAMP"}) {
+            jdbcTemplate.execute("ALTER TABLE roomba_coverage ADD COLUMN IF NOT EXISTS " + col);
+        }
+
         // Native (real, robot/cloud-side) schedules -- one row per household_schedule_id,
         // full ScheduleOptions kept as JSONB so display fields can be derived without a
         // migration every time roombapy-prime's model gains a field. Poller REPLACES this
@@ -307,6 +334,42 @@ public class UsageStorageMigration implements ApplicationRunner {
         // but never wrote the robot's own native schedule, so nothing it created ever
         // showed up in the iRobot app. Drop it now that real native schedules work.
         jdbcTemplate.execute("DROP TABLE IF EXISTS roomba_schedules");
+    }
+
+    /** The Postgres channel the roomba poller LISTENs on (roomba-poller/poller.py COMMAND_CHANNEL). */
+    static final String COMMAND_CHANNEL = "roomba_commands";
+
+    static final String COMMAND_NOTIFY_FUNCTION = """
+        CREATE OR REPLACE FUNCTION roomba_commands_notify() RETURNS trigger AS $$
+        BEGIN
+            PERFORM pg_notify('%s', NEW.id::text);
+            RETURN NEW;
+        END;
+        $$ LANGUAGE plpgsql
+        """.formatted(COMMAND_CHANNEL);
+
+    static final String COMMAND_NOTIFY_TRIGGER = """
+        CREATE OR REPLACE TRIGGER trg_roomba_commands_notify
+            AFTER INSERT ON roomba_commands
+            FOR EACH ROW EXECUTE FUNCTION roomba_commands_notify()
+        """;
+
+    /**
+     * Wakes the roomba poller the moment a command is queued (it LISTENs on
+     * {@value #COMMAND_CHANNEL}), instead of on its next 5 s tick. A trigger, so every
+     * inserter wakes it, not only this backend. Postgres-only (plpgsql), so it lives here
+     * and schema.sql only records it in a comment: that file also runs against H2 in the
+     * tests. Idempotent. A failure only costs the poller its fast wake-up (the tick still
+     * runs), so it is logged rather than allowed to stop the backend from starting.
+     */
+    void createCommandNotifyTrigger() {
+        try {
+            jdbcTemplate.execute(COMMAND_NOTIFY_FUNCTION);
+            jdbcTemplate.execute(COMMAND_NOTIFY_TRIGGER);
+        } catch (Exception e) {
+            log.warn("Couldn't create the roomba_commands NOTIFY trigger (the poller falls back to its tick): {}",
+                    e.getMessage());
+        }
     }
 
     /**

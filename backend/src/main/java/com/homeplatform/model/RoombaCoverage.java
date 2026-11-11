@@ -13,6 +13,14 @@ import java.time.LocalDateTime;
  * while a mission runs; the backend only reads it. {@code coverage} is a GeoJSON
  * FeatureCollection whose features carry an {@code operatingModes} property
  * (e.g. "vacuuming" = cleaned, "traveling" = passed through).
+ *
+ * <p>The cloud's coverage has no pass count, so the poller also counts passes from
+ * the live position stream (roomba-poller/coverage_passes.py) and writes them onto
+ * this row: {@code passes} is the area cleaned twice or more, as
+ * {@code {"v":1,"cell":0.05,"rects":[[ix,iy,w,h],...]}} in grid cells (metres =
+ * value * cell), for the mission {@code passesMissionId}. The poller also keeps the
+ * full grid in a {@code pass_grid} column (to carry on after a restart); the
+ * backend never reads it, so it isn't mapped here (see schema.sql).
  */
 @Entity
 @Table(name = "roomba_coverage")
@@ -39,4 +47,16 @@ public class RoombaCoverage {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /** Area cleaned twice or more this mission (null until the poller has counted any). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "passes")
+    private String passes;
+
+    /** The mission {@link #passes} belongs to: its start, epoch seconds (as mission_id is). */
+    @Column(name = "passes_mission_id", length = 64)
+    private String passesMissionId;
+
+    @Column(name = "passes_updated_at")
+    private LocalDateTime passesUpdatedAt;
 }
