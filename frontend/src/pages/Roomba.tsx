@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import RoombaMap, { type RoomSelection, type SplitLine } from '../components/RoombaMap';
+import RoombaMap, { type LastClean, type RoomSelection, type SplitLine } from '../components/RoombaMap';
 import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
 import RoomMergeModal from '../components/RoomMergeModal';
@@ -288,6 +288,17 @@ export default memo(function Roomba() {
   const recharging = isRecharging(status);
   const mapLive = running && !state.offline;
 
+  // The rooms of the newest confirmed clean, drawn as faint lanes on the map while the robot
+  // is docked (live coverage takes over during a run). A week-old clean isn't news: none then.
+  const lastConfirmed = useMemo(() => runs.find((r) => r.verified && r.rooms.length > 0) ?? null, [runs]);
+  const lastConfirmedFresh = !!lastConfirmed && now.getTime() - new Date(lastConfirmed.startedAt).getTime() < 7 * 86_400_000;
+  const lastCleanLabel = lastConfirmed && lastConfirmedFresh && !mapLive ? lastCleanedLine(lastConfirmed.startedAt, now) : null;
+  // Keyed on the run and its words, so the map's props stay stable between polls.
+  const lastClean = useMemo<LastClean | null>(
+    () => (lastConfirmed && lastCleanLabel ? { rooms: lastConfirmed.rooms, label: lastCleanLabel } : null),
+    [lastConfirmed, lastCleanLabel],
+  );
+
   // ── The answer ─────────────────────────────────────────
   const statusPending = statusQuery.data === undefined && !statusQuery.isError;
   const statusFailed = statusQuery.data === undefined && statusQuery.isError;
@@ -475,6 +486,7 @@ export default memo(function Roomba() {
         onToggleMergeRoom={toggleMergeRoom}
         cleanMode={cleanMode}
         onSelectCleanRoom={handleSelectCleanRoom}
+        lastClean={lastClean}
       />
       {modeBanner}
       {isAdmin && !modeBanner && mapQuery.data && cleanRooms.length > 0 && (

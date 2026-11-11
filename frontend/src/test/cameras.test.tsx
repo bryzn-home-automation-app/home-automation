@@ -5,6 +5,8 @@ import type { Camera, CameraBatteryReading } from '../types';
 import {
   BATTERY_LIVE_BUDGET_MS,
   ago,
+  FULL_BATTERY_AXIS,
+  batteryAxis,
   batteryLampTone,
   summaryDays,
   timeTicks,
@@ -220,6 +222,59 @@ describe('battery helpers', () => {
     expect(batteryLampTone(15)).toBe('problem');
     expect(batteryLampTone(12, true)).toBe('ok');
     expect(batteryLampTone(null)).toBe('neutral');
+  });
+
+  describe('batteryAxis (fitted y-axis)', () => {
+    const check = (a: ReturnType<typeof batteryAxis>) => {
+      const [lo, hi] = a.domain;
+      expect(lo).toBeGreaterThanOrEqual(0);
+      expect(hi).toBeLessThanOrEqual(100);
+      expect(a.ticks[0]).toBe(lo);
+      expect(a.ticks[a.ticks.length - 1]).toBe(hi);
+      expect(a.ticks.length).toBeGreaterThanOrEqual(3);
+      expect(a.ticks.length).toBeLessThanOrEqual(6);
+      // The alert line is always inside, never on the edge.
+      expect(lo).toBeLessThan(30);
+      expect(hi).toBeGreaterThan(30);
+    };
+
+    it('zooms in on batteries that live under 50%', () => {
+      const a = batteryAxis([27, 29, 33, 41, 45, null]);
+      expect(a).toEqual({ domain: [20, 50], ticks: [20, 30, 40, 50], full: false });
+      check(a);
+    });
+
+    it('fits very low batteries down to 0 and keeps the alert line in', () => {
+      const a = batteryAxis([5, 8, 12]);
+      expect(a).toEqual({ domain: [0, 40], ticks: [0, 10, 20, 30, 40], full: false });
+      check(a);
+    });
+
+    it('goes to the whole scale when a camera is near full and another is low', () => {
+      expect(batteryAxis([98, 4])).toEqual(FULL_BATTERY_AXIS);
+      // 20–100% would hardly be a zoom: the plain scale reads better.
+      expect(batteryAxis([98, 27])).toEqual(FULL_BATTERY_AXIS);
+      // Near full and nothing low still has to reach down to the alert line.
+      expect(batteryAxis([92, 97])).toEqual(FULL_BATTERY_AXIS);
+    });
+
+    it("doesn't magnify a flat line", () => {
+      const a = batteryAxis([40, 40, 40]);
+      expect(a.domain[1] - a.domain[0]).toBeGreaterThanOrEqual(20);
+      expect(a.ticks.every((t) => t % 5 === 0)).toBe(true);
+      check(a);
+    });
+
+    it('stretches to show the alert line when every reading is well above it', () => {
+      const a = batteryAxis([62, 70]);
+      expect(a).toEqual({ domain: [20, 80], ticks: [20, 40, 60, 80], full: false });
+      check(a);
+    });
+
+    it('falls back to 0–100% with no readings', () => {
+      expect(batteryAxis([])).toEqual(FULL_BATTERY_AXIS);
+      expect(batteryAxis([null, undefined, NaN])).toEqual(FULL_BATTERY_AXIS);
+    });
   });
 
   it('puts time ticks on whole hours at home (B-102)', () => {
@@ -500,6 +555,28 @@ describe('CameraBatteryChart', () => {
     expect(screen.getAllByRole('group', { name: 'Battery range' })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: '7 days' }));
     expect(onRange).toHaveBeenCalledWith(168);
+  });
+
+  it('fits the scale to the batteries, says so, and can show 0–100%', () => {
+    render(
+      <CameraBatteryChart
+        tracks={[track(driveway, { history: history([31, 36, 45]) }), track(backyard, { history: history([40, 33, 27]) })]}
+        range={24}
+        onRangeChange={() => {}}
+      />,
+    );
+    expect(screen.getByText('Scale 20–50%')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Scale 20–50%\.$/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Fit' })).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '0–100%' }));
+    expect(screen.queryByText('Scale 20–50%')).not.toBeInTheDocument();
+    expect(screen.getByRole('img', { name: /Scale 0–100%\.$/ })).toBeInTheDocument();
+  });
+
+  it('offers no scale switch when the readings need the whole scale', () => {
+    render(<CameraBatteryChart tracks={[track(driveway, { history: history([96, 98]) }), track(backyard, { history: history([20, 12]) })]} range={24} onRangeChange={() => {}} />);
+    expect(screen.queryByRole('group', { name: 'Battery scale' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/^Scale /)).not.toBeInTheDocument();
   });
 
   it('keeps the day-by-day detail, grouped per camera', () => {

@@ -367,6 +367,14 @@
   --appmap-wall:        var(--apptext);
   --appmap-room:        rgba(21, 24, 26, 0.05);
   --appmap-dot:         rgba(21, 24, 26, 0.12);
+  /* Rooms are enamel plates on the floor well; neighbours alternate between these three
+     (a whisper of ink mixed into the panel), so they follow the theme and the app colour.
+     The grid is the metre dot screen in the well around the plan. Defined once for both
+     themes: the var()s resolve against whichever theme and colour are showing. */
+  --appmap-plate:       var(--appsurface);
+  --appmap-plate-alt:   color-mix(in srgb, var(--apptext) 4.5%, var(--appsurface));
+  --appmap-plate-alt2:  color-mix(in srgb, var(--apptext) 8%, var(--appsurface));
+  --appmap-grid:        var(--appborder-strong);
 
   /* people: a person's colour is data; the initials on it are always ink */
   --appavatar-ink:      #15181a;
@@ -729,6 +737,24 @@ body {
 .roomba-roomhit-editable:hover > polygon {
   fill: var(--appaccent);
   fill-opacity: 0.18;
+}
+/* A room key reached with the keyboard is outlined like a hovered one. */
+.roomba-roomhit:focus-visible {
+  outline: none;
+}
+.roomba-roomhit:focus-visible > polygon {
+  stroke: var(--appaccent);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+/* The rename pencil shows on hover / focus only: at rest the plan stays quiet. */
+.roomba-roomhit-glyph {
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+.roomba-roomhit:hover .roomba-roomhit-glyph,
+.roomba-roomhit:focus-visible .roomba-roomhit-glyph {
+  opacity: 1;
 }
 
 /* ── The app colour wheel (components/ui/ColourWheel.tsx) ──

@@ -248,6 +248,59 @@ export function combinedBatterySeries(tracks: CameraBatteryReading[][]): Combine
   });
 }
 
+/** A battery chart's y-axis: the visible range and its round tick positions, in percent. */
+export interface BatteryAxis {
+  domain: [number, number];
+  ticks: number[];
+  /** The whole 0–100% scale (nothing to zoom to, or asked for). */
+  full: boolean;
+}
+
+export const FULL_BATTERY_AXIS: BatteryAxis = { domain: [0, 100], ticks: [0, 25, 50, 75, 100], full: true };
+
+/** Tick steps tried in order; the first that keeps the axis to MAX_TICKS wins. */
+const AXIS_STEPS = [5, 10, 20] as const;
+const MAX_TICKS = 6;
+/** A fitted axis this tall is hardly a zoom: show the plain 0–100% scale instead. */
+const MAX_FIT_SPAN = 75;
+
+/**
+ * A y-axis fitted to the readings (every camera's, in the chart's window) rather than 0–100%:
+ * the lowest and highest reading, and the alert threshold, with a few points of padding, then
+ * snapped out to round 5 / 10 / 20 % ticks (3 to 6 of them), never below 0 or above 100, and at
+ * least `minSpan` points tall so a camera holding steady doesn't look like it's swinging. No
+ * readings, or readings that need three quarters of the scale or more, give the plain 0–100% axis.
+ */
+export function batteryAxis(
+  values: ReadonlyArray<number | null | undefined>,
+  opts: { threshold?: number; pad?: number; minSpan?: number } = {},
+): BatteryAxis {
+  const nums = values.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  if (!nums.length) return FULL_BATTERY_AXIS;
+  const { threshold = BATTERY_LOW, pad = 3, minSpan = 20 } = opts;
+  const clamp = (v: number) => Math.min(100, Math.max(0, v));
+  let lo = clamp(Math.min(...nums, threshold) - pad);
+  let hi = clamp(Math.max(...nums, threshold) + pad);
+  if (hi - lo < minSpan) {
+    const mid = (lo + hi) / 2;
+    lo = mid - minSpan / 2;
+    hi = mid + minSpan / 2;
+    // Slide back inside 0–100 rather than cut the span short.
+    if (lo < 0) [lo, hi] = [0, hi - lo];
+    if (hi > 100) [lo, hi] = [lo - (hi - 100), 100];
+    lo = clamp(lo);
+  }
+  for (const step of AXIS_STEPS) {
+    const from = Math.floor(lo / step) * step;
+    const to = Math.min(100, Math.ceil(hi / step) * step);
+    const count = Math.round((to - from) / step) + 1;
+    if (count > MAX_TICKS) continue;
+    if (to - from >= MAX_FIT_SPAN) return FULL_BATTERY_AXIS;
+    return { domain: [from, to], ticks: Array.from({ length: count }, (_, i) => from + i * step), full: false };
+  }
+  return FULL_BATTERY_AXIS;
+}
+
 /** Night = the gaps between daylight windows, within [from, to]. */
 export function nightWindows(
   daylight: Array<{ from: string; to: string }>,

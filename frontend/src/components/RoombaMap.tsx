@@ -1,7 +1,18 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useId, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fetchRoombaPosition, fetchRoombaCoverage } from '../api/roomba';
 import { EmptyState, ErrorState, Icon, Loading, SkelBlock } from './ui';
+import {
+  alternateTones,
+  boxInRings,
+  fitRoomLabel,
+  labelPoint as labelPointOf,
+  poleOfInaccessibility,
+  pointInRings,
+  roomNeighbours,
+  type LabelFit,
+  type Pt,
+} from '../utils/mapLabels';
 import type {
   GeoFeatureCollection,
   GeoPosition,
@@ -64,6 +75,17 @@ interface RoombaMapProps {
   /** "Clean a room" mode: clicking a room opens its clean-config dialog. */
   cleanMode?: boolean;
   onSelectCleanRoom?: (room: RoomSelection) => void;
+  /**
+   * The rooms the last finished clean covered, drawn as faint lanes while the robot is docked,
+   * and the key's words for it ("Cleaned yesterday"). Keep it referentially stable.
+   */
+  lastClean?: LastClean | null;
+}
+
+/** The last finished clean, for the docked map's quiet "cleaned" lanes. */
+export interface LastClean {
+  rooms: string[];
+  label: string;
 }
 
 /** A drawable policy zone (keep-out / no-mop) polygon + its category. */
@@ -72,79 +94,42 @@ interface ZonePoly {
   category: string;
 }
 
-/** One room feature: its ring polygons, centroid (SVG units), id and current name. */
+/** One room feature: its ring polygons, label anchor (SVG units), id and current name. */
 interface RoomShape {
   id: string | null;
   name: string | null;
   rings: string[];
   /** Numeric outer ring in projected SVG space — for point-in-room hit testing. */
   outerPts: [number, number][];
+  /** The first polygon's rings (outer + holes), numeric — for label fitting. */
+  labelRings: Pt[][];
+  /** The room's visual centre (pole of inaccessibility) and its clearance to the walls. */
   cx: number;
   cy: number;
+  clearance: number;
+  /** Which of the alternating plate tones this room takes (no two neighbours share one). */
+  tone: number;
 }
+
+/** Where a room's label sits: its pole of inaccessibility (B-122). Kept here for the tests. */
+export const labelPoint = labelPointOf;
 
 /** Ray-casting point-in-polygon test (ring is [x,y] pairs, in any one space). */
 function pointInRing(px: number, py: number, ring: [number, number][]): boolean {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    const intersect =
-      yi > py !== yj > py && px < ((xj - xi) * (py - yi)) / (yj - yi) + xi;
-    if (intersect) inside = !inside;
-  }
-  return inside;
+  return pointInRings(px, py, [ring]);
 }
 
-/**
- * Where a room's name goes: the area-weighted (shoelace) centroid of its outer ring, and when
- * that falls outside the room (an L shape), the middle of the widest horizontal run through the
- * room at the centroid's height, or failing that at the box's middle (B-122). The plain average
- * of the vertices it replaced counted the ring's repeated closing point and drifted toward it.
- */
-export function labelPoint(ring: [number, number][]): [number, number] {
-  const closed = ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1];
-  const pts = closed ? ring.slice(0, -1) : ring;
-  if (pts.length === 0) return [0, 0];
-  let a = 0;
-  let cx = 0;
-  let cy = 0;
-  for (let i = 0; i < pts.length; i++) {
-    const [x0, y0] = pts[i];
-    const [x1, y1] = pts[(i + 1) % pts.length];
-    const cross = x0 * y1 - x1 * y0;
-    a += cross;
-    cx += (x0 + x1) * cross;
-    cy += (y0 + y1) * cross;
-  }
-  const c: [number, number] = Math.abs(a) < 1e-9
-    // Degenerate (a line): the mean of the distinct points.
-    ? [pts.reduce((t, p) => t + p[0], 0) / pts.length, pts.reduce((t, p) => t + p[1], 0) / pts.length]
-    : [cx / (3 * a), cy / (3 * a)];
-  if (pointInRing(c[0], c[1], pts)) return c;
-  const ys = pts.map((p) => p[1]);
-  const midY = (Math.min(...ys) + Math.max(...ys)) / 2;
-  for (const y of [c[1], midY]) {
-    const span = widestSpan(pts, y);
-    if (span) return [(span[0] + span[1]) / 2, y];
-  }
-  return c;
-}
-
-/** The widest stretch of a horizontal line at `y` that lies inside the ring. */
-function widestSpan(ring: [number, number][], y: number): [number, number] | null {
-  const xs: number[] = [];
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i];
-    const [xj, yj] = ring[j];
-    if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
-  }
-  xs.sort((p, q) => p - q);
-  let best: [number, number] | null = null;
-  for (let k = 0; k + 1 < xs.length; k += 2) {
-    if (!best || xs[k + 1] - xs[k] > best[1] - best[0]) best = [xs[k], xs[k + 1]];
-  }
-  return best;
+/** A room name as drawn: its lines, size and width, or a number that the key spells out. */
+interface RoomLabel {
+  x: number;
+  y: number;
+  text: string;
+  isPrompt: boolean;
+  fit: LabelFit | null;
+  /** 1-based number shown in the room when the name doesn't fit; the key lists it. */
+  keyNo: number | null;
+  /** Drawn reading upward (a tall, narrow room). */
+  rotated: boolean;
 }
 
 /** True for a key press that belongs to a control (a button, a field), not to the map's shortcuts. */
@@ -188,9 +173,28 @@ function extendBounds(fc: GeoFeatureCollection | null | undefined, b: Bounds): v
 // Target viewBox extent (SVG units) for the longer axis — gives crisp strokes
 // regardless of the real-world size of the map in meters.
 const VIEW_EXTENT = 1000;
-const PAD_RATIO = 0.06; // 6% breathing room around the plan
-// Room names never draw smaller than this on screen (B-123: about 8px on a phone before).
+// Breathing room around the plan, inside the well (the well itself has no padding, so the
+// plan gets nearly the full width on a phone). Marks at the very edge may spill into it.
+const PAD_RATIO = 0.045;
+// Room names never draw smaller than this on screen (B-123: about 8px on a phone before),
+// and no bigger than this in a big room: type is sized for the eye, not the floor area.
 const MIN_LABEL_PX = 11;
+const MAX_LABEL_PX = 13;
+const MAX_LABEL_PX_WIDE = 14;
+// A plan drawn at least this wide (a desktop) may use the larger name size.
+const WIDE_PLAN_PX = 520;
+// The plate tones that alternate between neighbouring rooms (tokens in index.css).
+const PLATE = ['var(--appmap-plate)', 'var(--appmap-plate-alt)', 'var(--appmap-plate-alt2)'];
+
+/** viewBox units per CSS px; before the plan is measured, assume a 600px drawing. */
+function unitsPerPx(viewWidth: number, drawnWidth: number): number {
+  return drawnWidth > 0 ? viewWidth / drawnWidth : viewWidth / 600;
+}
+
+/** An id safe inside url(#…): React's useId() has colons. */
+function useSvgId(prefix: string): string {
+  return `${prefix}${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
+}
 
 export default memo(function RoombaMap({
   map,
@@ -215,6 +219,7 @@ export default memo(function RoombaMap({
   retrying,
   robotName,
   aside,
+  lastClean,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   // Room hover highlight is driven purely by CSS `:hover` on the hit-area group
@@ -224,24 +229,38 @@ export default memo(function RoombaMap({
   // the placed corners live in the parent (controlled via splitDraft).
   const [cursor, setCursor] = useState<{ vx: number; vy: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  // Pattern / clip ids, unique per map on the page.
+  const idGrid = useSvgId('fpmap-grid');
+  const idLanes = useSvgId('fpmap-lanes');
+  const idLast = useSvgId('fpmap-last');
+  const idKeepOut = useSvgId('fpmap-keepout');
+  const idNoMop = useSvgId('fpmap-nomop');
+  const idClip = useSvgId('fpmap-clip');
 
   // Clear the rubber-band cursor whenever split mode toggles off.
   useEffect(() => {
     if (!splitMode) setCursor(null);
   }, [splitMode]);
 
-  // How wide the plan is drawn on screen, in CSS px, so labels keep a readable minimum size.
-  // Rounded to 20px steps so a resize doesn't redraw the static layers every frame; it never
-  // changes on a position or coverage poll.
+  // How wide the plan is drawn on screen, in CSS px, so labels and marks keep a readable size.
+  // Measured on the svg itself (its height can be capped on a tall plan, which letterboxes the
+  // drawing), rounded to 10px steps so a resize doesn't redraw the static layers every frame;
+  // it never changes on a position or coverage poll.
   const [drawnWidth, setDrawnWidth] = useState(0);
   const observerRef = useRef<ResizeObserver | null>(null);
-  const measureRef = useCallback((el: HTMLDivElement | null) => {
+  const setSvg = useCallback((el: SVGSVGElement | null) => {
+    svgRef.current = el;
     observerRef.current?.disconnect();
     observerRef.current = null;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width ?? 0;
-      setDrawnWidth(Math.round(w / 20) * 20);
+      const r = entries[0]?.contentRect;
+      if (!r) return;
+      const vb = el.viewBox?.baseVal;
+      const w = vb && vb.width > 0 && vb.height > 0 && r.height > 0
+        ? Math.min(r.width, (r.height * vb.width) / vb.height)
+        : r.width;
+      setDrawnWidth(Math.round(w / 10) * 10);
     });
     ro.observe(el);
     observerRef.current = ro;
@@ -386,37 +405,46 @@ export default memo(function RoombaMap({
       }
     }
 
-    // Rooms — one entry per feature, carrying its ring polygons, centroid, id
-    // (the map's room_id, used for renaming) and current name. The centroid is
-    // taken from the outer ring, matching where the label sits.
+    // Rooms — one entry per feature, carrying its ring polygons, label anchor, id
+    // (the map's room_id, used for renaming) and current name. The label sits at the
+    // visual centre of the room's first polygon (its pole of inaccessibility).
+    const maxDim = Math.max(width, height);
     const rooms: RoomShape[] = [];
     if (geo.rooms?.features) {
       for (const f of geo.rooms.features) {
         const g = f.geometry;
         if (!g) continue;
         const rings: string[] = [];
-        let outer: GeoPosition[] | null = null;
+        let first: GeoPosition[][] | null = null;
         if (g.type === 'Polygon') {
           for (const ring of g.coordinates) rings.push(ringToPoints(ring));
-          outer = g.coordinates[0] ?? null;
+          first = g.coordinates;
         } else if (g.type === 'MultiPolygon') {
           for (const poly of g.coordinates)
             for (const ring of poly) rings.push(ringToPoints(ring));
-          outer = g.coordinates[0]?.[0] ?? null;
+          first = g.coordinates[0] ?? null;
         }
-        if (rings.length === 0 || !outer || outer.length === 0) continue;
+        const outer = first?.[0];
+        if (rings.length === 0 || !first || !outer || outer.length === 0) continue;
 
         const outerPts = outer.map((p) => project(p));
-        const [cx, cy] = labelPoint(outerPts);
+        const labelRings = first.filter((r) => r.length > 0).map((r) => r.map((p) => project(p)));
+        const pole = poleOfInaccessibility(labelRings, maxDim / 500);
 
         const rawName = (f.properties?.name ?? f.properties?.room_name) as unknown;
         const name = typeof rawName === 'string' && rawName.trim() ? rawName.trim() : null;
         const rawId = f.id;
         const id = rawId == null ? null : String(rawId);
 
-        rooms.push({ id, name, rings, outerPts, cx, cy });
+        rooms.push({ id, name, rings, outerPts, labelRings, cx: pole.x, cy: pole.y, clearance: pole.d, tone: 0 });
       }
     }
+    // Neighbouring rooms take different plate tones, so a wall-less doorway still reads as
+    // two rooms. A shared wall is 2% of the plan long or more; a corner touch doesn't count.
+    const tones = alternateTones(roomNeighbours(rooms.map((r) => r.outerPts), maxDim * 0.004, maxDim * 0.02));
+    rooms.forEach((r, i) => {
+      r.tone = tones[i] ?? 0;
+    });
 
     const hasGeometry =
       floorPolys.length > 0 ||
@@ -435,8 +463,12 @@ export default memo(function RoombaMap({
       zonePolys,
       wallLines,
       hasGeometry,
+      // viewBox units per metre, and where a whole metre falls (for the scale grid)
+      scale,
+      gridX: pad + (Math.ceil(b.minX) - b.minX) * scale,
+      gridY: pad + (b.maxY - Math.floor(b.maxY)) * scale,
       // dock marker radius relative to the map extent
-      dockR: Math.max(width, height) * 0.018,
+      dockR: maxDim * 0.018,
     };
   }, [geo]);
 
@@ -510,46 +542,140 @@ export default memo(function RoombaMap({
   const isCleaning = !!cleanMode && !!onSelectCleanRoom;
   const canEdit = !!editable && !!onSelectRoom && !isSplitting && !isMerging && !isCleaning;
 
+  // Room names: each fitted inside its room at the room's visual centre — as large as the room
+  // allows (up to MAX_LABEL_PX), on two lines before giving up, read upward in a tall narrow
+  // room, and never under MIN_LABEL_PX. A room too small for its name on this screen gets a number, and
+  // the key under the map spells it out. Depends on the drawn width, never on a poll.
+  const labels = useMemo(() => {
+    const list: Array<RoomLabel | null> = [];
+    const keyed: Array<{ n: number; name: string }> = [];
+    if (!model) return { list, keyed };
+    const upp = unitsPerPx(model.width, drawnWidth);
+    const maxPx = drawnWidth >= WIDE_PLAN_PX ? MAX_LABEL_PX_WIDE : MAX_LABEL_PX;
+    for (const room of model.rooms) {
+      const text = room.name ?? (canEdit && room.id ? 'Name this room' : null);
+      if (!text) {
+        list.push(null);
+        continue;
+      }
+      const roomPx = room.clearance / upp;
+      const maxSize = Math.min(maxPx, Math.max(MIN_LABEL_PX, roomPx * 0.55)) * upp;
+      const opts = { maxSize, minSize: MIN_LABEL_PX * upp };
+      let fit = fitRoomLabel(text, (hw, hh) => boxInRings(room.labelRings, room.cx, room.cy, hw, hh), opts);
+      // A tall, narrow room (a bathroom, a closet) reads its name up the room, as on a plan.
+      let rotated = false;
+      if (!fit) {
+        fit = fitRoomLabel(text, (hw, hh) => boxInRings(room.labelRings, room.cx, room.cy, hh, hw), opts);
+        rotated = !!fit;
+      }
+      // An unnamed room's prompt that doesn't fit is left out; the Rooms list names it.
+      if (!fit && !room.name) {
+        list.push(null);
+        continue;
+      }
+      const keyNo = fit ? null : keyed.length + 1;
+      if (keyNo != null && room.name) keyed.push({ n: keyNo, name: room.name });
+      list.push({ x: room.cx, y: room.cy, text, isPrompt: !room.name, fit, keyNo, rotated });
+    }
+    return { list, keyed };
+  }, [model, drawnWidth, canEdit]);
+
+  const lastCleanSet = useMemo(() => new Set(lastClean?.rooms ?? []), [lastClean]);
+
   const staticBase = useMemo(() => {
     if (!model) return null;
-    const { floorPolys, rooms, width, height } = model;
+    const { floorPolys, rooms, width, height, scale, gridX, gridY } = model;
     const maxDim = Math.max(width, height);
+    const upp = unitsPerPx(width, drawnWidth);
     const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
+    // The scale grid: a dot every metre (every 2 m when a metre is under 12px on screen).
+    const step = scale / upp >= 12 ? scale : scale * 2;
+    const lane = 4 * upp; // cleaned lanes: a fine rule every 4px, like the robot's passes
+    const hatch = 5 * upp;
     return (
       <>
-        {/* Floor plan — the outer walkable surface */}
+        <defs>
+          <pattern id={idGrid} patternUnits="userSpaceOnUse" x={gridX - step / 2} y={gridY - step / 2} width={step} height={step}>
+            <circle cx={step / 2} cy={step / 2} r={0.9 * upp} fill="var(--appmap-grid)" />
+          </pattern>
+          <pattern id={idLanes} patternUnits="userSpaceOnUse" width={lane * 4} height={lane}>
+            <rect width={lane * 4} height={lane} fill="var(--apptext)" fillOpacity={0.07} />
+            <rect y={lane / 2 - 0.5 * upp} width={lane * 4} height={upp} fill="var(--apptext)" fillOpacity={0.4} />
+          </pattern>
+          {/* The last clean, when docked: the same lanes, wider apart and faint. */}
+          <pattern id={idLast} patternUnits="userSpaceOnUse" width={lane * 4} height={lane * 1.25}>
+            <rect y={lane * 0.625 - 0.45 * upp} width={lane * 4} height={0.9 * upp} fill="var(--apptext)" fillOpacity={0.11} />
+          </pattern>
+          <pattern id={idKeepOut} patternUnits="userSpaceOnUse" width={hatch} height={hatch} patternTransform="rotate(45)">
+            <rect width={hatch} height={hatch} fill="var(--apptint-problem)" />
+            <rect width={1.1 * upp} height={hatch} fill="var(--apptext-danger)" fillOpacity={0.55} />
+          </pattern>
+          <pattern id={idNoMop} patternUnits="userSpaceOnUse" width={hatch} height={hatch}>
+            <rect width={hatch} height={hatch} fill="var(--apptint-warn)" />
+            <circle cx={hatch / 2} cy={hatch / 2} r={0.95 * upp} fill="var(--apptext-warning)" fillOpacity={0.7} />
+          </pattern>
+          {/* Live coverage is clipped to the floor, so a pass that brushes a wall stays inside it. */}
+          <clipPath id={idClip}>
+            {(floorPolys.length > 0 ? floorPolys : rooms.flatMap((r) => r.rings)).map((pts, i) => (
+              <polygon key={i} points={pts} />
+            ))}
+          </clipPath>
+        </defs>
+
+        {/* The well: a metre grid for scale, under the plan, filling the whole well. */}
+        <rect
+          x={-width}
+          y={-height}
+          width={width * 3}
+          height={height * 3}
+          fill={`url(#${idGrid})`}
+          style={{ pointerEvents: 'none' }}
+        />
+
+        {/* Floor plan — the outer walkable surface, a plate over the grid */}
         {floorPolys.map((pts, i) => (
           <polygon
             key={`floor-${i}`}
             points={pts}
-            fill="var(--appsurface)"
+            fill="var(--appmap-plate)"
             stroke="var(--appborder-strong)"
-            strokeWidth={Math.max(width, height) * 0.003}
+            strokeWidth={maxDim * 0.002}
             strokeLinejoin="round"
           />
         ))}
 
-        {/* Rooms — a faint ink wash (decorative; interaction layer is below).
-            The hover highlight lives on the hit-area layer via CSS, so these fills
-            depend only on merge selection. */}
+        {/* Rooms — enamel plates in alternating tones with a hairline edge (decorative; the
+            interaction layer is in the overlay). The hover highlight lives on the hit-area
+            layer via CSS, so these depend only on the merge selection and the last clean. */}
         {rooms.map((room, ri) => {
           const mergeSelected = !!(mergeSet && room.id && mergeSet.has(room.id));
+          const lastCleaned = !!(room.name && lastCleanSet.has(room.name));
           return room.rings.map((pts, i) => (
-            <polygon
-              key={`room-${ri}-${i}`}
-              points={pts}
-              fill={mergeSelected ? 'var(--apptext)' : 'var(--appmap-room)'}
-              fillOpacity={mergeSelected ? 0.22 : 1}
-              stroke={mergeSelected ? 'var(--apptext)' : 'var(--appborder)'}
-              strokeWidth={maxDim * (mergeSelected ? 0.005 : 0.003)}
-              strokeLinejoin="round"
-              style={{ pointerEvents: 'none' }}
-            />
+            <g key={`room-${ri}-${i}`} style={{ pointerEvents: 'none' }}>
+              <polygon
+                points={pts}
+                fill={PLATE[room.tone] ?? PLATE[0]}
+                stroke="var(--appborder)"
+                strokeWidth={Math.max(maxDim * 0.0018, upp)}
+                strokeLinejoin="round"
+              />
+              {lastCleaned && <polygon points={pts} fill={`url(#${idLast})`} />}
+              {mergeSelected && (
+                <polygon
+                  points={pts}
+                  fill="var(--appaccent)"
+                  fillOpacity={0.2}
+                  stroke="var(--appaccent)"
+                  strokeWidth={2 * upp}
+                  strokeLinejoin="round"
+                />
+              )}
+            </g>
           ));
         })}
       </>
     );
-  }, [model, isMerging, mergeSelection]);
+  }, [model, isMerging, mergeSelection, drawnWidth, lastCleanSet, idGrid, idLanes, idLast, idKeepOut, idNoMop, idClip]);
 
   const staticOverlay = useMemo(() => {
     if (!model) return null;
@@ -557,80 +683,108 @@ export default memo(function RoombaMap({
     const maxDim = Math.max(width, height);
     const mergeSet = isMerging ? new Set(mergeSelection ?? []) : null;
     const interactive = canEdit || isMerging || isCleaning;
-    // viewBox units per CSS px; labels and glyphs keep a readable on-screen minimum (B-123).
-    const unitsPerPx = drawnWidth > 0 ? width / drawnWidth : 0;
-    const labelSize = Math.max(maxDim * 0.024, MIN_LABEL_PX * unitsPerPx);
-    const promptSize = Math.max(maxDim * 0.022, MIN_LABEL_PX * unitsPerPx);
-    const glyphSize = Math.max(maxDim * 0.03, 16 * unitsPerPx);
+    // viewBox units per CSS px; labels and glyphs keep a readable on-screen size (B-123).
+    const upp = unitsPerPx(width, drawnWidth);
+    const glyphSize = 16 * upp;
+    const wallW = Math.max(maxDim * 0.0055, 2.5 * upp);
     return (
       <>
-        {/* Keep-out / no-mop zones — hatched, distinct per category */}
+        {/* Keep-out zones: a diagonal hatch in a solid red edge. No-mop zones: a dot screen
+            in a dashed amber edge. The key under the map draws the same two. */}
         {zonePolys.map((z, i) => {
           const noMop = isNoMop(z.category);
           return (
             <polygon
               key={`zone-${i}`}
               points={z.points}
-              fill={noMop ? 'var(--apptint-warn)' : 'var(--apptint-problem)'}
+              fill={`url(#${noMop ? idNoMop : idKeepOut})`}
               stroke={noMop ? 'var(--apptext-warning)' : 'var(--apptext-danger)'}
-              strokeWidth={maxDim * 0.004}
-              strokeDasharray={`${maxDim * 0.012} ${maxDim * 0.008}`}
+              strokeWidth={1.25 * upp}
+              strokeDasharray={noMop ? `${4 * upp} ${3 * upp}` : undefined}
               strokeLinejoin="round"
+              style={{ pointerEvents: 'none' }}
             />
           );
         })}
 
-        {/* Borders / walls — strong outline */}
+        {/* Borders / walls — ink, the heaviest line on the plate. Doorways are the gaps. */}
         {borderPaths.map((pts, i) => (
           <polyline
             key={`border-${i}`}
             points={pts}
             fill="none"
             stroke="var(--appmap-wall)"
-            strokeWidth={maxDim * 0.006}
-            strokeLinejoin="round"
-            strokeLinecap="round"
+            strokeWidth={wallW}
+            strokeLinejoin="miter"
+            strokeLinecap="square"
+            style={{ pointerEvents: 'none' }}
           />
         ))}
 
-        {/* Virtual walls — LineString policy zones, dashed problem-coloured */}
-        {wallLines.map((pts, i) => (
-          <polyline
-            key={`vwall-${i}`}
-            points={pts}
-            fill="none"
-            stroke="var(--apptext-danger)"
-            strokeWidth={maxDim * 0.007}
-            strokeDasharray={`${maxDim * 0.016} ${maxDim * 0.01}`}
-            strokeLinejoin="round"
-            strokeLinecap="round"
-          />
-        ))}
-
-        {/* Dock marker: a small plate with the dock icon, like the legend's key */}
-        {dockMarkers.map(([cx, cy], i) => {
-          const s = Math.max(dockR * 2.6, 24 * unitsPerPx);
+        {/* Virtual walls — LineString policy zones: a dashed red rule with a stop bar at each end */}
+        {wallLines.map((pts, i) => {
+          const coords = pts.split(' ').map((p) => p.split(',').map(Number) as [number, number]);
+          const bar = 5 * upp;
+          const ends = [
+            [coords[0], coords[1]],
+            [coords[coords.length - 1], coords[coords.length - 2]],
+          ].filter(([a, b]) => a && b) as Array<[[number, number], [number, number]]>;
           return (
-            <g key={`dock-${i}`}>
+            <g key={`vwall-${i}`} style={{ pointerEvents: 'none' }}>
+              <polyline
+                points={pts}
+                fill="none"
+                stroke="var(--apptext-danger)"
+                strokeWidth={2.25 * upp}
+                strokeDasharray={`${5 * upp} ${3.5 * upp}`}
+                strokeLinejoin="round"
+              />
+              {ends.map(([a, b], k) => {
+                const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+                const nx = (-(b[1] - a[1]) / len) * bar;
+                const ny = ((b[0] - a[0]) / len) * bar;
+                return (
+                  <line
+                    key={k}
+                    x1={a[0] - nx}
+                    y1={a[1] - ny}
+                    x2={a[0] + nx}
+                    y2={a[1] + ny}
+                    stroke="var(--apptext-danger)"
+                    strokeWidth={2 * upp}
+                    strokeLinecap="round"
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+
+        {/* Dock: a square key-plate with the dock icon, as in the key. The robot is a round
+            puck, so the two never read as the same mark. */}
+        {dockMarkers.map(([cx, cy], i) => {
+          const s = Math.max(dockR * 2.2, 22 * upp);
+          return (
+            <g key={`dock-${i}`} style={{ pointerEvents: 'none' }}>
               <rect
                 x={cx - s / 2}
                 y={cy - s / 2}
                 width={s}
                 height={s}
-                rx={s * 0.25}
+                rx={s * 0.22}
                 fill="var(--appsurface)"
-                stroke="var(--appborder-strong)"
-                strokeWidth={s * 0.04}
+                stroke="var(--apptext)"
+                strokeWidth={1.25 * upp}
               />
               <use
                 href="#fp-i-dock"
-                x={cx - s * 0.32}
-                y={cy - s * 0.32}
-                width={s * 0.64}
-                height={s * 0.64}
+                x={cx - s * 0.33}
+                y={cy - s * 0.33}
+                width={s * 0.66}
+                height={s * 0.66}
                 fill="none"
                 stroke="var(--apptext)"
-                strokeWidth={1.5}
+                strokeWidth={1.6}
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -638,31 +792,60 @@ export default memo(function RoombaMap({
           );
         })}
 
-        {/* Room name labels — centered on each named room's centroid. In edit
-            mode, unnamed rooms show a "Name this room" prompt instead. */}
+        {/* Room names — ink on the plate, each fitted inside its room (see `labels`). In edit
+            mode, unnamed rooms show a "Name this room" prompt instead. A halo in the room's
+            own tone keeps a name readable over a zone's hatch or the cleaned lanes. */}
         {rooms.map((room, i) => {
-          const label = room.name ?? (canEdit && room.id ? 'Name this room' : null);
-          if (!label) return null;
-          const isPrompt = !room.name;
+          const l = labels.list[i];
+          if (!l) return null;
+          const mergeSelected = !!(mergeSet && room.id && mergeSet.has(room.id));
+          if (l.keyNo != null) {
+            const r = 8.5 * upp;
+            return (
+              <g key={`roomlabel-${i}`} style={{ pointerEvents: 'none' }}>
+                <circle cx={l.x} cy={l.y} r={r} fill="var(--appsurface)" stroke="var(--apptext)" strokeWidth={1.1 * upp} />
+                <text
+                  x={l.x}
+                  y={l.y}
+                  fill="var(--apptext)"
+                  fontSize={10.5 * upp}
+                  fontWeight={500}
+                  fontFamily="var(--appfont-mono)"
+                  textAnchor="middle"
+                  dominantBaseline="central"
+                >
+                  {l.keyNo}
+                </text>
+              </g>
+            );
+          }
+          const f = l.fit as LabelFit;
+          const lh = 1.18 * f.size;
           return (
             <text
               key={`roomlabel-${i}`}
-              x={room.cx}
-              y={room.cy}
-              fill={isPrompt ? 'var(--apptext-muted)' : 'var(--apptext-soft)'}
-              fontSize={isPrompt ? promptSize : labelSize}
-              fontWeight={isPrompt ? 500 : 600}
-              fontStyle={isPrompt ? 'italic' : 'normal'}
+              x={l.x}
+              y={l.y}
+              fill={l.isPrompt ? 'var(--apptext-muted)' : 'var(--apptext)'}
+              fontSize={f.size}
+              fontWeight={l.isPrompt ? 500 : 600}
+              fontStyle={l.isPrompt ? 'italic' : 'normal'}
               textAnchor="middle"
-              dominantBaseline="middle"
-              // Names as written (not silk-screen caps, which are too wide for small rooms on a
-              // phone); a halo in the floor colour keeps a name readable where it crosses a wall.
+              dominantBaseline="central"
+              transform={l.rotated ? `rotate(-90 ${l.x.toFixed(1)} ${l.y.toFixed(1)})` : undefined}
+              // Names as written (not silk-screen caps, which are too wide for small rooms).
               style={{ paintOrder: 'stroke', pointerEvents: 'none' }}
-              stroke="var(--appsurface)"
-              strokeWidth={labelSize * 0.28}
+              stroke={mergeSelected ? 'none' : PLATE[room.tone] ?? PLATE[0]}
+              strokeWidth={f.size * 0.32}
               strokeLinejoin="round"
             >
-              {label}
+              {f.lines.length === 1
+                ? f.lines[0]
+                : f.lines.map((line, k) => (
+                    <tspan key={k} x={l.x} dy={k === 0 ? -((f.lines.length - 1) * lh) / 2 : lh}>
+                      {line}
+                    </tspan>
+                  ))}
             </text>
           );
         })}
@@ -671,6 +854,7 @@ export default memo(function RoombaMap({
             mode) OR merge selection. On top so clicks land regardless of z-order. */}
         {interactive &&
           rooms
+            .map((room, index) => ({ ...room, index }))
             .filter((room) => room.id)
             .map((room, ri) => {
               const sel: RoomSelection = { id: room.id as string, name: room.name };
@@ -717,28 +901,38 @@ export default memo(function RoombaMap({
                     />
                   ))}
                   {/* Affordance glyph from the icon sprite: a check on a selected merge
-                      room, play in clean mode, a pencil on a named room in rename mode */}
-                  {(isMerging ? mergeSelected : isCleaning || !!room.name) && (
-                    <use
-                      href={`#fp-i-${isMerging ? 'check' : isCleaning ? 'play' : 'edit'}`}
-                      x={room.cx - glyphSize / 2}
-                      y={room.cy + labelSize * 0.8}
-                      width={glyphSize}
-                      height={glyphSize}
-                      fill="none"
-                      stroke={isMerging ? 'var(--apptext)' : 'var(--apptext-muted)'}
-                      strokeWidth={isMerging ? 2.2 : 1.5}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      style={{ pointerEvents: 'none' }}
-                    />
-                  )}
+                      room, play in clean mode, a pencil on a named room in rename mode (the
+                      pencil shows on hover / focus only, so the resting plan stays quiet; the
+                      line under the map says rooms can be renamed). Drawn under the name
+                      when there's room for it, otherwise left out. */}
+                  {(isMerging ? mergeSelected : isCleaning || !!room.name) && (() => {
+                    const l = labels.list[room.index];
+                    const below = l?.fit ? (l.rotated ? l.fit.halfW : l.fit.halfH) : l?.keyNo != null ? 8.5 * upp : -glyphSize / 2 - 3 * upp;
+                    const gy = room.cy + below + 3 * upp + glyphSize / 2;
+                    if (!boxInRings(room.labelRings, room.cx, gy, glyphSize / 2, glyphSize / 2)) return null;
+                    return (
+                      <use
+                        className={canEdit ? 'roomba-roomhit-glyph' : undefined}
+                        href={`#fp-i-${isMerging ? 'check' : isCleaning ? 'play' : 'edit'}`}
+                        x={room.cx - glyphSize / 2}
+                        y={gy - glyphSize / 2}
+                        width={glyphSize}
+                        height={glyphSize}
+                        fill="none"
+                        stroke={isMerging ? 'var(--appaccent-text)' : 'var(--apptext-muted)'}
+                        strokeWidth={isMerging ? 2.2 : 1.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                    );
+                  })()}
                 </g>
               );
             })}
       </>
     );
-  }, [model, isMerging, isCleaning, canEdit, mergeSelection, onToggleMergeRoom, onSelectCleanRoom, onSelectRoom, drawnWidth]);
+  }, [model, isMerging, isCleaning, canEdit, mergeSelection, onToggleMergeRoom, onSelectCleanRoom, onSelectRoom, drawnWidth, labels, idKeepOut, idNoMop]);
 
   // The legend names only the marks this plan actually has.
   const legend = useMemo(() => {
@@ -748,8 +942,9 @@ export default memo(function RoombaMap({
       noMop: model.zonePolys.some((z) => isNoMop(z.category)),
       wall: model.wallLines.length > 0,
       dock: model.dockMarkers.length > 0,
+      lastClean: !!lastClean && model.rooms.some((r) => !!r.name && lastCleanSet.has(r.name)),
     };
-  }, [model]);
+  }, [model, lastClean, lastCleanSet]);
 
   // Loading, failed or no map yet: the state in the map's place, the aside (the battery) kept.
   const holder = (body: ReactNode) => (
@@ -841,19 +1036,16 @@ export default memo(function RoombaMap({
   // The heading is drawn in SVG space where y grows downward, so the meter-space
   // angle theta maps to (cos θ, −sin θ). theta is provisional (may point out the
   // robot's back — see maps.md #1); still useful as a facing hint.
-  const unitsPerPx = drawnWidth > 0 ? width / drawnWidth : 0;
+  const upp = unitsPerPx(width, drawnWidth);
   const robot =
     position && Number.isFinite(position.x) && Number.isFinite(position.y)
       ? (() => {
           const [cx, cy] = project([position.x, position.y]);
-          const r = Math.max(maxDim * 0.016, 7 * unitsPerPx);
+          const r = Math.max(maxDim * 0.014, 8 * upp);
           const theta = typeof position.theta === 'number' ? position.theta : null;
-          const L = r * 2.4;
-          const head =
-            theta != null
-              ? { hx: cx + L * Math.cos(theta), hy: cy - L * Math.sin(theta) }
-              : null;
-          return { cx, cy, r, head };
+          // SVG rotates clockwise with y down, so the meter-space angle turns the other way.
+          const deg = theta != null ? (-theta * 180) / Math.PI : null;
+          return { cx, cy, r, deg };
         })()
       : null;
 
@@ -862,11 +1054,12 @@ export default memo(function RoombaMap({
 
   return (
     <div className={className}>
-      <div ref={measureRef} className="overflow-hidden rounded-well border border-appborder bg-appmap-floor p-2 sm:p-3">
+      <div className="fp-map-well overflow-hidden rounded-well border border-appborder bg-appmap-floor">
       <svg
-        ref={svgRef}
+        ref={setSvg}
         viewBox={`0 0 ${width.toFixed(1)} ${height.toFixed(1)}`}
-        className="block h-auto w-full"
+        className="fp-map-plan block h-auto w-full"
+        overflow="visible"
         // An image while it is only a picture; a group while its rooms are keys, because an
         // image's children are hidden from screen readers (B-121).
         role={interactive ? 'group' : 'img'}
@@ -881,39 +1074,34 @@ export default memo(function RoombaMap({
             position/coverage polls. */}
         {staticBase}
 
-        {/* Live cleaning coverage — traveled-through (lighter) vs vacuumed
-            (darker), painted over the light room fill so cleaned area reads as
-            progress. Drawn under walls so outlines stay crisp. */}
-        {coverageLayer.map((c, i) => (
-          <path
-            key={`cov-${i}`}
-            d={c.d}
-            fillRule="evenodd"
-            fill="var(--apptext)"
-            fillOpacity={c.mode === 'cleaned' ? 0.16 : 0.06}
-            stroke="none"
-            style={{ pointerEvents: 'none' }}
-          />
-        ))}
+        {/* Live cleaning coverage — the instrument's filled arc: what has been vacuumed
+            or mopped this run is ruled with fine lanes over a wash, like the passes
+            themselves; ground only travelled over gets the wash alone; the rest of the plate
+            stays bare. Clipped to the floor, and drawn under the walls so they stay crisp. */}
+        {coverageLayer.length > 0 && (
+          <g clipPath={`url(#${idClip})`} style={{ pointerEvents: 'none' }}>
+            {coverageLayer.map((c, i) => (
+              <path
+                key={`cov-${i}`}
+                d={c.d}
+                fillRule="evenodd"
+                fill={c.mode === 'cleaned' ? `url(#${idLanes})` : 'var(--apptext)'}
+                fillOpacity={c.mode === 'cleaned' ? 1 : 0.05}
+                stroke="none"
+              />
+            ))}
+          </g>
+        )}
 
         {/* Static overlay layers (zones, walls, dock, labels, room hit-areas) —
             memoized; unaffected by position/coverage polls. */}
         {staticOverlay}
 
-        {/* Live robot dot + heading — same project() space, hidden when stale */}
+        {/* Live robot — a round puck seen from above (its CLEAN button ring, and a notch
+            at the front when the heading is known), so it never reads as the square dock.
+            Same project() space; hidden when stale. */}
         {robot && (
           <g aria-label={`${name}'s position`}>
-            {robot.head && (
-              <line
-                x1={robot.cx}
-                y1={robot.cy}
-                x2={robot.head.hx}
-                y2={robot.head.hy}
-                stroke="var(--apptext)"
-                strokeWidth={robot.r * 0.45}
-                strokeLinecap="round"
-              />
-            )}
             {/* Pulsing halo — CSS transform/opacity animation (GPU-composited,
                 survives React reconciles) instead of perpetual SMIL <animate>
                 nodes that force a repaint loop and re-mount on every render. */}
@@ -925,14 +1113,27 @@ export default memo(function RoombaMap({
               fill="var(--apptext)"
               fillOpacity={0.18}
             />
-            <circle
-              cx={robot.cx}
-              cy={robot.cy}
-              r={robot.r}
-              fill="var(--apptext)"
-              stroke="var(--appmap-floor)"
-              strokeWidth={robot.r * 0.4}
-            />
+            {robot.deg != null ? (
+              // A puck drawn to a point at its front: the familiar "here, facing this way" pin.
+              <path
+                d={robotPointer(robot.r)}
+                fill="var(--apptext)"
+                stroke="var(--appmap-plate)"
+                strokeWidth={robot.r * 0.26}
+                strokeLinejoin="round"
+                transform={`translate(${robot.cx.toFixed(1)} ${robot.cy.toFixed(1)}) rotate(${robot.deg.toFixed(1)})`}
+              />
+            ) : (
+              <circle
+                cx={robot.cx}
+                cy={robot.cy}
+                r={robot.r}
+                fill="var(--apptext)"
+                stroke="var(--appmap-plate)"
+                strokeWidth={robot.r * 0.26}
+              />
+            )}
+            <circle cx={robot.cx} cy={robot.cy} r={robot.r * 0.34} fill="var(--appmap-plate)" />
           </g>
         )}
 
@@ -1003,39 +1204,148 @@ export default memo(function RoombaMap({
       </svg>
       </div>
       {(aside != null || legend) && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-          <ul className="fp-dial-legend justify-start" aria-label="Map key">
+        // The key beside the battery: the key wraps in its own column, so on a phone the
+        // battery doesn't take a row of its own under it.
+        <div className="mt-3 flex items-center justify-between gap-x-4">
+          <ul className="fp-dial-legend fp-map-legend min-w-0 flex-1 justify-start" aria-label="Map key">
             {coverageLayer.length > 0 && <MapKey kind="cleaned">Cleaned this run</MapKey>}
+            {coverageLayer.length === 0 && legend?.lastClean && lastClean && <MapKey kind="last">{lastClean.label}</MapKey>}
             {legend?.keepOut && <MapKey kind="keepout">Off-limits</MapKey>}
             {legend?.noMop && <MapKey kind="nomop">No mopping</MapKey>}
             {legend?.wall && <MapKey kind="wall">Virtual wall</MapKey>}
-            {robot && <MapKey kind="dot">{name}</MapKey>}
+            {robot && <MapKey kind="robot">{name}</MapKey>}
             {legend?.dock && <MapKey kind="dock">Dock</MapKey>}
+            {labels.keyed.map((k) => (
+              <MapKey key={`n-${k.n}`} kind="num" n={k.n}>{k.name}</MapKey>
+            ))}
           </ul>
-          {aside}
+          {aside != null && <div className="shrink-0">{aside}</div>}
         </div>
       )}
     </div>
   );
 });
 
+/**
+ * The robot with a heading, around the origin pointing along +x: a circle of radius r drawn
+ * out to a point at 1.75r, its sides tangent to the circle.
+ */
+function robotPointer(r: number): string {
+  const tip = 1.75 * r;
+  const a = Math.acos(r / tip);
+  const x = (r * Math.cos(a)).toFixed(2);
+  const y = (r * Math.sin(a)).toFixed(2);
+  return `M${tip.toFixed(2)} 0 L${x} ${y} A${r.toFixed(2)} ${r.toFixed(2)} 0 1 1 ${x} ${-Number(y)} Z`;
+}
+
 function isNoMop(category: string): boolean {
   return category.includes('NO_MOP') || category.includes('MOP');
 }
 
+type MapKeyKind = 'cleaned' | 'last' | 'keepout' | 'nomop' | 'wall' | 'robot' | 'dock' | 'num';
+
+/** A legend swatch, drawn with the same strokes, hatches and fills as the mark on the plan. */
+function MapSwatch({ kind, n }: { kind: MapKeyKind; n?: number }) {
+  const id = useSvgId('fpkey');
+  const W = 18;
+  const H = 12;
+  const plate = <rect x={0.5} y={0.5} width={W - 1} height={H - 1} rx={2} fill="var(--appmap-plate)" stroke="var(--appborder)" />;
+  let body: ReactNode;
+  switch (kind) {
+    case 'cleaned':
+    case 'last':
+      body = (
+        <>
+          <defs>
+            <pattern id={id} patternUnits="userSpaceOnUse" width={16} height={kind === 'cleaned' ? 4 : 5}>
+              {kind === 'cleaned' && <rect width={16} height={4} fill="var(--apptext)" fillOpacity={0.07} />}
+              <rect y={kind === 'cleaned' ? 1.5 : 2.05} width={16} height={kind === 'cleaned' ? 1 : 0.9} fill="var(--apptext)" fillOpacity={kind === 'cleaned' ? 0.4 : 0.11} />
+            </pattern>
+          </defs>
+          {plate}
+          <rect x={0.5} y={0.5} width={W - 1} height={H - 1} rx={2} fill={`url(#${id})`} />
+        </>
+      );
+      break;
+    case 'keepout':
+      body = (
+        <>
+          <defs>
+            <pattern id={id} patternUnits="userSpaceOnUse" width={5} height={5} patternTransform="rotate(45)">
+              <rect width={5} height={5} fill="var(--apptint-problem)" />
+              <rect width={1.1} height={5} fill="var(--apptext-danger)" fillOpacity={0.55} />
+            </pattern>
+          </defs>
+          {plate}
+          <rect x={1} y={1} width={W - 2} height={H - 2} fill={`url(#${id})`} stroke="var(--apptext-danger)" strokeWidth={1.25} />
+        </>
+      );
+      break;
+    case 'nomop':
+      body = (
+        <>
+          <defs>
+            <pattern id={id} patternUnits="userSpaceOnUse" width={5} height={5} x={1} y={1}>
+              <rect width={5} height={5} fill="var(--apptint-warn)" />
+              <circle cx={2.5} cy={2.5} r={0.95} fill="var(--apptext-warning)" fillOpacity={0.7} />
+            </pattern>
+          </defs>
+          {plate}
+          <rect x={1} y={1} width={W - 2} height={H - 2} fill={`url(#${id})`} stroke="var(--apptext-warning)" strokeWidth={1.25} strokeDasharray="4 3" />
+        </>
+      );
+      break;
+    case 'wall':
+      body = (
+        <g stroke="var(--apptext-danger)">
+          <line x1={2} y1={6} x2={16} y2={6} strokeWidth={2.25} strokeDasharray="5 3.5" />
+          <line x1={2} y1={1.5} x2={2} y2={10.5} strokeWidth={2} strokeLinecap="round" />
+          <line x1={16} y1={1.5} x2={16} y2={10.5} strokeWidth={2} strokeLinecap="round" />
+        </g>
+      );
+      break;
+    case 'robot':
+      body = (
+        <g>
+          <path d={robotPointer(4.6)} transform="translate(6.5 6)" fill="var(--apptext)" />
+          <circle cx={6.5} cy={6} r={1.6} fill="var(--appmap-plate)" />
+        </g>
+      );
+      break;
+    case 'num':
+      body = (
+        <g>
+          <circle cx={9} cy={6} r={5.5} fill="var(--appsurface)" stroke="var(--apptext)" strokeWidth={1} />
+          <text x={9} y={6} fontSize={7.5} fontFamily="var(--appfont-mono)" fontWeight={500} fill="var(--apptext)" textAnchor="middle" dominantBaseline="central">
+            {n}
+          </text>
+        </g>
+      );
+      break;
+    default:
+      body = null;
+  }
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} className="block shrink-0" focusable="false">
+      {body}
+    </svg>
+  );
+}
+
 /** One legend entry, its key drawn like the mark it explains. */
-function MapKey({ kind, children }: { kind: 'cleaned' | 'keepout' | 'nomop' | 'wall' | 'dot' | 'dock'; children: ReactNode }) {
-  const key =
-    kind === 'dock' ? <Icon name="dock" className="fp-icon--s" />
-      : kind === 'dot' ? <span className="inline-block h-2.5 w-2.5 rounded-full bg-apptext" />
-        : kind === 'wall' ? <span className="inline-block w-4 border-t-2 border-dashed border-apptext-danger" />
-          : kind === 'keepout' ? <span className="inline-block h-2.5 w-3.5 rounded-[2px] border border-dashed border-apptext-danger bg-apptint-problem" />
-            : kind === 'nomop' ? <span className="inline-block h-2.5 w-3.5 rounded-[2px] border border-dashed border-apptext-warning bg-apptint-warn" />
-              : <span className="inline-block h-2.5 w-3.5 rounded-[2px] border border-appborder bg-[color-mix(in_srgb,var(--apptext)_16%,transparent)]" />;
+function MapKey({ kind, n, children }: { kind: MapKeyKind; n?: number; children: ReactNode }) {
   return (
     <li className="fp-lg-item">
-      <span aria-hidden="true" className="inline-flex">{key}</span>
-      {children}
+      <span aria-hidden="true" className="inline-flex">
+        {kind === 'dock' ? (
+          <span className="fp-map-key-dock">
+            <Icon name="dock" className="fp-icon--s" />
+          </span>
+        ) : (
+          <MapSwatch kind={kind} n={n} />
+        )}
+      </span>
+      {kind === 'num' ? <span><span className="fp-sr-only">{`Room ${n}: `}</span>{children}</span> : children}
     </li>
   );
 }

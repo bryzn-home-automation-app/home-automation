@@ -1,7 +1,9 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { CartesianGrid, Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import {
   BATTERY_LOW,
+  FULL_BATTERY_AXIS,
+  batteryAxis,
   chargeKey,
   chargeLabel,
   chargeState,
@@ -35,14 +37,20 @@ import {
 import type { Camera, CameraBatteryHistory } from '../types';
 
 const CHART_MARGIN = { top: 8, right: 8, left: 0, bottom: 0 } as const;
-const Y_TICKS = [0, 25, 50, 75, 100];
-const Y_DOMAIN: [number, number] = [0, 100];
+const percentTick = (v: number) => `${v}%`;
 
 export type BatteryRange = 24 | 168 | 720;
 const RANGES = [
   { value: '24', label: '24 hours' },
   { value: '168', label: '7 days' },
   { value: '720', label: '30 days' },
+] as const;
+
+/** Fit the y-axis to the readings (the default), or show the whole 0–100% scale. */
+type BatteryScale = 'fit' | 'full';
+const SCALES = [
+  { value: 'fit', label: 'Fit' },
+  { value: 'full', label: '0–100%' },
 ] as const;
 
 /**
@@ -63,7 +71,10 @@ const styleFor = (i: number): SeriesStyle => SERIES_STYLES[i % SERIES_STYLES.len
 const LINE_WIDTH = 2;
 /** The band drawn under a line while that camera charges: wide and translucent, in its own hue. */
 const CHARGE_WIDTH = 9;
-const CHARGE_OPACITY = 0.3;
+const CHARGE_OPACITY = 0.35;
+/** The alert threshold: dotted graphite, a touch heavier than a hairline so it holds at any zoom. */
+const THRESHOLD_WIDTH = 1.25;
+const LOW_ZONE_OPACITY = 0.08;
 
 /** One battery camera's history request, as the page's useQueries gives it. */
 export interface BatteryTrackInput {
@@ -181,6 +192,16 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
     return { ...base, combined };
   }, [inputs, range]);
 
+  // Fitted to every camera's readings in the window: batteries that live between 20 and 50%
+  // get the chart's whole height instead of its bottom half. The tooltip still says the exact %.
+  const [scale, setScale] = useState<BatteryScale>('fit');
+  const fitted = useMemo(
+    () => (combined ? batteryAxis(combined.rows.flatMap((r) => combined.tracks.map((tr) => r[levelKey(tr.index)]))) : FULL_BATTERY_AXIS),
+    [combined],
+  );
+  const axis = scale === 'fit' ? fitted : FULL_BATTERY_AXIS;
+  const scaleWords = `${axis.domain[0]}–${axis.domain[1]}%`;
+
   const query: QueryLike<Combined> = {
     data: combined,
     isError: !anyLoading && !loaded.length && missing.length > 0,
@@ -192,12 +213,16 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
 
   return (
     <div className="fp-stack">
-      <Chips
-        label="Battery range"
-        value={String(range) as '24' | '168' | '720'}
-        onChange={(v) => onRangeChange(Number(v) as BatteryRange)}
-        options={RANGES}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <Chips
+          label="Battery range"
+          value={String(range) as '24' | '168' | '720'}
+          onChange={(v) => onRangeChange(Number(v) as BatteryRange)}
+          options={RANGES}
+        />
+        {/* Nothing to zoom when the readings already need the whole scale. */}
+        {!fitted.full && <Chips label="Battery scale" value={scale} onChange={setScale} options={SCALES} />}
+      </div>
       <QueryState
         query={query}
         what={inputs.length === 1 ? `the ${inputs[0].camera.name} battery history` : 'the battery history'}
@@ -246,13 +271,16 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
               role="img"
               aria-label={`Battery level over the last ${RANGES.find((r) => r.value === String(range))?.label}: ${formatList(
                 shown.map((tr) => `${tr.camera.name} (${tr.style.pattern} line)${tr.camera.batteryPercent == null ? '' : ` now ${Math.round(tr.camera.batteryPercent)}%`}`),
-              )}.`}
+              )}. Scale ${scaleWords}.`}
             >
               <ResponsiveContainer width="100%" height="100%" debounce={80}>
                 <LineChart data={c.rows} margin={CHART_MARGIN}>
                   {c.nights.map((n) => (
-                    <ReferenceArea key={n.from} x1={n.from} x2={n.to} y1={0} y2={100} fill={palette.band} ifOverflow="hidden" />
+                    <ReferenceArea key={n.from} x1={n.from} x2={n.to} y1={axis.domain[0]} y2={axis.domain[1]} fill={palette.band} ifOverflow="hidden" />
                   ))}
+                  {/* Below the alert line, a faint warm wash: a line sitting on 30% still reads against it. */}
+                  <ReferenceArea y1={axis.domain[0]} y2={BATTERY_LOW} fill={palette.warn} fillOpacity={LOW_ZONE_OPACITY} ifOverflow="hidden" />
+
                   <CartesianGrid {...t.grid} />
                   <XAxis
                     dataKey="t"
@@ -265,8 +293,8 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
                     // A phone fits about every other 3-hour tick; Recharts drops the ones that would touch.
                     minTickGap={14}
                   />
-                  <YAxis {...t.axis} domain={Y_DOMAIN} ticks={Y_TICKS} unit="%" width={44} />
-                  <ReferenceLine y={BATTERY_LOW} {...t.reference} />
+                  <YAxis {...t.axis} domain={axis.domain} ticks={axis.ticks} tickFormatter={percentTick} width={44} />
+                  <ReferenceLine y={BATTERY_LOW} {...t.reference} strokeWidth={THRESHOLD_WIDTH} />
                   <Tooltip
                     content={<BatteryTooltip tracks={shown} palette={palette} />}
                     cursor={t.tooltip.cursor}
@@ -317,9 +345,10 @@ function CameraBatteryChart({ tracks: inputs, range, onRangeChange }: CameraBatt
               </span>
               <span className="fp-lg-item">
                 {/* The threshold's own dots, not a dash a camera line could be mistaken for. */}
-                <LineSwatch colour={t.reference.stroke} dash={t.reference.strokeDasharray} width={1} />
-                Alert at {BATTERY_LOW}%
+                <LineSwatch colour={t.reference.stroke} dash={t.reference.strokeDasharray} width={THRESHOLD_WIDTH} />
+                Alert at {BATTERY_LOW}%, shaded below
               </span>
+              {!axis.full && <span className="fp-lg-item fp-mono">Scale {scaleWords}</span>}
             </div>
             {shown.some((tr) => tr.days.length > 0) && (
               <Disclosure variant="row" summary="Charged and used, day by day" openSummary="Hide day by day">

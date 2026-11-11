@@ -995,6 +995,16 @@ button.fp-tl-item { width: 100%; border: 0; background: transparent; text-align:
 @keyframes fp-map-ping { 0% { transform: scale(.4); opacity: .7; } 100% { transform: scale(1.4); opacity: 0; } }
 .fp-map-pin { position: absolute; left: var(--fp-x); top: var(--fp-y); display: grid; place-items: center; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 7px; background: var(--appsurface); border: 1px solid var(--appborder-strong); color: var(--apptext); }
 .fp-map-pin .fp-icon { width: 16px; height: 16px; }
+/* The Roomba floor map (components/RoombaMap.tsx): the plan fills its well edge to edge (the
+   breathing room is inside the drawing, where the metre grid shows), and a very tall plan is
+   capped so the first screen on a phone isn't all map. */
+.fp-map-plan { max-height: min(70vh, 640px); }
+.fp-map-legend { row-gap: 6px; }
+.fp-map-key-dock {
+  display: inline-grid; place-items: center; width: 18px; height: 18px; border-radius: 4px;
+  background: var(--appsurface); border: 1.25px solid var(--apptext); color: var(--apptext);
+}
+.fp-map-key-dock .fp-icon { width: 13px; height: 13px; }
 
 /* ---------- 24. toast ---------- */
 /* An ink plate above the phone key row (bottom of the window on desktop). Render it with

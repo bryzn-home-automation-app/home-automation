@@ -37,6 +37,13 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("2.2.0", "stable", LocalDate.of(2026, 11, 11),
+                    "A clearer Roomba map",
+                    "The Roomba map is easier to read, and the camera battery chart zooms in on the levels your cameras really sit at.",
+                    List.of(
+                            change("improved", "Roomba map: rooms are shaded so they stand apart, names always fit, and the robot and its dock no longer look alike."),
+                            change("improved", "Roomba map: cleaned floor shows as lanes, and off-limits and no-mop areas each have their own pattern."),
+                            change("improved", "Camera batteries: the chart fits its scale to the readings, with a switch back to 0–100%."))),
             define("2.1.0", "stable", LocalDate.of(2026, 11, 10),
                     "Pick your own colour",
                     "Choose any colour for the app, see both cameras' batteries on one chart, and get clearer Roomba controls.",

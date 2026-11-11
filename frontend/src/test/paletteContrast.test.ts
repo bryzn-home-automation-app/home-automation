@@ -128,6 +128,34 @@ describe('theme token contrast (WCAG 2.2)', () => {
     for (const [key, c] of Object.entries(DATA_SERIES[th])) expect(ratio(solid(c), chart), `${key} ${c}`).toBeGreaterThanOrEqual(3);
   });
 
+  // The floor map's room plates mix a little ink into the panel (color-mix in srgb); room
+  // names are ink, an unnamed room's prompt is graphite, and both stay readable on every
+  // plate tone; names also with the merge selection's 20% accent wash on top (the prompt
+  // shows only in rename mode, never while merging).
+  it.each(CASES)('%s/%s: map room names >= 4.5:1 on every plate tone', (th, p) => {
+    const t = tokens(th, p);
+    const mix = (pct: number, a: string, b: string): RGB => {
+      const [x, y] = [solid(a), solid(b)];
+      return [0, 1, 2].map((i) => x[i] * pct + y[i] * (1 - pct)) as RGB;
+    };
+    const plateOf = (v: string): RGB => {
+      const m = v.match(/color-mix\(in srgb, (#[0-9a-f]+|rgba?\([^)]*\)) ([\d.]+)%, (#[0-9a-f]+|rgba?\([^)]*\))\)/i);
+      return m ? mix(Number(m[2]) / 100, m[1], m[3]) : solid(v);
+    };
+    for (const name of ['--appmap-plate', '--appmap-plate-alt', '--appmap-plate-alt2']) {
+      expect(t[name], `${name} is defined`).toBeDefined();
+      const plate = plateOf(t[name]);
+      for (const text of ['--apptext', '--apptext-muted']) {
+        expect(ratio(solid(t[text]), plate), `${text} on ${name}`).toBeGreaterThanOrEqual(4.5);
+        if (text !== '--apptext') continue;
+        expect(ratio(solid(t[text]), over(t['--appaccent'].replace(/^#([0-9a-f]{6})$/i, (_, h: string) => {
+          const n = parseInt(h, 16);
+          return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, 0.2)`;
+        }), plate)), `${text} on ${name} with the merge wash`).toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
   it.each(PALETTES)('light/%s: the remapped pastel text steps (text-amber-300, …) >= 4.5:1 on every surface', (p) => {
     const t = tokens('light', p);
     const remap = block(':root:not([data-theme="dark"])');
