@@ -70,10 +70,14 @@ function SwitchCell({ caption, icon, children }: { caption: string; icon: IconNa
   );
 }
 
-/** A setting row: name and one line of description on the left, controls on the right. */
+/**
+ * A setting row: name and one line of description on the left, controls on the right. In a list
+ * that is a panel's direct child the list runs edge to edge, so the row takes the panel's padding
+ * back, as the kit's .fp-row does (the weather card's switches sat on the card's border).
+ */
 export function SettingRow({ icon, title, description, controls, children }: { icon?: IconName; title: ReactNode; description?: ReactNode; controls: ReactNode; children?: ReactNode }) {
   return (
-    <li className="py-3">
+    <li className="py-3 [.fp-panel>.fp-list:not(.fp-list--inset)>&]:px-[var(--apppanel-pad)]">
       <div className="flex items-center gap-3">
         {icon && <Icon name={icon} className="fp-icon--m shrink-0 text-apptext-muted" />}
         <div className="min-w-0 flex-1">
