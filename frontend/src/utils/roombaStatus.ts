@@ -298,7 +298,8 @@ export function commandLabel(command: string | null | undefined): string {
 const COMMAND_STATE: Record<string, { tone: Tone; label: string }> = {
   PENDING: { tone: 'neutral', label: 'Queued' },
   SENT: { tone: 'info', label: 'Sending' },
-  // OK is the backend's "accepted by broker": the command reached the robot, not proof it acted.
+  // OK: the robot was seen to react (pause, resume, stop, dock, a clean from the dock), or for
+  // the rest the broker accepted it, which is not proof it acted.
   OK: { tone: 'ok', label: 'Sent to the robot' },
   FAILED: { tone: 'problem', label: 'Failed' },
 };

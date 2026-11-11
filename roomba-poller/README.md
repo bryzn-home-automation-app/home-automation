@@ -59,11 +59,40 @@ with the standard library only:
 python -m unittest discover -s roomba-poller -v
 ```
 
+### Commands from the dashboard
+
+The backend queues a row in `roomba_commands`; an insert trigger (created by the
+backend's `UsageStorageMigration`) runs `pg_notify('roomba_commands', id)`, and the
+poller's LISTEN connection wakes the loop at once (the 5 s tick is only a fallback).
+The command goes out on the existing cloud link when a shadow read on that same
+connection came back within the last 20 s; otherwise one quick read proves the link
+first, and only a failed read costs a full reconnect. After sending, the poller reads
+the robot's state back on a short schedule (1, 2, 3, 4.5 … 16 s; 30 s for a start).
+Where the state should move (pause, resume, stop, dock, a clean from the dock) the row
+stays `SENT` until it does (then `OK`); if it never does, the poller reconnects and
+sends pause / resume / stop / dock once more, and otherwise marks the row `FAILED` with
+the reason. A start is never sent twice. The rules live in `command_flow.py`; each command logs
+one line with its timings:
+
+```
+command #47 (dock) confirmed | queued->seen 3 ms [notify] | seen->sent 160 ms [link fresh, round trip 3.1s ago] | sent->confirmed 2300 ms | total 2463 ms
+```
+
 ## Robustness
 
 Fail-open. Any cloud or DB error in a cycle is logged and swallowed; the loop
 never crash-loops. Connection loss disconnects and reconnects on the next cycle.
 Logs go to stdout (`docker compose logs -f roomba-poller`).
+
+## Tests
+
+Standard library only (`unittest`); the third-party imports are stubbed when they
+aren't installed, and nothing reaches the network, a database or the robot:
+
+```bash
+cd roomba-poller
+python -m unittest discover -s tests
+```
 
 ## Environment variables
 

@@ -31,6 +31,10 @@ checks below.
    `edit_map_checked`, `get_mission_history`, `get_household_id`, `get_schedules`,
    `send_simple_command`, `send_routine_command_via_cmd_topic` and `watch_live_map`.
    Check the factory too: `PrimeFactory.create_prime_robot(..., login_result=, auto_refresh=True)`.
+   `CloudLink.facts()` also reads three internals of `robot._mqtt` (PrimeMqttClient) to decide
+   whether a command can go out without a test read: `.connected`, `.generation` and
+   `.seconds_until_token_refresh_due()`. If a bump renames them, nothing breaks: the poller just
+   does one shadow read before every command. Re-run `python -m unittest discover -s tests` too.
 
 ## 0.3.1 -> 0.8.3: what mattered to us
 

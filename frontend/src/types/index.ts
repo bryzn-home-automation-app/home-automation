@@ -361,11 +361,16 @@ export interface RoombaCommand {
   id: number;
   command: string;
   arg: string | null;
-  /** PENDING | SENT | OK | FAILED. "OK" = broker accepted, not necessarily acted. */
+  /**
+   * PENDING | SENT | OK | FAILED. A command whose effect shows in the robot's state (pause,
+   * resume, stop, dock, a clean from the dock) stays SENT until the poller reads the robot
+   * reacting, then OK. For the rest "OK" = broker accepted, not necessarily acted.
+   */
   status: string;
   detail: string | null;
   requestedBy: string | null;
   createdAt: string;
+  /** When the poller sent it. */
   processedAt: string | null;
 }
 
