@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import RoombaMap from '../components/RoombaMap';
+import RoombaMap, { twicePath } from '../components/RoombaMap';
+import type { RoombaCoverage } from '../api/roomba';
 import type { RoombaMap as RoombaMapData } from '../types';
 
 // The floor map drawn on its own: rooms stay named keys in every mode, the key lists only the
@@ -13,9 +14,12 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
+// What the coverage poll returns; a test sets it before rendering a running map.
+const live = vi.hoisted(() => ({ coverage: null as unknown }));
+
 vi.mock('../api/roomba', () => ({
   fetchRoombaPosition: async () => null,
-  fetchRoombaCoverage: async () => null,
+  fetchRoombaCoverage: async () => live.coverage,
 }));
 
 const poly = (x0: number, y0: number, x1: number, y1: number) => ({
@@ -96,5 +100,56 @@ describe('RoombaMap', () => {
     renderMap({ cleanMode: true, onSelectCleanRoom });
     fireEvent.click(screen.getByRole('button', { name: 'Clean Kitchen' }));
     expect(onSelectCleanRoom).toHaveBeenCalledWith({ id: '1', name: 'Kitchen' });
+  });
+
+  describe('while cleaning', () => {
+    const coverage = (passes: RoombaCoverage['passes']): RoombaCoverage => ({
+      robotId: 'r1',
+      missionId: '1794409217',
+      updatedAt: '2026-11-11T15:30:00Z',
+      coverage: {
+        type: 'FeatureCollection',
+        features: [
+          { type: 'Feature', properties: { operatingModes: ['vacuuming'] }, geometry: poly(0, 0, 5, 4) },
+          { type: 'Feature', properties: { operatingModes: ['traveling'] }, geometry: poly(5, 1, 7, 2) },
+        ],
+      } as RoombaCoverage['coverage'],
+      passes,
+    });
+
+    it('keys the twice-over ground only when there is some', async () => {
+      live.coverage = coverage({ v: 1, cell: 0.05, rects: [[0, 0, 40, 40]] });
+      const { container, unmount } = renderMap({ running: true });
+      const key = screen.getByRole('list', { name: 'Map key' });
+      expect(await within(key).findByText('Cleaned this run')).toBeInTheDocument();
+      expect(within(key).getByText('Cleaned twice')).toBeInTheDocument();
+      // Drawn inside the cleaned ground: the twice layer is clipped to it.
+      const twice = container.querySelector('path[clip-path^="url(#fpmap-cleaned"]');
+      expect(twice?.getAttribute('d')).toMatch(/^M[\d.]+ [\d.]+H[\d.]+V[\d.]+H[\d.]+Z$/);
+      unmount();
+
+      live.coverage = coverage(null);
+      renderMap({ running: true });
+      const key2 = screen.getByRole('list', { name: 'Map key' });
+      expect(await within(key2).findByText('Cleaned this run')).toBeInTheDocument();
+      expect(within(key2).queryByText('Cleaned twice')).toBeNull();
+      live.coverage = null;
+    });
+  });
+});
+
+describe('twicePath', () => {
+  // Metres straight to SVG units, y flipped about 10 m, as the plan's projection does.
+  const project = ([x, y]: number[]): [number, number] => [x * 100, (10 - y) * 100];
+
+  it('draws each rectangle top-left first, in the plan space', () => {
+    expect(twicePath({ v: 1, cell: 0.5, rects: [[2, 4, 2, 1]] }, project)).toBe('M100.0 750.0H200.0V800.0H100.0Z');
+  });
+
+  it('skips anything unusable', () => {
+    expect(twicePath(null, project)).toBe('');
+    expect(twicePath({ v: 1, cell: 0, rects: [[0, 0, 1, 1]] }, project)).toBe('');
+    const bad = [[0, 0, 0, 1], [0, 0, Number.NaN, 1], [1, 2]] as unknown as [number, number, number, number][];
+    expect(twicePath({ v: 1, cell: 0.5, rects: bad }, project)).toBe('');
   });
 });

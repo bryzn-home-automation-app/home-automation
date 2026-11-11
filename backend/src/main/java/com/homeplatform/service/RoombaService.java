@@ -634,7 +634,26 @@ public class RoombaService {
         return coverageRepo.findTopByOrderByUpdatedAtDesc()
                 .filter(c -> c.getUpdatedAt() != null && c.getUpdatedAt().isAfter(cutoff))
                 .map(c -> new RoombaCoverageResponse(
-                        c.getRobotId(), c.getMissionId(), parseJson(c.getCoverage()), iso(c.getUpdatedAt())));
+                        c.getRobotId(), c.getMissionId(), parseJson(c.getCoverage()), iso(c.getUpdatedAt()),
+                        sameMission(c.getMissionId(), c.getPassesMissionId()) ? parseJson(c.getPasses()) : null));
+    }
+
+    /**
+     * Whether the pass count belongs to the mission the coverage shows. Both are the
+     * mission's start in epoch seconds: the coverage's from the live bundle
+     * (missionStartTime), the passes' from the shadow (mssnStrtTm). They have matched
+     * exactly so far; a few seconds' difference is allowed in case they ever don't.
+     * A new mission's coverage arrives before its first pass count, so the previous
+     * run's count is never drawn on it.
+     */
+    static boolean sameMission(String coverageMission, String passesMission) {
+        if (coverageMission == null || passesMission == null) return false;
+        if (coverageMission.equals(passesMission)) return true;
+        try {
+            return Math.abs(Long.parseLong(coverageMission.trim()) - Long.parseLong(passesMission.trim())) <= 5;
+        } catch (NumberFormatException e) {
+            return false;
+        }
     }
 
     /**

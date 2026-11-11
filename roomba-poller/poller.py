@@ -45,6 +45,8 @@ from roombapy_prime.models.robot_info import DockState
 from roombapy_prime.prime_factory import PrimeFactory
 from roombapy_prime.vendor_errors import vendor_error
 
+import coverage_passes
+
 try:
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
@@ -68,6 +70,10 @@ LIVE_WRITE_MIN_INTERVAL = 1.0
 # every few seconds, and each update downloads + untars the live-map bundle, so
 # process at most one MapUpdateMessage per this many seconds.
 COVERAGE_WRITE_MIN_INTERVAL = 12.0
+# Pass count (coverage_passes): the twice-over area the map draws, and the full
+# grid kept so a restart mid-clean carries on (~85 KB of JSON for a whole-house
+# two-pass clean), are written at most this often.
+PASSES_WRITE_MIN_INTERVAL = 15.0
 
 
 # ---------------------------------------------------------------------------
@@ -198,6 +204,12 @@ class PollerState:
         self.unsaved_runs = {}        # mission_id -> (run dict, status) whose DB write failed; retried each poll
         self.history_due = 0.0        # monotonic ts: next mission-history sync (0 = now)
         self.history_backfilled = False  # first sync of this process asks for the full history
+        # Pass count for the running mission (coverage_passes.PassGrid). Lives here,
+        # not in the live-map task: that task stops on a pause or recharge and is
+        # restarted on every reconnect, and the count must carry on across all three.
+        self.passes = None
+        self.passes_written = (-1, 0.0)  # (grid version, monotonic ts) of the last write
+        self.passes_error_at = 0.0       # last logged pass-count failure (rate-limits the warning)
 
 
 def _snapshot(cms):
@@ -499,10 +511,12 @@ async def _persist_coverage(conninfo, robot_id, msg):
     roomba_coverage. The bundle is a gzip'd tar of GeoJSON layers in the same
     meter coordinate space as the floor-plan map, so the frontend overlays it
     directly. Fail-open: any error is the caller's to log; the stream continues.
+    Returns the bundle's file names (None when there was nothing to read), so the
+    caller can log what a live bundle holds.
     """
     url = getattr(msg, "livemap_url", None)
     if not url:
-        return
+        return None
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             raw = await resp.read()
@@ -512,21 +526,111 @@ async def _persist_coverage(conninfo, robot_id, msg):
     with tarfile.open(fileobj=io.BytesIO(body)) as tf:
         names = set(tf.getnames())
         if "coverage.geojson" not in names:
-            return
+            return names
         coverage = json.loads(tf.extractfile("coverage.geojson").read())
         if "metadata.json" in names:
             meta = json.loads(tf.extractfile("metadata.json").read())
             sm = meta.get("sourceMetadata") or {}
             mission_id = str(sm.get("missionStartTime") or meta.get("version") or "") or None
     upsert_coverage(conninfo, robot_id, mission_id, coverage)
+    return names
+
+
+# ---------------------------------------------------------------------------
+# Pass count: where the robot has cleaned more than once (see coverage_passes).
+# Kept beside the coverage row: `passes` is the twice-over area the map draws,
+# `pass_grid` every visited cell with its count (read back after a restart), both
+# keyed by passes_mission_id = the mission's start (mssnStrtTm, epoch seconds),
+# which is also what the live bundle calls missionStartTime (the coverage row's
+# mission_id).
+# ---------------------------------------------------------------------------
+def _mission_key(state):
+    started = (state.active or {}).get("started_at")
+    return str(int(started.timestamp())) if started is not None else None
+
+
+def load_pass_grid(conninfo, robot_id):
+    """(pass_grid, passes_mission_id) stored for the robot, or (None, None)."""
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        row = conn.execute(
+            "SELECT pass_grid, passes_mission_id FROM roomba_coverage WHERE robot_id = %s",
+            (robot_id,),
+        ).fetchone()
+    return (row[0], row[1]) if row else (None, None)
+
+
+def save_passes(conninfo, robot_id, mission_id, shown, grid):
+    """Write the twice-over area and the full grid onto the robot's coverage row.
+    An UPDATE: the row is the coverage's, created by upsert_coverage."""
+    sql = """
+        UPDATE roomba_coverage
+        SET passes = %s, pass_grid = %s, passes_mission_id = %s, passes_updated_at = NOW()
+        WHERE robot_id = %s
+    """
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        conn.execute(sql, (Json(shown), Json(grid), mission_id, robot_id))
+
+
+def _resume_passes(conninfo, robot_id, key):
+    """The pass grid for mission `key`: the stored one when it is this mission's (a
+    restart mid-clean), else a fresh one. Blocking; run in a thread."""
+    try:
+        data, stored_key = load_pass_grid(conninfo, robot_id)
+        if data and stored_key == key:
+            grid = coverage_passes.PassGrid.restore(key, data)
+            log.info("Pass count for mission %s carried on from the database (%d cells)", key, len(grid.cells))
+            return grid
+    except Exception as e:  # noqa: BLE001 — a fresh count is the fallback
+        log.warning("pass grid reload failed (starting a fresh count): %s: %s", type(e).__name__, e)
+    return coverage_passes.PassGrid(key)
+
+
+def _write_passes(conninfo, robot_id, mission_id, cell, counts):
+    """Encode + write (blocking; run in a thread — the tidying takes ~0.2 s for a
+    whole house)."""
+    save_passes(conninfo, robot_id, mission_id,
+                coverage_passes.display(counts, cell), coverage_passes.encode_grid(counts, cell))
+
+
+async def _count_passes(state, conninfo, robot_id, msg):
+    """Add a PositionUpdateMessage's samples (all of them, not just the newest) to
+    the mission's pass grid and write it when due. Never raises."""
+    try:
+        key = _mission_key(state)
+        if key is None:
+            return
+        grid = state.passes
+        if grid is None or grid.mission_id != key:
+            grid = await asyncio.to_thread(_resume_passes, conninfo, robot_id, key)
+            state.passes = grid
+            state.passes_written = (grid.version, 0.0)
+        now = time.monotonic()
+        grid.add_samples(
+            [(s.point[0], s.point[1], s.operating_modes) for s in msg.updates], now,
+        )
+        written_version, written_at = state.passes_written
+        if grid.version == written_version or now - written_at < PASSES_WRITE_MIN_INTERVAL:
+            return
+        version = grid.version
+        # Stamp before writing, so a failing write is retried on the interval, not
+        # on every message.
+        state.passes_written = (written_version, now)
+        await asyncio.to_thread(_write_passes, conninfo, robot_id, key, grid.cell, grid.counts())
+        state.passes_written = (version, now)
+    except Exception as e:  # noqa: BLE001 — the position dot must not depend on this
+        now = time.monotonic()
+        if now - state.passes_error_at >= 300:
+            state.passes_error_at = now
+            log.warning("pass count failed: %s: %s", type(e).__name__, e)
 
 
 # ---------------------------------------------------------------------------
 # Live position stream (concurrent task, shares the single robot connection)
 # ---------------------------------------------------------------------------
-async def run_live_map(robot, conninfo, robot_id):
+async def run_live_map(robot, conninfo, robot_id, state=None):
     """Stream live position from watch_live_map() and UPSERT the latest point
-    (throttled to ~1/sec) into roomba_position.
+    (throttled to ~1/sec) into roomba_position. With `state`, every sample also
+    goes into the mission's pass count (_count_passes).
 
     Runs as a CONCURRENT task over the SAME robot connection as the main loop —
     it opens no second cloud connection. Strictly fail-open: every error is
@@ -538,11 +642,13 @@ async def run_live_map(robot, conninfo, robot_id):
       PositionUpdateMessage.updates : list[PositionSample]
       PositionSample.point          : (x, y)  meters
       PositionSample.orientation    : float   radians (raw wire heading)
+      PositionSample.operating_modes: int     OperatingModeBitmask (see coverage_passes)
     MapUpdateMessage (the other stream shape) carries the live-map bundle URL,
     from which we extract cleaning coverage (see _persist_coverage).
     """
     last_write = 0.0
     last_coverage = 0.0
+    bundle_files = None
     try:
         async for msg in robot.watch_live_map():
             try:
@@ -552,11 +658,18 @@ async def run_live_map(robot, conninfo, robot_id):
                 if isinstance(msg, MapUpdateMessage):
                     now = time.monotonic()
                     if now - last_coverage >= COVERAGE_WRITE_MIN_INTERVAL:
-                        await _persist_coverage(conninfo, robot_id, msg)
+                        names = await _persist_coverage(conninfo, robot_id, msg)
                         last_coverage = now
+                        # What a live bundle holds (e.g. whether it has a
+                        # trajectories layer), once per stream.
+                        if names is not None and names != bundle_files:
+                            bundle_files = names
+                            log.info("Live map bundle files: %s", ", ".join(sorted(names)))
                     continue
                 if not isinstance(msg, PositionUpdateMessage) or not msg.updates:
                     continue
+                if state is not None:
+                    await _count_passes(state, conninfo, robot_id, msg)
                 now = time.monotonic()
                 if now - last_write < LIVE_WRITE_MIN_INTERVAL:
                     continue  # throttle DB writes; keep only ~1 sample/sec
@@ -597,7 +710,7 @@ async def _manage_live_task(task, robot, conninfo, state):
         if task is not None:
             await _cancel_live_task(task)  # clear a finished/failed handle first
         log.info("Mission running — starting live-position stream")
-        return asyncio.ensure_future(run_live_map(robot, conninfo, robot.blid))
+        return asyncio.ensure_future(run_live_map(robot, conninfo, robot.blid, state))
     if not running and task is not None:
         if alive:
             log.info("Mission ended — stopping live-position stream")

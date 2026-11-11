@@ -286,6 +286,28 @@ public class UsageStorageMigration implements ApplicationRunner {
             )
             """);
 
+        // Live cleaning coverage (poller UPSERTs the live bundle's coverage.geojson,
+        // UNIQUE robot_id) plus the poller's own pass count over it (see schema.sql).
+        // Hibernate creates the table and the mapped columns first; pass_grid is
+        // poller-only and unmapped, so this is what creates it on an existing table.
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_coverage (
+                id                 SERIAL PRIMARY KEY,
+                robot_id           VARCHAR(64)  NOT NULL UNIQUE,
+                mission_id         VARCHAR(64),
+                coverage           JSONB        NOT NULL,
+                updated_at         TIMESTAMP    NOT NULL DEFAULT NOW(),
+                passes             JSONB,
+                pass_grid          JSONB,
+                passes_mission_id  VARCHAR(64),
+                passes_updated_at  TIMESTAMP
+            )
+            """);
+        for (String col : new String[]{
+                "passes JSONB", "pass_grid JSONB", "passes_mission_id VARCHAR(64)", "passes_updated_at TIMESTAMP"}) {
+            jdbcTemplate.execute("ALTER TABLE roomba_coverage ADD COLUMN IF NOT EXISTS " + col);
+        }
+
         // Native (real, robot/cloud-side) schedules -- one row per household_schedule_id,
         // full ScheduleOptions kept as JSONB so display fields can be derived without a
         // migration every time roombapy-prime's model gains a field. Poller REPLACES this
