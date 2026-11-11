@@ -79,6 +79,7 @@ class World:
         self.reads = 0
         self.zombie = set()      # the broker confirms; the robot never hears it
         self.no_puback = set()   # the broker doesn't confirm
+        self.lost_ack = set()    # the broker doesn't confirm, but the robot does get it
         self.dead_reads = set()  # shadow reads time out
 
     def current(self):
@@ -111,10 +112,23 @@ class FakeRobot:
 
     async def send_simple_command(self, command):
         self.world.sends.append((self.index, command))
+        if self.index in self.world.lost_ack:
+            self.world.deliver(command)
+            return False
         if self.index in self.world.no_puback:
             return False
         if self.index not in self.world.zombie:
             self.world.deliver(command)
+        return True
+
+    async def send_routine_command_via_cmd_topic(self, cmd):
+        """A room clean or a favorite: starts a clean, like "start"."""
+        kind = "favorite" if getattr(cmd, "favorite_id", None) else "rooms"
+        self.world.sends.append((self.index, kind))
+        if self.index in self.world.no_puback:
+            return False
+        if self.index not in self.world.zombie:
+            self.world.deliver("start")
         return True
 
     async def get_active_map_versions(self):
@@ -193,8 +207,8 @@ class CommandPath(unittest.IsolatedAsyncioTestCase):
             await self.runner.run_followup_if_due()
             self.clock.advance(step)
 
-    async def send(self, command):
-        cmd_id = self.queue.add(command)
+    async def send(self, command, arg=None):
+        cmd_id = self.queue.add(command, arg)
         await self.runner.run_pending("notify")
         return self.queue.rows[cmd_id]
 
@@ -308,15 +322,48 @@ class CommandPath(unittest.IsolatedAsyncioTestCase):
         await self.run_for(1.5)
         self.assertEqual(row["status"], "OK")
 
-    async def test_an_unconfirmed_start_fails_without_a_second_send(self):
+    async def test_an_unconfirmed_start_is_watched_not_resent_and_fails_only_at_the_end(self):
         self.world.state = ("charge", "none", "M1")
         self.world.no_puback = {1}
         await self.poll()
         row = await self.send("start")
         self.assertEqual(self.world.sends, [(1, "start")])
-        self.assertEqual(len(self.world.robots), 2)
+        self.assertEqual(len(self.world.robots), 2, "reconnected once")
+        self.assertEqual(row["status"], "SENT", "kept SENT while the robot is watched")
+        await self.run_for(cf.START_VERIFY_CHECKS[-1] - 1)
+        self.assertEqual(row["status"], "SENT")
+        await self.run_for(2)
+        self.assertEqual(self.world.sends, [(1, "start")], "never sent twice")
+        self.assertEqual(len(self.world.robots), 2, "no second reconnect at the end")
         self.assertEqual(row["status"], "FAILED")
-        self.assertIn("didn't confirm", row["detail"])
+        self.assertIn("the cloud didn't confirm it (broker rejected)", row["detail"])
+        self.assertIn("hadn't reacted 30 s later", row["detail"])
+
+    async def test_an_unconfirmed_start_that_did_arrive_late_ends_ok_not_failed(self):
+        # The PUBACK is lost but the robot got it; the shadow shows it ~11 s on.
+        self.world.state = ("charge", "none", "M1")
+        self.world.lost_ack = {1}
+        self.world.react_after = 11.0
+        await self.poll()
+        row = await self.send("start")
+        self.assertEqual(row["status"], "SENT")
+        await self.run_for(10)
+        self.assertEqual(row["status"], "SENT", "not called before the shadow could show it")
+        await self.run_for(4)
+        self.assertEqual(row["status"], "OK")
+        self.assertIn("the cloud never confirmed it, but it got there", row["detail"])
+        self.assertEqual(self.world.sends, [(1, "start")])
+
+    async def test_an_unconfirmed_start_with_nothing_to_watch_fails_at_once(self):
+        # A clean is already under way: a start changes nothing visible, so silence says
+        # nothing and the row can't be judged later either.
+        self.world.state = ("run", "clean", "M1")
+        self.world.no_puback = {1}
+        await self.poll()
+        row = await self.send("start")
+        self.assertEqual(row["status"], "FAILED")
+        self.assertIn("may not have reached the robot", row["detail"])
+        self.assertIsNone(self.runner.followup)
 
     async def test_a_newer_command_supersedes_the_check_and_the_older_one_is_never_resent(self):
         self.world.react_after = 100.0
@@ -369,6 +416,123 @@ class CommandPath(unittest.IsolatedAsyncioTestCase):
         await self.send("start")
         self.assertGreater(self.state.fast_poll_until, 0)
 
+    # --- the cloud link going down mid-check ---------------------------------
+    async def test_a_check_cut_short_by_an_outage_settles_on_time_without_logging_in(self):
+        await self.poll()
+        self.world.react_after = 1000.0
+        row = await self.send("pause")
+        await self.run_for(2)
+        await self.link.drop()  # what the main loop does after a failed cycle
+        robots = len(self.world.robots)
+        await self.runner.run_followup_if_due(link_down="OSError: DNS failure")
+        self.assertEqual(row["status"], "SENT", "still inside the window")
+        self.clock.advance(cf.VERIFY_CHECKS[-1])
+        await self.runner.run_followup_if_due(link_down="OSError: DNS failure")
+        self.assertEqual(row["status"], "FAILED")
+        self.assertIn("the cloud link went down", row["detail"])
+        self.assertIn("OSError: DNS failure", row["detail"])
+        self.assertNotIn("try again", row["detail"])
+        self.assertEqual(len(self.world.robots), robots, "no login during the outage")
+        self.assertIsNone(self.runner.followup)
+
+    # --- writes after the send ----------------------------------------------
+    async def test_a_failed_write_after_the_send_never_marks_it_failed(self):
+        await self.poll()
+
+        def broken(*args, **kwargs):
+            raise RuntimeError("database restarting")
+
+        with mock.patch.object(poller, "_mark_sent", broken):
+            row = await self.send("pause")
+        self.assertEqual(self.world.sends, [(1, "pause")])
+        self.assertEqual(row["status"], "SENT")
+        self.assertIsNotNone(self.runner.followup, "still followed up")
+        await self.run_for(1.5)
+        self.assertEqual(row["status"], "OK")
+
+    async def test_a_failed_ok_write_is_retried_by_the_sweep(self):
+        self.world.state = ("charge", "none", "M1")
+        await self.poll()
+        original = self.queue.mark
+
+        def mark(conninfo, cmd_id, status, detail=None, terminal=True):
+            if status == "OK":
+                raise RuntimeError("database restarting")
+            original(conninfo, cmd_id, status, detail, terminal)
+
+        with mock.patch.object(poller, "_mark_command", mark):
+            row = await self.send("find")
+        self.assertEqual(row["status"], "SENT")
+        self.assertIn(1, self.runner.unwritten)
+        swept = []
+        with mock.patch.object(poller, "_settle_stale_sent", lambda conninfo, keep=None: swept.append(keep) or (0, 0)):
+            self.runner.sweep_if_due()
+        self.assertEqual((row["status"], row["detail"]), ("OK", "accepted by broker"))
+        self.assertEqual(self.runner.unwritten, {})
+        self.assertEqual(swept, [None])
+
+    async def test_the_sweep_runs_about_once_a_minute_and_spares_the_current_check(self):
+        await self.poll()
+        self.world.react_after = 1000.0
+        await self.send("pause")
+        swept = []
+        with mock.patch.object(poller, "_settle_stale_sent", lambda conninfo, keep=None: swept.append(keep) or (0, 0)):
+            self.runner.sweep_if_due()
+            self.runner.sweep_if_due()
+            self.clock.advance(cf.SWEEP_SECONDS)
+            self.runner.sweep_if_due()
+        self.assertEqual(swept, [1, 1])
+
+    # --- room cleans and favorites ------------------------------------------
+    async def test_a_room_clean_from_the_dock_is_verified(self):
+        self.world.state = ("charge", "none", "M1")
+        await self.poll()
+        row = await self.send("clean_room", '{"room_id": "7"}')
+        self.assertEqual(self.world.sends, [(1, "rooms")])
+        self.assertEqual(row["status"], "SENT")
+        await self.run_for(1.5)
+        self.assertEqual(row["status"], "OK")
+
+    async def test_a_failure_before_the_publish_is_refused_without_a_reconnect(self):
+        self.world.state = ("charge", "none", "M1")
+        await self.poll()
+
+        async def map_read_fails(robot):
+            raise TimeoutError("p2maps timed out")
+
+        with mock.patch.object(poller, "_active_p2map_id", map_read_fails):
+            row = await self.send("clean_rooms", '{"room_ids": ["7", "9"]}')
+        self.assertEqual(row["status"], "FAILED")
+        self.assertIn("nothing was sent", row["detail"])
+        self.assertEqual(self.world.sends, [])
+        self.assertEqual(len(self.world.robots), 1, "no reconnect for a request that never left")
+
+    async def test_a_favorite_is_a_start_read_back_and_never_resent(self):
+        self.world.state = ("charge", "none", "M1")
+        self.world.zombie = {1}
+        await self.poll()
+        row = await self.send("favorite", "fav-1")
+        self.assertEqual(row["status"], "SENT")
+        await self.run_for(cf.START_VERIFY_CHECKS[-1] + 2)
+        self.assertEqual(self.world.sends, [(1, "favorite")])
+        self.assertEqual(row["status"], "FAILED")
+        self.assertIn("wasn't sent again automatically", row["detail"])
+
+    # --- the pass count -----------------------------------------------------
+    async def test_the_pass_path_breaks_when_the_link_drops_and_when_a_stream_starts(self):
+        grid = mock.Mock()
+        self.state.passes = grid
+        await self.link.drop()
+        self.assertEqual(grid.break_path.call_count, 1)
+        self.state.mission_running = True
+        robot = mock.Mock(blid="BLID")
+        with mock.patch.object(poller, "run_live_map", mock.AsyncMock()):
+            task = await poller._manage_live_task(None, robot, "conninfo", self.state)
+        await task
+        self.assertEqual(grid.break_path.call_count, 2)
+        self.state.passes = None
+        await self.link.drop()  # no pass count yet: nothing to break, no error
+
     # --- the link wrapper ---------------------------------------------------
     async def test_tracked_robot_passes_everything_through_and_notes_each_answer(self):
         robot = self.link.robot
@@ -391,6 +555,113 @@ class CommandPath(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(self.link.monitor.last_rep)
         self.assertIsNotNone(self.link.monitor.last_stats)
         self.assertTrue(self.link.poll_now)
+
+
+class MainLoop(unittest.IsolatedAsyncioTestCase):
+    """poller.main() itself, in real time, with the cloud and the database faked. The
+    regression: a follow-up pending while the cloud login fails made the loop retry the
+    login with no pause at all (278k attempts in 2 s in the review's reproduction).
+    Repeated logins lock the iRobot account, the owner's app with it."""
+
+    async def run_main(self, connect_robot, pending, seconds):
+        class Session:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+        async def never(*args, **kwargs):
+            await asyncio.Event().wait()
+
+        async def nothing(*args, **kwargs):
+            return None
+
+        served = []
+
+        def fetch_pending(conninfo, limit=5):
+            if served:
+                return []
+            served.append(1)
+            return pending
+
+        rows = {}
+        patcher = mock.patch.multiple(
+            poller,
+            connect_robot=connect_robot,
+            listen_for_commands=never,
+            _settle_interrupted_commands=lambda conninfo: None,
+            _settle_stale_sent=lambda conninfo, keep=None: (0, 0),
+            _fetch_pending=fetch_pending,
+            _mark_command=lambda conninfo, cmd_id, status, detail=None, terminal=True: rows.update({cmd_id: status}),
+            _mark_sent=lambda conninfo, cmd_id, detail: None,
+            _finish_command=lambda conninfo, cmd_id, status, detail: rows.update({cmd_id: status}),
+            upsert_status=lambda *a, **k: None,
+            detect_completion=lambda *a, **k: None,
+            sync_device=nothing,
+            refresh_map=nothing,
+            refresh_parts=nothing,
+            sync_history=nothing,
+            run_live_map=nothing,
+            FAST_POLL_INTERVAL=1,
+        )
+        env = {"IROBOT_EMAIL": "e", "IROBOT_PASSWORD": "p", "POSTGRES_PASSWORD": "x"}
+        with patcher, mock.patch.dict(os.environ, env), mock.patch.object(poller.aiohttp, "ClientSession", Session):
+            task = asyncio.ensure_future(poller.main())
+            await asyncio.sleep(seconds)
+            task.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        return rows
+
+    async def test_a_dead_cloud_login_with_a_check_pending_is_retried_slowly(self):
+        attempts = []
+
+        class Mqtt:
+            connected = True
+            generation = 1
+
+            def seconds_until_token_refresh_due(self):
+                return 1800.0
+
+        class Robot:
+            blid = "BLID"
+
+            def __init__(self):
+                self._mqtt = Mqtt()
+                self.reads = 0
+
+            async def get_named_shadow(self, name, timeout=8.0):
+                self.reads += 1
+                if self.reads > 3:  # the link dies shortly after the command
+                    raise TimeoutError("No response to GET")
+                return Reply(rep("run", "clean", "M1"))
+
+            async def send_simple_command(self, command):
+                return True  # PUBACK; the robot never reacts
+
+            async def disconnect(self):
+                pass
+
+        async def connect_robot(session, email, password, country, blid, state):
+            attempts.append(asyncio.get_running_loop().time())
+            if len(attempts) == 1:
+                return Robot()
+            raise OSError("Cannot connect to host unauthorized.irobotapi.com (DNS failure)")
+
+        rows = await self.run_main(connect_robot, [(1, "pause", None, 5.0)], 3.0)
+        self.assertLessEqual(len(attempts), 2, f"{len(attempts)} cloud logins in 3 s")
+        self.assertEqual(rows.get(1), "SENT", "claimed and sent; settles when its window runs out")
+
+    async def test_a_login_that_never_works_is_retried_after_a_pause(self):
+        attempts = []
+
+        async def connect_robot(session, email, password, country, blid, state):
+            attempts.append(1)
+            raise OSError("Cannot connect to host unauthorized.irobotapi.com")
+
+        await self.run_main(connect_robot, [], 1.5)
+        self.assertEqual(len(attempts), 1)
 
 
 class FakeConn:

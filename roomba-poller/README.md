@@ -71,8 +71,12 @@ the robot's state back on a short schedule (1, 2, 3, 4.5 … 16 s; 30 s for a st
 Where the state should move (pause, resume, stop, dock, a clean from the dock) the row
 stays `SENT` until it does (then `OK`); if it never does, the poller reconnects and
 sends pause / resume / stop / dock once more, and otherwise marks the row `FAILED` with
-the reason. A start is never sent twice. The rules live in `command_flow.py`; each command logs
-one line with its timings:
+the reason. A start (or a room clean, or a favorite) is never sent twice: if the cloud
+doesn't confirm one, the row stays `SENT` while the robot is watched for the start's 30 s,
+and only then fails. If the cloud link goes down mid-check, the row settles with the
+link's reason when its window ends, without logging in again. About once a minute a sweep
+settles any `SENT` row the poller lost track of. The rules live in `command_flow.py`;
+each command logs one line with its timings:
 
 ```
 command #47 (dock) confirmed | queued->seen 3 ms [notify] | seen->sent 160 ms [link fresh, round trip 3.1s ago] | sent->confirmed 2300 ms | total 2463 ms
@@ -81,7 +85,10 @@ command #47 (dock) confirmed | queued->seen 3 ms [notify] | seen->sent 160 ms [l
 ## Robustness
 
 Fail-open. Any cloud or DB error in a cycle is logged and swallowed; the loop
-never crash-loops. Connection loss disconnects and reconnects on the next cycle.
+never crash-loops. Connection loss disconnects and reconnects on a later cycle,
+after a pause that doubles per failure in a row (5, 10, 20, 40, then 60 s) and that
+nothing cuts short: every retry is a full iRobot login, and repeated logins lock the
+account (and the owner's iRobot app with it).
 Logs go to stdout (`docker compose logs -f roomba-poller`).
 
 ## Tests

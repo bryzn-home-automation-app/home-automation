@@ -62,15 +62,22 @@ from command_flow import (
     RESEND_SAFE,
     ROBOT_COMMANDS,
     SENT,
+    STALE_SENT_SECONDS,
+    START_COMMANDS,
     STATUS_READ_TIMEOUT,
+    SWEEP_SECONDS,
     UNCONFIRMED,
     REFUSED,
     WAIT,
+    WATCH,
     CommandTiming,
     FollowUp,
+    failure_backoff,
     link_decision,
+    link_down_detail,
     loop_sleep,
     mission_signature,
+    mission_under_way,
     no_reaction_detail,
     no_reaction_hint,
     reaction_expected,
@@ -732,6 +739,14 @@ async def _cancel_live_task(task):
         await task
 
 
+def _break_pass_path(state):
+    """The position stream stopped or is starting over: the pass count must not join the
+    last sample before the gap to the first one after it (coverage_passes.PassGrid)."""
+    grid = getattr(state, "passes", None)
+    if grid is not None:
+        grid.break_path()
+
+
 async def _manage_live_task(task, robot, conninfo, state):
     """Start the live-map task while a mission is running, stop it otherwise, and
     replace a task that has finished/failed. Returns the current task handle."""
@@ -740,6 +755,7 @@ async def _manage_live_task(task, robot, conninfo, state):
     if running and not alive:
         if task is not None:
             await _cancel_live_task(task)  # clear a finished/failed handle first
+        _break_pass_path(state)
         log.info("Mission running — starting live-position stream")
         return asyncio.ensure_future(run_live_map(robot, conninfo, robot.blid, state))
     if not running and task is not None:
@@ -1165,7 +1181,7 @@ LIST_SCHEDULES = "list_schedules"
 # Commands that (may) start a mission. After one, the poller polls at the fast
 # cadence for a short window so mission start — and thus the live dot + coverage
 # capture — is picked up within seconds instead of on the next full poll cycle.
-MISSION_START_COMMANDS = {"start", "resume", CLEAN_ROOM, CLEAN_ROOMS}
+MISSION_START_COMMANDS = {"start", "resume", CLEAN_ROOM, CLEAN_ROOMS, "favorite"}
 FAST_POLL_INTERVAL = 10   # seconds — poll cadence while a mission runs or was just commanded
 FAST_POLL_WINDOW = 180    # seconds — how long to fast-poll after a mission-starting command
 
@@ -1239,18 +1255,53 @@ def _settle_interrupted_commands(conninfo):
         log.debug("command settle skipped: %s: %s", type(e).__name__, e)
 
 
+def _settle_stale_sent(conninfo, keep_id=None, older_than=STALE_SENT_SECONDS):
+    """Settle SENT rows the running poller lost track of (their OK / FAILED write failed,
+    say): older than `older_than` seconds and not `keep_id` (the command being followed
+    up). Same split as at start-up: sent (processed_at set) -> OK on the broker's word,
+    never sent -> FAILED. Returns (ok, failed) counts; raises on a database error.
+    created_at / processed_at are UTC, so the cut-off is too."""
+    cutoff = "(clock_timestamp() AT TIME ZONE 'UTC') - make_interval(secs => %s)"
+    keep = -1 if keep_id is None else keep_id
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        checked = conn.execute(
+            "UPDATE roomba_commands SET status = 'OK', detail = %s "
+            "WHERE status = 'SENT' AND processed_at IS NOT NULL AND id <> %s "
+            f"AND processed_at < {cutoff}",
+            ("accepted by broker; the poller lost track of it before the robot's reaction was checked",
+             keep, older_than),
+        ).rowcount
+        lost = conn.execute(
+            "UPDATE roomba_commands SET status = 'FAILED', detail = %s, processed_at = NOW() "
+            "WHERE status = 'SENT' AND processed_at IS NULL AND id <> %s "
+            f"AND created_at < {cutoff}",
+            ("the poller lost track of it while sending, so it may not have reached the robot",
+             keep, older_than),
+        ).rowcount
+    return checked, lost
+
+
+def _not_sent(e, what):
+    """(False, reason) for a failure BEFORE the publish: nothing left, so the runner reports
+    it as refused (no reconnect, no "may not have reached the robot")."""
+    return False, f"couldn't prepare the {what}, so nothing was sent ({type(e).__name__}: {e})"
+
+
 async def _run_favorite(robot, favorite_id):
     """Replay a saved favorite/zone by id. Unvalidated on hardware (we have 0 favorites
-    yet) — kept best-effort; any failure is caught and marked FAILED by the caller.
-    Returns whether the broker confirmed it."""
-    from roombapy_prime.models.mission_control import MissionCommandType, RoutineCommand
-    cmd = RoutineCommand(
-        command_type=MissionCommandType.START,
-        asset_id=robot.blid,
-        favorite_id=favorite_id,
-        initiator="rmtApp",
-    )
-    return await robot.send_routine_command_via_cmd_topic(cmd)
+    yet) — kept best-effort. Returns (ok, detail) like the room cleans."""
+    try:
+        from roombapy_prime.models.mission_control import MissionCommandType, RoutineCommand
+        cmd = RoutineCommand(
+            command_type=MissionCommandType.START,
+            asset_id=robot.blid,
+            favorite_id=favorite_id,
+            initiator="rmtApp",
+        )
+    except Exception as e:  # noqa: BLE001 — nothing sent yet
+        return _not_sent(e, "favorite")
+    ok = await robot.send_routine_command_via_cmd_topic(cmd)
+    return (True, f"favorite {favorite_id} sent") if ok is not False else (False, BROKER_REJECTED)
 
 
 async def _active_p2map_id(robot):
@@ -1436,14 +1487,6 @@ async def _clean_room(robot, conninfo, arg):
     or the robot cleans the WHOLE HOUSE instead of the requested room. Those are
     hardcoded here; only room_id + optional suction/passes come from the caller.
     """
-    from roombapy_prime.models.mission_control import (
-        CommandParams,
-        MissionCommandType,
-        Region,
-        RegionType,
-        RoutineCommand,
-    )
-
     try:
         params = json.loads(arg or "{}")
     except (ValueError, TypeError):
@@ -1452,21 +1495,32 @@ async def _clean_room(robot, conninfo, arg):
     if not room_id:
         return False, "missing room_id"
 
-    p2map_id = await _active_p2map_id(robot)
-    if not p2map_id:
-        # Required: a null map_id turns a room clean into a whole-house clean.
-        return False, "no active map"
+    # Everything up to the publish: a failure here (the map read, say) sent nothing.
+    try:
+        from roombapy_prime.models.mission_control import (
+            MissionCommandType,
+            Region,
+            RegionType,
+            RoutineCommand,
+        )
 
-    cparams = _clean_command_params(params)
+        p2map_id = await _active_p2map_id(robot)
+        if not p2map_id:
+            # Required: a null map_id turns a room clean into a whole-house clean.
+            return False, "no active map"
 
-    region = Region(region_id=str(room_id), region_type=RegionType.RID, params=cparams)
-    cmd = RoutineCommand(
-        command_type=MissionCommandType.START,  # NOT CLEAN
-        asset_id=robot.blid,
-        map_id=p2map_id,                          # NOT None
-        regions=[region],
-        initiator="rmtApp",                       # mandatory (presence, not value)
-    )
+        cparams = _clean_command_params(params)
+
+        region = Region(region_id=str(room_id), region_type=RegionType.RID, params=cparams)
+        cmd = RoutineCommand(
+            command_type=MissionCommandType.START,  # NOT CLEAN
+            asset_id=robot.blid,
+            map_id=p2map_id,                          # NOT None
+            regions=[region],
+            initiator="rmtApp",                       # mandatory (presence, not value)
+        )
+    except Exception as e:  # noqa: BLE001 — nothing sent yet
+        return _not_sent(e, "room clean")
     ok = await robot.send_routine_command_via_cmd_topic(cmd)
     return (True, "clean started") if ok else (False, BROKER_REJECTED)
 
@@ -1479,13 +1533,6 @@ async def _clean_rooms(robot, conninfo, arg):
 
     `arg` JSON: {room_ids: [str, ...], suction?: 1-4, passes?: "one"|"two", mode?: 2|4|6}.
     """
-    from roombapy_prime.models.mission_control import (
-        MissionCommandType,
-        Region,
-        RegionType,
-        RoutineCommand,
-    )
-
     try:
         params = json.loads(arg or "{}")
     except (ValueError, TypeError):
@@ -1494,27 +1541,38 @@ async def _clean_rooms(robot, conninfo, arg):
     if not isinstance(room_ids, list) or not room_ids:
         return False, "missing room_ids"
 
-    p2map_id = await _active_p2map_id(robot)
-    if not p2map_id:
-        # Required: a null map_id turns a region clean into a whole-house clean.
-        return False, "no active map"
+    # Everything up to the publish: a failure here (the map read, say) sent nothing.
+    try:
+        from roombapy_prime.models.mission_control import (
+            MissionCommandType,
+            Region,
+            RegionType,
+            RoutineCommand,
+        )
 
-    cparams = _clean_command_params(params)
-    regions = [
-        Region(region_id=str(r), region_type=RegionType.RID, params=cparams)
-        for r in room_ids
-        if r
-    ]
-    if not regions:
-        return False, "no valid rooms"
+        p2map_id = await _active_p2map_id(robot)
+        if not p2map_id:
+            # Required: a null map_id turns a region clean into a whole-house clean.
+            return False, "no active map"
 
-    cmd = RoutineCommand(
-        command_type=MissionCommandType.START,  # NOT CLEAN
-        asset_id=robot.blid,
-        map_id=p2map_id,                          # NOT None
-        regions=regions,
-        initiator="rmtApp",                       # mandatory (presence, not value)
-    )
+        cparams = _clean_command_params(params)
+        regions = [
+            Region(region_id=str(r), region_type=RegionType.RID, params=cparams)
+            for r in room_ids
+            if r
+        ]
+        if not regions:
+            return False, "no valid rooms"
+
+        cmd = RoutineCommand(
+            command_type=MissionCommandType.START,  # NOT CLEAN
+            asset_id=robot.blid,
+            map_id=p2map_id,                          # NOT None
+            regions=regions,
+            initiator="rmtApp",                       # mandatory (presence, not value)
+        )
+    except Exception as e:  # noqa: BLE001 — nothing sent yet
+        return _not_sent(e, "room clean")
     ok = await robot.send_routine_command_via_cmd_topic(cmd)
     return (True, f"clean started ({len(regions)} room(s))") if ok else (False, BROKER_REJECTED)
 
@@ -1560,15 +1618,15 @@ async def _list_schedules(robot, conninfo):
 async def _robot_command(robot, conninfo, command, arg):
     """Send one robot (cloud MQTT) command. Returns (outcome, detail): SENT once the broker
     confirmed it (PUBACK; that it reached the robot is checked afterwards), UNCONFIRMED
-    when it didn't confirm, REFUSED when the request itself was bad and nothing was sent.
-    Exceptions propagate (the caller treats them as UNCONFIRMED)."""
+    when it didn't confirm, REFUSED when the request itself was bad or couldn't be built
+    and nothing was sent. An exception from the publish itself propagates (the caller
+    treats it as UNCONFIRMED)."""
     if command in SIMPLE_COMMANDS:
         ok = await robot.send_simple_command(command)
         return (SENT, "accepted by broker") if ok else (UNCONFIRMED, BROKER_REJECTED)
     if command == "favorite":
-        ok = await _run_favorite(robot, arg)
-        return (SENT, f"favorite {arg} sent") if ok is not False else (UNCONFIRMED, BROKER_REJECTED)
-    if command == CLEAN_ROOM:
+        ok, detail = await _run_favorite(robot, arg)
+    elif command == CLEAN_ROOM:
         ok, detail = await _clean_room(robot, conninfo, arg)
     elif command == CLEAN_ROOMS:
         ok, detail = await _clean_rooms(robot, conninfo, arg)
@@ -1702,6 +1760,7 @@ class CloudLink:
     async def drop(self):
         await _cancel_live_task(self.live_task)  # tied to this connection
         self.live_task = None
+        _break_pass_path(self.state)
         self.state.mission_running = False
         robot, self.robot = self.robot, None
         if robot is not None:
@@ -1758,9 +1817,46 @@ class CommandRunner:
         self.state = state
         self.clock = clock
         self.followup = None
+        # Settling writes that failed (cmd_id -> (status, detail)), retried by the sweep so
+        # the row gets its real outcome rather than the sweep's guess.
+        self.unwritten = {}
+        self.sweep_due = 0.0
 
     def next_check_at(self):
         return self.followup.next_check_at() if self.followup is not None else None
+
+    def _write(self, what, fn, *args):
+        """A row write after the command went out: a failure is logged, never turned into
+        FAILED (the robot has the command). Returns whether it was written."""
+        try:
+            fn(self.conninfo, *args)
+            return True
+        except Exception as e:  # noqa: BLE001
+            log.warning("couldn't %s for command #%s: %s: %s", what, args[0] if args else "?", type(e).__name__, e)
+            return False
+
+    def sweep_if_due(self):
+        """About once a minute: retry settling writes that failed, then settle SENT rows the
+        poller lost track of (older than STALE_SENT_SECONDS, not the current follow-up).
+        Database only; never raises."""
+        now = self.clock()
+        if now < self.sweep_due:
+            return
+        self.sweep_due = now + SWEEP_SECONDS
+        for cmd_id, (status, detail) in list(self.unwritten.items()):
+            try:
+                _finish_command(self.conninfo, cmd_id, status, detail)
+                self.unwritten.pop(cmd_id, None)
+                log.info("command #%s marked %s (retried)", cmd_id, status)
+            except Exception as e:  # noqa: BLE001
+                log.debug("retry of #%s's %s write failed: %s: %s", cmd_id, status, type(e).__name__, e)
+        try:
+            keep = self.followup.cmd_id if self.followup is not None else None
+            checked, lost = _settle_stale_sent(self.conninfo, keep)
+            if checked or lost:
+                log.warning("Settled %d unchecked and %d lost command(s) left SENT", checked, lost)
+        except Exception as e:  # noqa: BLE001
+            log.debug("stale command sweep failed: %s: %s", type(e).__name__, e)
 
     async def run_pending(self, woke=""):
         try:
@@ -1800,24 +1896,45 @@ class CommandRunner:
             _mark_command(self.conninfo, cmd_id, "SENT", terminal=False)  # claim → no double-send on restart
         except Exception:  # noqa: BLE001
             return
+        went_out = False  # once the broker has it, nothing below may mark the row FAILED
         try:
             if command not in ROBOT_COMMANDS:
                 ok, detail = await _rest_command(self.link.robot, self.conninfo, self.state, command, arg)
+                went_out = ok
                 timing.sent_at = self.clock()
-                _mark_command(self.conninfo, cmd_id, "OK" if ok else "FAILED", detail)
+                if not self._write("record the result", _mark_command, cmd_id, "OK" if ok else "FAILED", detail):
+                    self.unwritten[cmd_id] = ("OK" if ok else "FAILED", detail)
                 log.info(timing_line(cmd_id, command, timing, "done" if ok else f"failed ({detail})"))
                 return
             if self.followup is not None:
                 self._supersede(cmd_id)
             baseline = await self._ready_link(timing)
+            published_at = self.clock()
             outcome, detail = await self._send(command, arg)
             if outcome == UNCONFIRMED:
                 outcome, detail, baseline = await self._recover_unconfirmed(command, arg, baseline, detail, timing)
+            if outcome == WATCH:
+                # Not confirmed, and a second copy could start a second clean: keep the row
+                # SENT and watch the robot, timed from the first publish; FAILED only if
+                # nothing happens by the end of the start's window.
+                went_out = True
+                timing.sent_at = published_at
+                if command in MISSION_START_COMMANDS:
+                    self.state.fast_poll_until = time.monotonic() + FAST_POLL_WINDOW
+                self._write("mark it sent", _mark_sent, cmd_id,
+                            "the cloud didn't confirm it; waiting to see whether the robot reacts")
+                self.followup = FollowUp(
+                    cmd_id=cmd_id, command=command, arg=arg, baseline=mission_signature(baseline),
+                    verify=True, sent_at=published_at, timing=timing, unconfirmed=detail,
+                )
+                self._skip_past_checks(self.followup)
+                return
             if outcome != SENT:
                 timing.done_at = self.clock()
                 _mark_command(self.conninfo, cmd_id, "FAILED", detail)
                 log.info(timing_line(cmd_id, command, timing, f"failed ({detail})"))
                 return
+            went_out = True
             timing.sent_at = self.clock()
             # A mission-starting command: fast-poll for a window so the live dot +
             # coverage begin within seconds instead of on the next full poll cycle.
@@ -1825,9 +1942,9 @@ class CommandRunner:
                 self.state.fast_poll_until = time.monotonic() + FAST_POLL_WINDOW
             verify = reaction_expected(command, baseline)
             if verify:
-                _mark_sent(self.conninfo, cmd_id, "sent; waiting for the robot to react")
-            else:
-                _mark_command(self.conninfo, cmd_id, "OK", detail)
+                self._write("mark it sent", _mark_sent, cmd_id, "sent; waiting for the robot to react")
+            elif not self._write("mark it OK", _mark_command, cmd_id, "OK", detail):
+                self.unwritten[cmd_id] = ("OK", detail)
             if command in NO_FOLLOW_UP:
                 log.info(timing_line(cmd_id, command, timing, "sent (nothing to read back)"))
                 return
@@ -1838,10 +1955,20 @@ class CommandRunner:
             )
         except Exception as e:  # noqa: BLE001 — fail-open, never crash the loop
             log.warning("command #%s (%s) failed: %s: %s", cmd_id, command, type(e).__name__, e)
+            if went_out:
+                return  # the robot has it; the follow-up or the sweep settles the row
             try:
                 _mark_command(self.conninfo, cmd_id, "FAILED", f"{type(e).__name__}: {e}")
             except Exception:  # noqa: BLE001
                 pass
+
+    def _skip_past_checks(self, fu):
+        """Skip the checks that fell due while the send was being recovered (the reconnect
+        and its read already looked); the next read is the next one still ahead. The last
+        check is never skipped."""
+        now = self.clock()
+        while fu.checks_done < len(fu.schedule) - 1 and fu.next_check_at() <= now:
+            fu.checks_done += 1
 
     def _supersede(self, newer_id):
         fu, self.followup = self.followup, None
@@ -1868,9 +1995,12 @@ class CommandRunner:
 
     async def _recover_unconfirmed(self, command, arg, baseline, detail, timing):
         """The cloud didn't confirm a send (no PUBACK, or the publish raised). Reconnect;
-        then send again when a second copy is harmless, or give the reason. A start is not
-        re-sent: if the first copy did get through, a second could begin another clean.
-        Returns (outcome, detail, baseline)."""
+        then send again when a second copy is harmless. A start is not re-sent: if the first
+        copy did get through, a second could begin another clean, and a start can take ~11 s
+        to show in the shadow, so one look now is too early to call. It is WATCHed instead:
+        the caller keeps the row SENT and follows it up over the start's whole window.
+        Returns (outcome, detail, baseline); for WATCH the baseline is the state a reaction
+        is judged against."""
         started = self.clock()
         await self.link.reconnect(f"the cloud didn't confirm {command} ({detail})")
         timing.notes.append(f"unconfirmed send ({detail}); reconnected in {_since_ms(started, self.clock)}")
@@ -1880,30 +2010,47 @@ class CommandRunner:
             timing.notes.append("the robot had reacted anyway")
             return SENT, "accepted (the robot reacted)", baseline
         if command not in RESEND_SAFE:
-            return (UNCONFIRMED,
-                    f"the cloud didn't confirm it ({detail}), so it may not have reached the robot. "
-                    "The link was reconnected; try again", fresh)
+            refused = (f"the cloud didn't confirm it ({detail}), so it may not have reached the robot. "
+                       "The link was reconnected; try again")
+            if baseline is None and command in START_COMMANDS and mission_under_way(rep):
+                # No before-state to compare, but a clean is under way now: take it as started.
+                timing.notes.append("a clean is under way after the reconnect")
+                return SENT, "accepted (a clean is under way)", rep
+            watch_from = baseline if baseline is not None else rep
+            if reaction_expected(command, watch_from):
+                timing.notes.append("watching the robot instead of sending it again")
+                return WATCH, detail, watch_from
+            return UNCONFIRMED, refused, fresh
         outcome, detail2 = await self._send(command, arg)
         timing.notes.append(f"sent again: {outcome}")
         if outcome == UNCONFIRMED:
             return UNCONFIRMED, f"the cloud didn't confirm it, even after reconnecting ({detail2})", fresh
         return outcome, detail2, fresh
 
-    async def run_followup_if_due(self):
+    async def run_followup_if_due(self, link_down=None):
         """Read the robot's state if the current follow-up's next check is due, and act on
-        what it shows."""
+        what it shows. With `link_down` (why the cloud link is down; the main loop passes it
+        after a failed cycle) nothing is read and nothing reconnects: every due check counts
+        as one with nothing seen, so the schedule still ends on time and the row settles
+        with the link's reason instead of waiting out the outage."""
         fu = self.followup
         if fu is None:
             return
         due = fu.next_check_at()
         if due is not None and self.clock() < due:
             return
+        if link_down is not None or self.link.robot is None:
+            action = fu.run_out(self.clock())
+            if action == WAIT:
+                return
+            self.followup = None
+            self._settle_link_down(fu, action, link_down or "no cloud link")
+            return
         rep = None
-        if self.link.robot is not None:
-            try:
-                rep = await self._read(STATUS_READ_TIMEOUT)
-            except Exception as e:  # noqa: BLE001 — counts as a check with nothing seen
-                log.info("follow-up read for #%s failed: %s: %s", fu.cmd_id, type(e).__name__, e)
+        try:
+            rep = await self._read(STATUS_READ_TIMEOUT)
+        except Exception as e:  # noqa: BLE001 — counts as a check with nothing seen
+            log.info("follow-up read for #%s failed: %s: %s", fu.cmd_id, type(e).__name__, e)
         action = fu.after_check(rep)
         if action == WAIT:
             return
@@ -1915,16 +2062,28 @@ class CommandRunner:
             # link, so the page isn't left waiting on it.
             log.warning("follow-up for #%s failed: %s: %s", fu.cmd_id, type(e).__name__, e)
             if fu.verify:
-                self._finish(fu.cmd_id, "FAILED",
-                             f"the robot didn't react, and the link couldn't be rebuilt to check ({type(e).__name__}: {e})")
+                self._finish(fu.cmd_id, "FAILED", link_down_detail(fu.command, f"{type(e).__name__}: {e}"))
             raise
 
+    def _settle_link_down(self, fu, action, reason):
+        t = fu.timing
+        t.done_at = self.clock()
+        if action == DONE or not fu.verify:
+            log.info(timing_line(fu.cmd_id, fu.command, t, f"sent; not read back (cloud link down: {reason})"))
+            return
+        detail = link_down_detail(fu.command, reason)
+        self._finish(fu.cmd_id, "FAILED", detail)
+        log.info(timing_line(fu.cmd_id, fu.command, t, f"failed ({detail})"))
+
     def _finish(self, cmd_id, status, detail):
-        """Settle a row; a database hiccup is logged, never mistaken for a link problem."""
+        """Settle a row; a database hiccup is logged (and the write retried by the sweep),
+        never mistaken for a link problem."""
         try:
             _finish_command(self.conninfo, cmd_id, status, detail)
+            self.unwritten.pop(cmd_id, None)
         except Exception as e:  # noqa: BLE001
-            log.warning("couldn't mark command #%s %s: %s: %s", cmd_id, status, type(e).__name__, e)
+            self.unwritten[cmd_id] = (status, detail)
+            log.warning("couldn't mark command #%s %s (will retry): %s: %s", cmd_id, status, type(e).__name__, e)
 
     def _confirmed(self, fu, how=""):
         t = fu.timing
@@ -1933,6 +2092,8 @@ class CommandRunner:
             log.info(timing_line(fu.cmd_id, fu.command, t, "sent; the robot's state moved"))
             return
         again = " again" if fu.attempt > 1 else ""
+        if fu.unconfirmed and not how:
+            how = " (the cloud never confirmed it, but it got there)"
         secs = (t.done_at - (t.sent_at if t.sent_at is not None else t.done_at))
         self._finish(fu.cmd_id, "OK", f"the robot reacted {secs:.1f} s after it was sent{again}{how}")
         log.info(timing_line(fu.cmd_id, fu.command, t, f"confirmed{' after a resend' if fu.attempt > 1 else ''}{how}"))
@@ -1966,9 +2127,10 @@ class CommandRunner:
             return
         # NO_REACTION: no second send for this one (or it was already the second).
         last = rep
-        if fu.attempt == 1:
+        if fu.attempt == 1 and not fu.unconfirmed:
             # Rebuild the link anyway, so a retry from the page goes out on a fresh one, and
-            # look once more in case the reaction was just slow.
+            # look once more in case the reaction was just slow. (An unconfirmed send was
+            # already reconnected when the cloud didn't confirm it.)
             started = self.clock()
             await self.link.reconnect(f"no reaction to #{fu.cmd_id} ({fu.command}) within {wait}")
             t.notes.append(f"no reaction within {wait}; reconnected in {_since_ms(started, self.clock)}")
@@ -1978,7 +2140,8 @@ class CommandRunner:
                 return
             last = now_rep if now_rep is not None else rep
         cms = (last or {}).get("cleanMissionStatus") or {}
-        detail = no_reaction_detail(fu.command, fu.attempt, no_reaction_hint(last, _error_text(cms.get("error"))))
+        detail = no_reaction_detail(fu.command, fu.attempt, no_reaction_hint(last, _error_text(cms.get("error"))),
+                                    unconfirmed=fu.unconfirmed)
         t.done_at = self.clock()
         self._finish(fu.cmd_id, "FAILED", detail)
         log.info(timing_line(fu.cmd_id, fu.command, t, f"failed ({detail})"))
@@ -2059,6 +2222,7 @@ async def main():
             runner = CommandRunner(link, conninfo, state)
             last_poll = 0.0
             woke = "start"
+            failures = 0  # failed cycles in a row
             while True:
                 try:
                     await link.ensure()
@@ -2099,13 +2263,31 @@ async def main():
                         await sync_history(robot, conninfo, state)
                     # Keep the concurrent live-position task in sync with mission state.
                     link.live_task = await _manage_live_task(link.live_task, robot, conninfo, state)
+                    runner.sweep_if_due()
+                    failures = 0
                 except asyncio.CancelledError:
                     await _cancel_live_task(link.live_task)
                     link.live_task = None
                     raise
                 except Exception as e:  # noqa: BLE001 — fail-open, reconnect next cycle
-                    log.warning("Cycle failed (%s: %s); will reconnect", type(e).__name__, e)
+                    failures += 1
+                    backoff = failure_backoff(failures)
+                    reason = f"{type(e).__name__}: {e}"
+                    log.warning("Cycle failed (%s); reconnecting in %.0fs", reason, backoff)
                     await link.drop()
+                    # A command being followed up can't be read back now: let its schedule
+                    # run out without the link, so its row settles instead of waiting out
+                    # the outage. Nothing here logs in.
+                    try:
+                        await runner.run_followup_if_due(link_down=reason)
+                    except Exception as e2:  # noqa: BLE001
+                        log.warning("follow-up during the outage failed: %s: %s", type(e2).__name__, e2)
+                    runner.sweep_if_due()
+                    # A plain wait: not cut short by a NOTIFY or a due check, because every
+                    # retry is a full cloud login and repeated logins lock the account.
+                    await asyncio.sleep(backoff)
+                    woke = "retry"
+                    continue
                 woke = await _sleep_until_woken(
                     wake, loop_sleep(time.monotonic(), tick=CMD_TICK_SECONDS, next_check=runner.next_check_at()))
     finally:

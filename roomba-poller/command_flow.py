@@ -25,6 +25,14 @@ from dataclasses import dataclass, field
 # Fallback wake-up. Postgres NOTIFY wakes the loop the moment a command is queued; this
 # tick only matters while the listener is down (or a notification was missed).
 CMD_TICK_SECONDS = 5.0
+# After a failed cycle (cloud login or connection down) the loop waits this long and no
+# less, doubling per failure in a row from CMD_TICK_SECONDS: every retry is a full iRobot
+# login, and repeated logins lock the account (the owner's iRobot app with it).
+FAILURE_BACKOFF_MAX = 60.0
+# Rows the poller lost track of: a SENT row this old that isn't being followed up is
+# settled by the periodic sweep (its OK / FAILED write failed, say).
+STALE_SENT_SECONDS = 120.0
+SWEEP_SECONDS = 60.0
 # A shadow round trip on the current connection at most this old proves the link. Mid-clean
 # the status is read every 10 s, so a command then goes out with no extra round trip.
 LINK_FRESH_SECONDS = 20.0
@@ -54,8 +62,8 @@ ROBOT_COMMANDS = frozenset({
     "start", "stop", "pause", "resume", "dock", "find", "evac", "favorite",
     "clean_room", "clean_rooms",
 })
-# Commands that start a clean.
-START_COMMANDS = frozenset({"start", "clean_room", "clean_rooms"})
+# Commands that start a clean (a saved favorite is a clean too).
+START_COMMANDS = frozenset({"start", "clean_room", "clean_rooms", "favorite"})
 # Safe to send a second time when the first may not have arrived: each one asks for a
 # state, and asking twice lands in the same state (a second "find" is one more chime). A
 # start is never re-sent: if the first copy did arrive late, a second could begin another
@@ -71,6 +79,7 @@ _IDLE_PHASES = frozenset({"charge", "stop", "idle", ""})
 SENT = "sent"                # the broker confirmed it (PUBACK)
 UNCONFIRMED = "unconfirmed"  # no PUBACK, or the publish raised: it may not have left
 REFUSED = "refused"          # the request itself was bad; nothing was sent
+WATCH = "watch"              # unconfirmed and not safe to send again: watch the robot instead
 
 # link_decision() results.
 FRESH = "fresh"
@@ -173,7 +182,14 @@ def reaction_expected(command, rep):
         return phase in ("run", "pause") or (phase == "stop" and on)
     if command in START_COMMANDS:
         return not on and phase in _IDLE_PHASES
-    return False  # find, evac, favorite, anything new
+    return False  # find, evac, anything new
+
+
+def mission_under_way(rep):
+    """The robot is partway through a clean (any cycle but none): what a start that
+    arrived looks like, read without a before-state to compare against."""
+    cms = _cms(rep)
+    return bool(cms) and _cycle_on(cms) and cms.get("cycle") not in ("evac", "dock")
 
 
 def no_reaction_hint(rep, error_text=None):
@@ -199,11 +215,15 @@ def verify_schedule(command):
     return START_VERIFY_CHECKS if command in START_COMMANDS else VERIFY_CHECKS
 
 
-def no_reaction_detail(command, attempts, hint=""):
+def no_reaction_detail(command, attempts, hint="", unconfirmed=None):
     """The reason stored on a command the robot never reacted to. Reads on after the UI's
-    "Pause failed: " / "The robot didn't start: "."""
+    "Pause failed: " / "The robot didn't start: ". `unconfirmed` is why the cloud didn't
+    confirm the send, for one that was watched rather than sent again."""
     wait = f"{verify_schedule(command)[-1]:.0f} s"
-    if attempts > 1:
+    if unconfirmed:
+        text = (f"the cloud didn't confirm it ({unconfirmed}), and the robot hadn't reacted "
+                f"{wait} later, so it most likely never got it. The link was reconnected; try again")
+    elif attempts > 1:
         text = "the robot didn't react, even after reconnecting and sending it again"
     elif command in START_COMMANDS:
         text = (f"the robot didn't react within {wait}. It wasn't sent again automatically, "
@@ -211,6 +231,15 @@ def no_reaction_detail(command, attempts, hint=""):
     else:
         text = f"the robot didn't react within {wait}"
     return f"{text} ({hint})" if hint else text
+
+
+def link_down_detail(command, reason):
+    """The reason stored on a sent command whose check ran out while the cloud link was
+    down: nothing could be read back, so whether it acted is unknown. No "try again" --
+    a start may well have arrived."""
+    wait = f"{verify_schedule(command)[-1]:.0f} s"
+    return (f"sent, but the cloud link went down before the robot was seen to react within {wait} "
+            f"({reason}). Check the robot before sending it again")
 
 
 # ---------------------------------------------------------------------------
@@ -268,6 +297,7 @@ class FollowUp:
     timing: CommandTiming
     attempt: int = 1
     checks_done: int = 0
+    unconfirmed: str | None = None      # the cloud never confirmed the send: why (watched, not resent)
 
     @property
     def schedule(self):
@@ -292,6 +322,17 @@ class FollowUp:
             return RESEND
         return NO_REACTION
 
+    def run_out(self, now):
+        """The robot can't be read (the link is down): count every check due by `now` as
+        one with nothing seen, so the schedule still ends on time. Returns the last action
+        (WAIT while checks remain)."""
+        action = WAIT
+        while (due := self.next_check_at()) is not None and due <= now:
+            action = self.after_check(None)
+            if action != WAIT:
+                break
+        return action
+
     def resent(self, now, baseline=None):
         """Start over after a second send, against the state read just before it."""
         self.attempt += 1
@@ -304,9 +345,18 @@ class FollowUp:
 # ---------------------------------------------------------------------------
 # The loop
 # ---------------------------------------------------------------------------
+def failure_backoff(failures, *, tick=CMD_TICK_SECONDS, cap=FAILURE_BACKOFF_MAX):
+    """Seconds to wait after the `failures`-th failed cycle in a row (1 = the first):
+    tick, 2x, 4x ... up to `cap`. Not cut short by a NOTIFY or a due check -- each retry
+    is a full cloud login."""
+    n = max(1, int(failures))
+    return min(tick * 2 ** min(n - 1, 16), cap)
+
+
 def loop_sleep(now, *, tick=CMD_TICK_SECONDS, next_check=None):
-    """Seconds the main loop may sleep: until the fallback tick or the next follow-up
-    read, whichever comes first (a NOTIFY ends the sleep sooner)."""
+    """Seconds the main loop may sleep after a GOOD cycle: until the fallback tick or the
+    next follow-up read, whichever comes first (a NOTIFY ends the sleep sooner). After a
+    failed cycle the loop sleeps failure_backoff() instead."""
     wait = tick
     if next_check is not None:
         wait = min(wait, next_check - now)

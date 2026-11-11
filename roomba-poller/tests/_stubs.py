@@ -36,6 +36,21 @@ class _DockState(enum.IntEnum):
     DOCK_READY = 301
 
 
+class _Record:
+    """Keeps its keyword arguments as attributes: enough to build a command."""
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+
+class _MissionCommandType(enum.Enum):
+    START = "start"
+
+
+class _RegionType(enum.Enum):
+    RID = "rid"
+
+
 def install():
     if _missing("aiohttp"):
         _module("aiohttp", ClientSession=object)
@@ -55,5 +70,11 @@ def install():
                 PositionUpdateMessage=type("PositionUpdateMessage", (), {}))
         _module("roombapy_prime.models.map_bundle", parse_map_bundle=lambda raw: {})
         _module("roombapy_prime.models.robot_info", DockState=_DockState)
+        _module("roombapy_prime.models.mission_control",
+                CommandParams=type("CommandParams", (_Record,), {}),
+                MissionCommandType=_MissionCommandType,
+                Region=type("Region", (_Record,), {}),
+                RegionType=_RegionType,
+                RoutineCommand=type("RoutineCommand", (_Record,), {}))
         _module("roombapy_prime.prime_factory", PrimeFactory=type("PrimeFactory", (), {}))
         _module("roombapy_prime.vendor_errors", vendor_error=lambda code: None)

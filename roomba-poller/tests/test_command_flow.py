@@ -99,7 +99,8 @@ class Reaction(unittest.TestCase):
             ("clean_rooms", rep("charge", "none"), True),
             ("find", rep("charge", "none"), False),
             ("evac", rep("charge", "none"), False),
-            ("favorite", rep("charge", "none"), False),
+            ("favorite", rep("charge", "none"), True),     # a saved favorite starts a clean
+            ("favorite", rep("run", "clean"), False),
             ("pause", None, False),                        # no baseline: trust the PUBACK
         ]
         for command, before, expected in cases:
@@ -115,6 +116,22 @@ class Reaction(unittest.TestCase):
         self.assertEqual(cf.no_reaction_hint(rep("charge", notReady=7)), "the robot reports it isn't ready (code 7)")
         self.assertEqual(cf.no_reaction_hint(rep("charge")), "")
         self.assertEqual(cf.no_reaction_hint(None), "")
+
+    def test_a_clean_under_way_is_recognised_without_a_before_state(self):
+        self.assertTrue(cf.mission_under_way(rep("run", "clean")))
+        self.assertTrue(cf.mission_under_way(rep("charge", "clean")))   # recharging mid-clean
+        self.assertFalse(cf.mission_under_way(rep("charge", "none")))
+        self.assertFalse(cf.mission_under_way(rep("evac", "evac")))      # a bin empty isn't a clean
+        self.assertFalse(cf.mission_under_way(None))
+
+    def test_unconfirmed_and_link_down_reasons(self):
+        text = cf.no_reaction_detail("start", 1, unconfirmed="broker rejected")
+        self.assertIn("the cloud didn't confirm it (broker rejected)", text)
+        self.assertIn("hadn't reacted 30 s later", text)
+        down = cf.link_down_detail("pause", "OSError: DNS failure")
+        self.assertIn("within 16 s", down)
+        self.assertIn("(OSError: DNS failure)", down)
+        self.assertNotIn("try again", down)
 
     def test_failure_reasons_read_on_after_the_ui_prefix(self):
         self.assertIn("even after reconnecting and sending it again", cf.no_reaction_detail("pause", 2))
@@ -132,6 +149,7 @@ class Resending(unittest.TestCase):
         # A second start could begin another clean if the first arrived late.
         for c in ("start", "clean_room", "clean_rooms", "favorite", "evac"):
             self.assertNotIn(c, cf.RESEND_SAFE)
+        self.assertEqual(cf.verify_schedule("favorite"), cf.START_VERIFY_CHECKS)
 
 
 def follow(command="pause", verify=True, base=rep("run", "clean"), sent_at=10.0):
@@ -183,6 +201,15 @@ class FollowUps(unittest.TestCase):
         self.assertEqual(actions[:-1], [cf.WAIT] * (len(cf.START_VERIFY_CHECKS) - 1))
         self.assertEqual(actions[-1], cf.NO_REACTION)
 
+    def test_with_the_link_down_due_checks_run_out_on_time(self):
+        fu = follow("pause", sent_at=10.0)
+        self.assertEqual(fu.run_out(10.5), cf.WAIT)
+        self.assertEqual(fu.checks_done, 0)
+        self.assertEqual(fu.run_out(14.0), cf.WAIT)     # checks at 11, 12, 13 counted
+        self.assertEqual(fu.checks_done, 3)
+        self.assertEqual(fu.run_out(10.0 + cf.VERIFY_CHECKS[-1]), cf.RESEND)
+        self.assertIsNone(fu.next_check_at())
+
     def test_resent_keeps_the_old_baseline_when_none_was_read(self):
         fu = follow()
         before = fu.baseline
@@ -214,6 +241,11 @@ class Loop(unittest.TestCase):
 
     def test_an_overdue_check_means_no_sleep(self):
         self.assertEqual(cf.loop_sleep(100.0, next_check=99.0), 0.0)
+
+    def test_failed_cycles_back_off_to_a_minute(self):
+        self.assertEqual([cf.failure_backoff(n) for n in range(1, 8)], [5, 10, 20, 40, 60, 60, 60])
+        self.assertEqual(cf.failure_backoff(0), 5)        # never zero
+        self.assertEqual(cf.failure_backoff(10_000), 60)  # no overflow
 
 
 class Timings(unittest.TestCase):
