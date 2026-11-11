@@ -35,6 +35,7 @@ const NotificationsPage = lazy(() => import('./pages/Notifications'));
 const ProfilePage = lazy(() => import('./pages/ProfilePage'));
 const MaintenanceDashboard = lazy(() => import('./pages/MaintenanceDashboard'));
 const Updates = lazy(() => import('./pages/Updates'));
+const Reminders = lazy(() => import('./pages/Reminders'));
 
 // ── Admin pages ──
 const UserManagement = lazy(() => import('./pages/admin/UserManagement'));
@@ -80,6 +81,7 @@ const NotificationsRoute = lazyRoute(NotificationsPage, 'list');
 const ProfilePageRoute = lazyRoute(ProfilePage, 'cards');
 const MaintenanceDashboardRoute = lazyRoute(MaintenanceDashboard, 'list');
 const UpdatesRoute = lazyRoute(Updates, 'list');
+const RemindersRoute = lazyRoute(Reminders, 'list');
 const UserManagementRoute = lazyRoute(UserManagement, 'list');
 const GuestManagementRoute = lazyRoute(GuestManagement, 'list');
 const AuditLogsRoute = lazyRoute(AuditLogs, 'list');
@@ -129,6 +131,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
                   <Route path="profile" element={<ProfilePageRoute />} />
                   <Route path="users" element={<UserManagementRoute />} />
                   <Route element={<MemberRoute />}>
+                    <Route path="reminders" element={<RemindersRoute />} />
                     <Route path="maintenance" element={<MaintenanceDashboardRoute />} />
                     <Route path="cameras" element={<CamerasRoute />} />
                   </Route>

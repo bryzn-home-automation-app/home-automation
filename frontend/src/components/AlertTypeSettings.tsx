@@ -16,6 +16,7 @@ const GROUPS: { category: AlertTypePreference['category']; title: string; icon: 
   { category: 'CAMERA', title: 'Cameras', icon: 'camera' },
   { category: 'ROOMBA', title: 'Roomba', icon: 'robot' },
   { category: 'ELECTRICAL', title: 'Electricity', icon: 'bolt' },
+  { category: 'REMINDER', title: 'Reminders', icon: 'calendar' },
 ];
 
 /** Alert types this card covers (weather has its own card). */

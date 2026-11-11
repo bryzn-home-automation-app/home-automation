@@ -1,6 +1,8 @@
-# Roomba V4 / "Prime" cloud client — beta. Pinned to the field-tested tag.
-# Requires Python 3.11+. Installs from git, so the image needs `git` present.
-roombapy-prime @ git+https://github.com/johnnyh1975/roombapy-prime.git@v0.3.1
+# Roomba V4 / "Prime" cloud client. Pinned to the latest stable tag (see UPSTREAM.md
+# for the version history and how to bump it). Requires Python 3.11+. Installs from
+# git, so the image needs `git` present. Since 0.5.0 it also pulls aiomqtt (>=2.5,<3)
+# as a transitive dependency; nothing to list here.
+roombapy-prime @ git+https://github.com/johnnyh1975/roombapy-prime.git@v0.8.3
 
 # Postgres driver (v3). [binary] pulls a prebuilt wheel — no libpq build deps.
 psycopg[binary]==3.2.3

@@ -37,6 +37,14 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("2.4.0", "stable", LocalDate.of(2026, 11, 11),
+                    "Reminders and a week of weather",
+                    "Set household reminders like trash day, see the week's weather on Home, and find containers grouped by project.",
+                    List.of(
+                            change("new", "Reminders: set up chores like trash day, choose when to get a heads-up, and mark them done for the week. They show on Home and can alert your phone."),
+                            change("new", "Home shows the week's weather by default, with a switch to the next 24 hours."),
+                            change("improved", "Server health groups containers by project, the way Docker does."),
+                            change("improved", "The Roomba connection uses the latest version of its library, which reconnects more reliably."))),
             define("2.3.0", "stable", LocalDate.of(2026, 11, 11),
                     "Both thermostats at once",
                     "Climate shows every thermostat side by side, and the camera battery chart zooms in properly.",

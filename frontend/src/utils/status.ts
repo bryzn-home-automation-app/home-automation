@@ -129,6 +129,7 @@ const CATEGORY: Record<string, Category> = {
   WIFI: { label: 'Guest Wi-Fi', icon: 'wifi' },
   WEATHER: { label: 'Weather', icon: 'cloud-sun' },
   SYSTEM: { label: 'Home server', icon: 'server' },
+  REMINDER: { label: 'Reminders', icon: 'calendar' },
 };
 /** A notification's category (Notification.category). */
 export function notificationCategory(category: string | null | undefined): Category {

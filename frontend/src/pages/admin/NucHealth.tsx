@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, type ReactNode } from 'react';
+import { Fragment, memo, useMemo, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { fetchHostHealth, fetchHostHistory } from '../../api/host';
@@ -407,24 +407,161 @@ function History({ range, onRange, history, loading, failed, onRetry, retrying }
 
 // ── Detail panels ──
 
-function containerStatus(c: HostContainer): { tone: Tone; label: string } {
+/*
+ * Containers are grouped the way Docker Desktop groups them: by Compose project (the
+ * com.docker.compose.project label), each row named by its Compose service.
+ */
+
+/** This app's Compose project; its containers are named homeplatform-* (the backend's check uses the name). */
+const OWN_PROJECT = 'home-automation';
+const OWN_PREFIX = 'homeplatform-';
+const OTHER_GROUP = 'Other containers';
+
+/** Docker's exit code from "Exited (137) 2 days ago"; null for anything else. */
+function exitCode(c: HostContainer): number | null {
+  const m = /^Exited \((-?\d+)\)/.exec(c.status ?? '');
+  return m ? Number(m[1]) : null;
+}
+
+/** Docker's own words for how long, without the health note: "Up 3 hours", "Exited (1) 5 minutes ago". */
+const dockerSays = (c: HostContainer) => (c.status ?? c.state ?? '').replace(/\s*\((healthy|unhealthy|health: starting)\)\s*$/, '');
+
+/** The Compose project, or (from an older monitor, or a container outside Compose) a guess from the name. */
+function projectOf(c: HostContainer, sharedPrefixes: Set<string>): string {
+  if (c.project) return c.project;
+  if (c.name.startsWith(OWN_PREFIX)) return OWN_PROJECT;
+  const prefix = /^([a-z0-9]+)[-_]/i.exec(c.name)?.[1];
+  return prefix && sharedPrefixes.has(prefix) ? prefix : OTHER_GROUP;
+}
+
+/** The Compose service, or the name without its project prefix and replica number. */
+function serviceOf(c: HostContainer, project: string): string {
+  if (c.service) return c.service;
+  const prefix = project === OWN_PROJECT && c.name.startsWith(OWN_PREFIX) ? OWN_PREFIX : `${project}-`;
+  const bare = c.name.startsWith(prefix) ? c.name.slice(prefix.length) : c.name;
+  return bare.replace(/[-_]\d+$/, '') || c.name;
+}
+
+interface ContainerView {
+  c: HostContainer;
+  service: string;
+  /** A one-shot (a migration, a permissions fix) that ran and exited cleanly while the rest of its project runs. */
+  finished: boolean;
+  tone: Tone;
+  label: string;
+}
+
+interface ContainerGroup {
+  project: string;
+  own: boolean;
+  rows: ContainerView[];
+  running: number;
+  /** Everything that should be running: all but the finished one-shots. */
+  expected: number;
+  memBytes: number;
+  /** Nothing in the project is running: switched off on purpose, not a failure. */
+  stopped: boolean;
+  tone: Tone;
+}
+
+function containerView(c: HostContainer, service: string, projectRunning: boolean, own: boolean): ContainerView {
   if (c.state === 'running') {
-    return c.health === 'unhealthy' ? { tone: 'headsup', label: 'Running · unhealthy' } : { tone: 'ok', label: c.health === 'healthy' ? 'Running · healthy' : 'Running' };
+    // Short words: the badge shares a phone-width row with the names.
+    if (c.health === 'unhealthy') return { c, service, finished: false, tone: 'headsup', label: 'Unhealthy' };
+    if (c.health === 'starting') return { c, service, finished: false, tone: 'ok', label: 'Starting' };
+    return { c, service, finished: false, tone: 'ok', label: c.health === 'healthy' ? 'Healthy' : 'Running' };
   }
-  if (c.state === 'restarting') return { tone: 'headsup', label: 'Restarting' };
-  return { tone: c.name.startsWith('homeplatform-') ? 'problem' : 'neutral', label: c.status ?? c.state ?? 'Stopped' };
+  if (c.state === 'restarting') return { c, service, finished: false, tone: 'headsup', label: 'Restarting' };
+  if (projectRunning && c.state === 'exited' && exitCode(c) === 0) return { c, service, finished: true, tone: 'neutral', label: 'Finished' };
+  // One of this app's own containers down is a problem (as the backend's check says); a stop in a
+  // project that is otherwise up is worth a look; a whole project switched off is just off.
+  const tone: Tone = own ? 'problem' : projectRunning ? 'headsup' : 'neutral';
+  return { c, service, finished: false, tone, label: c.state === 'created' ? 'Not started' : 'Stopped' };
+}
+
+function groupContainers(containers: HostContainer[]): ContainerGroup[] {
+  // Without the project label, a name prefix that two or more containers share stands in for it.
+  const counts = new Map<string, number>();
+  for (const c of containers) {
+    if (c.project || c.name.startsWith(OWN_PREFIX)) continue;
+    const p = /^([a-z0-9]+)[-_]/i.exec(c.name)?.[1];
+    if (p) counts.set(p, (counts.get(p) ?? 0) + 1);
+  }
+  const shared = new Set([...counts].filter(([, n]) => n > 1).map(([p]) => p));
+
+  const byProject = new Map<string, HostContainer[]>();
+  for (const c of containers) {
+    const p = projectOf(c, shared);
+    byProject.set(p, [...(byProject.get(p) ?? []), c]);
+  }
+
+  const groups = [...byProject].map(([project, list]): ContainerGroup => {
+    const own = project === OWN_PROJECT;
+    const projectRunning = list.some((c) => c.state === 'running');
+    const rows = list
+      .map((c) => containerView(c, serviceOf(c, project), projectRunning, own || c.name.startsWith(OWN_PREFIX)))
+      .sort((a, b) => a.service.localeCompare(b.service) || a.c.name.localeCompare(b.c.name));
+    const running = rows.filter((r) => r.c.state === 'running').length;
+    const expected = rows.filter((r) => !r.finished).length;
+    const stopped = !projectRunning;
+    const worst = worstTone(rows.map((r) => r.tone));
+    return {
+      project,
+      own,
+      rows,
+      running,
+      expected,
+      memBytes: rows.reduce((sum, r) => sum + (r.c.memBytes ?? 0), 0),
+      stopped,
+      tone: worst === 'problem' || worst === 'headsup' ? worst : stopped ? 'neutral' : 'ok',
+    };
+  });
+
+  // This app first, then the rest by name, the leftovers after them, and switched-off projects last.
+  const rank = (g: ContainerGroup) => (g.own ? 0 : g.stopped ? 3 : g.project === OTHER_GROUP ? 2 : 1);
+  return groups.sort((a, b) => rank(a) - rank(b) || a.project.localeCompare(b.project));
+}
+
+function groupSummary(g: ContainerGroup): string {
+  const finished = g.rows.length - g.expected;
+  return [
+    g.stopped ? `Stopped · 0 of ${g.expected} running` : `${g.running} of ${g.expected} running`,
+    finished ? `${finished} finished` : null,
+    !g.stopped && g.memBytes ? bytes(g.memBytes) : null,
+  ].filter(Boolean).join(' · ');
+}
+
+function ContainerRow({ v }: { v: ContainerView }) {
+  const { c } = v;
+  const facts = [dockerSays(c), ...(c.state === 'running' ? [`${pct(c.cpuPct, 1)} processor`, bytes(c.memBytes)] : [])].filter(Boolean);
+  return (
+    <Row
+      compact
+      title={<span className="break-all">{v.service}</span>}
+      meta={
+        <>
+          {v.service !== c.name && <span className="fp-mono block break-all">{c.name}</span>}
+          {/* Each fact keeps its figure and unit together when the line wraps. */}
+          <span className="block">
+            {facts.map((f, i) => <Fragment key={i}>{i ? ' · ' : ''}<span className="whitespace-nowrap">{f}</span></Fragment>)}
+          </span>
+        </>
+      }
+      trail={<Badge tone={v.tone} className="whitespace-nowrap">{v.label}</Badge>}
+    />
+  );
 }
 
 function Containers({ docker }: { docker: HostSnapshot['docker'] }) {
   if (!docker) return null;
-  const list = [...(docker.containers ?? [])].sort((a, b) =>
-    (a.state === 'running' ? 0 : 1) - (b.state === 'running' ? 0 : 1) || (b.memBytes ?? 0) - (a.memBytes ?? 0));
-  const running = list.filter((c) => c.state === 'running').length;
+  const all = docker.containers ?? [];
+  const groups = groupContainers(all);
+  const running = all.filter((c) => c.state === 'running').length;
   return (
     <Panel
       title="Containers"
       subtitle={docker.ok
-        ? `${running} of ${list.length} running · Docker ${docker.version ?? ''}${docker.memTotalBytes ? ` · ${bytes(docker.memTotalBytes)} VM` : ''}`
+        ? `${running} of ${all.length} running · Docker ${docker.version ?? ''}${docker.memTotalBytes ? ` · ${bytes(docker.memTotalBytes)} VM` : ''}`
         : undefined}
     >
       {!docker.ok ? (
@@ -432,19 +569,31 @@ function Containers({ docker }: { docker: HostSnapshot['docker'] }) {
           {docker.error ?? 'No answer from Docker.'} Container details come back once it does.
         </EmptyState>
       ) : (
-        <List>
-          {list.map((c) => {
-            const st = containerStatus(c);
-            return (
-              <Row
-                key={c.name}
-                title={<span className="break-all">{c.name}</span>}
-                meta={c.state === 'running' ? `${pct(c.cpuPct, 1)} processor · ${bytes(c.memBytes)}` : c.image ?? undefined}
-                trail={<Badge tone={st.tone} className="whitespace-nowrap">{st.label}</Badge>}
-              />
-            );
-          })}
-        </List>
+        <ul className="fp-list" aria-label="Containers by project">
+          {groups.map((g) => (
+            // Custom rows in the panel's edge-to-edge list take the panel's inset themselves.
+            <li key={g.project} className="px-[var(--apppanel-pad)] py-1">
+              <Disclosure
+                // A project with something wrong opens; so does this app's own; the rest wait to be asked.
+                defaultOpen={g.own || g.tone === 'headsup' || g.tone === 'problem'}
+                className="[&>summary]:flex [&>summary]:w-full [&>summary]:items-center [&>summary]:justify-between [&>summary]:gap-3"
+                summary={
+                  <span className="flex min-w-0 items-center gap-3 py-1 text-left">
+                    <Lamp tone={g.tone} label />
+                    <span className="flex min-w-0 flex-col">
+                      <span className="break-all font-semibold text-apptext">{g.project}</span>
+                      <span className="fp-small fp-muted font-normal">{groupSummary(g)}</span>
+                    </span>
+                  </span>
+                }
+              >
+                <List inset className="mb-2">
+                  {g.rows.map((v) => <ContainerRow key={v.c.name} v={v} />)}
+                </List>
+              </Disclosure>
+            </li>
+          ))}
+        </ul>
       )}
     </Panel>
   );

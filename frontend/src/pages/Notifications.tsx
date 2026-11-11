@@ -42,7 +42,7 @@ const LIMIT = 100;
 /** Rows shown before "Show older alerts" (lists never scroll in their own box; B-006). */
 const FIRST_ROWS = 20;
 
-type CategoryKey = 'all' | 'ELECTRICAL' | 'WEATHER' | 'CAMERA' | 'ROOMBA' | 'WATER' | 'SYSTEM';
+type CategoryKey = 'all' | 'ELECTRICAL' | 'WEATHER' | 'CAMERA' | 'ROOMBA' | 'REMINDER' | 'WATER' | 'SYSTEM';
 type SeverityKey = 'all' | 'CRITICAL' | 'WARNING' | 'INFO' | 'SUCCESS';
 
 /**
@@ -55,6 +55,7 @@ const CATEGORIES: { key: Exclude<CategoryKey, 'all'>; adminOnly?: boolean }[] = 
   { key: 'WEATHER' },
   { key: 'CAMERA' },
   { key: 'ROOMBA' },
+  { key: 'REMINDER' },
   { key: 'WATER', adminOnly: true },
   { key: 'SYSTEM', adminOnly: true },
 ];

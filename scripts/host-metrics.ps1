@@ -328,11 +328,14 @@ $docker = Section 'docker' {
             memTotalBytes = [int64]$info.mem
             containers    = @($list | ForEach-Object {
                 $u = $usage[$_.Names]
-                $project = if ($_.Labels -match 'com\.docker\.compose\.project=([^,]+)') { $Matches[1] } else { $null }
+                # Compose's labels, as Docker Desktop groups by them (project) and names each row (service).
+                $project = if ($_.Labels -match '(?:^|,)com\.docker\.compose\.project=([^,]+)') { $Matches[1] } else { $null }
+                $service = if ($_.Labels -match '(?:^|,)com\.docker\.compose\.service=([^,]+)') { $Matches[1] } else { $null }
                 $health = if ($_.Status -match '\((healthy|unhealthy|health: starting)\)') { $Matches[1] -replace 'health: ', '' } else { $null }
                 [ordered]@{
                     name          = $_.Names
                     project       = $project
+                    service       = $service
                     image         = $_.Image
                     state         = $_.State
                     status        = $_.Status
@@ -364,7 +367,7 @@ $metrics = [ordered]@{
     topCpu          = if ($processes) { $processes.topCpu } else { @() }
     topMemory       = if ($processes) { $processes.topMemory } else { @() }
     docker          = $docker
-    agent           = [ordered]@{ version = 1; durationMs = $started.ElapsedMilliseconds; sectionMs = $timings; errors = @($errors) }
+    agent           = [ordered]@{ version = 2; durationMs = $started.ElapsedMilliseconds; sectionMs = $timings; errors = @($errors) }
 }
 
 # Write then rename, so the backend never reads a half-written file.

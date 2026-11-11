@@ -2,6 +2,7 @@ package com.homeplatform.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.homeplatform.dto.WeatherOutlook;
 import com.homeplatform.dto.WeatherResponse;
 import com.homeplatform.dto.WeatherResponse.*;
 import com.homeplatform.model.WeatherObservation;
@@ -29,6 +30,8 @@ public class WeatherService {
     private static final String ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive";
     private static final double HDD_BASE_TEMP = 65.0;
     private static final int PAST_DAYS = 92;
+    /** Home's week view: today and the six days after it. */
+    static final int OUTLOOK_DAYS = 7;
     static final String SOURCE_FORECAST = "open-meteo-forecast";
     static final String SOURCE_OBSERVED = "open-meteo-observed";
     static final String SOURCE_ARCHIVE = "open-meteo-archive";
@@ -127,6 +130,53 @@ public class WeatherService {
             }
             return emptyResponse(lat, lon);
         }
+    }
+
+    /**
+     * The next {@link #OUTLOOK_DAYS} days (today first) from Open-Meteo's daily forecast, for
+     * Home's week view. Its own URL (daily only, no past days), cached like every other
+     * response; nothing is written to weather_observations, so the electric forecast's
+     * training data and the observed-day refresh are untouched. Throws when Open-Meteo can't
+     * be reached and nothing is cached, so the page can say the forecast failed rather than
+     * show an empty week.
+     */
+    public WeatherOutlook getWeekOutlook(double lat, double lon) throws Exception {
+        JsonNode raw = fetchCached(buildOutlookUrl(lat, lon));
+        return new WeatherOutlook(lat, lon, parseOutlook(raw));
+    }
+
+    static String buildOutlookUrl(double lat, double lon) {
+        return String.format(Locale.US,
+                "%s?latitude=%.4f&longitude=%.4f" +
+                "&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum," +
+                "weather_code,sunrise,sunset,wind_speed_10m_max" +
+                "&temperature_unit=fahrenheit" +
+                "&precipitation_unit=inch" +
+                "&wind_speed_unit=mph" +
+                "&timezone=America/Chicago" +
+                "&forecast_days=%d",
+                FORECAST_URL, lat, lon, OUTLOOK_DAYS);
+    }
+
+    static List<WeatherOutlook.Day> parseOutlook(JsonNode raw) {
+        JsonNode daily = raw == null ? null : raw.get("daily");
+        if (daily == null || !daily.has("time")) return List.of();
+        List<WeatherOutlook.Day> days = new ArrayList<>();
+        JsonNode times = daily.get("time");
+        for (int i = 0; i < times.size(); i++) {
+            days.add(new WeatherOutlook.Day(
+                    times.get(i).asText(),
+                    nullableDouble(daily.get("temperature_2m_max"), i),
+                    nullableDouble(daily.get("temperature_2m_min"), i),
+                    nullableDouble(daily.get("precipitation_probability_max"), i),
+                    nullableDouble(daily.get("precipitation_sum"), i),
+                    nullableInt(daily.get("weather_code"), i),
+                    nullableText(daily.get("sunrise"), i),
+                    nullableText(daily.get("sunset"), i),
+                    nullableDouble(daily.get("wind_speed_10m_max"), i)
+            ));
+        }
+        return days;
     }
 
     /**
@@ -250,6 +300,11 @@ public class WeatherService {
             url = buildForecastUrl(lat, lon, end);
         }
 
+        return fetchCached(url);
+    }
+
+    /** GET an Open-Meteo URL, reusing an answer younger than {@link #RESPONSE_TTL}. */
+    private JsonNode fetchCached(String url) throws Exception {
         CachedResponse hit = responseCache.get(url);
         Instant now = Instant.now();
         if (hit != null && hit.at().plus(RESPONSE_TTL).isAfter(now)) return hit.body();
@@ -519,6 +574,21 @@ public class WeatherService {
     private static int safeInt(JsonNode array, int index) {
         if (array == null || index >= array.size() || array.get(index).isNull()) return 0;
         return array.get(index).asInt();
+    }
+
+    private static Double nullableDouble(JsonNode array, int index) {
+        if (array == null || index >= array.size() || array.get(index).isNull()) return null;
+        return array.get(index).asDouble();
+    }
+
+    private static Integer nullableInt(JsonNode array, int index) {
+        if (array == null || index >= array.size() || array.get(index).isNull()) return null;
+        return array.get(index).asInt();
+    }
+
+    private static String nullableText(JsonNode array, int index) {
+        if (array == null || index >= array.size() || array.get(index).isNull()) return null;
+        return array.get(index).asText();
     }
 
     private static double toDouble(BigDecimal bd) {

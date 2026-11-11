@@ -1,5 +1,11 @@
 import api from './client';
-import type { WeatherResponse } from '../types';
+import type { WeatherOutlook, WeatherResponse } from '../types';
+
+/** The week ahead at the property: today and the next six days, one row per day. */
+export async function fetchWeatherOutlook(): Promise<WeatherOutlook> {
+  const { data } = await api.get('/weather/outlook');
+  return data;
+}
 
 /** Fetch weather for a specific date range (historical or recent). */
 export async function fetchWeatherForRange(

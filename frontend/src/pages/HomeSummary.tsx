@@ -2,6 +2,8 @@ import { lazy, Suspense, useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useUsageData } from '../hooks/useUsageData';
 import { ForecastStrip } from '../components/WeatherForecast';
+import { WeekStrip } from '../components/WeatherWeek';
+import RemindersPanel from '../components/RemindersPanel';
 import { fetchMaintenanceAnalytics } from '../api/maintenance';
 import { fetchNotifications, fetchUnreadCount } from '../api/notifications';
 import { fetchGuestSessionCount } from '../api/auth';
@@ -9,13 +11,14 @@ import { fetchThermostats } from '../api/climate';
 import { useAuth } from '../context/AuthContext';
 import { fetchRoombaStatus, fetchRoombaRuns } from '../api/roomba';
 import { fetchWaterBills } from '../api/waterBills';
-import { fetchCurrentWeather } from '../api/weather';
+import { fetchCurrentWeather, fetchWeatherOutlook } from '../api/weather';
+import { useDeviceChoice } from '../hooks/useDeviceChoice';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { usePageMeta } from '../components/shell/PageMeta';
 import { visibleRoutes, type AppRoute } from '../routes';
 import {
   Badge, Button, Count, Dial, DialCentre, DialLegend, Disclosure, EmptyState, Icon, InstrumentPanel, LampRow,
-  LinkButton, List, Num, Panel, QueryState, Readout, Readouts, Row, Screen, SkelRows, Split, Stack, Verdict,
+  LinkButton, List, Num, Panel, QueryState, Readout, Readouts, Row, Screen, Seg, SegPanel, SkelRows, Split, Stack, Verdict,
   type DialSegment, type LampRowItem, type LegendItem,
 } from '../components/ui';
 import {
@@ -23,7 +26,9 @@ import {
   formatTemp, formatTime, homeClock, homeToday, plural,
 } from '../utils/format';
 import { severityStatus, type Tone } from '../utils/status';
-import { getWeatherCodeDescription, isNightAt, nextHours, weatherIcon, type SunPlace } from '../utils/weather';
+import {
+  buildWeek, getWeatherCodeDescription, isNightAt, nextHours, weatherIcon, weekSummary, type SunPlace,
+} from '../utils/weather';
 import { sunTimesOn } from '../utils/sun';
 import {
   alertMeta, attentionItems, climateLine, homeVerdict, latestCompleteDay, rainWindow, homeRoomba, thermostatWords,
@@ -33,11 +38,19 @@ import type { Thermostat, WaterBill } from '../types';
 // The dialog carries the charts (recharts): loaded on first open, not with Home.
 const ForecastModal = lazy(() => import('../components/WeatherForecastModal'));
 
+/** The forecast panel's two views. Week is the default; the choice is kept per device. */
+const FORECAST_VIEWS = [
+  { value: 'week', label: 'Week', icon: 'calendar' },
+  { value: '24h', label: '24 hours', icon: 'clock' },
+] as const;
+type ForecastView = (typeof FORECAST_VIEWS)[number]['value'];
+const FORECAST_VIEW_KEY = 'homeos:homeForecastView';
+
 /*
  * Home: "Do I need to do anything? What's it like outside?" The 24-hour ring answers the
  * outside (daylight, now, rain, the temperature in the middle); the verdict and the list
- * under it answer the inside. Then the next hours, every other page one tap away, and the
- * newest alerts. Who's home stays on the admin page: presence is an admin-only endpoint.
+ * under it answer the inside. Then the forecast (the week by default, or the next hours: one
+ * switch, remembered per device), every other page one tap away, and the newest alerts. Who's home stays on the admin page: presence is an admin-only endpoint.
  */
 
 /** Every page's one-line summary on Home; the line the registry can't know. */
@@ -49,6 +62,7 @@ export default function HomeSummary() {
   // fetches — no reason to transfer ~2,880 rows the landing screen never shows.
   const { electricDaily, config } = useUsageData({ hourly: false });
   const [showForecast, setShowForecast] = useState(false);
+  const [forecastView, setForecastView] = useDeviceChoice<ForecastView>(FORECAST_VIEW_KEY, ['week', '24h'], 'week');
   const roombaInterval = useJitteredInterval(60_000);
   const thermostatInterval = useJitteredInterval(120_000, 10_000);
 
@@ -59,6 +73,13 @@ export default function HomeSummary() {
     queryKey: ['weather-current'],
     queryFn: fetchCurrentWeather,
     staleTime: 300_000,
+  });
+
+  // The week ahead (daily). Open-Meteo updates hourly and the server keeps an answer 10 min.
+  const outlook = useQuery({
+    queryKey: ['weather-outlook'],
+    queryFn: fetchWeatherOutlook,
+    staleTime: 600_000,
   });
 
   // Shared with the Climate tab (same key), so either page warms the other.
@@ -136,6 +157,7 @@ export default function HomeSummary() {
   const current = wx?.current ?? null;
   const place: SunPlace | null = wx ? { lat: wx.latitude, lon: wx.longitude } : null;
   const hours = useMemo(() => nextHours(wx?.hourly, 24), [wx?.hourly]);
+  const week = useMemo(() => buildWeek(outlook.data?.days, { hourly: wx?.hourly }), [outlook.data?.days, wx?.hourly]);
 
   const rb = roomba.data ?? null;
   const lastRun = roombaRuns.data?.[0] ?? null;
@@ -272,6 +294,8 @@ export default function HomeSummary() {
           ? { meta: `${plural(m.completedCount, 'job')} done${m.lastActivityDate ? `, last on ${formatShortDate(m.lastActivityDate)}` : ''}`, value: m.openCount, unit: 'open' }
           : { meta: 'The home upkeep log' };
       }
+      case 'reminders':
+        return { meta: 'Household chores and heads-ups' };
       case 'wifi':
         return guestCount.data
           ? { meta: `${plural(guestCount.data, 'guest')} signed in`, value: guestCount.data, unit: 'online' }
@@ -355,23 +379,53 @@ export default function HomeSummary() {
         {readouts}
       </InstrumentPanel>
 
+      {/* Renders nothing unless a household reminder is due (and never for guests). */}
+      <RemindersPanel />
+
       <Split>
         <Stack gap="page">
           <Panel
-            title="Next hours"
-            subtitle={hiLoLine(hours)}
-            action={hours.length > 0 ? <Button size="sm" icon="clock" onClick={() => setShowForecast(true)}>All 24 hours</Button> : undefined}
+            title="Forecast"
+            action={<Seg id="home-forecast" label="Forecast" fit="inline" value={forecastView} onChange={setForecastView} options={FORECAST_VIEWS} />}
           >
-            <QueryState
-              query={weather}
-              what="the forecast"
-              loading={<SkelRows count={2} />}
-              isEmpty={(d) => !d || nextHours(d.hourly, 2).length < 2}
-              empty={<EmptyState compact icon="cloud" title="No forecast yet">The hourly forecast refreshes every hour.</EmptyState>}
-              compact
-            >
-              {() => <ForecastStrip hours={hours} place={place} />}
-            </QueryState>
+            <SegPanel id="home-forecast" value={forecastView} className="fp-stack fp-stack--m">
+              {forecastView === 'week' ? (
+                <QueryState
+                  query={outlook}
+                  what="the week's forecast"
+                  loading={<SkelRows count={4} />}
+                  isEmpty={(d) => !d || buildWeek(d.days).every((day) => day.missing)}
+                  empty={<EmptyState compact icon="calendar" title="No forecast for the week yet">The daily forecast refreshes every hour.</EmptyState>}
+                  compact
+                >
+                  {() => (
+                    <>
+                      {weekSummary(week) && <p className="text-sm text-apptext-muted">{weekSummary(week)}</p>}
+                      <WeekStrip week={week} place={place} />
+                    </>
+                  )}
+                </QueryState>
+              ) : (
+                <QueryState
+                  query={weather}
+                  what="the forecast"
+                  loading={<SkelRows count={2} />}
+                  isEmpty={(d) => !d || nextHours(d.hourly, 2).length < 2}
+                  empty={<EmptyState compact icon="cloud" title="No forecast yet">The hourly forecast refreshes every hour.</EmptyState>}
+                  compact
+                >
+                  {() => (
+                    <>
+                      {hiLoLine(hours) && <p className="text-sm text-apptext-muted">{hiLoLine(hours)}</p>}
+                      <ForecastStrip hours={hours} place={place} />
+                      <div className="flex justify-end">
+                        <Button size="sm" variant="quiet" iconEnd="arrow-right" onClick={() => setShowForecast(true)}>All 24 hours</Button>
+                      </div>
+                    </>
+                  )}
+                </QueryState>
+              )}
+            </SegPanel>
           </Panel>
 
           <Panel title="Around the house">

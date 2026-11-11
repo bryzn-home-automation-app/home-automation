@@ -403,6 +403,103 @@ class WeatherServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("Week outlook")
+    class WeekOutlook {
+
+        private String outlookJson() {
+            return """
+            {
+              "latitude": 33.215,
+              "longitude": -97.133,
+              "daily": {
+                "time": ["2026-11-11","2026-11-12","2026-11-13","2026-11-14","2026-11-15","2026-11-16","2026-11-17"],
+                "temperature_2m_max": [68.2, 61.0, 55.4, 70.1, 74.3, 66.0, null],
+                "temperature_2m_min": [48.0, 50.5, 44.1, 46.0, 52.2, 49.9, null],
+                "precipitation_probability_max": [10, 80, 65, 5, 0, 20, null],
+                "precipitation_sum": [0.0, 0.62, 0.15, 0.0, 0.0, 0.0, null],
+                "weather_code": [2, 63, 61, 1, 0, 3, null],
+                "sunrise": ["2026-11-11T06:58","2026-11-12T06:59","2026-11-13T07:00","2026-11-14T07:01","2026-11-15T07:02","2026-11-16T07:03","2026-11-17T07:03"],
+                "sunset": ["2026-11-11T17:26","2026-11-12T17:25","2026-11-13T17:25","2026-11-14T17:24","2026-11-15T17:24","2026-11-16T17:23","2026-11-17T17:23"],
+                "wind_speed_10m_max": [9.8, 14.2, 12.0, 6.1, 5.5, 8.0, null]
+              }
+            }
+            """;
+        }
+
+        @Test
+        @DisplayName("asks Open-Meteo for 7 daily days in the home zone, with rain chance and sun times")
+        void requestsTheDailyForecast() {
+            String url = WeatherService.buildOutlookUrl(LAT, LON);
+            assertTrue(url.startsWith("https://api.open-meteo.com/v1/forecast?"));
+            assertTrue(url.contains("latitude=33.2150&longitude=-97.1330"));
+            assertTrue(url.contains("daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weather_code,sunrise,sunset,wind_speed_10m_max"));
+            assertTrue(url.contains("forecast_days=7"));
+            assertTrue(url.contains("timezone=America/Chicago"));
+            assertTrue(url.contains("temperature_unit=fahrenheit"));
+            assertFalse(url.contains("past_days"), "the week view needs no past days");
+            assertFalse(url.contains("hourly="), "daily only");
+        }
+
+        @Test
+        @DisplayName("returns one row per day and keeps missing values null, not 0")
+        void parsesDays() throws Exception {
+            when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(outlookJson());
+
+            var outlook = weatherService.getWeekOutlook(LAT, LON);
+
+            assertEquals(LAT, outlook.latitude());
+            assertEquals(7, outlook.days().size());
+            var wet = outlook.days().get(1);
+            assertEquals("2026-11-12", wet.date());
+            assertEquals(61.0, wet.maxTemperature());
+            assertEquals(50.5, wet.minTemperature());
+            assertEquals(80.0, wet.precipitationProbability());
+            assertEquals(0.62, wet.precipitation());
+            assertEquals(63, wet.weatherCode());
+            assertEquals("2026-11-12T06:59", wet.sunrise());
+            assertEquals("2026-11-12T17:25", wet.sunset());
+            assertEquals(14.2, wet.windSpeedMax());
+            var blank = outlook.days().get(6);
+            assertNull(blank.maxTemperature());
+            assertNull(blank.minTemperature());
+            assertNull(blank.precipitationProbability());
+            assertNull(blank.weatherCode());
+            assertEquals("2026-11-17T17:23", blank.sunset());
+        }
+
+        @Test
+        @DisplayName("never writes weather_observations and reuses a cached answer")
+        void readOnlyAndCached() throws Exception {
+            when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn(outlookJson());
+
+            weatherService.getWeekOutlook(LAT, LON);
+            weatherService.getWeekOutlook(LAT, LON);
+
+            verify(restTemplate, times(1)).getForObject(anyString(), eq(String.class));
+            verifyNoInteractions(repo);
+            verifyNoInteractions(appEventService);
+        }
+
+        @Test
+        @DisplayName("throws when Open-Meteo fails, so the endpoint reports it instead of an empty week")
+        void failureThrows() {
+            when(restTemplate.getForObject(anyString(), eq(String.class)))
+                    .thenThrow(new RestClientException("timeout"));
+
+            assertThrows(RestClientException.class, () -> weatherService.getWeekOutlook(LAT, LON));
+            verifyNoInteractions(repo);
+        }
+
+        @Test
+        @DisplayName("an answer without daily data is an empty week, not an error")
+        void noDaily() throws Exception {
+            when(restTemplate.getForObject(anyString(), eq(String.class))).thenReturn("{\"latitude\":33.2}");
+
+            assertTrue(weatherService.getWeekOutlook(LAT, LON).days().isEmpty());
+        }
+    }
+
     // ── Helpers ─────────────────────────────────────────────────
 
     private WeatherObservation buildObs(String dateStr, double avgTemp) {

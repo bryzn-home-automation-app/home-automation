@@ -154,6 +154,8 @@ public class PushService {
             case ROOMBA -> "/roomba";
             case ELECTRICAL, GAS, WATER -> "/utility";
             case SYSTEM -> "/admin/nuc";
+            // Home lists what's due with a Done button.
+            case REMINDER -> "/";
             default -> "/notifications";
         };
     }

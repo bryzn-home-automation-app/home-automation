@@ -194,6 +194,14 @@ export function formatWeekday(input: DateInput | null | undefined): string {
   return c ? WEEKDAYS[c.weekday] : DASH;
 }
 
+const WEEKDAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** "Monday": a weekday spelled out, for a sentence ("Warmest Saturday at 74°"). */
+export function formatWeekdayLong(input: DateInput | null | undefined): string {
+  const c = homeClock(input);
+  return c ? WEEKDAY_NAMES[c.weekday] : DASH;
+}
+
 /** "Oct ’26": a bill goes by the month its cycle ENDS in, as CoServ dates it (gasBills.billMonth; B-098). */
 export function formatMonthYear(input: DateInput | null | undefined): string {
   const c = homeClock(input);

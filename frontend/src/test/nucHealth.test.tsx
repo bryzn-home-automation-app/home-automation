@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { HostHealth, HostHistory, HostSnapshot } from '../types';
+import type { HostContainer, HostHealth, HostHistory, HostSnapshot } from '../types';
 import { bits, bytes, duration, powerEvents, processLabel, restartCause, since } from '../utils/host';
 
 vi.mock('../api/host', () => ({
@@ -120,11 +120,89 @@ describe('NUC Health page', () => {
     expect(screen.getByText('SSD 41 °C')).toBeInTheDocument();
     expect(screen.getByText(/^2 days 7\shr, since/)).toBeInTheDocument();
     expect(screen.getByText('homeplatform-backend')).toBeInTheDocument();
-    expect(screen.getByText('Running · healthy')).toBeInTheDocument();
+    expect(screen.getByText('Healthy')).toBeInTheDocument();
     expect(screen.getByText('1 of 2 running · Docker 29.7.2 · 6.8 GB VM')).toBeInTheDocument();
     expect(screen.getAllByText("Docker's Linux VM").length).toBeGreaterThan(0);
     expect(screen.getByText('Froze or lost power')).toBeInTheDocument();
     expect(screen.getByText('Never')).toBeInTheDocument(); // sleeps after
+  });
+
+  describe('containers, grouped by Compose project as Docker Desktop does', () => {
+    const box = (name: string, project: string | null, state: string, status: string, extra: Partial<HostContainer> = {}): HostContainer => ({
+      name, project, image: name, state, status, health: null,
+      cpuPct: state === 'running' ? 0.5 : null, memBytes: state === 'running' ? 100 * 1048576 : null, memLimitBytes: null, ...extra,
+    });
+    const CONTAINERS: HostContainer[] = [
+      box('servito-api-1', 'servito', 'running', 'Up 2 days', { service: 'api' }),
+      box('slate-web', 'servito', 'exited', 'Exited (137) 3 hours ago', { service: 'slate-web' }),
+      box('avantee-web-1', 'avantee', 'exited', 'Exited (0) 9 days ago', { service: 'web' }),
+      box('avantee-db-1', 'avantee', 'exited', 'Exited (0) 9 days ago', { service: 'db' }),
+      box('homeplatform-backend', 'home-automation', 'running', 'Up 3 hours (healthy)', { service: 'backend', health: 'healthy' }),
+      box('homeplatform-migrate', 'home-automation', 'exited', 'Exited (0) 3 hours ago', { service: 'migrate' }),
+      box('spy-trading-bot-app-1', 'spy-trading-bot', 'running', 'Up 5 hours', { service: 'app' }),
+      box('home-sso-auth-1', 'home-sso', 'running', 'Up 5 hours', { service: 'auth' }),
+      box('loner', null, 'running', 'Up 1 hour'),
+    ];
+    const withContainers = (containers: HostContainer[]): HostHealth => ({
+      ...HEALTH, latest: { ...SNAPSHOT, docker: { ...SNAPSHOT.docker!, containers } },
+    });
+    const groupsShown = () => within(screen.getByRole('list', { name: 'Containers by project' }))
+      .getAllByRole('group').map((d) => d.querySelector('summary .font-semibold')?.textContent);
+
+    it('puts this app first, the rest by name, the leftovers next and stopped projects last', async () => {
+      vi.mocked(hostApi.fetchHostHealth).mockResolvedValue(withContainers(CONTAINERS));
+      renderPage();
+      await screen.findByRole('list', { name: 'Containers by project' });
+      expect(groupsShown()).toEqual(['home-automation', 'home-sso', 'servito', 'spy-trading-bot', 'Other containers', 'avantee']);
+    });
+
+    it('counts what should be running, reads a clean one-shot exit as finished and a switched-off project as stopped', async () => {
+      vi.mocked(hostApi.fetchHostHealth).mockResolvedValue(withContainers(CONTAINERS));
+      renderPage();
+      await screen.findByRole('list', { name: 'Containers by project' });
+      const group = (name: string) => within(screen.getByRole('list', { name: 'Containers by project' })).getAllByRole('group').find((d) => d.querySelector('summary .font-semibold')?.textContent === name)!;
+
+      const own = group('home-automation');
+      expect(own).toHaveTextContent('1 of 1 running · 1 finished · 100 MB');
+      expect(within(own).getByText('Finished')).toBeInTheDocument();
+      expect(within(own).getByText('migrate')).toBeInTheDocument(); // the service names the row...
+      expect(within(own).getByText('homeplatform-migrate')).toBeInTheDocument(); // ...the container's name is under it
+      expect(own).toHaveAttribute('open');
+
+      // A stop in a project that is otherwise up is a heads-up, and opens its group.
+      const servito = group('servito');
+      expect(servito).toHaveTextContent('1 of 2 running');
+      expect(within(servito).getByText('Heads-up')).toBeInTheDocument();
+      expect(within(servito).getByText('Stopped')).toBeInTheDocument();
+      expect(servito).toHaveAttribute('open');
+
+      // A whole project switched off is unlit and closed, not an alarm.
+      const avantee = group('avantee');
+      expect(avantee).toHaveTextContent('Stopped · 0 of 2 running');
+      expect(within(avantee).getAllByText('Stopped')).toHaveLength(2);
+      expect(within(avantee).queryByText('Finished')).not.toBeInTheDocument();
+      expect(avantee).not.toHaveAttribute('open');
+      expect(group('spy-trading-bot')).not.toHaveAttribute('open'); // healthy: closed until asked
+      expect(screen.getByText('The home server is healthy.')).toBeInTheDocument();
+    });
+
+    it('still groups snapshots from a monitor that sent no project or service', async () => {
+      const old = [
+        box('homeplatform-backend', null, 'running', 'Up 3 hours'),
+        box('homeplatform-nginx', null, 'exited', 'Exited (1) 5 minutes ago'),
+        box('slate-api', null, 'running', 'Up 1 day'),
+        box('slate-worker', null, 'running', 'Up 1 day'),
+        box('solo', null, 'running', 'Up 1 day'),
+      ];
+      vi.mocked(hostApi.fetchHostHealth).mockResolvedValue(withContainers(old));
+      renderPage();
+      await screen.findByRole('list', { name: 'Containers by project' });
+      expect(groupsShown()).toEqual(['home-automation', 'slate', 'Other containers']);
+      const own = within(screen.getByRole('list', { name: 'Containers by project' })).getAllByRole('group')[0];
+      expect(own).toHaveTextContent('1 of 2 running');
+      expect(within(own).getByText('nginx')).toBeInTheDocument();
+      expect(within(own).getByText('Problem')).toBeInTheDocument(); // one of ours down, as before
+    });
   });
 
   it('lists problems worst first, in words as well as color', async () => {

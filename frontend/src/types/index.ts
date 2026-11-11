@@ -196,6 +196,31 @@ export interface WeatherResponse {
   aggregation: WeatherAggregation | null;
 }
 
+/** One day of GET /api/weather/outlook. Any figure can be null (beyond the models' reach). */
+export interface WeatherOutlookDay {
+  /** "2026-11-12": the home's calendar day. */
+  date: string;
+  maxTemperature: number | null;
+  minTemperature: number | null;
+  /** The day's highest hourly chance of rain, 0–100. */
+  precipitationProbability: number | null;
+  /** Inches. */
+  precipitation: number | null;
+  weatherCode: number | null;
+  /** Home wall-clock, "2026-11-12T06:59". */
+  sunrise: string | null;
+  sunset: string | null;
+  /** mph. */
+  windSpeedMax: number | null;
+}
+
+/** The week ahead (today + 6 days), for Home's week view. */
+export interface WeatherOutlook {
+  latitude: number;
+  longitude: number;
+  days: WeatherOutlookDay[];
+}
+
 // ── Roomba ────────────────────────────────────────────────
 // Shapes mirror the backend REST contract (BUILD_CONTRACT.md). The poller
 // writes append-only run rows + latest status/map snapshots; the backend
@@ -761,9 +786,12 @@ export interface HostSnapshot {
 
 export interface HostProcess { name: string; count: number | null; cpuPct: number | null; memBytes: number | null }
 
-/** cpuPct: share of Docker's CPUs. Usage is null for a container that isn't running. */
+/**
+ * project / service: the Compose labels (null outside Compose; service is absent from monitors
+ * before agent version 2). cpuPct: share of Docker's CPUs. Usage is null for a container that isn't running.
+ */
 export interface HostContainer {
-  name: string; project: string | null; image: string | null; state: string | null; status: string | null;
+  name: string; project: string | null; service?: string | null; image: string | null; state: string | null; status: string | null;
   health: string | null; cpuPct: number | null; memBytes: number | null; memLimitBytes: number | null;
 }
 

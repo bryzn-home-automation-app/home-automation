@@ -51,7 +51,9 @@ public class Notification {
         CAMERA,
         WEATHER,
         /** The NUC itself (Admin → NUC Health); admins only. */
-        SYSTEM
+        SYSTEM,
+        /** Household reminders (Reminders page) */
+        REMINDER
     }
 
     public enum Severity {

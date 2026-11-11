@@ -30,7 +30,10 @@ public enum AlertType {
     WEATHER_FREEZE(Category.WEATHER, "Freeze", "Temperatures at or below your limit: pipes, plants, sprinklers", false, true),
     WEATHER_HEAT(Category.WEATHER, "Extreme heat", "A high at or above your limit", false, true),
     WEATHER_WIND(Category.WEATHER, "High wind", "Gusts at or above your limit", false, true),
-    WEATHER_WINTER(Category.WEATHER, "Snow or ice", "Snow, sleet or freezing rain in the forecast", false, true);
+    WEATHER_WINTER(Category.WEATHER, "Snow or ice", "Snow, sleet or freezing rain in the forecast", false, true),
+    // Household reminders (the Reminders page): on by default, phone too, because a reminder
+    // with alerts turned on is an explicit ask. Each reminder can also turn its alerts off.
+    REMINDER(Category.REMINDER, "Reminders", "Heads-ups for household reminders, like trash day", true, true);
 
     private final Category category;
     private final String label;

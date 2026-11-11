@@ -469,7 +469,7 @@ CREATE INDEX IF NOT EXISTS idx_guest_sessions_expiry ON guest_sessions (expires_
 CREATE TABLE IF NOT EXISTS notifications (
     id            SERIAL PRIMARY KEY,
     user_id       INTEGER      NOT NULL REFERENCES users(id),
-    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI, CAMERA, WEATHER
+    category      VARCHAR(30)  NOT NULL,  -- ELECTRICAL, GAS, WATER, ROOMBA, WIFI, CAMERA, WEATHER, SYSTEM, REMINDER
     severity      VARCHAR(20)  NOT NULL DEFAULT 'INFO',  -- CRITICAL, WARNING, INFO, SUCCESS
     title         VARCHAR(200) NOT NULL,
     message       VARCHAR(1000),
@@ -853,4 +853,53 @@ CREATE TABLE IF NOT EXISTS host_metrics (
     containers_mem_bytes BIGINT,
     -- a later boot_time than the previous row's means the NUC restarted
     boot_time            TIMESTAMP
+);
+
+-- Household reminders (the Reminders page; ReminderService). Shared by every member;
+-- guests never see them. repeat_kind = WEEKLY (weekdays "MON,FRI") | MONTHLY (day_of_month
+-- 1-31; past the month's end = its last day) | ONCE (once_date). due_by is the time on the
+-- due day it must be done by (NULL = end of day). heads_ups is a comma list of heads-up
+-- keys (ReminderSchedule.HeadsUp): presets by name (AFTERNOON_BEFORE), else
+-- DAYS_BEFORE:3@09:00 or AT_TIME@14:30. Times are the home's (America/Chicago).
+-- Plain strings, not enum CHECKs: Hibernate's enum checks never get new values.
+-- alerts_from: heads-ups due before this (the last edit) aren't sent.
+CREATE TABLE IF NOT EXISTS reminders (
+    id             BIGSERIAL PRIMARY KEY,
+    name           VARCHAR(60)  NOT NULL,
+    note           VARCHAR(200),
+    repeat_kind    VARCHAR(10)  NOT NULL,
+    weekdays       VARCHAR(30),
+    day_of_month   INTEGER,
+    once_date      DATE,
+    due_by         TIME,
+    heads_ups      VARCHAR(500) NOT NULL DEFAULT '',
+    alerts_enabled BOOLEAN      NOT NULL DEFAULT TRUE,
+    alerts_from    TIMESTAMP    NOT NULL,
+    created_by     BIGINT,
+    created_at     TIMESTAMP    NOT NULL,
+    updated_by     BIGINT,
+    updated_at     TIMESTAMP    NOT NULL
+);
+
+-- One row per completed occurrence (a due date), for the whole household: who and when.
+-- Undo (a few seconds' grace on Home) deletes the row, like other member-made records.
+CREATE TABLE IF NOT EXISTS reminder_completions (
+    id              BIGSERIAL PRIMARY KEY,
+    reminder_id     BIGINT    NOT NULL,
+    occurrence_date DATE      NOT NULL,
+    user_id         BIGINT,
+    completed_at    TIMESTAMP NOT NULL,
+    CONSTRAINT uk_reminder_completion UNIQUE (reminder_id, occurrence_date)
+);
+
+-- Each heads-up handled for an occurrence, so it goes out once, even across restarts.
+-- sent = false: passed over (after downtime only the latest due heads-up is sent).
+CREATE TABLE IF NOT EXISTS reminder_alerts_sent (
+    id              BIGSERIAL PRIMARY KEY,
+    reminder_id     BIGINT      NOT NULL,
+    occurrence_date DATE        NOT NULL,
+    heads_up_key    VARCHAR(40) NOT NULL,
+    sent            BOOLEAN     NOT NULL,
+    sent_at         TIMESTAMP   NOT NULL,
+    CONSTRAINT uk_reminder_alert UNIQUE (reminder_id, occurrence_date, heads_up_key)
 );

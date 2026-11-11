@@ -58,7 +58,7 @@ class HostMetricsServiceTest {
              "topCpu":[{"name":"vmmemWSL","count":1,"cpuPct":10.4,"memBytes":7057063936}],
              "topMemory":[{"name":"vmmemWSL","count":1,"cpuPct":10.4,"memBytes":7057063936}],
              "docker":{"ok":true,"error":null,"version":"29.7.2","cpus":4,"memTotalBytes":7271218790,
-                       "containers":[{"name":"homeplatform-backend","project":"home-automation","image":"home-automation-backend",
+                       "containers":[{"name":"homeplatform-backend","project":"home-automation","service":"backend","image":"home-automation-backend",
                                       "state":"running","status":"Up 3 hours (healthy)","health":"healthy","cpuPct":1.2,
                                       "memBytes":600000000,"memLimitBytes":7271218790},
                                      {"name":"other-app","project":"other","image":"x","state":"exited","status":"Exited (0) 2 days ago",
@@ -161,6 +161,9 @@ class HostMetricsServiceTest {
         HostHealthResponse view = service.view();
         assertThat(view.status()).isEqualTo("ONLINE");
         assertThat(view.latest().docker().containers()).hasSize(2);
+        // The Compose labels the page groups by; a monitor older than agent version 2 sends no service.
+        assertThat(view.latest().docker().containers()).extracting(Container::project).containsExactly("home-automation", "other");
+        assertThat(view.latest().docker().containers()).extracting(Container::service).containsExactly("backend", null);
         // Only the crash on Nov 4 is worth flagging; the other app's stopped container isn't ours.
         assertThat(view.checks()).extracting(Check::key).containsExactly("crash");
         assertThat(view.checks().get(0).detail()).contains("Nov 4, 4:11 PM").contains("9:06:20 PM on 11/2/2026");
@@ -222,7 +225,7 @@ class HostMetricsServiceTest {
                     assertThat(c.detail()).startsWith("no answer from Docker within 15 s. ");
                 });
 
-        Container stopped = new Container("homeplatform-nginx", "home-automation", "nginx", "exited", "Exited (1) 5 minutes ago",
+        Container stopped = new Container("homeplatform-nginx", "home-automation", "nginx", "nginx", "exited", "Exited (1) 5 minutes ago",
                 null, null, null, null);
         List<Check> checks = service.checks(withDocker(s, new Docker(true, null, "29.7.2", 4, 1L, List.of(stopped))), T0);
         assertThat(checks).filteredOn(c -> c.key().equals("containers")).singleElement()

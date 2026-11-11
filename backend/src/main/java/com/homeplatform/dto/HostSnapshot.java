@@ -80,9 +80,13 @@ public record HostSnapshot(
     public record Docker(Boolean ok, String error, String version, Integer cpus, Long memTotalBytes,
                          @JsonFormat(with = JsonFormat.Feature.ACCEPT_SINGLE_VALUE_AS_ARRAY) List<Container> containers) {}
 
-    /** {@code cpuPct}: share of Docker's CPUs; usage is null for a container that isn't running. */
+    /**
+     * {@code project} / {@code service}: the Compose labels (null outside Compose, and {@code service}
+     * is missing from monitors before agent version 2). {@code cpuPct}: share of Docker's CPUs; usage
+     * is null for a container that isn't running.
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record Container(String name, String project, String image, String state, String status,
+    public record Container(String name, String project, String service, String image, String state, String status,
                             String health, Double cpuPct, Long memBytes, Long memLimitBytes) {}
 
     @JsonIgnoreProperties(ignoreUnknown = true)

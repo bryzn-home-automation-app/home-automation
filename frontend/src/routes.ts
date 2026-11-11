@@ -53,6 +53,7 @@ export const ROUTES: readonly AppRoute[] = [
   { id: 'cameras', path: '/cameras', label: 'Cameras', short: 'Cameras', title: 'Cameras', group: 'everyday', icon: 'camera', access: 'member', keyRow: true },
   { id: 'roomba', path: '/roomba', label: 'Roomba', short: 'Roomba', title: 'Roomba', group: 'everyday', icon: 'robot', access: 'all', keyRow: true },
 
+  { id: 'reminders', path: '/reminders', label: 'Reminders', short: 'Reminders', title: 'Reminders', group: 'house', icon: 'calendar', access: 'member' },
   { id: 'maintenance', path: '/maintenance', label: 'Maintenance', short: 'Maintenance', title: 'Maintenance', group: 'house', icon: 'wrench', access: 'member' },
   { id: 'wifi', path: '/wifi', label: 'Guest Wi-Fi', short: 'Guest Wi-Fi', title: 'Guest Wi-Fi', group: 'house', icon: 'wifi', access: 'all' },
   { id: 'users', path: '/users', label: 'People', short: 'People', title: 'People', group: 'house', icon: 'users', access: 'all' },
