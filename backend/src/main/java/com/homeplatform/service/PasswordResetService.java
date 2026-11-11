@@ -17,11 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.NoSuchElementException;
+import java.util.regex.Pattern;
 
 /**
  * "Forgot password?" for household members: a member who knows their username and the birthday an
@@ -38,12 +41,17 @@ import java.util.NoSuchElementException;
  *   <li>Unknown username, ineligible account, no birthday, wrong birthday and a Home account that
  *       can't be changed this way all get the same answer, count against the same limits and take
  *       the same minimum time; the date is compared in constant time.</li>
- *   <li>Wrong tries are limited per username (5 in 15 minutes, then an hour's pause; 10 in a day,
- *       then a day's pause) and per client address (20 in 15 minutes, then an hour). The limits
- *       live in Redis and fail closed: no Redis, no resets.</li>
+ *   <li>Tries are limited per client address (20 in 15 minutes, then an hour; behind Docker every
+ *       client shares one address, so this is a limit for the whole house), per username (5 in 15
+ *       minutes, then an hour) and per username per day (10, then a day). Every try is COUNTED
+ *       BEFORE it's checked, with an atomic increment, so a burst of simultaneous requests can't
+ *       all slip in under a limit. The limits live in Redis and fail closed: no Redis, no resets.</li>
+ *   <li>A username must be plain printable ASCII. The database matches names without case using
+ *       Unicode rules (ı and ſ match I and S), so a look-alike would reach the same account under a
+ *       different counter. Counters are keyed by the account's own name when it exists.</li>
  *   <li>Every attempt is written to app_events (category "auth"; never the birthday or password).
- *       Admins get an in-app and phone notice when a reset succeeds, a username gets paused, or a
- *       matched birthday couldn't change the Home password.</li>
+ *       Admins get an in-app and phone notice for a reset, for the first wrong birthday for a member
+ *       each day, for any pause, and for a matched birthday that couldn't change the Home password.</li>
  * </ul>
  * Off unless the users file is configured (AUTHELIA_USERS_FILE). A reset doesn't end sessions
  * already open: Authelia's sessions live in its own Redis, and the app's JWTs aren't tied to a
@@ -62,17 +70,20 @@ public class PasswordResetService {
     /** Long enough for any passphrase; keeps an absurd request from being hashed. */
     static final int MAX_PASSWORD_LENGTH = 128;
 
-    /** Wrong tries per username: this many in {@link #USER_WINDOW}, then {@link #USER_LOCKOUT}. */
+    /** Tries per username: this many in {@link #USER_WINDOW}, then {@link #USER_LOCKOUT}. */
     static final int USER_MAX = 5;
     static final Duration USER_WINDOW = Duration.ofMinutes(15);
     static final Duration USER_LOCKOUT = Duration.ofHours(1);
     /** And this many in a day, then a day's pause: at most ~10 guesses a day per account. */
     static final int USER_DAY_MAX = 10;
     static final Duration DAY = Duration.ofHours(24);
-    /** Wrong tries per client address (behind Docker this may be every client's address at once). */
+    /** Tries per client address (behind Docker this is every client's address at once). */
     static final int IP_MAX = 20;
     static final Duration IP_WINDOW = Duration.ofMinutes(15);
     static final Duration IP_LOCKOUT = Duration.ofHours(1);
+
+    /** Printable ASCII, no spaces: every real username; nothing that folds into one. */
+    private static final Pattern PLAIN_USERNAME = Pattern.compile("[!-~]{1,100}");
 
     /** The one answer for every kind of no-match, so it can't tell anyone which kind it was. */
     public static final String NO_MATCH = "That didn't match. Check your username and birthday, or ask Bryan.";
@@ -124,40 +135,63 @@ public class PasswordResetService {
 
     public Result reset(String rawUsername, LocalDate birthDate, String newPassword, String ip) {
         if (!isEnabled()) return Result.of(Outcome.OFF);
-        // Input checks first: they don't depend on any account, so they reveal nothing.
+        // Input checks first: they don't depend on any account, so they reveal nothing and aren't counted.
         String username = rawUsername == null ? "" : rawUsername.trim();
         if (username.isEmpty() || birthDate == null) {
             return new Result(Outcome.INVALID, "Enter your username and birthday.", 0);
+        }
+        String address = printable(ip);
+        if (!PLAIN_USERNAME.matcher(username).matches()) {
+            // No account has such a name. Answered like any no-match, but with nothing looked up
+            // nothing is counted or padded, and a flood of them is logged once a minute.
+            if (limiter.firstIn("reset-pw:logged:odd-username", Duration.ofMinutes(1))) {
+                events.warn(CATEGORY, SOURCE, "Password reset refused (from " + address + "): the username isn't plain "
+                        + "letters, digits and symbols (repeats within a minute aren't logged)");
+            }
+            return Result.of(Outcome.NO_MATCH);
         }
         if (birthDate.isBefore(EARLIEST) || birthDate.isAfter(LocalDate.now())) {
             return new Result(Outcome.INVALID, "Enter your birthday.", 0);
         }
         String problem = passwordProblem(newPassword);
         if (problem != null) return new Result(Outcome.INVALID, problem, 0);
+        String who = "'" + username + "' (from " + address + ")";
 
-        Keys keys = new Keys(username, ip);
-        String who = "'" + printable(username) + "' (from " + printable(ip) + ")";
-
-        long ipWait = limiter.blockedForSeconds(keys.ip, IP_MAX);
-        long userWait = limiter.blockedForSeconds(keys.user, USER_MAX);
-        long dayWait = limiter.blockedForSeconds(keys.day, USER_DAY_MAX);
-        if (ipWait < 0 || userWait < 0 || dayWait < 0) {
-            events.log(CATEGORY, "ERROR", SOURCE, "Password reset unavailable for " + who + ": the rate limiter (Redis) can't be reached", null);
+        // The users file says nothing about any one account, so it's read before anything is
+        // counted: an outage costs nobody a try.
+        Accounts home;
+        try {
+            home = homeAccounts.read();
+        } catch (UsersFileException e) {
+            if (limiter.firstIn("reset-pw:logged:users-file", Duration.ofMinutes(1))) {
+                events.log(CATEGORY, "ERROR", SOURCE, "Password reset unavailable for " + who + ": the Home users file "
+                        + e.getMessage() + " (repeats within a minute aren't logged)", null);
+            }
             return Result.of(Outcome.UNAVAILABLE);
         }
-        long wait = Math.max(ipWait, Math.max(userWait, dayWait));
-        if (wait > 0) {
-            // One line a minute per username, so a flood of refused requests can't flood app_events.
-            if (limiter.firstIn(keys.logged, Duration.ofMinutes(1))) {
-                events.warn(CATEGORY, SOURCE, "Password reset refused for " + who + ": too many wrong tries, paused for "
-                        + Math.max(1, wait / 60) + " more min (repeats within a minute aren't logged)");
-            }
-            return new Result(Outcome.THROTTLED, null, wait);
-        }
 
+        // Count, then check. The client address first: a request it turns away touches no
+        // per-username key, so made-up usernames can't fill Redis while it's paused.
+        String ipKey = "reset-pw:ip:" + address;
+        long ipCount = limiter.countAttempt(ipKey, IP_WINDOW, IP_MAX, IP_LOCKOUT);
+        if (ipCount < 0) return redisDown(who);
+        if (ipCount > IP_MAX) return throttled(ipKey, "reset-pw:logged:ip", who);
+
+        // From the account lookup on, every answer takes the same minimum time.
         long started = System.nanoTime();
         try {
-            return attempt(username, birthDate, newPassword, keys, who);
+            User user = users.findByUsernameIgnoreCase(username).orElse(null);
+            // Keyed by the account's own name when there is one, never by what was typed.
+            Keys keys = Keys.of(user != null ? user.getUsername() : username);
+            // Per username, then per day: while the hour's pause holds, tries don't reach the day's
+            // count, so piling on a paused account can't turn its hour into a day.
+            long userCount = limiter.countAttempt(keys.user, USER_WINDOW, USER_MAX, USER_LOCKOUT);
+            if (userCount < 0) return redisDown(who);
+            if (userCount > USER_MAX) return throttled(keys.user, keys.logged, who);
+            long dayCount = limiter.countAttempt(keys.day, DAY, USER_DAY_MAX, DAY);
+            if (dayCount < 0) return redisDown(who);
+            if (dayCount > USER_DAY_MAX) return throttled(keys.day, keys.logged, who);
+            return attempt(user, birthDate, newPassword, home, keys, new Counts(ipCount, userCount, dayCount), who);
         } finally {
             padTo(started);
         }
@@ -177,22 +211,15 @@ public class PasswordResetService {
         return null;
     }
 
-    private Result attempt(String username, LocalDate birthDate, String newPassword, Keys keys, String who) {
-        User user = users.findByUsernameIgnoreCase(username).orElse(null);
+    /** This attempt's place in each count (each at most its max: it got this far). */
+    private record Counts(long ip, long user, long day) {}
+
+    private Result attempt(User user, LocalDate birthDate, String newPassword, Accounts home, Keys keys,
+                           Counts counts, String who) {
         String refusal = refusal(user);
         LocalDate stored = refusal == null ? user.getBirthDate() : NOTHING_STORED;
         // Always compare, in constant time, so the paths take the same work.
         boolean same = MessageDigest.isEqual(dateBytes(stored), dateBytes(birthDate));
-
-        // The users file is read on every attempt, matched or not, so whether it's readable can't
-        // say anything about the birthday.
-        Accounts home;
-        try {
-            home = homeAccounts.read();
-        } catch (UsersFileException e) {
-            events.log(CATEGORY, "ERROR", SOURCE, "Password reset unavailable for " + who + ": the Home users file " + e.getMessage(), null);
-            return Result.of(Outcome.UNAVAILABLE);
-        }
 
         if (refusal == null && same) {
             String homeRefusal = home.refusal(user.getEmail());
@@ -203,7 +230,7 @@ public class PasswordResetService {
                 } catch (AutheliaUsersFile.Refused e) {
                     homeRefusal = e.getMessage(); // changed between the read and the write
                 } catch (UsersFileException e) {
-                    return writeFailed(user, e, who);
+                    return writeFailed(user, e, keys, who);
                 }
             }
             refusal = "birthday matched, but " + homeRefusal;
@@ -211,26 +238,37 @@ public class PasswordResetService {
             notifyAdmins(Severity.WARNING, name + "'s Home password wasn't reset",
                     "Someone gave " + name + "'s birthday on the sign-in page, but " + homeRefusal
                             + ", so nothing changed and they were told it didn't match.");
+        } else if (refusal == null && limiter.firstIn(keys.noticed, DAY)) {
+            // A wrong birthday for a real member: the first each day reaches the admin, so slow
+            // guessing below the pauses isn't silent. Sent before the padding ends, so the answer
+            // doesn't change.
+            String name = nameOf(user);
+            notifyAdmins(Severity.WARNING, "Wrong birthday for " + name,
+                    "Someone entered a wrong birthday for " + name + " on the sign-in page (Forgot password). If it wasn't "
+                            + name + ", you can clear their birthday in People. More wrong tries today won't send another notice.");
         }
 
         String why = refusal != null ? refusal : "birthday didn't match";
-        long userCount = limiter.recordFailure(keys.user, USER_WINDOW, USER_MAX, USER_LOCKOUT);
-        long dayCount = limiter.recordFailure(keys.day, DAY, USER_DAY_MAX, DAY);
-        limiter.recordFailure(keys.ip, IP_WINDOW, IP_MAX, IP_LOCKOUT);
-        String paused = dayCount == USER_DAY_MAX ? "a day" : userCount == USER_MAX ? "an hour" : null;
-
+        String paused = counts.day() == USER_DAY_MAX ? "a day" : counts.user() == USER_MAX ? "an hour" : null;
         events.warn(CATEGORY, SOURCE, "Password reset refused for " + who + ": " + why
-                + (paused != null ? ". Resets for this username are now paused for " + paused : ""));
+                + (paused != null ? ". Resets for this username are now paused for " + paused : "")
+                + (counts.ip() == IP_MAX ? ". Resets from this address (every client, behind Docker) are now paused for an hour" : ""));
         if (paused != null && user != null) {
             String name = nameOf(user);
             notifyAdmins(Severity.WARNING, "Password resets paused for " + name,
                     "Someone entered the wrong birthday for " + name + "'s account too many times, so resetting their Home password is paused for "
                             + paused + ". If it wasn't " + name + ", you can clear the birthday in People.");
         }
+        if (counts.ip() == IP_MAX) {
+            notifyAdmins(Severity.WARNING, "Password resets paused for everyone",
+                    IP_MAX + " password reset tries in " + IP_WINDOW.toMinutes() + " minutes came through the home server, so "
+                            + "Forgot password is paused for everyone for an hour. The Debug page's Sign-in log shows which usernames were tried.");
+        }
         return Result.of(Outcome.NO_MATCH);
     }
 
     private Result succeeded(User user, AutheliaUsersFile.Changed changed, Keys keys, String who) {
+        // This try was counted like any other; a member who mistyped first isn't left paused.
         limiter.clear(keys.user);
         limiter.clear(keys.day);
         events.info(CATEGORY, SOURCE, "Home password reset with a birthday for " + who + ": Home account '"
@@ -244,13 +282,31 @@ public class PasswordResetService {
     }
 
     /** The birthday matched but the file couldn't be changed safely: nothing changed (or it was put back). */
-    private Result writeFailed(User user, UsersFileException e, String who) {
+    private Result writeFailed(User user, UsersFileException e, Keys keys, String who) {
+        // The right birthday: not a wrong try, so the member keeps their tries for when it works.
+        limiter.clear(keys.user);
+        limiter.clear(keys.day);
         String name = nameOf(user);
         events.log(CATEGORY, "ERROR", SOURCE, "Home password reset for " + who + " failed: the Home users file " + e.getMessage(), null);
         log.error("Home password reset for '{}' failed: the users file {}", user.getUsername(), e.getMessage());
         notifyAdmins(e.signInAtRisk() ? Severity.CRITICAL : Severity.WARNING,
                 e.signInAtRisk() ? "Home sign-in may be broken" : name + "'s Home password reset failed",
                 name + " gave the right birthday to reset their Home password, but the Home users file " + e.getMessage() + ".");
+        return Result.of(Outcome.UNAVAILABLE);
+    }
+
+    private Result throttled(String key, String logKey, String who) {
+        long wait = limiter.secondsLeft(key);
+        // One line a minute per paused key, so a flood of refused requests can't flood app_events.
+        if (limiter.firstIn(logKey, Duration.ofMinutes(1))) {
+            events.warn(CATEGORY, SOURCE, "Password reset refused for " + who + ": too many tries, paused for "
+                    + Math.max(1, wait / 60) + " more min (repeats within a minute aren't logged)");
+        }
+        return new Result(Outcome.THROTTLED, null, wait);
+    }
+
+    private Result redisDown(String who) {
+        events.log(CATEGORY, "ERROR", SOURCE, "Password reset unavailable for " + who + ": the rate limiter (Redis) can't be reached", null);
         return Result.of(Outcome.UNAVAILABLE);
     }
 
@@ -263,7 +319,7 @@ public class PasswordResetService {
         return null;
     }
 
-    /** Every response that reached the check takes at least {@link #minResponse}. */
+    /** Every response that reached the account lookup takes at least {@link #minResponse}. */
     private void padTo(long startedNanos) {
         long left = minResponse.toNanos() - (System.nanoTime() - startedNanos);
         if (left <= 0) return;
@@ -325,15 +381,25 @@ public class PasswordResetService {
     // Helpers
     // ═══════════════════════════════════════════════════════════
 
-    /** Redis keys for one attempt: the same for any username string, whether or not it exists. */
-    private record Keys(String user, String day, String ip, String logged) {
-        Keys(String username, String ip) {
-            this(key("user", username), key("user-day", username), "reset-pw:ip:" + ip, key("logged", username));
+    /**
+     * Redis keys for one username: a short digest of its folded form, so any name (and any made-up
+     * one) gives keys of the same small size, and the names themselves aren't stored in Redis.
+     */
+    record Keys(String user, String day, String logged, String noticed) {
+        static Keys of(String username) {
+            String id = id(username);
+            return new Keys("reset-pw:user:" + id, "reset-pw:user-day:" + id, "reset-pw:logged:" + id, "reset-pw:noticed:" + id);
         }
+    }
 
-        private static String key(String kind, String username) {
-            String u = username.toLowerCase(Locale.ROOT);
-            return "reset-pw:" + kind + ":" + (u.length() > 100 ? u.substring(0, 100) : u);
+    /** The per-username part of the keys: SHA-256 of the name upper-then-lower cased, 24 hex digits. */
+    static String id(String username) {
+        String folded = username.toUpperCase(Locale.ROOT).toLowerCase(Locale.ROOT);
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(folded.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest, 0, 12);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
         }
     }
 

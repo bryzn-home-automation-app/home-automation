@@ -20,6 +20,7 @@ import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.filter.ForwardedHeaderFilter;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -90,10 +91,13 @@ class PasswordResetControllerTest {
 
     /** The controller with the real reset service and users file (Authelia's own argon2 cost). */
     private MockMvc mvc(String usersFileLocation, boolean passwordLogin) {
+        return MockMvcBuilders.standaloneSetup(controller(usersFileLocation, passwordLogin)).build();
+    }
+
+    private AuthController controller(String usersFileLocation, boolean passwordLogin) {
         PasswordResetService reset = new PasswordResetService(users, new AutheliaUsersFile(usersFileLocation, "admin"),
                 redis.limiter(), mock(AppEventService.class), mock(NotificationService.class), 0);
-        return MockMvcBuilders.standaloneSetup(
-                new AuthController(mock(UserService.class), mock(LoginRateLimiter.class), reset, passwordLogin)).build();
+        return new AuthController(mock(UserService.class), mock(LoginRateLimiter.class), reset, passwordLogin);
     }
 
     private void add(String username, Role role, AccountStatus status, LocalDate birthday) {
@@ -200,7 +204,8 @@ class PasswordResetControllerTest {
         Files.delete(usersFile);
         assertEquals(503, reset("member", "1992-11-20", "new-password-1", "10.0.0.1").getStatus());
         assertEquals(503, reset("stranger", "1992-11-20", "new-password-1", "10.0.0.1").getStatus());
-        assertTrue(redis.values.isEmpty());
+        assertTrue(redis.values.keySet().stream().noneMatch(k -> k.startsWith("reset-pw:ip") || k.startsWith("reset-pw:user")),
+                () -> "nothing counted: " + redis.values.keySet());
     }
 
     @Test
@@ -220,6 +225,23 @@ class PasswordResetControllerTest {
                     .content("{\"username\":\"u" + i + "\",\"birthDate\":\"1990-01-01\",\"newPassword\":\"new-password-1\"}"));
         }
         assertEquals("20", redis.values.get("reset-pw:ip:192.168.4.50"));
+    }
+
+    @Test
+    @DisplayName("as in the app (ForwardedHeaderFilter), a client's own Forwarded header would choose the address: why nginx drops it")
+    void forwardedHeaderIsNginxsToDrop() throws Exception {
+        mvc = MockMvcBuilders.standaloneSetup(controller(usersFile.toString(), false)).addFilters(new ForwardedHeaderFilter()).build();
+        String body = "{\"username\":\"someone\",\"birthDate\":\"1990-01-01\",\"newPassword\":\"new-password-1\"}";
+        // What nginx sends: its own $remote_addr, the client's Forwarded header dropped.
+        mvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body)
+                .header("X-Forwarded-For", "172.18.0.1"));
+        assertEquals("1", redis.values.get("reset-pw:ip:172.18.0.1"));
+        // If a client's header got through, it would win, and a fresh one per request would
+        // never be limited by address. nginx/default.conf sets Forwarded "" on every backend route.
+        mvc.perform(post("/api/auth/reset-password").contentType(MediaType.APPLICATION_JSON).content(body)
+                .header("X-Forwarded-For", "172.18.0.1").header("Forwarded", "for=203.0.113.77"));
+        assertEquals("1", redis.values.get("reset-pw:ip:203.0.113.77"));
+        assertEquals("1", redis.values.get("reset-pw:ip:172.18.0.1"));
     }
 
     @Test

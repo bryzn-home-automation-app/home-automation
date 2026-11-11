@@ -4,9 +4,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -66,43 +68,51 @@ public class LoginRateLimiter {
         }
     }
 
-    // ── Stricter limits with their own numbers (the birthday password reset) ──
+    // ── Count first, then check (the birthday password reset) ──
 
     /**
-     * Seconds until {@code key} lets attempts through again: 0 when it has fewer than {@code max}
-     * failures. Fails CLOSED, unlike {@link #isBlocked}: when Redis can't be asked this returns -1,
-     * which callers must treat as blocked. A reset checked by a birthday has no other brake, so a
-     * Redis outage pauses resets rather than lifting the limit.
+     * One step in Redis, so nothing runs between the count and its expiry: INCR; the window starts
+     * at the first count; the max-th count replaces it with the lockout. Later counts leave the
+     * expiry alone, so piling on a paused key never makes the pause longer. A key that somehow has
+     * no expiry gets the lockout rather than staying forever.
      */
-    public long blockedForSeconds(String key, int max) {
+    static final DefaultRedisScript<Long> COUNT_ATTEMPT = new DefaultRedisScript<>("""
+            local n = redis.call('INCR', KEYS[1])
+            if n == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
+            if n == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[3]) end
+            if redis.call('PTTL', KEYS[1]) < 0 then redis.call('PEXPIRE', KEYS[1], ARGV[3]) end
+            return n
+            """, Long.class);
+
+    /**
+     * Counts an attempt BEFORE it's checked. Callers let the attempt through only while the count
+     * is at most {@code max}; because the increment is atomic, however many requests arrive at
+     * once, at most {@code max} per window get through. Counts start a {@code window}; the
+     * {@code max}-th sets a {@code lockout} from then.
+     *
+     * <p>Fails CLOSED, unlike {@link #isBlocked}: -1 when Redis can't be asked, which callers must
+     * treat as unavailable. A reset checked by a birthday has no other brake.
+     *
+     * @return this attempt's count in the window (1 for the first), or -1 when Redis failed
+     */
+    public long countAttempt(String key, Duration window, int max, Duration lockout) {
         try {
-            String v = redis.opsForValue().get(key);
-            if (v == null || Integer.parseInt(v) < max) return 0;
-            Long ttl = redis.getExpire(key, TimeUnit.SECONDS);
-            // No expiry (shouldn't happen): say a minute rather than "never".
-            return ttl == null || ttl <= 0 ? 60 : ttl;
+            Long count = redis.execute(COUNT_ATTEMPT, List.of(key),
+                    String.valueOf(window.toMillis()), String.valueOf(max), String.valueOf(lockout.toMillis()));
+            return count == null ? -1 : count;
         } catch (Exception e) {
-            log.warn("Rate limiter check failed (failing closed): {}", e.getMessage());
+            log.warn("Rate limiter count failed (failing closed): {}", e.getMessage());
             return -1;
         }
     }
 
-    /**
-     * Records a failure counted in {@code window} from the first one. The failure that reaches
-     * {@code max} locks the key for {@code lockout} from now (a longer pause than the window).
-     *
-     * @return the new count, or -1 when Redis failed
-     */
-    public long recordFailure(String key, Duration window, int max, Duration lockout) {
+    /** Seconds until {@code key} expires; a minute when that can't be told. */
+    public long secondsLeft(String key) {
         try {
-            Long count = redis.opsForValue().increment(key);
-            if (count == null) return -1;
-            if (count == 1) redis.expire(key, window);
-            if (count == max) redis.expire(key, lockout);
-            return count;
+            Long ttl = redis.getExpire(key, TimeUnit.SECONDS);
+            return ttl == null || ttl <= 0 ? 60 : ttl;
         } catch (Exception e) {
-            log.warn("Rate limiter record failed: {}", e.getMessage());
-            return -1;
+            return 60;
         }
     }
 

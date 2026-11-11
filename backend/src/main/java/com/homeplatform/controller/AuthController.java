@@ -203,11 +203,16 @@ public class AuthController {
     }
 
     private String getClientIp(HttpServletRequest request) {
-        // Trust only the LAST entry in X-Forwarded-For — the one appended by our
-        // trusted reverse proxy (nginx). The leftmost entries are client-supplied
-        // and spoofable; reading [0] there let an attacker forge a fresh IP per
-        // request and bypass the login rate limiter. nginx replaces (not appends)
-        // this header with $remote_addr, so in practice there is a single value.
+        // In the running app this header is never seen here. server.forward-headers-strategy:
+        // framework installs Spring's ForwardedHeaderFilter, which turns the forwarded headers into
+        // getRemoteAddr() (an RFC 7239 "Forwarded: for=" first, else X-Forwarded-For's FIRST entry)
+        // and then hides them, so this falls through to getRemoteAddr(). That is only as good as
+        // what nginx sends: it replaces X-Forwarded-For with its own $remote_addr and drops any
+        // client "Forwarded" header (nginx/default.conf); without that, "Forwarded: for=<anything>"
+        // would pick the address and escape every per-address limit. Behind Docker, $remote_addr
+        // is the same gateway address for every client. The header branch below only runs where
+        // that filter isn't installed (standalone controller tests); it takes the LAST entry, the
+        // one a proxy appends.
         String xfwd = request.getHeader("X-Forwarded-For");
         if (xfwd != null && !xfwd.isBlank()) {
             String[] parts = xfwd.split(",");

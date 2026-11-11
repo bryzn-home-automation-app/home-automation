@@ -127,7 +127,12 @@ public class OidcController {
         return b.build();
     }
 
-    /** nginx replaces X-Forwarded-For with the real client address, so it can be trusted here. */
+    /**
+     * In the running app Spring's ForwardedHeaderFilter has already turned the forwarded headers
+     * into getRemoteAddr() and hidden them (see AuthController.getClientIp): nginx's $remote_addr,
+     * since nginx replaces X-Forwarded-For and drops a client's "Forwarded" header. Used for the
+     * sign-in record only, not for any limit.
+     */
     private static String clientIp(HttpServletRequest req) {
         String fwd = req.getHeader("X-Forwarded-For");
         return fwd != null && !fwd.isBlank() ? fwd.split(",")[0].trim() : req.getRemoteAddr();

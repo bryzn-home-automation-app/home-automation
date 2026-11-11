@@ -10,6 +10,7 @@ import com.homeplatform.security.AutheliaUsersFile;
 import com.homeplatform.security.AutheliaUsersFile.Account;
 import com.homeplatform.security.AutheliaUsersFile.Accounts;
 import com.homeplatform.security.AutheliaUsersFile.UsersFileException;
+import com.homeplatform.service.PasswordResetService.Keys;
 import com.homeplatform.service.PasswordResetService.Outcome;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,9 +20,17 @@ import org.mockito.ArgumentCaptor;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -29,7 +38,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * The birthday reset: who qualifies (here and in the Home users file), that every kind of no-match
- * looks the same, the limits, and what reaches the log. Made-up people and dates only.
+ * looks the same, the limits (counted before they're checked), and what reaches the log and the
+ * admin. Made-up people and dates only.
  */
 class PasswordResetServiceTest {
 
@@ -50,8 +60,10 @@ class PasswordResetServiceTest {
     @BeforeEach
     void setUp() throws Exception {
         users = mock(UserRepository.class);
+        // As Postgres does it: upper() on both sides, with Unicode's case rules (ı → I, ſ → S).
         when(users.findByUsernameIgnoreCase(anyString())).thenAnswer(i -> people.stream()
-                .filter(u -> u.getUsername().equalsIgnoreCase(i.getArgument(0))).findFirst());
+                .filter(u -> u.getUsername().toUpperCase(Locale.ROOT).equals(i.<String>getArgument(0).toUpperCase(Locale.ROOT)))
+                .findFirst());
         when(users.findById(anyLong())).thenAnswer(i -> people.stream()
                 .filter(u -> u.getId().equals(i.getArgument(0))).findFirst());
         when(users.findAll()).thenAnswer(i -> List.copyOf(people));
@@ -94,6 +106,14 @@ class PasswordResetServiceTest {
         return service.reset(username, birthday, NEW_PASSWORD, IP).outcome();
     }
 
+    private static String userKey(String username) {
+        return Keys.of(username).user();
+    }
+
+    private static String dayKey(String username) {
+        return Keys.of(username).day();
+    }
+
     /** Every text the service wrote to app_events. */
     private List<String> logged() {
         List<String> all = new ArrayList<>();
@@ -111,6 +131,13 @@ class PasswordResetServiceTest {
         return all;
     }
 
+    /** Titles of every admin notice sent. */
+    private List<String> notices() {
+        ArgumentCaptor<String> title = ArgumentCaptor.forClass(String.class);
+        verify(notifications, atLeast(0)).createAndPush(anyLong(), any(), any(), title.capture(), anyString(), anyString());
+        return title.getAllValues();
+    }
+
     @Test
     @DisplayName("a member with the right birthday gets the new Home password, and admins hear it opens every Home app")
     void success() throws Exception {
@@ -121,6 +148,8 @@ class PasswordResetServiceTest {
                 eq("Pat reset their Home password"), contains("opens every app behind Sign in with Home"), eq("/users"));
         verifyNoMoreInteractions(notifications);
         assertTrue(logged().stream().anyMatch(m -> m.contains("Home password reset with a birthday for 'PAT' (from 10.9.8.7): Home account 'pat'")));
+        assertNull(redis.values.get(userKey("pat")), "this try was counted, then cleared");
+        assertNull(redis.values.get(dayKey("pat")));
     }
 
     @Test
@@ -140,14 +169,15 @@ class PasswordResetServiceTest {
             assertEquals(PasswordResetService.Result.of(Outcome.NO_MATCH), service.reset(c[0], tried, NEW_PASSWORD, IP), c[0]);
             assertTrue(logged().stream().anyMatch(m -> m.contains("'" + c[0] + "'") && m.contains(c[1])), c[1]);
         }
+        verifyNoInteractions(notifications);
         assertEquals(Outcome.NO_MATCH, attempt("pat", PAT_BIRTHDAY.plusDays(1)));
         assertTrue(logged().stream().anyMatch(m -> m.contains("'pat'") && m.contains("birthday didn't match")));
 
         verify(home, never()).setPassword(any(), any());
-        verifyNoInteractions(notifications);
+        assertEquals(List.of("Wrong birthday for Pat"), notices(), "only the real member's wrong birthday is reported");
         // Every one of them counted against its username, the unknown one included.
         for (String u : new String[]{"nobody", "sam", "visitor", "newbie", "gone", "nobday", "pat"}) {
-            assertEquals("1", redis.values.get("reset-pw:user:" + u), u);
+            assertEquals("1", redis.values.get(userKey(u)), u);
         }
     }
 
@@ -165,7 +195,7 @@ class PasswordResetServiceTest {
             if (c.homeAccount() != null) homePeople.add(c.homeAccount());
             assertEquals(PasswordResetService.Result.of(Outcome.NO_MATCH), service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, IP), c.reason());
             n++;
-            assertEquals(String.valueOf(n), redis.values.get("reset-pw:user:pat"), "counted like a wrong birthday");
+            assertEquals(String.valueOf(n), redis.values.get(userKey("pat")), "counted like a wrong birthday");
             String reason = c.reason();
             assertTrue(logged().stream().anyMatch(m -> m.contains("'pat'") && m.contains("birthday matched, but") && m.contains(reason)), reason);
             verify(notifications).createAndPush(eq(1L), eq(Category.SYSTEM), eq(Severity.WARNING),
@@ -180,23 +210,25 @@ class PasswordResetServiceTest {
         doThrow(new AutheliaUsersFile.Refused("their Home account 'pat' is in the 'admin' group"))
                 .when(home).setPassword(anyString(), anyString());
         assertEquals(Outcome.NO_MATCH, attempt("pat", PAT_BIRTHDAY));
-        assertEquals("1", redis.values.get("reset-pw:user:pat"));
+        assertEquals("1", redis.values.get(userKey("pat")));
     }
 
     @Test
-    @DisplayName("an unreadable users file makes resets unavailable for everyone, matched or not, and counts nothing")
+    @DisplayName("an unreadable users file makes resets unavailable for everyone, matched or not, before anything is counted")
     void usersFileUnreadable() throws Exception {
         when(home.read()).thenThrow(new UsersFileException("isn't there (/authelia/users_database.yml)"));
         assertEquals(Outcome.UNAVAILABLE, attempt("pat", PAT_BIRTHDAY));
         assertEquals(Outcome.UNAVAILABLE, attempt("pat", PAT_BIRTHDAY.plusDays(1)));
         assertEquals(Outcome.UNAVAILABLE, attempt("nobody", PAT_BIRTHDAY));
-        assertTrue(redis.values.isEmpty());
+        assertTrue(redis.values.keySet().stream().noneMatch(k -> k.startsWith("reset-pw:ip") || k.startsWith("reset-pw:user")),
+                () -> "nothing counted: " + redis.values.keySet());
+        verify(users, never()).findByUsernameIgnoreCase(any());
         verify(home, never()).setPassword(any(), any());
-        assertTrue(logged().stream().anyMatch(m -> m.contains("the Home users file isn't there")));
+        assertEquals(1, logged().stream().filter(m -> m.contains("the Home users file isn't there")).count(), "logged once a minute");
     }
 
     @Test
-    @DisplayName("a failed write is unavailable (nothing changed) and the admin is told; a file left broken is critical")
+    @DisplayName("a failed write is unavailable (nothing changed), not a wrong try, and the admin is told; a file left broken is critical")
     void writeFails() throws Exception {
         doThrow(new UsersFileException("didn't read back as written, so the previous file was put back from x; nothing changed"))
                 .doThrow(new UsersFileException("didn't read back as written, and putting the previous file back failed too", true, null))
@@ -207,7 +239,8 @@ class PasswordResetServiceTest {
         assertEquals(Outcome.UNAVAILABLE, attempt("pat", PAT_BIRTHDAY));
         verify(notifications).createAndPush(eq(1L), eq(Category.SYSTEM), eq(Severity.CRITICAL),
                 eq("Home sign-in may be broken"), contains("failed too"), eq("/users"));
-        assertNull(redis.values.get("reset-pw:user:pat"), "not a wrong try");
+        assertNull(redis.values.get(userKey("pat")), "the right birthday gives its count back");
+        assertNull(redis.values.get(dayKey("pat")));
     }
 
     @Test
@@ -225,11 +258,11 @@ class PasswordResetServiceTest {
     @DisplayName("five wrong tries pause the username for an hour, even for the right birthday, and tell the admins")
     void fiveWrongTriesPause() throws Exception {
         for (int i = 0; i < 4; i++) assertEquals(Outcome.NO_MATCH, attempt("pat", PAT_BIRTHDAY.minusYears(1)));
-        verifyNoInteractions(notifications);
-        assertEquals(Duration.ofMinutes(15), redis.ttl("reset-pw:user:pat"));
+        assertEquals(List.of("Wrong birthday for Pat"), notices(), "the first wrong one of the day, and only that");
+        assertEquals(Duration.ofMinutes(15), redis.ttl(userKey("pat")));
 
         assertEquals(Outcome.NO_MATCH, attempt("pat", PAT_BIRTHDAY.minusYears(1)));
-        assertEquals(Duration.ofHours(1), redis.ttl("reset-pw:user:pat"), "the fifth starts a longer pause");
+        assertEquals(Duration.ofHours(1), redis.ttl(userKey("pat")), "the fifth starts a longer pause");
         verify(notifications).createAndPush(eq(1L), eq(Category.SYSTEM), eq(Severity.WARNING),
                 eq("Password resets paused for Pat"), contains("an hour"), eq("/users"));
 
@@ -239,9 +272,34 @@ class PasswordResetServiceTest {
         verify(home, never()).setPassword(any(), any());
 
         // An hour later the right birthday works, and clears the counts.
-        redis.pass("reset-pw:user:pat");
+        redis.pass(userKey("pat"));
         assertEquals(Outcome.RESET, attempt("pat", PAT_BIRTHDAY));
-        assertNull(redis.values.get("reset-pw:user-day:pat"));
+        assertNull(redis.values.get(dayKey("pat")));
+    }
+
+    @Test
+    @DisplayName("a member who mistypes four times and gets it right on the fifth isn't left paused")
+    void mistypesThenRight() {
+        for (int i = 0; i < 4; i++) assertEquals(Outcome.NO_MATCH, attempt("pat", PAT_BIRTHDAY.minusDays(i + 1)));
+        // The fifth is counted first (and sets the hour's pause), then succeeds and clears it.
+        assertEquals(Outcome.RESET, attempt("pat", PAT_BIRTHDAY));
+        assertNull(redis.values.get(userKey("pat")));
+        assertNull(redis.values.get(dayKey("pat")));
+        assertEquals(Outcome.RESET, attempt("pat", PAT_BIRTHDAY), "and can go again straight away");
+    }
+
+    @Test
+    @DisplayName("hammering a paused account doesn't make its pause longer, or turn the hour into a day")
+    void hammeringDoesNotExtend() {
+        for (int i = 0; i < 5; i++) attempt("pat", PAT_BIRTHDAY.minusYears(3));
+        assertEquals(Duration.ofHours(1), redis.ttl(userKey("pat")));
+        for (int i = 0; i < 12; i++) {
+            assertEquals(Outcome.THROTTLED, service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, "10.0.0." + i).outcome());
+        }
+        assertEquals("17", redis.values.get(userKey("pat")), "still counted");
+        assertEquals(Duration.ofHours(1), redis.ttl(userKey("pat")), "but the pause still ends an hour after the fifth");
+        assertEquals("5", redis.values.get(dayKey("pat")), "and paused tries don't reach the day's count");
+        assertEquals(Duration.ofHours(24), redis.ttl(dayKey("pat")));
     }
 
     @Test
@@ -249,7 +307,7 @@ class PasswordResetServiceTest {
     void unknownUsernamePausedAlike() {
         for (int i = 0; i < 5; i++) assertEquals(Outcome.NO_MATCH, attempt("nobody", PAT_BIRTHDAY));
         assertEquals(Outcome.THROTTLED, attempt("nobody", PAT_BIRTHDAY));
-        assertEquals(Duration.ofHours(1), redis.ttl("reset-pw:user:nobody"));
+        assertEquals(Duration.ofHours(1), redis.ttl(userKey("nobody")));
         verifyNoInteractions(notifications);
     }
 
@@ -257,13 +315,13 @@ class PasswordResetServiceTest {
     @DisplayName("ten wrong tries in a day pause the username for a day")
     void tenADay() {
         for (int i = 0; i < 5; i++) attempt("pat", PAT_BIRTHDAY.minusDays(i + 1));
-        redis.pass("reset-pw:user:pat"); // the hour's pause runs out
+        redis.pass(userKey("pat")); // the hour's pause runs out
         for (int i = 0; i < 4; i++) attempt("pat", PAT_BIRTHDAY.minusDays(i + 10));
-        assertEquals(Duration.ofHours(24), redis.ttl("reset-pw:user-day:pat"), "window from the first try");
+        assertEquals(Duration.ofHours(24), redis.ttl(dayKey("pat")), "window from the first try");
         assertEquals(Outcome.NO_MATCH, attempt("pat", PAT_BIRTHDAY.minusDays(20)));
-        assertEquals(Duration.ofHours(24), redis.ttl("reset-pw:user-day:pat"), "the tenth starts a fresh day's pause");
+        assertEquals(Duration.ofHours(24), redis.ttl(dayKey("pat")), "the tenth starts a fresh day's pause");
 
-        redis.pass("reset-pw:user:pat");
+        redis.pass(userKey("pat"));
         var blocked = service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, IP);
         assertEquals(Outcome.THROTTLED, blocked.outcome());
         assertEquals(24 * 3600, blocked.retryAfterSeconds());
@@ -271,11 +329,114 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("twenty wrong tries from one address pause every username from it")
+    @DisplayName("twenty tries from one address pause every username from it, and the admin hears resets are paused for everyone")
     void perAddress() {
         for (int i = 0; i < 20; i++) attempt("guess" + i, PAT_BIRTHDAY);
         assertEquals(Outcome.THROTTLED, attempt("pat", PAT_BIRTHDAY));
+        assertNull(redis.values.get(userKey("pat")), "turned away before any per-username key");
+        assertTrue(notices().contains("Password resets paused for everyone"));
         assertEquals(Outcome.RESET, service.reset("pat", PAT_BIRTHDAY, NEW_PASSWORD, "10.1.1.1").outcome());
+    }
+
+    /** Runs {@code n} resets at once (released together) and counts the outcomes. */
+    private Map<Outcome, Integer> burst(int n, java.util.function.IntFunction<String> username,
+                                        java.util.function.IntFunction<LocalDate> birthday) throws Exception {
+        ExecutorService pool = Executors.newFixedThreadPool(n);
+        CountDownLatch ready = new CountDownLatch(n);
+        CountDownLatch go = new CountDownLatch(1);
+        List<Future<Outcome>> futures = new ArrayList<>();
+        for (int i = 0; i < n; i++) {
+            int k = i;
+            futures.add(pool.submit(() -> {
+                ready.countDown();
+                go.await();
+                return service.reset(username.apply(k), birthday.apply(k), NEW_PASSWORD, IP).outcome();
+            }));
+        }
+        assertTrue(ready.await(10, TimeUnit.SECONDS));
+        go.countDown();
+        Map<Outcome, Integer> counts = new EnumMap<>(Outcome.class);
+        for (Future<Outcome> f : futures) counts.merge(f.get(30, TimeUnit.SECONDS), 1, Integer::sum);
+        pool.shutdown();
+        return counts;
+    }
+
+    @Test
+    @DisplayName("fifty guesses released at once: no more than five are ever checked against the birthday")
+    void concurrentGuessesPerUsername() throws Exception {
+        Map<Outcome, Integer> counts = burst(50, i -> "pat", i -> PAT_BIRTHDAY.minusDays(i + 1));
+        int evaluated = counts.getOrDefault(Outcome.NO_MATCH, 0) + counts.getOrDefault(Outcome.RESET, 0);
+        assertTrue(evaluated <= PasswordResetService.USER_MAX, counts::toString);
+        assertEquals(PasswordResetService.USER_MAX, evaluated, counts::toString);
+        assertEquals(50 - PasswordResetService.USER_MAX, counts.get(Outcome.THROTTLED), counts::toString);
+    }
+
+    @Test
+    @DisplayName("fifty made-up usernames released at once from one address: no more than twenty are checked")
+    void concurrentGuessesPerAddress() throws Exception {
+        Map<Outcome, Integer> counts = burst(50, i -> "made-up-" + i, i -> PAT_BIRTHDAY);
+        int evaluated = counts.getOrDefault(Outcome.NO_MATCH, 0) + counts.getOrDefault(Outcome.RESET, 0);
+        assertEquals(PasswordResetService.IP_MAX, evaluated, counts::toString);
+        long perUsernameKeys = redis.values.keySet().stream().filter(k -> k.startsWith("reset-pw:user:")).count();
+        assertEquals(PasswordResetService.IP_MAX, perUsernameKeys, "turned-away names leave no keys");
+    }
+
+    @Test
+    @DisplayName("look-alike letters (ı, ſ, a space) get the plain no-match without reaching the account or any counter")
+    void lookAlikeUsernames() throws Exception {
+        person(7L, "kim", Role.USER, AccountStatus.ACTIVE, PAT_BIRTHDAY).setDisplayName("Kim");
+        homePeople.add(new Account("kim", List.of("kim@example.test"), List.of("family"), false));
+        for (String odd : new String[]{"kım", "ſam", "pa t", "pat ", "ｐat"}) {
+            assertEquals(PasswordResetService.Result.of(Outcome.NO_MATCH), service.reset(odd, PAT_BIRTHDAY, NEW_PASSWORD, IP), odd);
+        }
+        verify(users, never()).findByUsernameIgnoreCase(any());
+        assertTrue(redis.values.keySet().stream().noneMatch(k -> k.startsWith("reset-pw:ip") || k.startsWith("reset-pw:user")),
+                () -> "nothing counted: " + redis.values.keySet());
+        assertEquals(1, logged().stream().filter(m -> m.contains("isn't plain letters")).count(), "logged once a minute");
+        verify(home, never()).setPassword(any(), any());
+    }
+
+    @Test
+    @DisplayName("every spelling of a real username shares one counter: the account's own name keys it")
+    void caseVariantsShareACounter() {
+        get("pat").setUsername("Pat");
+        for (String spelling : new String[]{"pat", "PAT", "pAt", "Pat", "PAt"}) {
+            assertEquals(Outcome.NO_MATCH, attempt(spelling, PAT_BIRTHDAY.minusYears(1)), spelling);
+        }
+        assertEquals("5", redis.values.get(userKey("Pat")));
+        assertEquals(Outcome.THROTTLED, attempt("paT", PAT_BIRTHDAY));
+    }
+
+    @Test
+    @DisplayName("Redis keys stay short whatever is typed, and don't hold the name")
+    void shortKeys() {
+        attempt("x".repeat(100), PAT_BIRTHDAY);
+        attempt("pat", PAT_BIRTHDAY.minusDays(1));
+        int longest = "reset-pw:user-day:".length() + 24;
+        for (String k : redis.values.keySet()) {
+            if (k.startsWith("reset-pw:ip:")) continue;
+            assertTrue(k.length() <= longest, k);
+            assertFalse(k.contains("xxxx") || k.endsWith(":pat"), k);
+        }
+        assertEquals(Keys.of("PAT"), Keys.of("pat"));
+    }
+
+    @Test
+    @DisplayName("the first wrong birthday for a member each day reaches the admin; more that day don't; unknown names never do")
+    void wrongBirthdayNotice() {
+        person(7L, "kim", Role.USER, AccountStatus.ACTIVE, LocalDate.of(1993, 3, 3)).setDisplayName("Kim");
+        attempt("pat", PAT_BIRTHDAY.minusDays(1));
+        attempt("pat", PAT_BIRTHDAY.minusDays(2));
+        attempt("kim", PAT_BIRTHDAY);
+        attempt("nobody", PAT_BIRTHDAY);
+        attempt("sam", PAT_BIRTHDAY);
+        assertEquals(List.of("Wrong birthday for Pat", "Wrong birthday for Kim"), notices());
+        verify(notifications).createAndPush(eq(1L), eq(Category.SYSTEM), eq(Severity.WARNING), eq("Wrong birthday for Pat"),
+                contains("you can clear their birthday in People"), eq("/users"));
+
+        redis.pass(Keys.of("pat").noticed()); // a day later
+        attempt("pat", PAT_BIRTHDAY.minusDays(3));
+        assertEquals(2, notices().stream().filter("Wrong birthday for Pat"::equals).count());
     }
 
     @Test
@@ -291,8 +452,8 @@ class PasswordResetServiceTest {
     @DisplayName("refused requests while paused are logged once a minute, not once each")
     void throttledLogCoalesced() {
         for (int i = 0; i < 5; i++) attempt("pat", PAT_BIRTHDAY.minusYears(2));
-        for (int i = 0; i < 30; i++) attempt("pat", PAT_BIRTHDAY);
-        long pausedLines = logged().stream().filter(m -> m.contains("too many wrong tries")).count();
+        for (int i = 0; i < 12; i++) attempt("pat", PAT_BIRTHDAY);
+        long pausedLines = logged().stream().filter(m -> m.contains("too many tries")).count();
         assertEquals(1, pausedLines);
     }
 
@@ -318,7 +479,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("the birthday and the password never reach the log, whatever happens")
+    @DisplayName("the birthday and the password never reach the log or a notice, whatever happens")
     void nothingSecretLogged() throws Exception {
         attempt("pat", PAT_BIRTHDAY.plusDays(3));
         attempt("nobody", PAT_BIRTHDAY);
@@ -339,7 +500,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("every no-match takes at least the minimum time, so timing can't tell the kinds apart")
+    @DisplayName("every answer from the account lookup on takes at least the minimum time, so timing can't tell the kinds apart")
     void minimumTime() {
         service = new PasswordResetService(users, home, redis.limiter(), events, notifications, 120);
         homePeople.removeIf(a -> a.username().equals("pat"));
