@@ -123,6 +123,15 @@ describe('Roomba page', () => {
     expect(within(dialog).getByText('Docked to recharge')).toBeTruthy();
   });
 
+  it('charts the time per clean under the recent cleans, loaded after the page', async () => {
+    renderPage();
+    const chart = await screen.findByRole('region', { name: 'Time per clean' });
+    // The Nov 8 run: 339 min start to finish, 163 of them recharging.
+    await waitFor(() =>
+      expect(chart.querySelector('.fp-chart-readout[aria-live]')?.textContent?.replace(/ /g, ' ')).toMatch(/Cleaning 2 hr 56 minRecharging 2 hr 43 min1,124 sq ft$/),
+    );
+  });
+
   it('says a failed load failed, with Try again (B-005)', async () => {
     state.runsFail = true;
     renderPage();

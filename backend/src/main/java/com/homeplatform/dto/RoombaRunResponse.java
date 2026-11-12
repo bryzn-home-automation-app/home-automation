@@ -10,7 +10,9 @@ import java.util.List;
  * mission history and are null on a run it hasn't confirmed yet
  * ({@code verified} false).
  *
- * @param durationMinutes start to finish, including any recharge stops
+ * @param durationMinutes start to finish, including any recharge stops and pauses
+ * @param chargeMinutes   docked to recharge mid-clean (part of durationMinutes)
+ * @param pauseMinutes    paused mid-clean (part of durationMinutes)
  * @param rooms           names of the rooms the run was sent to (empty = whole home / unknown)
  * @param settings        e.g. "Vacuum · Turbo · 2 passes", from the first room's settings
  */
@@ -29,6 +31,7 @@ public record RoombaRunResponse(
         String cycle,
         String source,
         Integer chargeMinutes,
+        Integer pauseMinutes,
         Integer evacuations,
         String doneCode,
         List<String> rooms,

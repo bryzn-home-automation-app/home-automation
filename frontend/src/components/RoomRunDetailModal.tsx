@@ -43,7 +43,8 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
   const st = runStatus(run.status);
   const durationMin = runDurationMinutes(run);
   const charged = run.chargeMinutes != null && run.chargeMinutes > 0 ? run.chargeMinutes : null;
-  const cleaningMin = durationMin != null ? Math.max(0, durationMin - (charged ?? 0)) : null;
+  const paused = run.pauseMinutes != null && run.pauseMinutes > 0 ? run.pauseMinutes : null;
+  const cleaningMin = durationMin != null ? Math.max(0, durationMin - (charged ?? 0) - (paused ?? 0)) : null;
   const hasError = run.error != null && run.error !== 0;
   const initiator = initiatorLabel(run.initiator);
 
@@ -61,14 +62,9 @@ export default function RoomRunDetailModal({ run, onClose }: Props) {
         <KeyValue>
           <KV label="Started" value={formatTime(run.startedAt)} />
           <KV label="Ended" value={endedLabel(run.startedAt, run.completedAt)} />
-          {charged != null ? (
-            <>
-              <KV label="Cleaning time" value={formatDuration(cleaningMin)} />
-              <KV label="Docked to recharge" value={formatDuration(charged)} />
-            </>
-          ) : (
-            <KV label="Cleaning time" value={formatDuration(durationMin)} />
-          )}
+          <KV label="Cleaning time" value={formatDuration(cleaningMin)} />
+          {charged != null && <KV label="Docked to recharge" value={formatDuration(charged)} />}
+          {paused != null && <KV label="Paused" value={formatDuration(paused)} />}
           <KV label="Area cleaned" value={formatNumber(run.squareFeet, { unit: 'sq ft' })} />
           {run.verified && <KV label="Rooms" value={run.rooms.length ? run.rooms.join(', ') : 'Whole home'} />}
           {run.settings && <KV label="Settings" value={run.settings} />}

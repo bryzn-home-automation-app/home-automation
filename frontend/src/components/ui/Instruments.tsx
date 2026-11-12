@@ -261,8 +261,8 @@ export interface LegendItem {
   /** The value, in mono bold. */
   value?: ReactNode;
   tone?: ChartTone;
-  /** line (default), dash, box, seg (dashed band), mark (tick), band, today. */
-  key?: 'line' | 'dash' | 'box' | 'seg' | 'mark' | 'band' | 'today';
+  /** line (default), dash, box, outline (a hollow box: a partial bar), seg (dashed band), mark (tick), band, today. */
+  key?: 'line' | 'dash' | 'box' | 'outline' | 'seg' | 'mark' | 'band' | 'today';
 }
 
 /** The legend under a dial (or a chart): what each colour and mark means. */

@@ -215,11 +215,17 @@ class AlertEngineTest {
     private RoombaRunResponse run(String completedAt, Integer error, Integer squareFeet,
                                   Integer durationMinutes, Integer missionNumber, String status,
                                   Integer chargeMinutes, boolean verified) {
+        return run(completedAt, error, squareFeet, durationMinutes, missionNumber, status, chargeMinutes, null, verified);
+    }
+
+    private RoombaRunResponse run(String completedAt, Integer error, Integer squareFeet,
+                                  Integer durationMinutes, Integer missionNumber, String status,
+                                  Integer chargeMinutes, Integer pauseMinutes, boolean verified) {
         return new RoombaRunResponse(
                 7L, Instant.now().toString(), completedAt, durationMinutes, squareFeet,
                 status, "m-1", missionNumber, error, error != null && error != 0 ? "Left wheel stuck" : null,
                 "manual", "clean", verified ? "irobot-history" : "roombapy-prime",
-                chargeMinutes, null, null, List.of(), null, verified);
+                chargeMinutes, pauseMinutes, null, null, List.of(), null, verified);
     }
 
     /** An AlertEngine wired to supply a fixed run + status, with dedup always fresh. */
@@ -259,6 +265,17 @@ class AlertEngineTest {
             verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_DONE), eq(Severity.SUCCESS),
                     eq("Cleaning complete — #43"),
                     eq("Cleaned 1,529 sq ft in 4 hr 23 min, plus 6 hr 30 min docked to recharge."));
+        }
+
+        @Test
+        @DisplayName("cleaning time excludes paused minutes too")
+        void cleaningCompleteWithPause() {
+            // Nov 6: 419 min start to finish = 186 cleaning + 203 recharging + 30 paused.
+            var engine = roombaEngine(run(Instant.now().toString(), 0, 1555, 419, 47, "COMPLETED", 203, 30, true), null);
+            engine.generateRoombaAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_DONE), eq(Severity.SUCCESS),
+                    eq("Cleaning complete — #47"),
+                    eq("Cleaned 1,555 sq ft in 3 hr 6 min, plus 3 hr 23 min docked to recharge."));
         }
 
         @Test

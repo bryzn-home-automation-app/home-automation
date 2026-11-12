@@ -834,6 +834,7 @@ public class RoombaService {
                 r.getCycle(),
                 r.getSource(),
                 r.getChargeMinutes(),
+                r.getPauseMinutes(),
                 r.getEvacuations(),
                 r.getDoneCode(),
                 rooms,

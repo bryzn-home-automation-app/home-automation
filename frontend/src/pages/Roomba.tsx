@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import RoombaMap, { type LastClean, type RoomSelection, type SplitLine } from '../components/RoombaMap';
 import RoomRenameModal from '../components/RoomRenameModal';
@@ -13,7 +13,7 @@ import RoombaMaintenance from '../components/RoombaMaintenance';
 import { usePageMeta } from '../components/shell/PageMeta';
 import {
   Badge, Button, Disclosure, EmptyState, Icon, IconButton, InstrumentPanel, KeyValue, KV, Lamp, List, Notice,
-  Num, Panel, QueryState, Readout, Readouts, Ring, Row, Screen, Seg, SegPanel, SkelRows, Split, Stack,
+  Num, Panel, QueryState, Readout, Readouts, Ring, Row, Screen, Seg, SegPanel, SkelPanel, SkelRows, Split, Stack,
   Verdict, useSearchParamState, type ChartTone,
 } from '../components/ui';
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts } from '../api/roomba';
@@ -27,6 +27,10 @@ import {
 import { batteryStatus, humanize, onlineStatus, type Tone } from '../utils/status';
 import { DASH, NBSP, formatDayName, formatDuration, formatNumber, formatStamp, formatTime, plural } from '../utils/format';
 import type { RoombaRun, RoombaStatus } from '../types';
+
+// The Time per clean chart pulls in Recharts; it sits below the fold, so it loads after the
+// map and the keys instead of ahead of them.
+const RoombaRunTimes = lazy(() => import('../components/RoombaRunTimes'));
 
 // Overview is the everyday view (the map, recent cleans, schedules, rooms); Maintenance is the
 // robot's parts and lifetime counters, checked now and then. The view lives in ?view= so it
@@ -546,7 +550,12 @@ export default memo(function Roomba() {
       <SegPanel id="roomba-view" value={view}>
         {view === 'overview' ? (
           <Split>
-            <RecentCleans query={runsQuery} onOpen={setSelectedRun} now={now} />
+            <Stack gap="page">
+              <RecentCleans query={runsQuery} onOpen={setSelectedRun} now={now} />
+              <Suspense fallback={<SkelPanel chart />}>
+                <RoombaRunTimes query={runsQuery} cleaningNow={!!status && state.inMission} now={now} />
+              </Suspense>
+            </Stack>
             <Stack gap="page">
               <RoombaNativeSchedules isAdmin={isAdmin} />
               {cleanRooms.length > 0 && (
@@ -645,8 +654,8 @@ export default memo(function Roomba() {
 
 function RunRow({ run, onOpen, now }: { run: RoombaRun; onOpen: (r: RoombaRun) => void; now: Date }) {
   const st = runStatus(run.status);
-  // Cleaning time: the recharge stops are taken out (a whole-house run is ~4 h of cleaning
-  // across ~11 h); the detail dialog has both.
+  // Cleaning time: the recharge stops and pauses are taken out (a whole-house run is ~3 h of
+  // cleaning across ~6½ h); the detail dialog and the Time per clean chart have each part.
   const mins = cleaningMinutes(run);
   const rooms = run.verified ? roomsSummary(run.rooms) : null;
   return (

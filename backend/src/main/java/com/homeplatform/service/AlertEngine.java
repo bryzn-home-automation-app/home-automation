@@ -259,9 +259,13 @@ public class AlertEngine {
         String title = "Cleaning complete — " + tag;
         if (!isNewRoomba(userId, title, false)) return;  // one-time event: dedup forever
 
+        // Cleaning time: the run's wall-clock length less its recharge stops and pauses,
+        // the same figure the Roomba tab shows.
         Integer cleaning = run.durationMinutes();
-        if (cleaning != null && run.chargeMinutes() != null) {
-            cleaning = Math.max(0, cleaning - run.chargeMinutes());
+        if (cleaning != null) {
+            int stopped = (run.chargeMinutes() != null ? run.chargeMinutes() : 0)
+                    + (run.pauseMinutes() != null ? run.pauseMinutes() : 0);
+            cleaning = Math.max(0, cleaning - stopped);
         }
         boolean haveDur = cleaning != null && cleaning > 0;
         String msg;

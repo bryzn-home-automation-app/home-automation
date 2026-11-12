@@ -306,6 +306,7 @@ class RoombaServiceTest {
                     .completedAt(LocalDateTime.of(2026, 11, 3, 1, 54, 17))
                     .durationMinutes(653)
                     .chargeMinutes(390)
+                    .pauseMinutes(12)
                     .evacuations(5)
                     .squareFeet(1529)
                     .status("COMPLETED")
@@ -327,6 +328,7 @@ class RoombaServiceTest {
             assertEquals(List.of("Living Room", "Kitchen", "Room 99", "Zone 3"), r.rooms());
             assertEquals("Vacuum & mop · Turbo · 2 passes", r.settings());
             assertEquals(390, r.chargeMinutes());
+            assertEquals(12, r.pauseMinutes());
             assertEquals(5, r.evacuations());
         }
     }

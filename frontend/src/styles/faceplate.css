@@ -1032,6 +1032,7 @@ button.fp-tl-item { width: 100%; border: 0; background: transparent; text-align:
 .fp-lg-key { flex: none; width: 16px; height: 0; border-top: 2px solid var(--fp-c); }
 .fp-lg-key--dash { border-top-style: dashed; }
 .fp-lg-key--box { width: 10px; height: 10px; border: 0; border-radius: 2px; background: var(--fp-c); }
+.fp-lg-key--outline { width: 10px; height: 10px; border: 1.5px solid var(--fp-c); border-radius: 2px; background: transparent; }
 .fp-lg-key--band { width: 14px; height: 10px; border: 0; border-radius: 2px; background: var(--appchart-band); }
 .fp-lg-key--today { width: 0; height: 12px; border-top: 0; border-left: 1.5px dashed var(--appchart-cursor); }
 .fp-lg-key--seg { width: 14px; height: 10px; border: 0; border-radius: 2px; background: repeating-linear-gradient(90deg, var(--fp-c) 0 3px, transparent 3px 5px); }
@@ -1045,7 +1046,7 @@ button.fp-tl-item { width: 100%; border: 0; background: transparent; text-align:
 .fp-chart-readout .fp-rd-item .fp-lg-key { display: inline-block; margin-right: 6px; vertical-align: middle; }
 .fp-chart-readout b { white-space: nowrap; }
 .fp-chart-readout .fp-rd-item .fp-lg-key { width: 12px; }
-.fp-chart-readout .fp-rd-item .fp-lg-key--box { width: 8px; height: 8px; }
+.fp-chart-readout .fp-rd-item .fp-lg-key--box, .fp-chart-readout .fp-rd-item .fp-lg-key--outline { width: 8px; height: 8px; }
 .fp-chart-readout b { color: var(--apptext); font-weight: 500; }
 .fp-chart-plot { position: relative; height: var(--fp-plot-h, 180px); margin-left: var(--fp-y-gutter, 34px); margin-bottom: 24px; touch-action: pan-y; outline-offset: 6px; }
 .fp-chart-plot > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }

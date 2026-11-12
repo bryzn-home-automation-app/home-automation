@@ -292,9 +292,11 @@ export interface RoombaRun {
   source: string | null;
   /**
    * From the cloud's mission history (null until it has confirmed the run —
-   * `verified`). durationMinutes includes chargeMinutes spent docked to recharge.
+   * `verified`). durationMinutes includes chargeMinutes spent docked to recharge
+   * and pauseMinutes spent paused.
    */
   chargeMinutes: number | null;
+  pauseMinutes: number | null;
   evacuations: number | null;
   doneCode: string | null;
   /** Rooms the run was sent to, by name (empty = whole home or not known). */
