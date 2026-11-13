@@ -58,6 +58,9 @@ CHECK_EVERY = timedelta(minutes=30)
 RETRY_SECONDS = (60, 120, 300, 600, 900)
 # A switch-off still failing near the start gets one last try this long before it.
 LAST_TRY_BEFORE_START = timedelta(seconds=30)
+# roomba_schedule_skips.detail and .last_error are VARCHAR(500): a longer value fails the row's
+# UPDATE, so everything stored is cut to this (poller.py cuts again where it binds them).
+TEXT_MAX = 500
 
 # What the page and the command row say about a skip (roomba_schedule_skips.detail).
 UNDONE_EARLY = "Undone before the schedule was switched off."
@@ -94,6 +97,10 @@ class Skip:
     next_check_at: datetime | None = None
     attempts: int = 0
     last_error: str | None = None
+    # Not before this, whatever else says it is due: set by the poller when the row couldn't be
+    # written, so a database that won't take the next check time can't make it read the cloud
+    # every pass (it lives in memory, not in the row).
+    hold_until: datetime | None = None
 
     @property
     def key(self):
@@ -102,6 +109,8 @@ class Skip:
     def due(self, now):
         """Something to do now: a step, a look, a retry, or settling it."""
         if self.state not in ACTIVE:
+            return False
+        if self.hold_until is not None and now < self.hold_until:
             return False
         if self.undo or (self.state == PENDING and now >= self.scheduled_for):
             return True
@@ -158,7 +167,7 @@ def settle_offline(skip, now):
         return _finish(skip, CANCELLED, UNDONE_EARLY, now)
     if now >= skip.scheduled_for:
         why = f" ({skip.last_error})" if skip.last_error else ""
-        return _finish(skip, FAILED, TOO_LATE + why, now, keep_error=True)
+        return _finish(skip, FAILED, _clip(TOO_LATE + why, TEXT_MAX), now, keep_error=True)
     return None
 
 

@@ -465,6 +465,107 @@ class Assignments(unittest.TestCase):
         self.assertFalse(any("undo_requested" in s or "alerted" in s for s in sets))
 
 
+class FakePg:
+    """psycopg.connect() for _save_skip_changes: keeps each UPDATE, and refuses one that binds a
+    string over 500 characters (roomba_schedule_skips.detail / last_error are VARCHAR(500)), or
+    any for the ids in `refuse`, as Postgres would."""
+
+    def __init__(self, refuse=()):
+        self.updates = []
+        self.refuse = set(refuse)
+
+    def __call__(self, conninfo, autocommit=False):
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def execute(self, sql, params):
+        skip_id = params[-1]
+        if skip_id in self.refuse or any(isinstance(p, str) and len(p) > 500 for p in params):
+            raise RuntimeError("value too long for type character varying(500)")
+        self.updates.append((skip_id, sql, params))
+
+
+class UnwritableRows(unittest.IsolatedAsyncioTestCase):
+    """A row that can't be written must cost neither the other rows nor a cloud read every pass
+    (a 566-character FAILED detail once failed its UPDATE every time and took the batch with it)."""
+
+    def setUp(self):
+        self.cloud = FakeCloud()
+        self.cloud.add(TUE_THU, [2, 3, 4])
+        self.long_error = "OSError: " + "Cannot connect to host https://unauthorized.irobotapi.com/v1/households/" * 9
+        self.assertGreater(len(self.long_error), 600)
+
+    def test_a_failed_skip_with_a_long_error_fits_its_columns(self):
+        s = skip(1, TUE_THU, 17, last_error=self.long_error[:480])
+        c = ss.settle_offline(s, at(17, 9, 0))
+        self.assertEqual(c.state, ss.FAILED)
+        self.assertTrue(c.detail.startswith(ss.TOO_LATE))
+        self.assertLessEqual(len(c.detail), 500)
+        # And whatever reaches the database is cut to the column, whoever made it.
+        sets, params = poller._skip_assignments(ss.Change(1, detail=self.long_error, last_error=self.long_error), at(17, 9))
+        self.assertEqual([len(p) for p in params[:2]], [500, 500])
+
+    def test_one_row_that_fails_does_not_stop_the_others(self):
+        pg = FakePg(refuse={2})
+        with mock.patch.object(poller.psycopg, "connect", pg), self.assertLogs("roomba-poller", "WARNING"):
+            failed = poller._save_skip_changes("conninfo", [ss.Change(i, attempts=1) for i in (1, 2, 3)], at(16, 20))
+        self.assertEqual(failed, {2})
+        self.assertEqual([u[0] for u in pg.updates], [1, 3])
+
+    async def test_a_long_error_end_to_end_is_stored(self):
+        # The cloud read fails with a 600-character error, the clean comes, the skip FAILs.
+        s = skip(1, TUE_THU, 17, attempts=3, last_error=self.long_error)
+        pg = FakePg()
+        with mock.patch.multiple(poller, _load_active_skips=lambda conninfo: [copy.copy(s)]), \
+                mock.patch.object(poller.psycopg, "connect", pg):
+            await poller._run_schedule_skips(self.cloud, "conninfo", now=at(17, 9, 1), tz=HOME, state=poller.PollerState())
+        (skip_id, sql, params), = pg.updates
+        self.assertIn("state = %s", sql)
+        self.assertEqual(params[0], ss.FAILED)
+        self.assertEqual(self.cloud.reads, 0, "settled without the cloud")
+
+    async def test_a_row_the_database_refuses_is_held_back_from_the_cloud(self):
+        state = poller.PollerState()
+        s = skip(1, TUE_THU, 17)
+        pg = FakePg(refuse={1})
+        self.cloud.fail_reads = True
+        with mock.patch.multiple(poller, _load_active_skips=lambda conninfo: [copy.copy(s)]), \
+                mock.patch.object(poller.psycopg, "connect", pg), self.assertLogs("roomba-poller", "WARNING"):
+            await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20), tz=HOME, state=state)
+            self.assertEqual(self.cloud.reads, 1)
+            # The retry time never reached the row: the pass 30 s on, and the one after, leave the cloud alone.
+            for seconds in (30, 59):
+                await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20) + timedelta(seconds=seconds),
+                                                 tz=HOME, state=state)
+            self.assertEqual(self.cloud.reads, 1)
+            # After the first backoff it is tried again, and held longer when the row still fails.
+            await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20, 1), tz=HOME, state=state)
+            self.assertEqual(self.cloud.reads, 2)
+        self.assertEqual(state.skip_holds[1], (at(16, 20, 3), 2))
+        # The database takes it again: the hold goes with the next write.
+        pg.refuse.clear()
+        with mock.patch.multiple(poller, _load_active_skips=lambda conninfo: [copy.copy(s)]), \
+                mock.patch.object(poller.psycopg, "connect", pg):
+            await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20, 3), tz=HOME, state=state)
+        self.assertEqual(self.cloud.reads, 3)
+        self.assertNotIn(1, state.skip_holds)
+
+    async def test_no_send_for_a_skip_whose_applying_mark_was_not_stored(self):
+        state = poller.PollerState()
+        pg = FakePg(refuse={1})
+        with mock.patch.multiple(poller, _load_active_skips=lambda conninfo: [skip(1, TUE_THU, 17)]), \
+                mock.patch.object(poller.psycopg, "connect", pg), mock.patch.object(poller, "_replace_native_schedules", lambda *a: None), \
+                self.assertLogs("roomba-poller", "WARNING"):
+            await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20), tz=HOME, state=state)
+        self.assertEqual(self.cloud.writes, [])
+        self.assertIn(1, state.skip_holds)
+
+
 class MirrorRefresh(unittest.IsolatedAsyncioTestCase):
     """The periodic read of the robot's schedules into roomba_native_schedule (poller.py
     refresh_schedules): on start-up and every few hours, read-only, and never at the cost of
@@ -601,7 +702,7 @@ class MainLoopSkips(unittest.IsolatedAsyncioTestCase):
     async def test_a_failing_skip_check_costs_no_login(self):
         checks = []
 
-        async def failing_pass(robot, conninfo, now=None, tz=None):
+        async def failing_pass(robot, conninfo, now=None, tz=None, state=None):
             checks.append(1)
             raise OSError("iRobot cloud unreachable")
 
@@ -614,7 +715,7 @@ class MainLoopSkips(unittest.IsolatedAsyncioTestCase):
             robot = LoopRobot(schedules=broken)
             checks = []
 
-            async def skip_pass(robot, conninfo, now=None, tz=None):
+            async def skip_pass(robot, conninfo, now=None, tz=None, state=None):
                 checks.append(1)
                 return "nothing due"
 

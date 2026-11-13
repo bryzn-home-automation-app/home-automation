@@ -258,6 +258,9 @@ class PollerState:
         self.history_due = 0.0        # monotonic ts: next mission-history sync (0 = now)
         self.history_backfilled = False  # first sync of this process asks for the full history
         self.schedules_due = 0.0      # monotonic ts: next read of the robot's schedules (0 = now)
+        # Skips whose row couldn't be written: skip id -> (not before, aware UTC; writes failed in
+        # a row). Keeps a database that won't take a row from making each pass read the cloud.
+        self.skip_holds = {}
         # Pass count for the running mission (coverage_passes.PassGrid). Lives here,
         # not in the live-map task: that task stops on a pause or recharge and is
         # restarted on every reconnect, and the count must carry on across all three.
@@ -1770,11 +1773,14 @@ def _load_skip_outcome(conninfo, skip_id):
 
 
 def _skip_assignments(c, now):
-    """The SET list and its values for one schedule_skips.Change."""
+    """The SET list and its values for one schedule_skips.Change. The text columns are cut to
+    their width: a longer value would fail the row's UPDATE every time it is tried."""
     sets, params = [], []
     for column, value in (("state", c.state), ("detail", c.detail), ("original_enabled", c.original_enabled),
                           ("attempts", c.attempts), ("last_error", c.last_error)):
         if value is not None:
+            if column in ("detail", "last_error"):
+                value = schedule_skips._clip(value, schedule_skips.TEXT_MAX)
             sets.append(f"{column} = %s")
             params.append(value)
     for column, value in (("next_check_at", c.next_check_at), ("applied_at", c.applied_at),
@@ -1791,14 +1797,48 @@ def _skip_assignments(c, now):
 
 def _save_skip_changes(conninfo, changes, now):
     """Write each change onto its row. Only the columns the poller owns: never
-    undo_requested_at (the backend's) or alerted_at."""
+    undo_requested_at (the backend's) or alerted_at. Each row on its own: one that can't be
+    written is logged and the rest still are. Returns the ids that weren't written; raises when
+    the database can't be reached at all."""
     changes = [c for c in changes if c is not None]
+    failed = set()
     if not changes:
-        return
+        return failed
     with psycopg.connect(conninfo, autocommit=True) as conn:
         for c in changes:
             sets, params = _skip_assignments(c, now)
-            conn.execute(f"UPDATE roomba_schedule_skips SET {', '.join(sets)} WHERE id = %s", (*params, c.skip_id))
+            try:
+                conn.execute(f"UPDATE roomba_schedule_skips SET {', '.join(sets)} WHERE id = %s", (*params, c.skip_id))
+            except Exception as e:  # noqa: BLE001 — the other rows still get theirs
+                failed.add(c.skip_id)
+                log.warning("couldn't save skip #%s: %s", c.skip_id, _err(e))
+    return failed
+
+
+def _persist_skip_changes(conninfo, state, changes, now):
+    """_save_skip_changes(), remembering in `state` (PollerState.skip_holds) each skip whose row
+    wasn't written: it isn't looked at again before its next check time, or a backoff by
+    failures in a row, so a database that won't take the row can't turn into a cloud read every
+    pass. A row that is written drops its hold. Returns the ids not written; re-raises when the
+    database couldn't be reached (every skip in `changes` is held first)."""
+    changes = [c for c in changes if c is not None]
+    holds = state.skip_holds if state is not None else {}
+    try:
+        failed = _save_skip_changes(conninfo, changes, now) or set()
+    except Exception:
+        failed = {c.skip_id for c in changes}
+        raise
+    finally:
+        for c in changes:
+            if c.skip_id not in failed:
+                holds.pop(c.skip_id, None)
+                continue
+            count = holds.get(c.skip_id, (None, 0))[1] + 1
+            until = now + timedelta(seconds=schedule_skips.retry_delay(count))
+            if c.next_check_at is not None and c.next_check_at > until:
+                until = c.next_check_at
+            holds[c.skip_id] = (until, count)
+    return failed
 
 
 async def _read_schedule_containers(robot):
@@ -1883,16 +1923,23 @@ def _err(e):
     return f"{type(e).__name__}: {e}"
 
 
-async def _run_schedule_skips(robot, conninfo, now=None, tz=None):
+async def _run_schedule_skips(robot, conninfo, now=None, tz=None, state=None):
     """One pass over the active skips. Settles what needs no cloud; reads the cloud only when a
     skip is due; writes only to switch one schedule off or back on, and then reads it back to
     check. A failed read or write is stored on the skip and retried later (its own backoff,
-    never a tight loop). Refreshes roomba_native_schedule from whatever it read. Returns a
-    summary for the log; raises only on a database error."""
+    never a tight loop), and a skip whose row can't be stored is held in `state` (a
+    PollerState) for its backoff instead. Refreshes roomba_native_schedule from whatever it
+    read. Returns a summary for the log; raises only on a database error."""
     now = now or datetime.now(timezone.utc)
+    holds = state.skip_holds if state is not None else {}
     changes = {}
     live = []
-    for s in _load_active_skips(conninfo):
+    loaded = _load_active_skips(conninfo)
+    for skip_id in [i for i in holds if i not in {s.id for s in loaded}]:
+        holds.pop(skip_id, None)  # settled since
+    for s in loaded:
+        if s.id in holds:
+            s.hold_until = holds[s.id][0]
         c = schedule_skips.settle_offline(s, now)
         if c is not None:
             changes[s.id] = c
@@ -1900,7 +1947,7 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None):
             live.append(s)
     groups = schedule_skips.groups_due(live, now)
     if not groups:
-        _save_skip_changes(conninfo, changes.values(), now)
+        _persist_skip_changes(conninfo, state, changes.values(), now)
         return f"{len(changes)} settled" if changes else "nothing due"
 
     try:
@@ -1910,11 +1957,18 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None):
             for s in group:
                 if s.due(now):
                     changes[s.id] = schedule_skips.retry(s, now, f"couldn't read the schedules ({_err(e)})")
-        _save_skip_changes(conninfo, changes.values(), now)
+        _persist_skip_changes(conninfo, state, changes.values(), now)
         return f"couldn't read the schedules ({_err(e)})"
 
     plans = [schedule_skips.plan_group(g, schedule_skips.find_entry(conts, *key), now, tz) for key, g in groups.items()]
-    _save_skip_changes(conninfo, [m for p in plans for m in p.marks], now)  # APPLYING, before any send
+    # APPLYING, before any send. A skip whose mark couldn't be stored isn't sent for: a restart
+    # mid-send wouldn't know the schedule may be off because of us.
+    unmarked = _persist_skip_changes(conninfo, state, [m for p in plans for m in p.marks], now)
+    for p in plans:
+        if p.write is False and any(s.id in unmarked for s in p.writers):
+            p.write = None
+            for s in p.writers:
+                p.changes.pop(s.id, None)
     sent = []
     for p in plans:
         if p.write is None:
@@ -1944,25 +1998,25 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None):
         _write_schedule_mirror(conninfo, robot.blid, conts)
     except Exception as e:  # noqa: BLE001 — the page's copy only; the skips matter more
         log.warning("schedule mirror refresh failed: %s", _err(e))
-    _save_skip_changes(conninfo, changes.values(), now)
+    _persist_skip_changes(conninfo, state, changes.values(), now)
     return f"{len(changes)} skip(s) updated"
 
 
-async def _check_schedule_skips(robot, conninfo):
+async def _check_schedule_skips(robot, conninfo, state=None):
     """The main loop's periodic pass. Fail-open: a problem here never fails the cycle (which
     would drop the cloud link and log in again); the skips keep their own retry times."""
     try:
-        summary = await _run_schedule_skips(robot, conninfo)
+        summary = await _run_schedule_skips(robot, conninfo, state=state)
         if summary != "nothing due":
             log.info("Schedule skips: %s", summary)
     except Exception as e:  # noqa: BLE001 — e.g. the database is restarting; tried again next check
         log.warning("schedule skip check failed: %s", _err(e))
 
 
-async def _skip_command(robot, conninfo, arg):
+async def _skip_command(robot, conninfo, arg, state=None):
     """A skip asked for or undone on the page: run a pass now instead of at the next check,
     and report what became of that skip on the command row."""
-    await _run_schedule_skips(robot, conninfo)
+    await _run_schedule_skips(robot, conninfo, state=state)
     try:
         skip_id = int(arg)
     except (TypeError, ValueError):
@@ -2012,7 +2066,7 @@ async def _rest_command(robot, conninfo, state, command, arg):
     if command == LIST_SCHEDULES:
         return await _list_schedules(robot, conninfo)
     if command in (SKIP_CLEAN, UNDO_SKIP):
-        return await _skip_command(robot, conninfo, arg)
+        return await _skip_command(robot, conninfo, arg, state)
     return False, f"unknown command: {command}"
 
 
@@ -2630,7 +2684,7 @@ async def main():
                     # and back on after it, retrying until it is (fail-open; schedule_skips.py).
                     if not wake.is_set() and now >= skips_due:
                         skips_due = now + SKIP_CHECK_SECONDS
-                        await _check_schedule_skips(robot, conninfo)
+                        await _check_schedule_skips(robot, conninfo, state)
                     # Keep the concurrent live-position task in sync with mission state.
                     link.live_task = await _manage_live_task(link.live_task, robot, conninfo, state)
                     runner.sweep_if_due()
