@@ -72,6 +72,8 @@ public class RoombaScheduleSkipService {
     static final String PENDING = "PENDING";
     static final String APPLYING = "APPLYING";
     static final String APPLIED = "APPLIED";
+    static final String RESTORED = "RESTORED";
+    static final String CANCELLED = "CANCELLED";
     static final String FAILED = "FAILED";
     static final List<String> ACTIVE = List.of(PENDING, APPLYING, APPLIED);
 

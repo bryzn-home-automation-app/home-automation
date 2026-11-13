@@ -7,11 +7,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
 
 public interface RoombaScheduleSkipRepository extends JpaRepository<RoombaScheduleSkip, Long> {
+
+    /** One day's skips, plus every skip in the given states whatever its day (AlertEngine's missed-start check). */
+    List<RoombaScheduleSkip> findBySkipDateOrStateIn(LocalDate skipDate, Collection<String> states);
 
     /** Skips still in hand, plus the ones settled lately, newest start first (the page's list). */
     @Query("SELECT s FROM RoombaScheduleSkip s WHERE s.state IN :states OR s.createdAt >= :since "

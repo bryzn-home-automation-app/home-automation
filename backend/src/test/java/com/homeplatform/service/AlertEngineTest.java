@@ -7,6 +7,8 @@ import com.homeplatform.dto.RoombaStatusResponse;
 import com.homeplatform.model.AlertType;
 import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.Notification.Severity;
+import com.homeplatform.model.RoombaScheduleSkip;
+import com.homeplatform.repository.RoombaScheduleSkipRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -15,7 +17,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -617,6 +623,231 @@ class AlertEngineTest {
             watchEngine(quiet(true), List.of(NOV12), NOV13.withHour(21).withMinute(30)).generateRoombaWatchAlerts(1L);
             watchEngine(quiet(true), List.of(NOV12), NOV13, true, new ArrayList<>()).generateRoombaWatchAlerts(1L);
             verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+        }
+    }
+
+    // ──────────────────────────────────────────
+    // A clean skipped from the Roomba page is no miss
+    // ──────────────────────────────────────────
+
+    private static final ZoneId HOME = ZoneId.of("America/Chicago");
+    private static final String MON_FRI = "s-13";
+    private static final String TUE_THU = "s-14";
+
+    /** Nov {@code day} 2026 at {@code hour}:{@code minute} at home, as the UTC wall clock the skips table holds. */
+    private static LocalDateTime utc(int day, int hour, int minute) {
+        return ZonedDateTime.of(2026, 11, day, hour, minute, 0, 0, HOME).withZoneSameInstant(ZoneOffset.UTC).toLocalDateTime();
+    }
+
+    /** A skip of {@code schedule}'s 9:00 AM clean on Nov {@code day}, in {@code state}. */
+    private static RoombaScheduleSkip skip(String schedule, int day, String state) {
+        return RoombaScheduleSkip.builder().id((long) day).householdScheduleId(schedule).scheduleId(schedule)
+                .skipDate(LocalDate.of(2026, 11, day)).scheduleHour(9).scheduleMinute(0)
+                .scheduledFor(utc(day, 9, 0)).restoreAfter(utc(day, 9, 30)).state(state)
+                .createdAt(utc(day - 1, 20, 0)).attempts(0).updatedAt(utc(day - 1, 20, 0)).build();
+    }
+
+    /** The NUC's two schedules, with each one's on/off flag as the mirror reads it. */
+    private static List<RoombaNativeScheduleResponse> mirror(boolean monFriOn, boolean tueThuOn) {
+        return List.of(
+                new RoombaNativeScheduleResponse(MON_FRI, "Regular Schedule", "WEEKLY", List.of(1, 5), 9, 0, monFriOn, 6, List.of(6), null),
+                new RoombaNativeScheduleResponse(TUE_THU, "Regular Schedule", "WEEKLY", List.of(2, 3, 4), 9, 0, tueThuOn, 6, List.of(2), null));
+    }
+
+    /** An engine at {@code now} with these schedules and skips; every alert is new. */
+    private AlertEngine skipEngine(RoombaStatusResponse status, ZonedDateTime now,
+                                   List<RoombaNativeScheduleResponse> schedules, List<RoombaScheduleSkip> skips) {
+        return new AlertEngine(null, notificationService, null, null, null) {
+            @Override RoombaRunResponse latestRoombaRun() { return null; }
+            @Override RoombaStatusResponse roombaStatus() { return status; }
+            @Override List<RoombaRunResponse> recentRoombaRuns() { return List.of(); }
+            @Override List<RoombaNativeScheduleResponse> roombaSchedules() { return schedules; }
+            @Override List<RoombaScheduleSkip> roombaSkips(LocalDate today) { return skips; }
+            @Override ZonedDateTime nowAtHome() { return now; }
+            @Override boolean isNewRoomba(Long uid, String title, boolean todayOnly) { return true; }
+            @Override boolean isNewRoombaSince(Long uid, String title, Instant since) { return true; }
+        };
+    }
+
+    private void expectMissed(String title) {
+        verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING), eq(title), anyString());
+    }
+
+    private void expectNoMiss() {
+        verify(notificationService, never()).send(anyLong(), any(), any(), startsWith("Scheduled clean didn't start"), any());
+    }
+
+    @Nested
+    @DisplayName("a skipped clean never reads as one that didn't start")
+    class SkippedClean {
+
+        private static final String FRI_9AM = "Scheduled clean didn't start — Nov 13, 9:00 AM";
+        private static final String WED_9AM = "Scheduled clean didn't start — Nov 11, 9:00 AM";
+
+        @Test
+        @DisplayName("skipped and standing: under way, switched back on after the start, or not switched off in time")
+        void standingSkips() {
+            RoombaScheduleSkip applied = skip(MON_FRI, 13, "APPLIED");
+            applied.setAppliedAt(utc(12, 20, 0));
+            RoombaScheduleSkip restored = skip(MON_FRI, 13, "RESTORED");
+            restored.setAppliedAt(utc(12, 20, 0));
+            restored.setFinishedAt(utc(13, 9, 30));
+            RoombaScheduleSkip failed = skip(MON_FRI, 13, "FAILED");
+            failed.setFinishedAt(utc(13, 9, 0));
+            for (RoombaScheduleSkip s : List.of(skip(MON_FRI, 13, "PENDING"), skip(MON_FRI, 13, "APPLYING"), applied, restored, failed)) {
+                // The tank was empty too (Nov 13): still no "didn't start", the clean was skipped.
+                // While the skip holds the schedule off, the mirror reads it off.
+                boolean on = !"APPLIED".equals(s.getState()) && !"APPLYING".equals(s.getState());
+                skipEngine(nov13(), NOV13, mirror(on, true), List.of(s)).generateRoombaWatchAlerts(1L);
+                skipEngine(quiet(true), NOV13, mirror(true, true), List.of(s)).generateRoombaWatchAlerts(1L);
+            }
+            expectNoMiss();
+        }
+
+        @Test
+        @DisplayName("a skip that couldn't be made, and the robot cleaned anyway -> nothing")
+        void failedAndRan() {
+            var engine = new AlertEngine(null, notificationService, null, null, null) {
+                @Override RoombaStatusResponse roombaStatus() { return quiet(true); }
+                @Override List<RoombaRunResponse> recentRoombaRuns() { return List.of(runAt("2026-11-13T15:00:20Z", "2026-11-13T16:40:00Z")); }
+                @Override List<RoombaNativeScheduleResponse> roombaSchedules() { return mirror(true, true); }
+                @Override List<RoombaScheduleSkip> roombaSkips(LocalDate today) { return List.of(skip(MON_FRI, 13, "FAILED")); }
+                @Override ZonedDateTime nowAtHome() { return NOV13; }
+                @Override boolean isNewRoombaSince(Long uid, String title, Instant since) { return true; }
+            };
+            engine.generateRoombaWatchAlerts(1L);
+            expectNoMiss();
+        }
+
+        @Test
+        @DisplayName("undone after the start: the schedule was off at 9:00 as asked -> nothing")
+        void undoneAfterTheStart() {
+            RoombaScheduleSkip s = skip(MON_FRI, 13, "RESTORED");
+            s.setAppliedAt(utc(12, 20, 0));
+            s.setUndoRequestedAt(utc(13, 9, 10));
+            s.setFinishedAt(utc(13, 9, 10));
+            skipEngine(quiet(true), NOV13, mirror(true, true), List.of(s)).generateRoombaWatchAlerts(1L);
+            expectNoMiss();
+        }
+
+        @Test
+        @DisplayName("undone before the start, or switched back on in the iRobot app before it -> the miss is told")
+        void takenBackBeforeTheStart() {
+            RoombaScheduleSkip undone = skip(MON_FRI, 13, "CANCELLED");
+            undone.setUndoRequestedAt(utc(13, 8, 0));
+            undone.setFinishedAt(utc(13, 8, 0));
+            skipEngine(nov13(), NOV13, mirror(true, true), List.of(undone)).generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING), eq(FRI_9AM),
+                    eq("iRummy's 9:00 AM vacuum-and-mop clean didn't start. The dock's clean-water tank is empty. "
+                            + "Refill it and iRummy can mop again. If it's full, push it in firmly; a loose tank reads as empty."));
+
+            RoombaScheduleSkip onInApp = skip(MON_FRI, 13, "RESTORED");
+            onInApp.setAppliedAt(utc(12, 20, 0));
+            onInApp.setFinishedAt(utc(13, 8, 30));
+            skipEngine(quiet(true), NOV13, mirror(true, true), List.of(onInApp)).generateRoombaWatchAlerts(1L);
+            verify(notificationService, times(2)).send(anyLong(), any(), any(), eq(FRI_9AM), any());
+        }
+
+        @Test
+        @DisplayName("a skip of another day or another schedule hides nothing")
+        void otherSkips() {
+            // Monday's clean of the same schedule, and a row for the other schedule on the 13th.
+            skipEngine(quiet(true), NOV13, mirror(true, true), List.of(skip(MON_FRI, 16, "PENDING"), skip(TUE_THU, 13, "PENDING")))
+                    .generateRoombaWatchAlerts(1L);
+            expectMissed(FRI_9AM);
+        }
+
+        @Test
+        @DisplayName("two schedules due the same day: skipping one leaves the other's miss to be told")
+        void anotherScheduleTheSameDay() {
+            var schedules = List.of(
+                    new RoombaNativeScheduleResponse(MON_FRI, "Regular Schedule", "WEEKLY", List.of(1, 5), 9, 0, true, 6, List.of(6), null),
+                    new RoombaNativeScheduleResponse("s-15", "Regular Schedule", "WEEKLY", List.of(5), 8, 0, true, 3, List.of(2), null));
+            skipEngine(quiet(true), NOV13, schedules, List.of(skip(MON_FRI, 13, "APPLIED"))).generateRoombaWatchAlerts(1L);
+            expectMissed("Scheduled clean didn't start — Nov 13, 8:00 AM");
+            verify(notificationService, never()).send(anyLong(), any(), any(), eq(FRI_9AM), any());
+        }
+
+        @Test
+        @DisplayName("switched off by tomorrow's skip after today's start: today's miss is still told")
+        void offForTomorrowsSkip() {
+            // Wed Nov 11: Thursday's clean is skipped, so at 9:15 the poller switched the Tue – Thu
+            // schedule off, and the mirror reads it off. Wednesday's 9:00 clean didn't start.
+            RoombaScheduleSkip thursday = skip(TUE_THU, 12, "APPLIED");
+            thursday.setAppliedAt(utc(11, 9, 15));
+            ZonedDateTime wed = NOV13.minusDays(2);
+            skipEngine(quiet(true), wed, mirror(true, false), List.of(thursday)).generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING), eq(WED_9AM),
+                    eq("iRummy's 9:00 AM vacuum clean didn't start. It hasn't said why: check the robot and the iRobot app."));
+        }
+
+        @Test
+        @DisplayName("off for the skipped start itself, or off in the iRobot app with no skip of ours -> nothing")
+        void offAsAsked() {
+            RoombaScheduleSkip thursday = skip(TUE_THU, 12, "APPLIED");
+            thursday.setAppliedAt(utc(11, 9, 15));
+            skipEngine(quiet(true), NOV13.minusDays(1), mirror(true, false), List.of(thursday)).generateRoombaWatchAlerts(1L);
+            // The owner switched it off: no skip row at all.
+            skipEngine(quiet(true), NOV13.minusDays(2), mirror(true, false), List.of()).generateRoombaWatchAlerts(1L);
+            expectNoMiss();
+        }
+
+        @Test
+        @DisplayName("still off from a skip after it should have been back on -> the miss is told, and why")
+        void leftOff() {
+            // Monday the 9th was skipped; switching the schedule back on has failed since 9:30 that day.
+            RoombaScheduleSkip monday = skip(MON_FRI, 9, "APPLIED");
+            monday.setAppliedAt(utc(6, 9, 15));
+            // And today's, undone at 8:00 while the poller couldn't reach the cloud.
+            RoombaScheduleSkip today = skip(MON_FRI, 13, "APPLIED");
+            today.setAppliedAt(utc(12, 20, 0));
+            today.setUndoRequestedAt(utc(13, 8, 0));
+            String why = "iRummy's 9:00 AM vacuum-and-mop clean didn't start. Its schedule was still switched off in the "
+                    + "iRobot app after a skipped clean. Turn it back on there; the home app keeps trying too.";
+            skipEngine(nov13(), NOV13, mirror(false, true), List.of(monday)).generateRoombaWatchAlerts(1L);
+            skipEngine(quiet(true), NOV13, mirror(false, true), List.of(today)).generateRoombaWatchAlerts(1L);
+            verify(notificationService, times(2)).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING), eq(FRI_9AM), eq(why));
+        }
+
+        @Test
+        @DisplayName("the skips can't be read -> no missed-start alert this time")
+        void unreadable() {
+            skipEngine(quiet(true), NOV13, mirror(true, true), null).generateRoombaWatchAlerts(1L);
+            expectNoMiss();
+        }
+
+        @Test
+        @DisplayName("reads the day's skips and every one holding a schedule off")
+        void query() {
+            var repo = mock(RoombaScheduleSkipRepository.class);
+            var roomba = mock(RoombaService.class);
+            when(roomba.getStatus()).thenReturn(java.util.Optional.of(quiet(true)));
+            when(roomba.getNativeSchedules()).thenReturn(mirror(true, true));
+            when(roomba.getRuns(anyInt())).thenReturn(List.of());
+            when(repo.findBySkipDateOrStateIn(any(), any())).thenReturn(List.of(skip(MON_FRI, 13, "APPLIED")));
+            var engine = new AlertEngine(null, notificationService, null, null, roomba, repo) {
+                @Override ZonedDateTime nowAtHome() { return NOV13; }
+                @Override boolean isNewRoombaSince(Long uid, String title, Instant since) { return true; }
+            };
+            engine.generateRoombaWatchAlerts(1L);
+            verify(repo).findBySkipDateOrStateIn(LocalDate.of(2026, 11, 13), List.of("APPLYING", "APPLIED"));
+            expectNoMiss();
+
+            when(repo.findBySkipDateOrStateIn(any(), any())).thenThrow(new RuntimeException("connection refused"));
+            engine.generateRoombaWatchAlerts(1L);
+            expectNoMiss();
+        }
+
+        @Test
+        @DisplayName("a Sunday schedule counts Sunday as 7 or as iRobot's 0")
+        void sunday() {
+            ZonedDateTime sun = ZonedDateTime.of(2026, 11, 15, 10, 3, 0, 0, HOME);
+            for (int sunday : new int[]{0, 7}) {
+                var schedules = List.of(new RoombaNativeScheduleResponse("s-16", "Regular Schedule", "WEEKLY",
+                        List.of(sunday), 9, 0, true, 6, List.of(2), null));
+                skipEngine(quiet(true), sun, schedules, List.of()).generateRoombaWatchAlerts(1L);
+            }
+            verify(notificationService, times(2)).send(anyLong(), any(), any(), eq("Scheduled clean didn't start — Nov 15, 9:00 AM"), any());
         }
     }
 }

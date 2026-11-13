@@ -8,10 +8,13 @@ import com.homeplatform.model.AlertType;
 import com.homeplatform.model.Notification;
 import com.homeplatform.model.Notification.Category;
 import com.homeplatform.model.Notification.Severity;
+import com.homeplatform.model.RoombaScheduleSkip;
 import com.homeplatform.model.User;
+import com.homeplatform.repository.RoombaScheduleSkipRepository;
 import com.homeplatform.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -23,10 +26,13 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Generates real ELECTRICAL notifications from live usage data.
@@ -61,17 +67,27 @@ public class AlertEngine {
     private final UserRepository userRepo;
     private final AppEventService appEventService;
     private final RoombaService roombaService;
+    private final RoombaScheduleSkipRepository skipRepo;
 
+    @Autowired
     public AlertEngine(JdbcTemplate jdbc,
                        NotificationService notificationService,
                        UserRepository userRepo,
                        AppEventService appEventService,
-                       RoombaService roombaService) {
+                       RoombaService roombaService,
+                       RoombaScheduleSkipRepository skipRepo) {
         this.jdbc = jdbc;
         this.notificationService = notificationService;
         this.userRepo = userRepo;
         this.appEventService = appEventService;
         this.roombaService = roombaService;
+        this.skipRepo = skipRepo;
+    }
+
+    /** Without the skipped cleans (tests that supply them through {@link #roombaSkips}). */
+    AlertEngine(JdbcTemplate jdbc, NotificationService notificationService, UserRepository userRepo,
+                AppEventService appEventService, RoombaService roombaService) {
+        this(jdbc, notificationService, userRepo, appEventService, roombaService, null);
     }
 
     // ──────────────────────────────────────────
@@ -279,6 +295,20 @@ public class AlertEngine {
         return roombaService == null ? List.of() : roombaService.getNativeSchedules();
     }
 
+    /**
+     * The skipped cleans that bear on today's starts: today's skips, and every skip of ours
+     * holding a schedule switched off now, whatever its day. Null when they can't be read.
+     */
+    List<RoombaScheduleSkip> roombaSkips(LocalDate today) {
+        if (skipRepo == null) return List.of();
+        try {
+            return skipRepo.findBySkipDateOrStateIn(today, HOLDING);
+        } catch (Exception e) {
+            log.warn("AlertEngine: couldn't read the skipped Roomba cleans: {}", e.getMessage());
+            return null;
+        }
+    }
+
     /** Now at home (a seam for tests). */
     ZonedDateTime nowAtHome() {
         return ZonedDateTime.now(CHICAGO);
@@ -436,6 +466,13 @@ public class AlertEngine {
      * nothing said so. Only on a fresh reading (the poller checked in within 10 minutes, so
      * a missing run isn't just the poller being down), and not when the robot was already
      * out on another clean at that time. Once per scheduled start.
+     *
+     * <p>A clean skipped from the Roomba page isn't a miss ({@link #skipped}), and neither is
+     * one whose schedule a skip of ours had switched off as asked ({@link #skipHold}). Such a
+     * skip leaves the mirrored schedule reading {@code enabled: false}, so the flag alone can't
+     * say whether the owner switched it off: a schedule a skip of ours holds off still counts
+     * as on for the starts before we switched it off, and for any start after it should have
+     * been back on (the switch back on failed, or an undo wasn't carried out in time).
      */
     void maybeMissedStartAlerts(Long userId, RoombaStatusResponse s) {
         if (s == null || !s.online()) return;
@@ -444,12 +481,20 @@ public class AlertEngine {
         ZonedDateTime now = nowAtHome();
         LocalDate today = now.toLocalDate();
         List<RoombaRunResponse> runs = null;
+        List<RoombaScheduleSkip> skips = null;
         for (RoombaNativeScheduleResponse sch : schedules) {
-            if (!sch.enabled() || sch.hour() == null || sch.minute() == null || sch.days() == null) continue;
+            if (sch.hour() == null || sch.minute() == null || sch.days() == null) continue;
             if (sch.frequency() != null && !"WEEKLY".equalsIgnoreCase(sch.frequency())) continue;
-            if (!sch.days().contains(today.getDayOfWeek().getValue())) continue;
+            if (!RoombaScheduleSkipService.runsOn(new HashSet<>(sch.days()), today)) continue;
             ZonedDateTime at = today.atTime(sch.hour(), sch.minute()).atZone(CHICAGO);
             if (now.isBefore(at.plus(START_GRACE)) || now.isAfter(at.plus(START_STALE))) continue;
+            if (skips == null) {
+                skips = roombaSkips(today);
+                if (skips == null) return;  // a skipped clean can't be told from a missed one: next check
+            }
+            if (skipped(sch, at, skips)) continue;
+            SkipHold hold = skipHold(sch, at.toInstant(), skips);
+            if (hold == SkipHold.WANTED || (hold == SkipHold.NONE && !sch.enabled())) continue;
             if (runs == null) runs = recentRoombaRuns();
             if (startedOrBusy(at.toInstant(), s, runs)) continue;
 
@@ -461,11 +506,92 @@ public class AlertEngine {
                     ? MODE_WORDS.get(sch.operatingModes().get(0)) : null;
             String msg = name + "'s " + time + (mode != null ? " " + mode : "") + " clean didn't start.";
             RoombaDockIssue issue = s.dockIssue();
-            msg += issue != null && issue.kind() != null
-                    ? " " + RoombaDock.reason(issue.kind(), issue.code()) + ". " + RoombaDock.fix(issue.kind(), issue.code(), s.name())
-                    : " It hasn't said why: check the robot and the iRobot app.";
+            if (hold == SkipHold.LEFT_OFF) {
+                msg += " Its schedule was still switched off in the iRobot app after a skipped clean."
+                        + " Turn it back on there; the home app keeps trying too.";
+            } else if (issue != null && issue.kind() != null) {
+                msg += " " + RoombaDock.reason(issue.kind(), issue.code()) + ". " + RoombaDock.fix(issue.kind(), issue.code(), s.name());
+            } else {
+                msg += " It hasn't said why: check the robot and the iRobot app.";
+            }
             createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title, msg);
         }
+    }
+
+    /** Skip states in which the poller has (or may have) the schedule switched off. */
+    static final List<String> HOLDING = List.of(RoombaScheduleSkipService.APPLYING, RoombaScheduleSkipService.APPLIED);
+
+    /**
+     * Whether the start at {@code at} was skipped from the Roomba page, so its not starting is
+     * what was asked for. A skip row for that schedule, day and time counts unless it was
+     * undone before the start, or ended before the start without skipping it (switched back on,
+     * changed or deleted in the iRobot app, or already off there, which the schedule's own
+     * flag then says). So it counts while it is under way (PENDING, APPLYING, APPLIED), once it
+     * is RESTORED after the start, and when it FAILED: then the schedule couldn't be switched
+     * off in time, and the admins have had "Couldn't skip the Roomba's clean"; if the robot ran
+     * anyway there is nothing to say, and if it didn't, it did what the owner asked.
+     */
+    static boolean skipped(RoombaNativeScheduleResponse sch, ZonedDateTime at, List<RoombaScheduleSkip> skips) {
+        Instant start = at.toInstant();
+        for (RoombaScheduleSkip skip : skips) {
+            if (!Objects.equals(skip.getHouseholdScheduleId(), sch.householdScheduleId())
+                    || !at.toLocalDate().equals(skip.getSkipDate())
+                    || !Objects.equals(skip.getScheduleHour(), at.getHour())
+                    || !Objects.equals(skip.getScheduleMinute(), at.getMinute())) {
+                continue;
+            }
+            Instant undone = utcInstant(skip.getUndoRequestedAt());
+            if (undone != null && undone.isBefore(start)) continue;
+            Instant ended = utcInstant(skip.getFinishedAt());
+            boolean over = RoombaScheduleSkipService.RESTORED.equals(skip.getState())
+                    || RoombaScheduleSkipService.CANCELLED.equals(skip.getState());
+            if (over && ended != null && ended.isBefore(start)) continue;
+            return true;
+        }
+        return false;
+    }
+
+    /** How a skip of ours stood on a schedule at one of its starts. */
+    enum SkipHold {
+        /** No skip of ours holds it off: the schedule's own on/off flag says whether it was on. */
+        NONE,
+        /** A skip of ours holds it off now, but switched it off after this start: it was on. */
+        ON_THEN,
+        /** Switched off by a skip of ours at this start, as asked: no clean was due. */
+        WANTED,
+        /** Switched off by a skip of ours at this start, past when it should have been back on. */
+        LEFT_OFF
+    }
+
+    /**
+     * Whether a skip of ours had this schedule switched off at {@code start}. The poller
+     * switches it off once its run before the skipped one has started, and back on 30 minutes
+     * after the skipped start (or at once on an undo), so between those it is off as asked.
+     */
+    static SkipHold skipHold(RoombaNativeScheduleResponse sch, Instant start, List<RoombaScheduleSkip> skips) {
+        SkipHold hold = SkipHold.NONE;
+        for (RoombaScheduleSkip skip : skips) {
+            if (!HOLDING.contains(skip.getState()) || !Objects.equals(skip.getHouseholdScheduleId(), sch.householdScheduleId())) {
+                continue;
+            }
+            // APPLYING has no applied_at yet: it was stored just before the switch-off was sent.
+            Instant off = utcInstant(skip.getAppliedAt() != null ? skip.getAppliedAt() : skip.getUpdatedAt());
+            if (off == null || off.isAfter(start)) {
+                if (hold == SkipHold.NONE) hold = SkipHold.ON_THEN;
+                continue;
+            }
+            Instant backOn = utcInstant(skip.getRestoreAfter());
+            Instant undone = utcInstant(skip.getUndoRequestedAt());
+            if (undone != null && (backOn == null || undone.isBefore(backOn))) backOn = undone;
+            if (backOn == null || start.isBefore(backOn)) return SkipHold.WANTED;
+            hold = SkipHold.LEFT_OFF;
+        }
+        return hold;
+    }
+
+    /** A roomba_schedule_skips TIMESTAMP (UTC wall clock) as an instant. */
+    private static Instant utcInstant(LocalDateTime utc) {
+        return utc == null ? null : utc.toInstant(ZoneOffset.UTC);
     }
 
     /**
