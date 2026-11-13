@@ -353,6 +353,40 @@ describe('Roomba page', () => {
     }
   });
 
+  it('a skipped clean and an empty tank: the verdict, the skip and the Next clean tile agree', async () => {
+    atHome('2026-11-13T16:42:00Z'); // Fri 10:42 AM, Nov 13: the tank is empty
+    try {
+      state.status = {
+        needsAttention: true,
+        attentionReasons: ["The dock's clean-water tank is empty"],
+        dockIssue: { kind: 'clean_water_empty', code: 671, since: '2026-11-13T15:01:00Z' },
+      };
+      // Monday's vacuum and mop is skipped, so the next clean is Tuesday's vacuum: nothing to wait on.
+      const mopping = { ...schedule('hh_MONFRI', [1, 5], false), operatingModes: [6] };
+      state.schedules = [mopping, schedule('hh_TUETHU', [2, 3, 4])];
+      state.skips = [skipRow({
+        householdScheduleId: 'hh_MONFRI', scheduleId: 'hh_MONFRI', date: '2026-11-16',
+        scheduledFor: '2026-11-16T15:00:00Z', restoreAfter: '2026-11-16T15:30:00Z',
+      })];
+      const { unmount } = renderPage();
+      expect(await screen.findByText("The dock's clean-water tank is empty.")).toBeTruthy();
+      const notice = (await screen.findByText("Monday's 9:00 AM clean is skipped.")).closest('.fp-notice') as HTMLElement;
+      expect(notice.textContent).toMatch(/Next clean Tuesday at 9:00\sAM\./);
+      expect(screen.getByText(/^Tue, Nov 17, Regular Schedule$/)).toBeTruthy();
+      unmount();
+
+      // Not skipped: Monday's clean mops, so the tile says it waits on the tank, with a heads-up lamp.
+      state.schedules = [{ ...mopping, enabled: true }, schedule('hh_TUETHU', [2, 3, 4])];
+      state.skips = [];
+      renderPage();
+      const note = await screen.findByText(/^Mon, Nov 16, once the clean-water tank is refilled$/);
+      expect(note.closest('.fp-readout')?.querySelector('.fp-lamp')).toBeTruthy();
+      expect(screen.getByText("The dock's clean-water tank is empty.")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says when a skip couldn't be made", async () => {
     atHome('2026-11-17T15:20:00Z'); // Tue 9:20 AM
     try {

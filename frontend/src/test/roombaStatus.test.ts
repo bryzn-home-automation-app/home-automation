@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  commandLabel, commandState, cycleLabel, dockIssueWords, dockLamp, lastSeen, lastSeenWords, nextScheduledClean, padLabel,
+  commandLabel, commandState, cycleLabel, dockIssueWords, dockLamp, lastSeen, lastSeenWords, nextCleanWaitsOn, nextScheduledClean, padLabel,
   partsSummary, roomAt, roombaState, roombaVerdict, runStatus, scheduleDays, scheduleLine,
 } from '../utils/roombaStatus';
 import type { RoombaMapGeoJson } from '../types';
@@ -345,6 +345,30 @@ describe('schedules', () => {
     // Saturday: Sunday's clean comes first.
     expect(nextScheduledClean(schedules, new Date('2026-11-14T18:00:00Z'))).toEqual({ at: '2026-11-15T10:05', name: 'Sunday deep clean' });
     expect(nextScheduledClean([], NOW)).toBeNull();
+  });
+
+  it("says what the next clean waits on when it mops and the dock's tanks won't let it (Nov 13)", () => {
+    // Fri Nov 13, 10:42 AM: the next clean is Monday's 9:00 AM vacuum and mop; Tue – Thu only vacuums.
+    const fri = new Date('2026-11-13T16:42:00Z');
+    const schedules = [
+      { householdScheduleId: 'mf', name: 'Regular Schedule', days: [1, 5], hour: 9, minute: 0, enabled: true, operatingModes: [6] },
+      { householdScheduleId: 'tt', name: 'Regular Schedule', days: [2, 3, 4], hour: 9, minute: 0, enabled: true, operatingModes: [2] },
+    ];
+    const monday = nextScheduledClean(schedules, fri);
+    expect(monday).toEqual({ at: '2026-11-16T09:00', name: 'Regular Schedule', modes: [6] });
+    const empty = { kind: 'clean_water_empty', code: 671, since: '2026-11-13T15:01:00Z' };
+    expect(nextCleanWaitsOn(monday, empty)).toBe('once the clean-water tank is refilled');
+    expect(nextCleanWaitsOn(monday, { ...empty, kind: 'dirty_water_full', code: 672 })).toBe('once the dirty-water tank is emptied');
+    expect(nextCleanWaitsOn(monday, { ...empty, kind: 'clean_water_out', code: 650 })).toBe('once the clean-water tank is back in');
+    expect(nextCleanWaitsOn(monday, { ...empty, kind: 'dirty_water_out', code: 653 })).toBe('once the dirty-water tank is back in');
+    // Tuesday's vacuum doesn't need the tanks; nor is a clean held up by the bag, the mop or an unknown code.
+    const tuesday = nextScheduledClean(schedules, new Date('2026-11-16T16:00:00Z'));
+    expect(tuesday?.modes).toEqual([2]);
+    expect(nextCleanWaitsOn(tuesday, empty)).toBeNull();
+    for (const kind of ['bag', 'mop', 'other']) expect(nextCleanWaitsOn(monday, { ...empty, kind })).toBeNull();
+    expect(nextCleanWaitsOn(monday, null)).toBeNull();
+    expect(nextCleanWaitsOn(null, empty)).toBeNull();
+    expect(nextCleanWaitsOn({ modes: undefined }, empty)).toBeNull();
   });
 });
 

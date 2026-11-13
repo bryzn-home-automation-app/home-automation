@@ -564,6 +564,8 @@ export interface NextClean {
   /** Home wall-clock "YYYY-MM-DDTHH:MM" (format it with format.ts). */
   at: string;
   name: string | null;
+  /** Its schedule's operating modes (2 vacuum, 4 mop, 6 vacuum and mop), when known. */
+  modes?: readonly number[];
 }
 
 /**
@@ -572,7 +574,8 @@ export interface NextClean {
  * is passed over, and a schedule switched off only for a skip still counts (it goes back on).
  */
 export function nextScheduledClean(
-  schedules: readonly (Pick<RoombaNativeSchedule, 'days' | 'hour' | 'minute' | 'enabled' | 'name'> & { householdScheduleId?: string })[] | null | undefined,
+  schedules: readonly (Pick<RoombaNativeSchedule, 'days' | 'hour' | 'minute' | 'enabled' | 'name'>
+    & { householdScheduleId?: string; operatingModes?: readonly number[] })[] | null | undefined,
   now: Date | number = Date.now(),
   skips?: readonly RoombaScheduleSkip[] | null,
 ): NextClean | null {
@@ -606,10 +609,35 @@ export function nextScheduledClean(
   return {
     at: wallClock(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), Math.floor(best.minutes / 60), best.minutes % 60),
     name: best.s.name,
+    modes: best.s.operatingModes,
   };
 }
 
 /** "Tomorrow" / "Today" / "Thu, Nov 12" for a NextClean. */
 export function nextCleanDay(next: NextClean, now: Date | number = Date.now()): string {
   return formatDayName(next.at, now);
+}
+
+/**
+ * What the next clean waits on when the dock's complaint will stop it, for the Next clean tile:
+ * "once the clean-water tank is refilled". A clean that mops needs the dock's water tanks (Nov 13
+ * 2026: the 9:00 AM vacuum-and-mop clean never started with the clean-water tank empty), so the
+ * tile mustn't promise it while the verdict above says the tank is empty. Null for a clean that
+ * only vacuums, modes not known, or a complaint that isn't known to stop a clean (the bag, the
+ * mop, a code nobody has decoded).
+ */
+export function nextCleanWaitsOn(next: Pick<NextClean, 'modes'> | null, issue: RoombaStatus['dockIssue']): string | null {
+  if (!next || !issue?.kind || !(next.modes ?? []).some((m) => m === 4 || m === 6)) return null;
+  switch (issue.kind) {
+    case 'clean_water_empty':
+      return 'once the clean-water tank is refilled';
+    case 'clean_water_out':
+      return 'once the clean-water tank is back in';
+    case 'dirty_water_full':
+      return 'once the dirty-water tank is emptied';
+    case 'dirty_water_out':
+      return 'once the dirty-water tank is back in';
+    default:
+      return null;
+  }
 }

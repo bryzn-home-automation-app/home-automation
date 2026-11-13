@@ -24,7 +24,7 @@ import { useRoombaScheduleSkips } from '../hooks/useRoombaScheduleSkips';
 import { useAuth } from '../context/AuthContext';
 import { cleaningMinutes, isRecharging, roomsSummary } from '../utils/roomba';
 import {
-  dockLamp, initiatorLabel, lastSeen, nextCleanDay, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
+  dockLamp, initiatorLabel, lastSeen, nextCleanDay, nextCleanWaitsOn, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
 } from '../utils/roombaStatus';
 import { batteryStatus, humanize, onlineStatus, type Tone } from '../utils/status';
 import { DASH, NBSP, formatDayName, formatDuration, formatNumber, formatStamp, formatTime, plural } from '../utils/format';
@@ -423,8 +423,11 @@ export default memo(function Roomba() {
 
   const next = nextScheduledClean(schedulesQuery.data, now, skips.query.data);
   const [nextValue, nextUnit] = next ? splitTime(formatTime(next.at)) : [DASH, undefined];
+  // A clean that mops won't start while the dock complains about its tanks: say what it waits on
+  // (in place of the schedule's name, which the iRobot app makes "Regular Schedule" anyway).
+  const nextWaitsOn = nextCleanWaitsOn(next, status?.dockIssue);
   const nextNote = next
-    ? [nextCleanDay(next, now), next.name].filter(Boolean).join(', ')
+    ? [nextCleanDay(next, now), nextWaitsOn ?? next.name].filter(Boolean).join(', ')
     : schedulesQuery.data === undefined
       ? schedulesQuery.isError ? "Couldn't load the schedules" : 'Checking the schedules'
       : 'No schedule turned on';
@@ -542,7 +545,7 @@ export default memo(function Roomba() {
         readouts={
           <Readouts count={2}>
             {firstReadout}
-            <Readout label="Next clean" value={nextValue} unit={nextUnit} note={nextNote} />
+            <Readout label="Next clean" value={nextValue} unit={nextUnit} note={nextNote} tone={nextWaitsOn ? 'headsup' : undefined} />
           </Readouts>
         }
         foot={
