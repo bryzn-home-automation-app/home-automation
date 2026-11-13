@@ -257,6 +257,7 @@ class PollerState:
         self.unsaved_runs = {}        # mission_id -> (run dict, status) whose DB write failed; retried each poll
         self.history_due = 0.0        # monotonic ts: next mission-history sync (0 = now)
         self.history_backfilled = False  # first sync of this process asks for the full history
+        self.schedules_due = 0.0      # monotonic ts: next read of the robot's schedules (0 = now)
         # Pass count for the running mission (coverage_passes.PassGrid). Lives here,
         # not in the live-map task: that task stops on a pause or recharge and is
         # restarted on every reconnect, and the count must carry on across all three.
@@ -1246,6 +1247,7 @@ async def poll_once(robot, conninfo, state):
 
     await refresh_map(robot, conninfo, robot_id, state, shadow_version)
     await refresh_parts(robot, conninfo, robot_id, state)
+    await refresh_schedules(robot, conninfo, robot_id, state)
 
 
 # ---------------------------------------------------------------------------
@@ -1808,6 +1810,50 @@ async def _read_schedule_containers(robot):
     return household_id, schedule_skips.containers(await robot.get_schedules_raw(household_id))
 
 
+def _write_schedule_mirror(conninfo, robot_id, conts):
+    """Replace roomba_native_schedule with the schedules in a read (schedule_skips.containers()).
+    Returns how many were written, or None when the read listed none: an empty answer never
+    wipes the page's copy, which the missed-start alert and the Next clean tile rely on (the
+    owner's "Read schedules" still replaces it with whatever the cloud says, empty or not)."""
+    rows = schedule_skips.mirror_rows(conts)
+    if not rows:
+        return None
+    _replace_native_schedules(conninfo, robot_id, rows)
+    return len(rows)
+
+
+# The robot's own schedules (GET /v1/households/{id}/settings/schedule: a cloud REST read,
+# nothing is sent to the robot). roomba_native_schedule used to change only on a "Read
+# schedules" from the page, so it was a month old (Oct 8) while the backend's "Scheduled clean
+# didn't start" alert and the page's Next clean tile read it. Now read on start-up and every
+# few hours, like the parts, and on every skip pass that reads them anyway.
+SCHEDULES_REFRESH_SECONDS = 3 * 3600
+SCHEDULES_RETRY_SECONDS = 600    # after a failed or unreadable read; one cloud call, never sooner
+SCHEDULES_READ_TIMEOUT = 30.0    # a read that hangs must not hold up the loop (commands wait behind it)
+
+
+async def refresh_schedules(robot, conninfo, robot_id, state, clock=time.monotonic):
+    """Re-read the robot's schedules into roomba_native_schedule when due. Read-only on the
+    cloud side. Fail-open: never raises (but a cancel), so it can't fail a cycle, drop the link
+    or cause a login; the next try is stamped before the read, so whatever happens it waits
+    SCHEDULES_RETRY_SECONDS. An unreadable answer raises in the read and an empty one writes
+    nothing, so neither wipes the copy the backend has."""
+    now = clock()
+    if now < state.schedules_due:
+        return
+    state.schedules_due = now + SCHEDULES_RETRY_SECONDS
+    try:
+        _, conts = await asyncio.wait_for(_read_schedule_containers(robot), SCHEDULES_READ_TIMEOUT)
+        written = _write_schedule_mirror(conninfo, robot_id, conts)
+        state.schedules_due = now + SCHEDULES_REFRESH_SECONDS
+        if written is None:
+            log.warning("Schedule refresh: the iRobot cloud listed no schedules; keeping the last copy")
+        else:
+            log.info("Schedules refreshed: %d schedule(s)", written)
+    except Exception as e:  # noqa: BLE001 — fail-open; tried again after SCHEDULES_RETRY_SECONDS
+        log.warning("schedule refresh failed: %s", _err(e))
+
+
 async def _set_schedule_enabled(robot, household_id, conts, container_id, schedule_id, enabled):
     """THE schedule write: one schedule's `enabled` flag, on the container exactly as just
     read. update_schedules() replaces the container's whole list, so every schedule in it goes
@@ -1895,7 +1941,7 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None):
     for p in plans:
         changes.update(p.changes)
     try:
-        _replace_native_schedules(conninfo, robot.blid, schedule_skips.mirror_rows(conts))
+        _write_schedule_mirror(conninfo, robot.blid, conts)
     except Exception as e:  # noqa: BLE001 — the page's copy only; the skips matter more
         log.warning("schedule mirror refresh failed: %s", _err(e))
     _save_skip_changes(conninfo, changes.values(), now)

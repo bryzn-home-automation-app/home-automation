@@ -601,6 +601,7 @@ class MainLoop(unittest.IsolatedAsyncioTestCase):
             sync_device=nothing,
             refresh_map=nothing,
             refresh_parts=nothing,
+            refresh_schedules=nothing,
             sync_history=nothing,
             run_live_map=nothing,
             _check_schedule_skips=nothing,

@@ -465,37 +465,107 @@ class Assignments(unittest.TestCase):
         self.assertFalse(any("undo_requested" in s or "alerted" in s for s in sets))
 
 
+class MirrorRefresh(unittest.IsolatedAsyncioTestCase):
+    """The periodic read of the robot's schedules into roomba_native_schedule (poller.py
+    refresh_schedules): on start-up and every few hours, read-only, and never at the cost of
+    the copy the backend already has."""
+
+    def setUp(self):
+        self.cloud = FakeCloud()
+        self.cloud.add(MON_FRI, [1, 5])
+        self.cloud.add(TUE_THU, [2, 3, 4], enabled=False)   # off for a skip, say
+        self.table = Table()
+        self.table.mirror = "last copy"
+        patcher = mock.patch.object(poller, "_replace_native_schedules", self.table.replace_mirror)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.state = poller.PollerState()
+        self.t = 1000.0
+
+    async def refresh(self):
+        await poller.refresh_schedules(self.cloud, "conninfo", "BLID", self.state, clock=lambda: self.t)
+
+    async def test_it_reads_on_start_up_and_then_every_few_hours_writing_nothing_to_the_cloud(self):
+        await self.refresh()
+        self.assertEqual(self.cloud.reads, 1)
+        self.assertEqual([(cid, o["enabled"]) for cid, o in self.table.mirror], [(MON_FRI, True), (TUE_THU, False)])
+        self.t += 2 * 3600
+        await self.refresh()
+        self.assertEqual(self.cloud.reads, 1, "not due yet")
+        self.t += 3600
+        await self.refresh()
+        self.assertEqual(self.cloud.reads, 2)
+        self.assertEqual(self.cloud.writes, [])
+
+    async def test_a_failed_read_keeps_the_copy_and_waits_before_the_next_try(self):
+        self.cloud.fail_reads = True
+        with self.assertLogs("roomba-poller", "WARNING"):
+            await self.refresh()
+        self.assertEqual(self.table.mirror, "last copy")
+        await self.refresh()
+        self.assertEqual(self.cloud.reads, 1, "never straight back to the cloud")
+        self.cloud.fail_reads = False
+        self.t += poller.SCHEDULES_RETRY_SECONDS
+        await self.refresh()
+        self.assertEqual(self.cloud.reads, 2)
+        self.assertEqual(len(self.table.mirror), 2)
+
+    async def test_an_unreadable_or_empty_answer_never_wipes_the_copy(self):
+        answers = [
+            {"error": "something else"},
+            {"household_schedules": None},
+            {"household_schedules": [{"household_schedule_id": MON_FRI, "schedules": "?"}]},
+            {"household_schedules": []},
+            {"household_schedules": [{"household_schedule_id": MON_FRI, "schedules": [{"schedule_id": MON_FRI}]}]},
+        ]
+        for answer in answers:
+            async def reply(household_id, answer=answer):
+                return answer
+
+            with mock.patch.object(self.cloud, "get_schedules_raw", reply), self.assertLogs("roomba-poller", "WARNING"):
+                await self.refresh()
+            self.assertEqual(self.table.mirror, "last copy", answer)
+            self.t += poller.SCHEDULES_REFRESH_SECONDS
+
+    async def test_no_household_or_a_read_that_hangs_is_given_up(self):
+        async def no_household():
+            return None
+
+        with mock.patch.object(self.cloud, "get_household_id", no_household), self.assertLogs("roomba-poller", "WARNING"):
+            await self.refresh()
+        self.assertEqual(self.table.mirror, "last copy")
+
+        async def hangs(household_id):
+            await asyncio.Event().wait()
+
+        self.t += poller.SCHEDULES_RETRY_SECONDS
+        with mock.patch.object(self.cloud, "get_schedules_raw", hangs), mock.patch.object(poller, "SCHEDULES_READ_TIMEOUT", 0.05), \
+                self.assertLogs("roomba-poller", "WARNING"):
+            await asyncio.wait_for(self.refresh(), 1.0)
+        self.assertEqual(self.table.mirror, "last copy")
+
+    async def test_a_skip_pass_that_reads_no_schedules_leaves_the_copy_too(self):
+        table = Table()
+        table.mirror = "last copy"
+        table.add(skip(1, TUE_THU, 17))
+        self.cloud.containers = {}
+        with mock.patch.multiple(poller, _load_active_skips=table.load, _save_skip_changes=table.save,
+                                 _replace_native_schedules=table.replace_mirror):
+            await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20), tz=HOME)
+        self.assertEqual(table.state(1), ss.CANCELLED)
+        self.assertEqual(table.mirror, "last copy")
+
+
 class MainLoopSkips(unittest.IsolatedAsyncioTestCase):
-    """The main loop runs the skip check on its first good cycle, and a skip check that fails
-    never fails the cycle: no reconnect, so no extra cloud login."""
+    """The main loop runs the skip check on its first good cycle, and a skip check or a schedule
+    read that fails never fails the cycle: no reconnect, so no extra cloud login."""
 
-    async def test_a_failing_skip_check_costs_no_login(self):
-        logins, checks = [], []
-
-        class Mqtt:
-            connected = True
-            generation = 1
-
-            def seconds_until_token_refresh_due(self):
-                return 1800.0
-
-        class Robot:
-            blid = "BLID"
-            _mqtt = Mqtt()
-
-            async def get_named_shadow(self, name, timeout=8.0):
-                return type("R", (), {"payload": {"state": {"reported": {}}}})()
-
-            async def disconnect(self):
-                pass
+    async def run_main(self, robot, seconds, **patches):
+        logins = []
 
         async def connect_robot(session, email, password, country, blid, state):
             logins.append(1)
-            return Robot()
-
-        async def failing_pass(robot, conninfo, now=None, tz=None):
-            checks.append(1)
-            raise OSError("iRobot cloud unreachable")
+            return robot
 
         class Session:
             async def __aenter__(self):
@@ -510,22 +580,87 @@ class MainLoopSkips(unittest.IsolatedAsyncioTestCase):
         async def nothing(*a, **k):
             return None
 
-        patcher = mock.patch.multiple(
-            poller, connect_robot=connect_robot, listen_for_commands=never,
+        fakes = dict(
+            connect_robot=connect_robot, listen_for_commands=never,
             _settle_interrupted_commands=lambda conninfo: None, _settle_stale_sent=lambda conninfo, keep=None: (0, 0),
             _fetch_pending=lambda conninfo, limit=5: [], upsert_status=lambda *a, **k: None,
             detect_completion=lambda *a, **k: None, sync_device=nothing, refresh_map=nothing, refresh_parts=nothing,
-            sync_history=nothing, run_live_map=nothing, _run_schedule_skips=failing_pass,
+            sync_history=nothing, run_live_map=nothing,
         )
+        fakes.update(patches)
         env = {"IROBOT_EMAIL": "e", "IROBOT_PASSWORD": "p", "POSTGRES_PASSWORD": "x"}
-        with patcher, mock.patch.dict(os.environ, env), mock.patch.object(poller.aiohttp, "ClientSession", Session):
+        with mock.patch.multiple(poller, **fakes), mock.patch.dict(os.environ, env), \
+                mock.patch.object(poller.aiohttp, "ClientSession", Session):
             task = asyncio.ensure_future(poller.main())
-            await asyncio.sleep(1.0)
+            await asyncio.sleep(seconds)
             task.cancel()
             with self.assertRaises(asyncio.CancelledError):
                 await task
+        return logins
+
+    async def test_a_failing_skip_check_costs_no_login(self):
+        checks = []
+
+        async def failing_pass(robot, conninfo, now=None, tz=None):
+            checks.append(1)
+            raise OSError("iRobot cloud unreachable")
+
+        logins = await self.run_main(LoopRobot(), 1.0, _run_schedule_skips=failing_pass)
         self.assertEqual(checks, [1], "checked once on the first cycle, then every SKIP_CHECK_SECONDS")
         self.assertEqual(logins, [1])
+
+    async def test_a_schedule_read_that_fails_or_hangs_costs_no_cycle_and_no_login(self):
+        for broken in ("fails", "hangs"):
+            robot = LoopRobot(schedules=broken)
+            checks = []
+
+            async def skip_pass(robot, conninfo, now=None, tz=None):
+                checks.append(1)
+                return "nothing due"
+
+            with mock.patch.object(poller, "SCHEDULES_READ_TIMEOUT", 0.2):
+                logins = await self.run_main(robot, 1.0, _run_schedule_skips=skip_pass)
+            self.assertEqual(robot.schedule_reads, 1, f"{broken}: read once at start-up, then not before the retry time")
+            self.assertEqual(logins, [1], broken)
+            self.assertEqual(robot.disconnects, 0, f"{broken}: the cycle carried on, the link was kept")
+            self.assertEqual(checks, [1], f"{broken}: the rest of the cycle still ran")
+
+
+class LoopRobot:
+    """Enough of a PrimeRobot for poller.main(): the shadow answers; the schedule read works,
+    fails or never answers."""
+
+    blid = "BLID"
+
+    class _Mqtt:
+        connected = True
+        generation = 1
+
+        def seconds_until_token_refresh_due(self):
+            return 1800.0
+
+    def __init__(self, schedules="works"):
+        self._mqtt = self._Mqtt()
+        self.schedules = schedules
+        self.schedule_reads = 0
+        self.disconnects = 0
+
+    async def get_named_shadow(self, name, timeout=8.0):
+        return type("R", (), {"payload": {"state": {"reported": {}}}})()
+
+    async def get_household_id(self):
+        self.schedule_reads += 1
+        if self.schedules == "fails":
+            raise OSError("Cannot connect to host")
+        if self.schedules == "hangs":
+            await asyncio.Event().wait()
+        return "HOUSEHOLD"
+
+    async def get_schedules_raw(self, household_id):
+        return {"household_schedules": []}
+
+    async def disconnect(self):
+        self.disconnects += 1
 
 
 if __name__ == "__main__":
