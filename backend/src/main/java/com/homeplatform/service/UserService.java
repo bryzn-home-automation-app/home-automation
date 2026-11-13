@@ -8,6 +8,7 @@ import com.homeplatform.model.User.Role;
 import com.homeplatform.repository.GuestSessionRepository;
 import com.homeplatform.repository.UserRepository;
 import com.homeplatform.security.JwtUtil;
+import com.homeplatform.security.OnlineTracker;
 import com.homeplatform.security.UserAccessCache;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -35,6 +37,7 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final LoginRateLimiter rateLimiter;
     private final UserAccessCache accessCache;
+    private final OnlineTracker online;
 
     /** Shared code required for guest check-in. Blank = guest login disabled. */
     @Value("${app.guest.invite-code:}")
@@ -47,7 +50,8 @@ public class UserService {
                        MaintenanceService maintenanceService,
                        PasswordEncoder passwordEncoder,
                        LoginRateLimiter rateLimiter,
-                       UserAccessCache accessCache) {
+                       UserAccessCache accessCache,
+                       OnlineTracker online) {
         this.userRepo = userRepo;
         this.sessionRepo = sessionRepo;
         this.jwtUtil = jwtUtil;
@@ -56,6 +60,7 @@ public class UserService {
         this.passwordEncoder = passwordEncoder;
         this.rateLimiter = rateLimiter;
         this.accessCache = accessCache;
+        this.online = online;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -83,7 +88,7 @@ public class UserService {
         user = userRepo.save(user);
 
         log.info("New registration: {} ({}), status=PENDING_APPROVAL", user.getUsername(), user.getEmail());
-        return toResponse(user, false);
+        return toResponse(user);
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -290,14 +295,11 @@ public class UserService {
     // ═══════════════════════════════════════════════════════════
 
     public List<AdminUserResponse> getAllUsers() {
-        Set<Long> onlineUserIds = sessionRepo.findByStatus(GuestSession.Status.ACTIVE)
-                .stream().map(s -> s.getUser().getId()).collect(Collectors.toSet());
-
         // Role priority: ADMIN → USER → GUEST (ascending), then newest first
         Map<String, Integer> rolePriority = Map.of("ADMIN", 0, "USER", 1, "GUEST", 2);
 
         return userRepo.findAll().stream()
-                .map(u -> toResponse(u, onlineUserIds.contains(u.getId())))
+                .map(this::toResponse)
                 .sorted(Comparator
                         .<AdminUserResponse, Integer>comparing(r -> rolePriority.getOrDefault(r.role(), 9))
                         .thenComparing(Comparator.comparing(AdminUserResponse::createdAt).reversed()))
@@ -306,7 +308,7 @@ public class UserService {
 
     public List<AdminUserResponse> getPendingUsers() {
         return userRepo.findByStatus(AccountStatus.PENDING_APPROVAL).stream()
-                .map(u -> toResponse(u, false))
+                .map(this::toResponse)
                 .sorted(Comparator.comparing(AdminUserResponse::createdAt))
                 .collect(Collectors.toList());
     }
@@ -332,7 +334,7 @@ public class UserService {
         accessCache.evict(userId);
 
         log.info("User '{}' approved as {}", user.getUsername(), role);
-        return toResponse(user, false);
+        return toResponse(user);
     }
 
     @Transactional
@@ -352,7 +354,7 @@ public class UserService {
         user = userRepo.save(user);
         accessCache.evict(userId);
         log.info("User '{}' role updated to {}", user.getUsername(), newRole);
-        return toResponse(user, false);
+        return toResponse(user);
     }
 
     @Transactional
@@ -430,6 +432,11 @@ public class UserService {
                 });
     }
 
+    /** Signed out: People shows them away now, not when the online window runs out. */
+    public void signOut(Long userId) {
+        online.signedOut(userId);
+    }
+
     // ═══════════════════════════════════════════════════════════
     // Seed admin
     // ═══════════════════════════════════════════════════════════
@@ -481,13 +488,18 @@ public class UserService {
                 u.getRole().name(), u.getPhone(), u.getAvatarUrl(), u.getAccentColor());
     }
 
-    private AdminUserResponse toResponse(User u, boolean isOnline) {
+    /** Online = a signed-in request within the last few minutes ({@link OnlineTracker}), for every role. */
+    private AdminUserResponse toResponse(User u) {
+        // Wall-clock time like lastLoginAt (LocalDateTime.now()).
+        LocalDateTime lastActiveAt = online.lastSeen(u.getId())
+                .map(at -> LocalDateTime.ofInstant(at, ZoneId.systemDefault()))
+                .orElse(null);
         return new AdminUserResponse(
                 u.getId(), u.getEmail(), u.getUsername(), u.getDisplayName(),
                 u.getRole().name(), u.getStatus().name(),
                 u.getLastLoginAt(), u.getLoginCount(),
-                u.getCreatedAt(), u.getApprovedAt(), isOnline,
-                u.getAvatarUrl(), u.getAccentColor());
+                u.getCreatedAt(), u.getApprovedAt(), online.isOnline(u.getId()),
+                u.getAvatarUrl(), u.getAccentColor(), lastActiveAt);
     }
 
     private GuestSessionResponse toSessionResponse(GuestSession s) {

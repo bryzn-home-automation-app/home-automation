@@ -13,6 +13,7 @@ public class JwtAuthFilter implements Filter {
 
     private final JwtUtil jwtUtil;
     private final UserAccessCache accessCache;
+    private final OnlineTracker online;
 
     // Only these specific auth endpoints are public — /api/auth/me and
     // /api/auth/heartbeat require a valid token.
@@ -37,9 +38,10 @@ public class JwtAuthFilter implements Filter {
             // nothing for now — exact match only
     );
 
-    public JwtAuthFilter(JwtUtil jwtUtil, UserAccessCache accessCache) {
+    public JwtAuthFilter(JwtUtil jwtUtil, UserAccessCache accessCache, OnlineTracker online) {
         this.jwtUtil = jwtUtil;
         this.accessCache = accessCache;
+        this.online = online;
     }
 
     @Override
@@ -106,6 +108,9 @@ public class JwtAuthFilter implements Filter {
         httpReq.setAttribute("userId", userId);
         httpReq.setAttribute("username", jwtUtil.getUsername(token));
         httpReq.setAttribute("role", access.role().name());
+
+        // Any signed-in request means the person has the app open (People's "online").
+        online.seen(userId);
 
         chain.doFilter(request, response);
     }

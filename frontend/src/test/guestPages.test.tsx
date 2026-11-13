@@ -25,7 +25,7 @@ function user(id: number, name: string, role: string, isOnline: boolean): AdminU
   return {
     id, email: `${name.toLowerCase()}@home`, username: name.toLowerCase(), displayName: name, role,
     status: 'ACTIVE', lastLoginAt: null, loginCount: 1, createdAt: '2026-01-01', approvedAt: null,
-    isOnline, avatarUrl: null, accentColor: '#34d399',
+    isOnline, avatarUrl: null, accentColor: '#34d399', lastActiveAt: null,
   };
 }
 

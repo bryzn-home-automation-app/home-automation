@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { LoginResponse } from '../api/auth';
-import { fetchMe, heartbeat as sendHeartbeat } from '../api/auth';
+import { fetchMe, heartbeat as sendHeartbeat, signOut } from '../api/auth';
 import api, { setUnauthorizedHandler } from '../api/client';
 import { queryClient } from '../queryClient';
 
@@ -195,7 +195,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     void checkSession();
   }, [checkSession]);
 
-  // Heartbeat every 60 seconds when logged in
+  // Heartbeat every 60 seconds when logged in. It keeps a guest's 30-day pass alive, and like every
+  // signed-in request it keeps this person "online" on People (the server allows 3 minutes).
   useEffect(() => {
     if (!token) return;
     const interval = setInterval(() => {
@@ -221,6 +222,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    const current = readStoredToken();
+    if (current) void signOut(current); // People shows them away now
     loggedInViaForm.current = false;
     queryClient.clear();
     setToken(null);

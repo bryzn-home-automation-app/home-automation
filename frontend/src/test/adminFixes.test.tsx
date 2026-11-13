@@ -16,7 +16,7 @@ import { coverageState, tablePreset } from '../pages/admin/diagnostics';
 const user = (over: Partial<AdminUser>): AdminUser => ({
   id: 1, email: 'm@x', username: 'mai', displayName: 'Mai', role: 'USER', status: 'ACTIVE', lastLoginAt: null,
   loginCount: 0, createdAt: '2026-10-01 09:00:00', approvedAt: null, isOnline: false, avatarUrl: null, accentColor: null,
-  ...over,
+  lastActiveAt: null, ...over,
 });
 
 describe('Activity log rows (B-034, B-169)', () => {

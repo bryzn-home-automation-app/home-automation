@@ -23,6 +23,7 @@ class JwtAuthFilterTest {
     private JwtUtil jwt;
     private UserRepository users;
     private UserAccessCache cache;
+    private OnlineTracker online;
     private JwtAuthFilter filter;
     private User user;
 
@@ -31,7 +32,8 @@ class JwtAuthFilterTest {
         jwt = new JwtUtil(SECRET, 3_600_000);
         users = mock(UserRepository.class);
         cache = new UserAccessCache(users);
-        filter = new JwtAuthFilter(jwt, cache);
+        online = new OnlineTracker();
+        filter = new JwtAuthFilter(jwt, cache, online);
         user = new User();
         user.setId(5L);
         user.setStatus(User.AccountStatus.ACTIVE);
@@ -80,6 +82,22 @@ class JwtAuthFilterTest {
         cache.evict(5L);
         FilterChain chain = mock(FilterChain.class);
         assertEquals(401, call(token, chain, new MockHttpServletRequest()).getStatus());
+    }
+
+    @Test
+    @DisplayName("a request that gets through marks its person online, whatever their role; a refused one doesn't")
+    void marksOnline() throws Exception {
+        String token = jwt.generateToken(5L, "bryan", "ADMIN");
+        assertFalse(online.isOnline(5L));
+
+        call(token, mock(FilterChain.class), new MockHttpServletRequest());
+        assertTrue(online.isOnline(5L), "an admin is online too, not only guests");
+
+        online.signedOut(5L);
+        user.setStatus(User.AccountStatus.DISABLED);
+        cache.evict(5L);
+        assertEquals(401, call(token, mock(FilterChain.class), new MockHttpServletRequest()).getStatus());
+        assertFalse(online.isOnline(5L), "a refused token doesn't count");
     }
 
     @Test

@@ -59,9 +59,12 @@ export interface AdminUser {
   loginCount: number;
   createdAt: string;
   approvedAt: string | null;
+  /** The app made a signed-in request in the last 3 minutes (it sends one every minute while open). */
   isOnline: boolean;
   avatarUrl: string | null;
   accentColor: string | null;
+  /** Their last signed-in request, since the server last restarted; null when there's none. */
+  lastActiveAt: string | null;
 }
 
 export interface GuestSession {
@@ -156,6 +159,14 @@ export async function fetchMe(): Promise<LoginResponse> {
 
 export async function heartbeat(): Promise<void> {
   await api.post('/auth/heartbeat');
+}
+
+/**
+ * Tells the server this person signed out, so People shows them away now rather than a few
+ * minutes later. Takes the token because Sign out drops the stored one at once. Best-effort.
+ */
+export async function signOut(token: string): Promise<void> {
+  await api.post('/auth/logout', null, { headers: { Authorization: `Bearer ${token}` } }).catch(() => {});
 }
 
 // ── Admin ──

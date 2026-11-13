@@ -69,6 +69,28 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('auth_token')).toBeNull();
   });
 
+  it('tells the server on sign-out, with the token it drops, so People shows them away at once', async () => {
+    const post = vi.spyOn(api, 'post').mockResolvedValue({ data: { status: 'ok' } });
+    try {
+      const { result } = renderHook(() => useAuth(), { wrapper });
+      await act(async () => {
+        result.current.logout(); // no one signed in: nothing to tell
+      });
+      expect(post).not.toHaveBeenCalled();
+
+      await act(async () => {
+        result.current.login('my-token', mockUser);
+      });
+      await act(async () => {
+        result.current.logout();
+      });
+      expect(post).toHaveBeenCalledWith('/auth/logout', null, { headers: { Authorization: 'Bearer my-token' } });
+      expect(localStorage.getItem('auth_token')).toBeNull();
+    } finally {
+      post.mockRestore();
+    }
+  });
+
   it('marks a deliberate sign-out until the next sign-in', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
 

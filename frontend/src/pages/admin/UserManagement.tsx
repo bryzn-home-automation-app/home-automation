@@ -16,6 +16,7 @@ import {
 } from '../../api/auth';
 import BirthdayInput, { formatBirthday } from '../../components/BirthdayInput';
 import { useAuth } from '../../context/AuthContext';
+import { useJitteredInterval } from '../../hooks/useJitteredInterval';
 import { usePageMeta } from '../../components/shell/PageMeta';
 import {
   Avatar,
@@ -67,6 +68,16 @@ function lastSeen(at: string): string {
 }
 
 /**
+ * When someone who isn't online was last here: their last moment in the app (the server only
+ * knows that since it last restarted), else their last sign-in.
+ */
+export function lastHere(u: Pick<AdminUser, 'lastActiveAt' | 'lastLoginAt'>): { label: string; at: string } | null {
+  if (u.lastActiveAt) return { label: 'Last active', at: u.lastActiveAt };
+  if (u.lastLoginAt) return { label: 'Last signed in', at: u.lastLoginAt };
+  return null;
+}
+
+/**
  * The email line, for admins only and never the placeholder address guest accounts are
  * created with (B-182: everyone, guests included, could read the family's addresses).
  */
@@ -99,7 +110,15 @@ export default function UserManagement() {
     setActionError(`${what}: ${e?.response?.data?.message || e?.response?.data?.error || e?.message || 'request failed'}`);
   };
 
-  const allUsers = useQuery({ queryKey: ['all-users'], queryFn: fetchAllUsers });
+  // Who's online changes by the minute (an open app checks in every minute), so keep it current.
+  const usersInterval = useJitteredInterval(60_000);
+  const allUsers = useQuery({
+    queryKey: ['all-users'],
+    queryFn: fetchAllUsers,
+    staleTime: 30_000,
+    refetchInterval: usersInterval,
+    refetchIntervalInBackground: false,
+  });
   const pendingUsers = useQuery({ queryKey: ['admin-users-pending'], queryFn: fetchPendingUsers, enabled: isAdmin });
   // The birthdays members reset a forgotten password with: admins only, and only this endpoint has them.
   const birthdays = useQuery({ queryKey: ['admin-user-birthdays'], queryFn: fetchBirthdays, enabled: isAdmin });
@@ -172,17 +191,20 @@ export default function UserManagement() {
   const online = [...household, ...guests].filter((u) => u.isOnline);
   const pending = isAdmin ? pendingUsers.data ?? [] : [];
 
-  const boardPeople: BoardPerson[] = [...household, ...guests].map((u) => ({
-    key: u.id,
-    name: nameOf(u),
-    color: personColor(u),
-    photoUrl: u.avatarUrl,
-    state: u.isOnline ? 'Online' : 'Away',
-    tone: u.isOnline ? 'ok' : 'neutral',
-    away: !u.isOnline,
-    // Short: a board cell is ~110px wide.
-    when: u.isOnline ? (u.role === 'GUEST' ? 'Visiting' : 'Now') : u.lastLoginAt ? formatRelative(u.lastLoginAt) : 'Not yet',
-  }));
+  const boardPeople: BoardPerson[] = [...household, ...guests].map((u) => {
+    const here = lastHere(u);
+    return {
+      key: u.id,
+      name: nameOf(u),
+      color: personColor(u),
+      photoUrl: u.avatarUrl,
+      state: u.isOnline ? 'Online' : 'Away',
+      tone: u.isOnline ? 'ok' : 'neutral',
+      away: !u.isOnline,
+      // Short: a board cell is ~110px wide.
+      when: u.isOnline ? (u.role === 'GUEST' ? 'Visiting' : 'Now') : here ? formatRelative(here.at) : 'Not yet',
+    };
+  });
 
   const onlineNames = online.map(nameOf);
   const verdictText = !allUsers.data
@@ -476,7 +498,8 @@ function PendingRequest({ user, busy, onApprove, onDeny }: { user: AdminUser; bu
 /** One person in the roster: face (lit while online), name and role, when they were last here. */
 function PersonRow({ user, isAdmin, isSelf, resetOn, onManage }: { user: AdminUser; isAdmin: boolean; isSelf: boolean; resetOn?: boolean; onManage: () => void }) {
   const name = nameOf(user);
-  const seen = user.isOnline ? 'Online now' : user.lastLoginAt ? `Last signed in ${lastSeen(user.lastLoginAt)}` : 'Not signed in yet';
+  const here = lastHere(user);
+  const seen = user.isOnline ? 'Online now' : here ? `${here.label} ${lastSeen(here.at)}` : 'Not signed in yet';
   const meta = [
     isSelf ? `You · ${seen.charAt(0).toLowerCase()}${seen.slice(1)}` : seen,
     visibleEmail(user, isAdmin),
@@ -661,6 +684,7 @@ function ManageDialog({
   };
   const guest = user.role === 'GUEST';
   const email = visibleEmail(user, true);
+  const here = lastHere(user);
   return (
     <>
       <Dialog
@@ -684,7 +708,7 @@ function ManageDialog({
           <div className="fp-person">
             <Avatar name={name} color={personColor(user)} photoUrl={user.avatarUrl} size="lg" decorative />
             <span className="fp-small fp-muted">
-              {user.isOnline ? 'Online now' : user.lastLoginAt ? `Last signed in ${formatStamp(user.lastLoginAt)}` : 'Not signed in yet'}
+              {user.isOnline ? 'Online now' : here ? `${here.label} ${formatStamp(here.at)}` : 'Not signed in yet'}
               {' · '}
               {plural(user.loginCount, 'sign-in')}
             </span>

@@ -152,12 +152,28 @@ public class AuthController {
         return ResponseEntity.ok(userService.me(userId));
     }
 
-    /** Session heartbeat — keeps guest session alive. */
+    /**
+     * Session heartbeat, once a minute while the app is open — keeps guest session alive. Like any
+     * signed-in request it also keeps the person online (JwtAuthFilter → OnlineTracker).
+     */
     @PostMapping("/heartbeat")
     public ResponseEntity<Map<String, String>> heartbeat(HttpServletRequest request) {
         Long userId = (Long) request.getAttribute("userId");
         if (userId != null) {
             userService.heartbeat(userId);
+        }
+        return ResponseEntity.ok(Map.of("status", "ok"));
+    }
+
+    /**
+     * Sign-out: the person reads offline at once instead of a few minutes later. Tokens are
+     * stateless, so nothing is revoked; the app drops its copy.
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, String>> logout(HttpServletRequest request) {
+        Long userId = (Long) request.getAttribute("userId");
+        if (userId != null) {
+            userService.signOut(userId);
         }
         return ResponseEntity.ok(Map.of("status", "ok"));
     }

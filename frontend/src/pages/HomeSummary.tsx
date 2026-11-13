@@ -297,8 +297,9 @@ export default function HomeSummary() {
       case 'reminders':
         return { meta: 'Household chores and heads-ups' };
       case 'wifi':
+        // Guest passes that haven't ended (30 days), not who has the app open: People shows that.
         return guestCount.data
-          ? { meta: `${plural(guestCount.data, 'guest')} signed in`, value: guestCount.data, unit: 'online' }
+          ? { meta: `${plural(guestCount.data, 'guest')} signed in`, value: guestCount.data, unit: 'active' }
           : { meta: 'Share the guest network' };
       case 'users':
         // Members see a read-only list (B-064).

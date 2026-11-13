@@ -15,5 +15,7 @@ public record AdminUserResponse(
         LocalDateTime approvedAt,
         boolean isOnline,
         String avatarUrl,
-        String accentColor
+        String accentColor,
+        // Their last signed-in request (since the backend started), or null.
+        LocalDateTime lastActiveAt
 ) {}

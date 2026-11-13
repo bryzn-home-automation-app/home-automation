@@ -23,13 +23,13 @@ vi.mock('../api/auth', () => ({
   oidcConfig: vi.fn(),
 }));
 
-import UserManagement, { householdOf, visibleEmail } from '../pages/admin/UserManagement';
+import UserManagement, { householdOf, lastHere, visibleEmail } from '../pages/admin/UserManagement';
 
 function user(over: Partial<AdminUser>): AdminUser {
   return {
     id: 1, email: 'bryan@example.com', username: 'bryan', displayName: 'Bryan', role: 'ADMIN', status: 'ACTIVE',
     lastLoginAt: null, loginCount: 3, createdAt: '2026-08-22T10:00:00Z', approvedAt: null, isOnline: true,
-    avatarUrl: null, accentColor: null, ...over,
+    avatarUrl: null, accentColor: null, lastActiveAt: null, ...over,
   };
 }
 
@@ -61,6 +61,15 @@ describe('People helpers', () => {
     expect(visibleEmail(USERS[1], false)).toBeNull();
     expect(visibleEmail(USERS[2], true)).toBeNull();
   });
+
+  it('says when someone away was last here: last active in the app, else last signed in', () => {
+    expect(lastHere({ lastActiveAt: '2026-11-13 12:05:00', lastLoginAt: '2026-11-13 08:00:00' }))
+      .toEqual({ label: 'Last active', at: '2026-11-13 12:05:00' });
+    // The server only knows activity since it last restarted.
+    expect(lastHere({ lastActiveAt: null, lastLoginAt: '2026-11-13 08:00:00' }))
+      .toEqual({ label: 'Last signed in', at: '2026-11-13 08:00:00' });
+    expect(lastHere({ lastActiveAt: null, lastLoginAt: null })).toBeNull();
+  });
 });
 
 describe('People page', () => {
@@ -72,6 +81,20 @@ describe('People page', () => {
     (authApi.updateUserRole as any).mockResolvedValue(USERS[1]);
     (authApi.fetchBirthdays as any).mockResolvedValue([]);
     (authApi.oidcConfig as any).mockResolvedValue({ enabled: true, passwordLogin: false, passwordReset: true, passwordMinLength: 8 });
+  });
+
+  it('shows the admin online like anyone else, and someone away as last active minutes ago', async () => {
+    (authApi.fetchAllUsers as any).mockResolvedValue([
+      user({}),
+      user({
+        id: 2, email: 'mai@example.com', username: 'mai', displayName: 'Mai', role: 'USER', isOnline: false,
+        lastActiveAt: new Date(Date.now() - 5 * 60_000).toISOString(), lastLoginAt: '2026-11-01T09:00:00Z',
+      }),
+    ]);
+    renderPage();
+    expect(await screen.findByText(/^You · online now/)).toBeInTheDocument();
+    expect(screen.getByText(/^Last active 5 min ago/)).toBeInTheDocument();
+    expect(screen.getByText('Bryan is in the app.')).toBeInTheDocument();
   });
 
   it('never offers an admin the controls for their own account (B-181)', async () => {
