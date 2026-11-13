@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  commandLabel, commandState, cycleLabel, lastSeen, lastSeenWords, nextScheduledClean, padLabel, partsSummary, roomAt,
-  roombaState, roombaVerdict, runStatus, scheduleDays, scheduleLine,
+  commandLabel, commandState, cycleLabel, dockIssueWords, dockLamp, lastSeen, lastSeenWords, nextScheduledClean, padLabel,
+  partsSummary, roomAt, roombaState, roombaVerdict, runStatus, scheduleDays, scheduleLine,
 } from '../utils/roombaStatus';
 import type { RoombaMapGeoJson } from '../types';
 import { labelPoint, isFromControl } from '../components/RoombaMap';
@@ -107,6 +107,72 @@ describe('roombaVerdict', () => {
     const ok = roombaVerdict({ status: { ...base, batteryPct: 100 }, parts: [], now: NOW });
     expect(ok).toMatchObject({ tone: 'ok', sentence: 'Rosie is docked and ready.', note: 'Battery at 100%.' });
     expect(roombaVerdict({ status: null }).tone).toBe('neutral');
+  });
+});
+
+describe('the dock', () => {
+  // Nov 13 2026 on the NUC: docked, battery full, dock.state 301 ("Ready"), dock.error 0, and the
+  // pad-wash state 671: the clean-water tank. The 9:00 AM vacuum-and-mop clean never started.
+  const nov13 = {
+    ...base,
+    name: 'iRummy',
+    batteryPct: 100,
+    needsAttention: true,
+    attentionReasons: ["The dock's clean-water tank is empty", 'picea unknown fault code:717', 'Maintenance overdue: Routine clean-up'],
+    dockIssue: { kind: 'clean_water_empty', code: 671, since: '2026-11-13T15:01:00Z' },
+  };
+  const parts = [{ label: 'Routine clean-up', status: 'overdue' }];
+
+  it('says the clean-water tank is empty and what to do, not "ready" (Nov 13)', () => {
+    const v = roombaVerdict({ status: nov13, parts, now: NOW });
+    expect(v).toMatchObject({
+      tone: 'headsup',
+      sentence: "The dock's clean-water tank is empty.",
+      note: "Refill it and iRummy can mop again. If it's full, push it in firmly; a loose tank reads as empty.",
+      code: 'Dock code 671',
+      aboutParts: false,
+    });
+    expect(dockLamp({ ...nov13, dockState: 301 })).toEqual({ tone: 'headsup', label: 'Dock: clean water empty' });
+  });
+
+  it('tells the dirty-water tank apart from the clean one', () => {
+    const v = roombaVerdict({ status: { ...nov13, dockIssue: { kind: 'dirty_water_full', code: 672, since: null } }, now: NOW });
+    expect(v.sentence).toBe("The dock's dirty-water tank is full.");
+    expect(v.note).toBe("Empty it and iRummy can mop again. If it's empty, push it in firmly; a loose tank reads as full.");
+    expect(dockIssueWords({ kind: 'dirty_water_full', code: 654, since: null }, 'iRummy')?.note).toBe('Empty it and iRummy can mop again.');
+    expect(dockIssueWords({ kind: 'dirty_water_out', code: 653, since: null }, 'iRummy')).toMatchObject({
+      sentence: "The dock's dirty-water tank is out.", short: 'Dock: dirty tank out',
+    });
+    expect(dockIssueWords({ kind: 'clean_water_out', code: 650, since: null }, null)?.note).toBe('Fill it and put it back, and the Roomba can mop again.');
+  });
+
+  it('turns a code nobody decoded into "needs attention" with the code, never "ready"', () => {
+    const v = roombaVerdict({ status: { ...nov13, dockIssue: { kind: 'other', code: 717, since: null } }, now: NOW });
+    expect(v).toMatchObject({ tone: 'headsup', sentence: 'The dock needs attention.', code: 'Dock code 717' });
+    expect(v.note).toMatch(/can't read yet/);
+    // A kind from a newer poller reads the same way.
+    expect(dockIssueWords({ kind: 'grey_water_sensor', code: 652, since: null }, 'iRummy')?.sentence).toBe('The dock needs attention.');
+    expect(dockLamp({ ...nov13, dockState: 301, dockIssue: { kind: 'other', code: 717, since: null } })).toEqual({ tone: 'headsup', label: 'Dock code 717' });
+  });
+
+  it('the bag and the mop', () => {
+    expect(dockIssueWords({ kind: 'bag', code: 353, since: null }, 'iRummy')).toMatchObject({
+      sentence: 'The dock needs a new bag.', note: "Fit one so the dock can empty iRummy's bin again.",
+    });
+    expect(dockIssueWords({ kind: 'mop', code: 668, since: null }, 'iRummy')?.sentence).toBe("iRummy's mop isn't attached.");
+    expect(dockIssueWords({ kind: 'mop', code: 756, since: null }, null)?.sentence).toBe("The Roomba's mop isn't attached.");
+  });
+
+  it('still puts an error and a robot away from the dock first', () => {
+    expect(roombaVerdict({ status: { ...nov13, error: 17, errorText: 'Stuck on a cable' }, now: NOW }).sentence).toBe('iRummy needs help: stuck on a cable.');
+    expect(roombaVerdict({ status: { ...nov13, phase: 'run', cycle: 'clean', running: true }, now: NOW }).sentence).toBe('iRummy is cleaning.');
+  });
+
+  it('a quiet dock is OK; nothing known, no lamp', () => {
+    expect(dockLamp({ dockState: 301, dockError: 0, name: 'iRummy', dockIssue: null })).toEqual({ tone: 'ok', label: 'Dock OK' });
+    expect(dockLamp({ dockState: 301, dockError: 46, name: 'iRummy' })).toEqual({ tone: 'headsup', label: 'Dock needs a look' });
+    expect(dockLamp({ dockState: null, dockError: null, name: null })).toBeNull();
+    expect(roombaVerdict({ status: { ...base, batteryPct: 100, dockIssue: null }, parts: [], now: NOW }).sentence).toBe('Rosie is docked and ready.');
   });
 });
 

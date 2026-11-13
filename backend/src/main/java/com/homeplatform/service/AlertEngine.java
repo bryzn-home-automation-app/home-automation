@@ -1,5 +1,7 @@
 package com.homeplatform.service;
 
+import com.homeplatform.dto.RoombaDockIssue;
+import com.homeplatform.dto.RoombaNativeScheduleResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
 import com.homeplatform.model.AlertType;
@@ -18,8 +20,10 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
@@ -201,6 +205,10 @@ public class AlertEngine {
      *    or charging faults (the derived {@code needsAttention} reasons).
      *  • Battery low (WARNING) — battery ≤ {@value #LOW_BATTERY_PCT}% while not
      *    charging (may not finish or return to dock).
+     *  • Roomba dock — … (WARNING) — the dock's own complaint (clean-water tank empty,
+     *    dirty-water tank full, …), once per occurrence ({@link #maybeDockAlert}).
+     *  • Scheduled clean didn't start (WARNING) — once per scheduled start
+     *    ({@link #maybeMissedStartAlerts}).
      * The three status-derived alerts dedup once per day so a persistent condition
      * re-notifies daily rather than every scheduler tick.
      */
@@ -215,9 +223,39 @@ public class AlertEngine {
             if (status != null) {
                 maybeRoombaStatusAlerts(userId, status);
             }
+            dockAndScheduleAlerts(userId, status);
         } catch (Exception e) {
             log.warn("AlertEngine: roomba alert generation failed for user {}: {}", userId, e.getMessage());
         }
+    }
+
+    /**
+     * The dock's complaint and a scheduled clean that didn't start, for every active member.
+     * These need to be timely (the rest of the Roomba alerts ride on the hourly sync and on
+     * logins), so {@code RoombaAlertScheduler} runs this every few minutes.
+     */
+    public void generateRoombaWatchAlerts() {
+        for (User u : userRepo.findByStatus(User.AccountStatus.ACTIVE)) {
+            if (u.getRole() == User.Role.GUEST) continue;
+            try {
+                generateRoombaWatchAlerts(u.getId());
+            } catch (Exception e) {
+                log.warn("AlertEngine (roomba watch) failed for user {}: {}", u.getId(), e.getMessage());
+            }
+        }
+    }
+
+    void generateRoombaWatchAlerts(Long userId) {
+        dockAndScheduleAlerts(userId, roombaStatus());
+    }
+
+    // synchronized: the five-minute check, the hourly sync and a login can land together, and
+    // each checks "sent already?" before sending.
+    private synchronized void dockAndScheduleAlerts(Long userId, RoombaStatusResponse status) {
+        if (status != null) {
+            maybeDockAlert(userId, status);
+        }
+        maybeMissedStartAlerts(userId, status);
     }
 
     // package-private seams so tests can supply status/runs without a DB
@@ -229,6 +267,21 @@ public class AlertEngine {
         if (roombaService == null) return null;
         List<RoombaRunResponse> runs = roombaService.getRuns(1);
         return runs.isEmpty() ? null : runs.get(0);
+    }
+
+    /** The newest runs, enough to cover today (the robot runs once or twice a day). */
+    List<RoombaRunResponse> recentRoombaRuns() {
+        return roombaService == null ? List.of() : roombaService.getRuns(10);
+    }
+
+    /** The robot's own schedules as last read from the cloud (roomba_native_schedule). */
+    List<RoombaNativeScheduleResponse> roombaSchedules() {
+        return roombaService == null ? List.of() : roombaService.getNativeSchedules();
+    }
+
+    /** Now at home (a seam for tests). */
+    ZonedDateTime nowAtHome() {
+        return ZonedDateTime.now(CHICAGO);
     }
 
     void maybeCleaningCompleteAlert(Long userId, RoombaRunResponse run) {
@@ -303,14 +356,16 @@ public class AlertEngine {
                 createRoomba(userId, AlertType.ROOMBA_ERROR, Severity.CRITICAL, title,
                         "The robot reported: " + reason + ". It may be stuck and need a hand to continue.");
             }
-        } else if (s.needsAttention() && s.attentionReasons() != null && !s.attentionReasons().isEmpty()) {
+        } else if (s.needsAttention() && !otherReasons(s).isEmpty()) {
             // ── Needs attention (WARNING) — bin/tank removed, dock error, not ready, charge faults ──
             // Fold the leading reason into the title so a *different* problem the same
             // day still alerts (rather than being deduped against an unrelated one).
-            String title = "Roomba needs attention — " + s.attentionReasons().get(0);
+            // The dock's complaint has its own alert (maybeDockAlert), so it isn't repeated here.
+            List<String> reasons = otherReasons(s);
+            String title = "Roomba needs attention — " + reasons.get(0);
             if (isNewRoomba(userId, title, true)) {
                 createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title,
-                        String.join("; ", s.attentionReasons()) + ".");
+                        String.join("; ", reasons) + ".");
             }
         }
 
@@ -323,6 +378,128 @@ public class AlertEngine {
                 createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title, String.format(
                         "Battery at %d%%. The robot may not have enough charge to finish or return to its dock.",
                         batt));
+            }
+        }
+    }
+
+    /** The attention reasons without the dock's complaint, which has an alert of its own. */
+    static List<String> otherReasons(RoombaStatusResponse s) {
+        List<String> reasons = s.attentionReasons() == null ? List.of() : s.attentionReasons();
+        RoombaDockIssue issue = s.dockIssue();
+        if (issue == null) return reasons;
+        String dock = RoombaDock.reason(issue.kind(), issue.code());
+        return reasons.stream().filter(r -> !r.equals(dock)).toList();
+    }
+
+    // ── The dock ──────────────────────────────────
+
+    /**
+     * A complaint has to stand this long before it alerts: the poller reads the robot every
+     * five minutes when it's idle, so this is two readings, not one that cleared on the next.
+     */
+    static final Duration DOCK_ISSUE_SETTLE = Duration.ofMinutes(10);
+
+    /**
+     * The dock's complaint (clean-water tank empty, dirty-water tank full, …), once per
+     * occurrence: the poller keeps {@code since} while the same complaint stands, so a member
+     * hears about it once, and again only after it was fixed and came back (or changed).
+     */
+    void maybeDockAlert(Long userId, RoombaStatusResponse s) {
+        RoombaDockIssue issue = s.dockIssue();
+        if (issue == null || issue.kind() == null || issue.kind().isBlank()) return;
+        Instant now = nowAtHome().toInstant();
+        Instant since = parseInstant(issue.since());
+        if (since != null && since.isAfter(now.minus(DOCK_ISSUE_SETTLE))) return;
+        String title = RoombaDock.alertTitle(issue.kind());
+        // No start recorded (a poller from before dock_issue_since): at most once a day.
+        if (!isNewRoombaSince(userId, title, since != null ? since : now.minus(Duration.ofDays(1)))) return;
+        createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title,
+                RoombaDock.alertMessage(issue.kind(), issue.code(), s.name()));
+    }
+
+    // ── A scheduled clean that didn't start ───────
+
+    /** A scheduled clean starts within a minute (09:00:13–09:00:34 since October); this late, it didn't. */
+    static final Duration START_GRACE = Duration.ofMinutes(30);
+    /** A start this close to the scheduled time is the schedule's (the robot's clock can run early). */
+    static final Duration START_EARLY = Duration.ofMinutes(10);
+    /** Past this, the morning's miss isn't news any more (the backend was down, say). */
+    static final Duration START_STALE = Duration.ofHours(12);
+    private static final DateTimeFormatter MISSED_DAY = DateTimeFormatter.ofPattern("MMM d", java.util.Locale.US);
+    private static final DateTimeFormatter MISSED_TIME = DateTimeFormatter.ofPattern("h:mm a", java.util.Locale.US);
+    private static final Map<Integer, String> MODE_WORDS = Map.of(2, "vacuum", 4, "mop", 6, "vacuum-and-mop");
+
+    /**
+     * Today's scheduled cleans (the robot's own schedules, in home time like the robot's
+     * clock) that should have started by now and didn't. Nov 13 2026: the 9:00 AM
+     * vacuum-and-mop clean never started because the dock's clean-water tank was empty, and
+     * nothing said so. Only on a fresh reading (the poller checked in within 10 minutes, so
+     * a missing run isn't just the poller being down), and not when the robot was already
+     * out on another clean at that time. Once per scheduled start.
+     */
+    void maybeMissedStartAlerts(Long userId, RoombaStatusResponse s) {
+        if (s == null || !s.online()) return;
+        List<RoombaNativeScheduleResponse> schedules = roombaSchedules();
+        if (schedules == null || schedules.isEmpty()) return;
+        ZonedDateTime now = nowAtHome();
+        LocalDate today = now.toLocalDate();
+        List<RoombaRunResponse> runs = null;
+        for (RoombaNativeScheduleResponse sch : schedules) {
+            if (!sch.enabled() || sch.hour() == null || sch.minute() == null || sch.days() == null) continue;
+            if (sch.frequency() != null && !"WEEKLY".equalsIgnoreCase(sch.frequency())) continue;
+            if (!sch.days().contains(today.getDayOfWeek().getValue())) continue;
+            ZonedDateTime at = today.atTime(sch.hour(), sch.minute()).atZone(CHICAGO);
+            if (now.isBefore(at.plus(START_GRACE)) || now.isAfter(at.plus(START_STALE))) continue;
+            if (runs == null) runs = recentRoombaRuns();
+            if (startedOrBusy(at.toInstant(), s, runs)) continue;
+
+            String time = at.format(MISSED_TIME);
+            String title = "Scheduled clean didn't start — " + at.format(MISSED_DAY) + ", " + time;
+            if (!isNewRoombaSince(userId, title, at.toInstant())) continue;
+            String name = s.name() != null && !s.name().isBlank() ? s.name().trim() : "The Roomba";
+            String mode = sch.operatingModes() != null && sch.operatingModes().size() == 1
+                    ? MODE_WORDS.get(sch.operatingModes().get(0)) : null;
+            String msg = name + "'s " + time + (mode != null ? " " + mode : "") + " clean didn't start.";
+            RoombaDockIssue issue = s.dockIssue();
+            msg += issue != null && issue.kind() != null
+                    ? " " + RoombaDock.reason(issue.kind(), issue.code()) + ". " + RoombaDock.fix(issue.kind(), issue.code(), s.name())
+                    : " It hasn't said why: check the robot and the iRobot app.";
+            createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title, msg);
+        }
+    }
+
+    /**
+     * Whether the robot started a clean around {@code at}, or was out on one already. Runs
+     * are written when they end; a clean still going shows as the status's mission start.
+     */
+    static boolean startedOrBusy(Instant at, RoombaStatusResponse s, List<RoombaRunResponse> runs) {
+        Instant from = at.minus(START_EARLY);
+        Instant to = at.plus(START_GRACE);
+        Instant missionStart = parseInstant(s.missionStart());
+        if (missionStart != null && !missionStart.isAfter(to)) {
+            if (!missionStart.isBefore(from)) return true;                 // started on time
+            String cycle = s.cycle() == null ? "" : s.cycle().trim().toLowerCase();
+            if (s.running() || !(cycle.isEmpty() || cycle.equals("none"))) return true; // an earlier clean, still going
+        }
+        for (RoombaRunResponse r : runs == null ? List.<RoombaRunResponse>of() : runs) {
+            Instant started = parseInstant(r.startedAt());
+            if (started == null) continue;
+            if (!started.isBefore(from) && !started.isAfter(to)) return true;
+            Instant ended = parseInstant(r.completedAt());
+            if (started.isBefore(from) && (ended == null || ended.isAfter(at))) return true;
+        }
+        return false;
+    }
+
+    static Instant parseInstant(String iso) {
+        if (iso == null || iso.isBlank()) return null;
+        try {
+            return java.time.OffsetDateTime.parse(iso).toInstant();
+        } catch (Exception e) {
+            try {
+                return Instant.parse(iso);
+            } catch (Exception e2) {
+                return null;
             }
         }
     }
@@ -473,6 +650,27 @@ public class AlertEngine {
             return count == null || count == 0;
         } catch (Exception e) {
             return true; // on error, allow creation
+        }
+    }
+
+    /**
+     * True if no ROOMBA notification with this exact title has been created for the user
+     * since {@code since}: one alert per occurrence of a condition that began then.
+     * notifications.created_at is the backend's local time (Notification's
+     * LocalDateTime.now()), so {@code since} is turned into the same. Unlike the checks
+     * above, a failed read means no alert: this runs every few minutes, and a broken
+     * check must not repeat the alert each time.
+     */
+    boolean isNewRoombaSince(Long userId, String title, Instant since) {
+        try {
+            Long count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM notifications
+                WHERE user_id = ? AND category = 'ROOMBA' AND title = ? AND created_at >= ?
+                """, Long.class, userId, title, LocalDateTime.ofInstant(since, ZoneId.systemDefault()));
+            return count == null || count == 0;
+        } catch (Exception e) {
+            log.warn("AlertEngine: couldn't check for an earlier '{}' alert: {}", title, e.getMessage());
+            return false;
         }
     }
 

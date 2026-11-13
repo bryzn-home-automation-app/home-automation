@@ -269,6 +269,21 @@ export interface RoombaStatus {
   needsAttention: boolean;
   attentionReasons: string[];
   updatedAt: string;
+  /** What the dock is complaining about (its tanks, bag, the mop), or null when nothing. */
+  dockIssue?: RoombaDockIssue | null;
+}
+
+/**
+ * The dock's complaint, decoded by the poller (roomba-poller/dock_issues.py). `kind` is one of
+ * clean_water_empty, clean_water_out, dirty_water_full, dirty_water_out, bag, mop, or other (a
+ * code nobody has decoded); anything else reads as "needs attention" too.
+ */
+export interface RoombaDockIssue {
+  kind: string;
+  /** The dock's own code (671 = clean-water tank empty or not in place). */
+  code: number | null;
+  /** When it began (ISO-8601 UTC). */
+  since: string | null;
 }
 
 export type RoombaRunStatus = 'COMPLETED' | 'STUCK' | 'CANCELLED';

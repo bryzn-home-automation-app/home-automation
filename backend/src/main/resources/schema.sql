@@ -178,7 +178,16 @@ CREATE TABLE IF NOT EXISTS roomba_status (
     lifetime_run_minutes INTEGER,
     map_version         VARCHAR(64),
     raw                 JSONB,
-    updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
+    updated_at          TIMESTAMP      NOT NULL DEFAULT NOW(),
+    -- What the dock is complaining about, decoded by the poller from raw->'dock'
+    -- (roomba-poller/dock_issues.py has the code table and its sources):
+    -- clean_water_empty | clean_water_out | dirty_water_full | dirty_water_out | bag | mop |
+    -- other (a code nobody has decoded); NULL when nothing. A plain string, not a DB enum.
+    -- dock_issue_code is the code it reported; dock_issue_since (UTC) when this complaint
+    -- began, kept while it stands so the backend alerts once per occurrence.
+    dock_issue          VARCHAR(40),
+    dock_issue_code     INTEGER,
+    dock_issue_since    TIMESTAMP
 );
 
 -- Current floor-plan map bundle per robot. Poller UPSERTs when map_version changes.

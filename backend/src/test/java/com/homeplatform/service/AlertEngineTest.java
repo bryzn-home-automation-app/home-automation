@@ -1,5 +1,7 @@
 package com.homeplatform.service;
 
+import com.homeplatform.dto.RoombaDockIssue;
+import com.homeplatform.dto.RoombaNativeScheduleResponse;
 import com.homeplatform.dto.RoombaRunResponse;
 import com.homeplatform.dto.RoombaStatusResponse;
 import com.homeplatform.model.AlertType;
@@ -13,6 +15,9 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -203,7 +208,7 @@ class AlertEngineTest {
                 "robot-1", "Roomba", batteryPct, phase, null, error, errorText,
                 false, true, true, null, null, null, null, null, null, null, null,
                 null, null, null, null, null, null, null, null, null,
-                true, needsAttention, attentionReasons, Instant.now().toString());
+                true, needsAttention, attentionReasons, Instant.now().toString(), null);
     }
 
     /** Build a completed, history-confirmed run; only completedAt/error/area/duration/missionNumber matter. */
@@ -399,6 +404,218 @@ class AlertEngineTest {
                 @Override boolean isNewRoomba(Long uid, String title, boolean todayOnly) { return false; }
             };
             engine.generateRoombaAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+        }
+    }
+
+    // ──────────────────────────────────────────
+    // The dock, and a scheduled clean that didn't start (Nov 13 2026)
+    // ──────────────────────────────────────────
+
+    /** Fri Nov 13 2026, 10:03 AM at home: an hour after the 9:00 AM clean that never started. */
+    private static final ZonedDateTime NOV13 = ZonedDateTime.of(2026, 11, 13, 10, 3, 0, 0, ZoneId.of("America/Chicago"));
+    /** The dock's complaint as the poller stored it (pwState 671), from 9:01 AM. */
+    private static final RoombaDockIssue CLEAN_WATER = new RoombaDockIssue("clean_water_empty", 671, "2026-11-13T15:01:00Z");
+    /** The NUC's two schedules: Mon + Fri vacuum and mop, Tue – Thu vacuum, both at 9:00 AM. */
+    private static final List<RoombaNativeScheduleResponse> SCHEDULES = List.of(
+            new RoombaNativeScheduleResponse("s-13", "Regular Schedule", "WEEKLY", List.of(1, 5), 9, 0, true, 6, List.of(6), null),
+            new RoombaNativeScheduleResponse("s-14", "Regular Schedule", "WEEKLY", List.of(2, 3, 4), 9, 0, true, 6, List.of(2), null));
+    /** Thursday's clean, the newest run on Nov 13. */
+    private static final RoombaRunResponse NOV12 = runAt("2026-11-12T15:00:15Z", "2026-11-12T18:30:36Z");
+
+    /** The status on Nov 13: docked, idle, with whatever reasons and dock complaint given. */
+    private static RoombaStatusResponse docked(RoombaDockIssue issue, List<String> reasons, String missionStart,
+                                               String cycle, boolean online) {
+        return new RoombaStatusResponse(
+                "robot-1", "iRummy", 100, "charge", cycle, 0, null,
+                false, true, true, null, missionStart, 1105, null, 301, 0, "Ready", 0, "none", "padPlate",
+                44, 0, "picea unknown fault code:717", null, 51, null, null,
+                online, !reasons.isEmpty(), reasons, NOV13.toInstant().toString(), issue);
+    }
+
+    private static RoombaStatusResponse nov13() {
+        return docked(CLEAN_WATER, List.of("The dock's clean-water tank is empty", "picea unknown fault code:717"),
+                null, "none", true);
+    }
+
+    private static RoombaStatusResponse quiet(boolean online) {
+        return docked(null, List.of(), null, "none", online);
+    }
+
+    private static RoombaRunResponse runAt(String startedAt, String completedAt) {
+        return new RoombaRunResponse(9L, startedAt, completedAt, 60, 1000, "COMPLETED", "m", 52, 0, null,
+                "cloud", "clean", "irobot-history", 0, 0, null, null, List.of(), null, true);
+    }
+
+    /** An engine on Nov 13's data at {@code now}; {@code seenSince} records the dock dedup's start. */
+    private AlertEngine watchEngine(RoombaStatusResponse status, List<RoombaRunResponse> runs,
+                                    ZonedDateTime now, boolean sentAlready, List<Instant> seenSince) {
+        return new AlertEngine(null, notificationService, null, null, null) {
+            @Override RoombaRunResponse latestRoombaRun() { return null; }
+            @Override RoombaStatusResponse roombaStatus() { return status; }
+            @Override List<RoombaRunResponse> recentRoombaRuns() { return runs; }
+            @Override List<RoombaNativeScheduleResponse> roombaSchedules() { return SCHEDULES; }
+            @Override ZonedDateTime nowAtHome() { return now; }
+            @Override boolean isNewRoomba(Long uid, String title, boolean todayOnly) { return !sentAlready; }
+            @Override boolean isNewRoombaSince(Long uid, String title, Instant since) {
+                seenSince.add(since);
+                return !sentAlready;
+            }
+        };
+    }
+
+    private AlertEngine watchEngine(RoombaStatusResponse status, List<RoombaRunResponse> runs, ZonedDateTime now) {
+        return watchEngine(status, runs, now, false, new ArrayList<>());
+    }
+
+    @Nested
+    @DisplayName("the dock's complaint")
+    class DockAlerts {
+
+        @Test
+        @DisplayName("Nov 13: the clean-water tank, said plainly, deduped from when it began")
+        void cleanWaterTank() {
+            List<Instant> since = new ArrayList<>();
+            watchEngine(nov13(), List.of(NOV12), NOV13, false, since).generateRoombaAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING),
+                    eq("Roomba dock — clean-water tank empty"),
+                    eq("The dock's clean-water tank is empty. Refill it and iRummy can mop again. "
+                            + "If it's full, push it in firmly; a loose tank reads as empty. Dock code 671."));
+            assertEquals(Instant.parse("2026-11-13T15:01:00Z"), since.get(0));  // then the missed start's 9:00
+        }
+
+        @Test
+        @DisplayName("the generic attention alert leaves the dock to its own alert")
+        void genericAlertSkipsTheDock() {
+            watchEngine(nov13(), List.of(NOV12), NOV13).generateRoombaAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING),
+                    eq("Roomba needs attention — picea unknown fault code:717"), eq("picea unknown fault code:717."));
+        }
+
+        @Test
+        @DisplayName("no generic alert when the dock is the only reason")
+        void onlyTheDock() {
+            var status = docked(CLEAN_WATER, List.of("The dock's clean-water tank is empty"), null, "none", true);
+            watchEngine(status, List.of(NOV12), NOV13).generateRoombaAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), contains("needs attention"), any());
+            verify(notificationService).send(anyLong(), any(), any(), eq("Roomba dock — clean-water tank empty"), any());
+        }
+
+        @Test
+        @DisplayName("waits for a complaint to stand ten minutes")
+        void settles() {
+            var fresh = new RoombaDockIssue("dirty_water_full", 672, NOV13.minusMinutes(4).toInstant().toString());
+            var status = docked(fresh, List.of("The dock's dirty-water tank is full"), null, "none", true);
+            watchEngine(status, List.of(NOV12), NOV13).generateRoombaWatchAlerts(1L);  // 4 minutes in
+            verify(notificationService, never()).send(anyLong(), any(), any(), contains("dirty-water"), any());
+            watchEngine(status, List.of(NOV12), NOV13.plusMinutes(7)).generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING),
+                    eq("Roomba dock — dirty-water tank full"),
+                    eq("The dock's dirty-water tank is full. Empty it and iRummy can mop again. "
+                            + "If it's empty, push it in firmly; a loose tank reads as full. Dock code 672."));
+        }
+
+        @Test
+        @DisplayName("already sent for this occurrence -> nothing")
+        void oncePerOccurrence() {
+            watchEngine(nov13(), List.of(NOV12), NOV13, true, new ArrayList<>()).generateRoombaWatchAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a code nobody decoded says 'needs attention' with the code, never fine")
+        void undecoded() {
+            var other = new RoombaDockIssue("other", 609, "2026-11-13T15:01:00Z");
+            var status = docked(other, List.of("The dock needs attention (code 609)"), null, "none", true);
+            watchEngine(status, List.of(NOV12), NOV13).generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING),
+                    eq("Roomba dock needs attention"),
+                    eq("The dock reported code 609, which this app can't read yet. Check the light on the dock and the iRobot app."));
+        }
+
+        @Test
+        @DisplayName("the words for each kind")
+        void words() {
+            assertEquals("The dock's clean-water tank is out", RoombaDock.reason("clean_water_out", 650));
+            assertEquals("Put it back and iRummy can mop again.", RoombaDock.fix("dirty_water_out", 653, "iRummy"));
+            assertEquals("Empty it and the Roomba can mop again.", RoombaDock.fix("dirty_water_full", 654, null));
+            assertEquals("The dock needs a new bag. Fit one so the dock can empty iRummy's bin again. Dock code 353.",
+                    RoombaDock.alertMessage("bag", 353, "iRummy"));
+            assertEquals("The dock needs attention (code 717)", RoombaDock.reason("something_new", 717));
+            assertEquals("Roomba dock needs attention", RoombaDock.alertTitle("something_new"));
+        }
+    }
+
+    @Nested
+    @DisplayName("a scheduled clean that didn't start")
+    class MissedStart {
+
+        private static final String TITLE = "Scheduled clean didn't start — Nov 13, 9:00 AM";
+
+        @Test
+        @DisplayName("Nov 13: the 9:00 AM vacuum-and-mop clean, with the dock's reason, deduped from 9:00")
+        void nov13Missed() {
+            List<Instant> since = new ArrayList<>();
+            watchEngine(nov13(), List.of(NOV12), NOV13, false, since).generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING), eq(TITLE),
+                    eq("iRummy's 9:00 AM vacuum-and-mop clean didn't start. The dock's clean-water tank is empty. "
+                            + "Refill it and iRummy can mop again. If it's full, push it in firmly; a loose tank reads as empty."));
+            // [the dock alert's start, the scheduled start]
+            assertEquals(Instant.parse("2026-11-13T15:00:00Z"), since.get(1));
+        }
+
+        @Test
+        @DisplayName("with nothing from the dock, it says so")
+        void noReason() {
+            watchEngine(quiet(true), List.of(NOV12), NOV13).generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(eq(1L), eq(AlertType.ROOMBA_ATTENTION), eq(Severity.WARNING), eq(TITLE),
+                    eq("iRummy's 9:00 AM vacuum-and-mop clean didn't start. It hasn't said why: check the robot and the iRobot app."));
+        }
+
+        @Test
+        @DisplayName("not before half an hour has passed")
+        void tooEarly() {
+            watchEngine(quiet(true), List.of(NOV12), NOV13.withHour(9).withMinute(25)).generateRoombaWatchAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("a clean that started on time, finished or still going, is no miss")
+        void started() {
+            watchEngine(quiet(true), List.of(runAt("2026-11-13T15:00:20Z", "2026-11-13T15:40:00Z"), NOV12), NOV13)
+                    .generateRoombaWatchAlerts(1L);
+            var running = new RoombaStatusResponse("robot-1", "iRummy", 80, "run", "clean", 0, null, true, true, true,
+                    "M", "2026-11-13T15:00:20Z", 300, 60, 301, 0, "Ready", 0, "schedule", "padPlate", 44, 0, null, null,
+                    51, null, null, true, false, List.of(), NOV13.toInstant().toString(), null);
+            watchEngine(running, List.of(NOV12), NOV13).generateRoombaWatchAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("out on an earlier clean at 9:00 -> no miss; one that ended before 9:00 doesn't count")
+        void busy() {
+            watchEngine(docked(null, List.of(), "2026-11-13T13:00:00Z", "clean", true), List.of(NOV12), NOV13)
+                    .generateRoombaWatchAlerts(1L);
+            watchEngine(quiet(true), List.of(runAt("2026-11-13T12:30:00Z", "2026-11-13T15:20:00Z"), NOV12), NOV13)
+                    .generateRoombaWatchAlerts(1L);
+            verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
+
+            watchEngine(quiet(true), List.of(runAt("2026-11-13T12:30:00Z", "2026-11-13T14:30:00Z"), NOV12), NOV13)
+                    .generateRoombaWatchAlerts(1L);
+            verify(notificationService).send(anyLong(), any(), any(), eq(TITLE), any());
+        }
+
+        @Test
+        @DisplayName("a stale reading, a day off the schedule, a schedule that ran, or one already sent -> nothing")
+        void guarded() {
+            watchEngine(quiet(false), List.of(NOV12), NOV13).generateRoombaWatchAlerts(1L);
+            // Saturday: no schedule.
+            watchEngine(quiet(true), List.of(NOV12), NOV13.plusDays(1)).generateRoombaWatchAlerts(1L);
+            // Thursday the 12th: the 9:00 AM vacuum started at 9:00:15.
+            watchEngine(quiet(true), List.of(NOV12), NOV13.minusDays(1)).generateRoombaWatchAlerts(1L);
+            // Next morning: too late to be news.
+            watchEngine(quiet(true), List.of(NOV12), NOV13.withHour(21).withMinute(30)).generateRoombaWatchAlerts(1L);
+            watchEngine(quiet(true), List.of(NOV12), NOV13, true, new ArrayList<>()).generateRoombaWatchAlerts(1L);
             verify(notificationService, never()).send(anyLong(), any(), any(), any(), any());
         }
     }

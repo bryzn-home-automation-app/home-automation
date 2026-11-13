@@ -1,6 +1,7 @@
 package com.homeplatform.service;
 
 import com.homeplatform.dto.RoombaCommandResponse;
+import com.homeplatform.dto.RoombaDockIssue;
 import com.homeplatform.dto.RoombaMapResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
 import com.homeplatform.dto.RoombaRunResponse;
@@ -253,6 +254,45 @@ class RoombaServiceTest {
             RoombaStatusResponse r = service.getStatus().orElseThrow();
             assertFalse(r.running());
             assertFalse(r.online());
+        }
+
+        @Test
+        @DisplayName("Nov 13: the dock's complaint leads the reasons, in words, with its code and start")
+        void dockIssue() {
+            RoombaStatus s = RoombaStatus.builder()
+                    .robotId("robot-1").name("iRummy").phase("charge").cycle("none")
+                    .dockState(301).dockError(0).dockText("Ready")
+                    .faultText("picea unknown fault code:717")
+                    .dockIssue("clean_water_empty").dockIssueCode(671)
+                    .dockIssueSince(LocalDateTime.of(2026, 11, 13, 15, 1))
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(2))
+                    .build();
+            when(statusRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(s));
+
+            RoombaStatusResponse r = service.getStatus().orElseThrow();
+            assertTrue(r.needsAttention());
+            assertEquals(List.of("The dock's clean-water tank is empty", "picea unknown fault code:717"),
+                    r.attentionReasons());
+            assertEquals(new RoombaDockIssue("clean_water_empty", 671, "2026-11-13T15:01Z"), r.dockIssue());
+        }
+
+        @Test
+        @DisplayName("a dock error the complaint already names isn't listed twice; a quiet dock has none")
+        void dockErrorNotTwice() {
+            RoombaStatus s = RoombaStatus.builder()
+                    .robotId("robot-1").phase("charge").dockError(672)
+                    .dockIssue("dirty_water_full").dockIssueCode(672)
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC).minusMinutes(2))
+                    .build();
+            when(statusRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(s));
+            assertEquals(List.of("The dock's dirty-water tank is full"), service.getStatus().orElseThrow().attentionReasons());
+
+            s.setDockIssue(null);
+            s.setDockIssueCode(null);
+            s.setDockError(0);
+            RoombaStatusResponse quiet = service.getStatus().orElseThrow();
+            assertNull(quiet.dockIssue());
+            assertFalse(quiet.needsAttention());
         }
     }
 

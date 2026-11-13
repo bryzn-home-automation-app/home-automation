@@ -22,7 +22,7 @@ import { useRoombaNativeSchedules } from '../hooks/useRoombaNativeSchedules';
 import { useAuth } from '../context/AuthContext';
 import { cleaningMinutes, isRecharging, roomsSummary } from '../utils/roomba';
 import {
-  initiatorLabel, lastSeen, nextCleanDay, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
+  dockLamp, initiatorLabel, lastSeen, nextCleanDay, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
 } from '../utils/roombaStatus';
 import { batteryStatus, humanize, onlineStatus, type Tone } from '../utils/status';
 import { DASH, NBSP, formatDayName, formatDuration, formatNumber, formatStamp, formatTime, plural } from '../utils/format';
@@ -355,6 +355,12 @@ export default memo(function Roomba() {
           v.note || v.aboutParts ? (
             <>
               {v.note}
+              {v.code && (
+                <>
+                  {' '}
+                  <span className="fp-mono fp-small fp-muted whitespace-nowrap">{v.code}</span>
+                </>
+              )}
               {v.aboutParts && (
                 <>
                   {' '}
@@ -445,6 +451,7 @@ export default memo(function Roomba() {
       </span>
     );
   const online = onlineStatus(status ? status.online : null);
+  const dock = dockLamp(status);
 
   // ── Map editing (admin) ────────────────────────────────
   const modeBanner = isAdmin && (cleanMode || splitMode || mergeMode) ? (
@@ -540,6 +547,12 @@ export default memo(function Roomba() {
               <span className="inline-flex flex-wrap items-center gap-x-3.5 gap-y-1.5">
                 {presence('Bin', status.binPresent)}
                 {presence('Tank', status.tankPresent)}
+                {dock && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <Lamp tone={dock.tone} size="s" />
+                    <span className="fp-small">{dock.label}</span>
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
                   <Lamp tone={online.tone} size="s" />
                   <span className="fp-small">{online.label}</span>

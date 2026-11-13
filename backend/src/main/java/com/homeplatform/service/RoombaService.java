@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.homeplatform.dto.RoombaCommandResponse;
 import com.homeplatform.dto.RoombaDeviceResponse;
+import com.homeplatform.dto.RoombaDockIssue;
 import com.homeplatform.dto.RoombaPartResponse;
 import com.homeplatform.dto.RoombaMapResponse;
 import com.homeplatform.dto.RoombaPositionResponse;
@@ -738,7 +739,14 @@ public class RoombaService {
         if (s.getError() != null && s.getError() != 0) {
             reasons.add(errorText != null ? errorText : "Error " + s.getError());
         }
-        if (s.getDockError() != null && s.getDockError() != 0) {
+        // The dock's complaint in words (the tank, the bag, the mop), ahead of the raw dock error.
+        RoombaDockIssue dockIssue = s.getDockIssue() == null ? null
+                : new RoombaDockIssue(s.getDockIssue(), s.getDockIssueCode(), iso(s.getDockIssueSince()));
+        if (dockIssue != null) {
+            reasons.add(RoombaDock.reason(dockIssue.kind(), dockIssue.code()));
+        }
+        if (s.getDockError() != null && s.getDockError() != 0
+                && (dockIssue == null || !s.getDockError().equals(dockIssue.code()))) {
             reasons.add("Dock error " + s.getDockError());
         }
         if (s.getNotReady() != null && s.getNotReady() != 0) {
@@ -797,7 +805,8 @@ public class RoombaService {
                 online,
                 needsAttention,
                 reasons,
-                iso(s.getUpdatedAt())
+                iso(s.getUpdatedAt()),
+                dockIssue
         );
     }
 

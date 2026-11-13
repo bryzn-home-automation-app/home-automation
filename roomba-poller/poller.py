@@ -51,6 +51,7 @@ from roombapy_prime.prime_factory import PrimeFactory
 from roombapy_prime.vendor_errors import vendor_error
 
 import coverage_passes
+import dock_issues
 from command_flow import (
     CMD_TICK_SECONDS,
     CONFIRMED,
@@ -309,23 +310,39 @@ def upsert_status(conninfo, robot_id, name, rep, stats, map_version):
 
     dock = rep.get("dock") or {}
     dock_state = dock.get("state")
+    dock_issue, dock_issue_code = dock_issues.dock_issue(dock)
 
+    # dock_issue_since: when the dock's current complaint began. Kept while the same complaint
+    # stands, restarted when it changes, cleared with it; the backend alerts once per start.
     sql = """
         INSERT INTO roomba_status (
             robot_id, name, battery_pct, phase, cycle, error, error_text, bin_present,
             tank_present, current_mission_id, mission_start, sqft, runtime_minutes,
             dock_state, dock_error, dock_text, not_ready, initiator, detected_pad,
             charge_cycles, charge_errors, fault_text, wear,
-            lifetime_missions, lifetime_run_minutes, map_version, raw, updated_at
+            lifetime_missions, lifetime_run_minutes, map_version, raw, updated_at,
+            dock_issue, dock_issue_code, dock_issue_since
         ) VALUES (
             %(robot_id)s, %(name)s, %(battery_pct)s, %(phase)s, %(cycle)s, %(error)s,
             %(error_text)s, %(bin_present)s, %(tank_present)s, %(current_mission_id)s,
             %(mission_start)s, %(sqft)s, %(runtime_minutes)s, %(dock_state)s,
             %(dock_error)s, %(dock_text)s, %(not_ready)s, %(initiator)s, %(detected_pad)s,
             %(charge_cycles)s, %(charge_errors)s, %(fault_text)s, %(wear)s,
-            %(lifetime_missions)s, %(lifetime_run_minutes)s, %(map_version)s, %(raw)s, NOW()
+            %(lifetime_missions)s, %(lifetime_run_minutes)s, %(map_version)s, %(raw)s, NOW(),
+            %(dock_issue)s, %(dock_issue_code)s,
+            CASE WHEN %(dock_issue)s::varchar IS NULL THEN NULL ELSE NOW() END
         )
         ON CONFLICT (robot_id) DO UPDATE SET
+            dock_issue = EXCLUDED.dock_issue,
+            dock_issue_code = EXCLUDED.dock_issue_code,
+            dock_issue_since = CASE
+                WHEN EXCLUDED.dock_issue IS NULL THEN NULL
+                WHEN roomba_status.dock_issue_since IS NOT NULL
+                     AND roomba_status.dock_issue IS NOT DISTINCT FROM EXCLUDED.dock_issue
+                     AND roomba_status.dock_issue_code IS NOT DISTINCT FROM EXCLUDED.dock_issue_code
+                    THEN roomba_status.dock_issue_since
+                ELSE EXCLUDED.dock_issue_since
+            END,
             name = EXCLUDED.name,
             battery_pct = EXCLUDED.battery_pct,
             phase = EXCLUDED.phase,
@@ -382,6 +399,8 @@ def upsert_status(conninfo, robot_id, name, rep, stats, map_version):
         "lifetime_run_minutes": lifetime_run_minutes,
         "map_version": map_version,
         "raw": Json(rep),
+        "dock_issue": dock_issue,
+        "dock_issue_code": dock_issue_code,
     }
     with psycopg.connect(conninfo, autocommit=True) as conn:
         conn.execute(sql, params)

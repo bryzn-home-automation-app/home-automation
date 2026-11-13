@@ -40,5 +40,7 @@ public record RoombaStatusResponse(
         boolean online,
         boolean needsAttention,
         List<String> attentionReasons,
-        String updatedAt
+        String updatedAt,
+        /** What the dock is complaining about, or null (see {@link RoombaDockIssue}). */
+        RoombaDockIssue dockIssue
 ) {}

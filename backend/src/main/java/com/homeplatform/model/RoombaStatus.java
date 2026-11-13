@@ -108,4 +108,20 @@ public class RoombaStatus {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    /**
+     * What the dock is complaining about, decoded by the poller (roomba-poller/dock_issues.py):
+     * clean_water_empty, dirty_water_full, … or other; null when nothing. A plain string on
+     * purpose (no DB enum to outgrow). See {@link com.homeplatform.service.RoombaDock}.
+     */
+    @Column(name = "dock_issue", length = 40)
+    private String dockIssue;
+
+    /** The code the dock reported for it (e.g. 671 in pwState). */
+    @Column(name = "dock_issue_code")
+    private Integer dockIssueCode;
+
+    /** When this complaint began (UTC); the poller keeps it while the complaint stands. */
+    @Column(name = "dock_issue_since")
+    private LocalDateTime dockIssueSince;
 }

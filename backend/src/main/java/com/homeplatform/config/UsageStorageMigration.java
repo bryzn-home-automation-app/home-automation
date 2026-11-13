@@ -234,6 +234,11 @@ public class UsageStorageMigration implements ApplicationRunner {
                 updated_at          TIMESTAMP      NOT NULL DEFAULT NOW()
             )
             """);
+        // What the dock is complaining about (poller dock_issues.py; see schema.sql).
+        for (String col : new String[]{
+                "dock_issue VARCHAR(40)", "dock_issue_code INTEGER", "dock_issue_since TIMESTAMP"}) {
+            jdbcTemplate.execute("ALTER TABLE roomba_status ADD COLUMN IF NOT EXISTS " + col);
+        }
 
         // Current floor-plan map bundle per robot (poller UPSERTs on map_version change).
         jdbcTemplate.execute("""

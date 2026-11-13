@@ -214,7 +214,7 @@ export function partsSummary(parts: readonly Pick<RoombaPart, 'label' | 'status'
 // ─── The verdict ────────────────────────────────────────────────────────
 
 export interface RoombaVerdictInput {
-  status: (RoombaStatusInput & Partial<Pick<RoombaStatus, 'name' | 'sqft' | 'runtimeMinutes' | 'needsAttention' | 'attentionReasons' | 'batteryPct'>>) | null | undefined;
+  status: (RoombaStatusInput & Partial<Pick<RoombaStatus, 'name' | 'sqft' | 'runtimeMinutes' | 'needsAttention' | 'attentionReasons' | 'batteryPct' | 'dockIssue'>>) | null | undefined;
   parts?: readonly Pick<RoombaPart, 'label' | 'status'>[] | null;
   /** Where it was last seen, when the map shows that (lastSeen): the note says where to look. */
   lastSeen?: Pick<LastSeen, 'words'> | null;
@@ -229,6 +229,8 @@ export interface RoombaVerdict {
   note: string | null;
   /** True when the note points at the parts (the page adds a "See parts" link). */
   aboutParts: boolean;
+  /** The dock's own code, shown small after the note ("Dock code 671"), or null. */
+  code?: string | null;
 }
 
 /** The answer at the top of the Roomba page: what the robot is doing and whether anything needs doing. */
@@ -303,6 +305,11 @@ export function roombaVerdict({ status, parts, lastSeen: seenAt, now = Date.now(
   if (seen) {
     return { tone: 'headsup', sentence: `${name} is stopped away from the dock.`, note: join(seen, partsNote), aboutParts: !!partsNote };
   }
+  // The dock's own complaint (its tanks, its bag, the mop): what's wrong and what to do, never "ready".
+  const dock = dockIssueWords(status.dockIssue, status.name);
+  if (dock) {
+    return { tone: 'headsup', sentence: dock.sentence, note: dock.note, aboutParts: false, code: dock.code };
+  }
   if (status.dockError) {
     return {
       tone: 'headsup',
@@ -333,6 +340,77 @@ function formatPartList(labels: string[]): string {
 
 function lowerFirstWord(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1).replace(/\.$/, '');
+}
+
+// ─── The dock ───────────────────────────────────────────────────────────
+
+/*
+ * The dock's own complaint (status.dockIssue, decoded by the poller: roomba-poller/dock_issues.py
+ * has the code table and where each code comes from). Nov 13 2026: the 9:00 AM vacuum-and-mop
+ * clean didn't start, the dock's light was red, and this page said "docked and ready" because the
+ * dock's main state (301) only covers emptying the bin; the pad-wash state read 671, "clean-water
+ * tank empty or not installed". 671 and 672 can't tell an empty (or full) tank from one that isn't
+ * pushed in, so their advice covers both. A kind this doesn't know reads as "the dock needs
+ * attention" with the code, never as ready. The alerts word the same kinds (backend RoombaDock).
+ */
+
+export interface DockIssueWords {
+  /** What's wrong: "The dock's clean-water tank is empty." */
+  sentence: string;
+  /** What to do. */
+  note: string;
+  /** Short, for the lamp under the map beside "Bin in" and the robot's own "Tank in": "Dock: clean water empty". */
+  short: string;
+  /** "Dock code 671", or null without a code. */
+  code: string | null;
+}
+
+/** The dock's complaint in words, or null when it has none. */
+export function dockIssueWords(issue: RoombaStatus['dockIssue'], robotName?: string | null): DockIssueWords | null {
+  if (!issue || !issue.kind) return null;
+  const name = robotName?.trim() || 'the Roomba';
+  const Name = robotName?.trim() || 'The Roomba';
+  const code = issue.code != null ? `Dock code ${issue.code}` : null;
+  const words = (sentence: string, note: string, short: string): DockIssueWords => ({ sentence, note, short, code });
+  switch (issue.kind) {
+    case 'clean_water_empty':
+      return words(
+        "The dock's clean-water tank is empty.",
+        `Refill it and ${name} can mop again.${issue.code === 671 ? " If it's full, push it in firmly; a loose tank reads as empty." : ''}`,
+        'Dock: clean water empty',
+      );
+    case 'clean_water_out':
+      return words("The dock's clean-water tank is out.", `Fill it and put it back, and ${name} can mop again.`, 'Dock: clean tank out');
+    case 'dirty_water_full':
+      return words(
+        "The dock's dirty-water tank is full.",
+        `Empty it and ${name} can mop again.${issue.code === 672 ? " If it's empty, push it in firmly; a loose tank reads as full." : ''}`,
+        'Dock: dirty water full',
+      );
+    case 'dirty_water_out':
+      return words("The dock's dirty-water tank is out.", `Put it back and ${name} can mop again.`, 'Dock: dirty tank out');
+    case 'bag':
+      return words('The dock needs a new bag.', `Fit one so the dock can empty ${name}'s bin again.`, 'Dock: needs a bag');
+    case 'mop':
+      return words(`${Name}'s mop isn't attached.`, 'Attach or reseat it and it can mop again. It can still vacuum.', 'Mop not attached');
+    default:
+      return words(
+        'The dock needs attention.',
+        "It's reporting something this app can't read yet. Check the light on the dock and the iRobot app.",
+        code ?? 'Dock needs a look',
+      );
+  }
+}
+
+/** The dock's lamp under the map: its complaint in a few words, a dock error, or "Dock OK". Null when nothing is known. */
+export function dockLamp(
+  status: Pick<RoombaStatus, 'dockState' | 'dockError' | 'name'> & Partial<Pick<RoombaStatus, 'dockIssue'>> | null | undefined,
+): { tone: Tone; label: string } | null {
+  if (!status) return null;
+  const issue = dockIssueWords(status.dockIssue, status.name);
+  if (issue) return { tone: 'headsup', label: issue.short };
+  if (status.dockError) return { tone: 'headsup', label: 'Dock needs a look' };
+  return status.dockState != null ? { tone: 'ok', label: 'Dock OK' } : null;
 }
 
 // ─── Runs ───────────────────────────────────────────────────────────────

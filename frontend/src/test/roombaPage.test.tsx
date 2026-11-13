@@ -133,6 +133,27 @@ describe('Roomba page', () => {
     expect(screen.queryByText(/Last seen/)).toBeNull();
   });
 
+  it("says the dock's clean-water tank is empty, with its code, and lights the dock lamp (Nov 13)", async () => {
+    state.status = {
+      needsAttention: true,
+      attentionReasons: ["The dock's clean-water tank is empty", 'picea unknown fault code:717'],
+      faultText: 'picea unknown fault code:717',
+      dockIssue: { kind: 'clean_water_empty', code: 671, since: new Date(Date.now() - 3_600_000).toISOString() },
+    };
+    const { unmount } = renderPage();
+    expect(await screen.findByText("The dock's clean-water tank is empty.")).toBeTruthy();
+    expect(screen.getByText(/Refill it and Rosie can mop again\./)).toBeTruthy();
+    expect(screen.getByText('Dock code 671')).toBeTruthy();
+    expect(screen.getByText('Dock: clean water empty')).toBeTruthy();
+    expect(screen.queryByText(/docked and ready/)).toBeNull();
+    unmount();
+
+    state.status = {};
+    renderPage();
+    expect(await screen.findByText('Rosie is docked and ready.')).toBeTruthy();
+    expect(screen.getByText('Dock OK')).toBeTruthy();
+  });
+
   it('lists runs by their visible words and opens the run dialog (B-132)', async () => {
     renderPage();
     const list = await screen.findByRole('region', { name: 'Recent cleans' });
