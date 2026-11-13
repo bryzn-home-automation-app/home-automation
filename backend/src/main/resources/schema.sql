@@ -298,6 +298,45 @@ CREATE TABLE IF NOT EXISTS roomba_coverage (
     passes_updated_at  TIMESTAMP
 );
 
+-- Skipped scheduled cleans. The schedules are the robot's own, in iRobot's cloud, which has
+-- no "skip once": the poller switches the schedule off across the skipped start and back on
+-- after restore_after (roomba-poller/schedule_skips.py). The backend inserts a row (ADMIN)
+-- and may set undo_requested_at; the poller alone moves state:
+--   PENDING   asked for; the schedule isn't switched off yet (next_check_at: when to look)
+--   APPLYING  the switch-off is being sent (stored first, so a restart knows it may be off)
+--   APPLIED   switched off by us (original_enabled = its flag before); back on after restore_after
+--   RESTORED  back on, or nothing left to switch back on      (all three: finished_at)
+--   CANCELLED nothing switched off: undone, schedule changed or deleted in the app
+--   FAILED    couldn't be switched off before scheduled_for
+-- skip_date / schedule_hour / schedule_minute are the home's clock; the TIMESTAMPs are UTC.
+-- attempts / last_error count failed cloud calls in a row; alerted_at = the admins were told.
+CREATE TABLE IF NOT EXISTS roomba_schedule_skips (
+    id                     BIGSERIAL PRIMARY KEY,
+    robot_id               VARCHAR(64),
+    household_schedule_id  VARCHAR(160) NOT NULL,
+    schedule_id            VARCHAR(160),
+    skip_date              DATE         NOT NULL,
+    schedule_hour          INTEGER      NOT NULL,
+    schedule_minute        INTEGER      NOT NULL,
+    scheduled_for          TIMESTAMP    NOT NULL,
+    restore_after          TIMESTAMP    NOT NULL,
+    state                  VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+    original_enabled       BOOLEAN,
+    detail                 VARCHAR(500),
+    requested_by           VARCHAR(120),
+    created_at             TIMESTAMP    NOT NULL DEFAULT NOW(),
+    applied_at             TIMESTAMP,
+    finished_at            TIMESTAMP,
+    undo_requested_at      TIMESTAMP,
+    undo_requested_by      VARCHAR(120),
+    next_check_at          TIMESTAMP,
+    attempts               INTEGER      NOT NULL DEFAULT 0,
+    last_error             VARCHAR(500),
+    alerted_at             TIMESTAMP,
+    updated_at             TIMESTAMP    NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_roomba_schedule_skips_state ON roomba_schedule_skips (state, scheduled_for);
+
 -- App release notes for the "What's New" tab. Authored in code and upserted by
 -- ReleaseSeeder on startup (one row per version). `changes` is a JSONB array of
 -- {type: new|improved|fixed, text}. `sort_order` drives newest-first display so

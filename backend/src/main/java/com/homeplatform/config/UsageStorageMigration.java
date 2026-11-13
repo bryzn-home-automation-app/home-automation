@@ -336,6 +336,38 @@ public class UsageStorageMigration implements ApplicationRunner {
             )
             """);
 
+        // Skipped scheduled cleans (RoombaScheduleSkip; the poller's schedule_skips.py moves
+        // the state). Columns and states are documented in schema.sql.
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS roomba_schedule_skips (
+                id                     BIGSERIAL PRIMARY KEY,
+                robot_id               VARCHAR(64),
+                household_schedule_id  VARCHAR(160) NOT NULL,
+                schedule_id            VARCHAR(160),
+                skip_date              DATE         NOT NULL,
+                schedule_hour          INTEGER      NOT NULL,
+                schedule_minute        INTEGER      NOT NULL,
+                scheduled_for          TIMESTAMP    NOT NULL,
+                restore_after          TIMESTAMP    NOT NULL,
+                state                  VARCHAR(20)  NOT NULL DEFAULT 'PENDING',
+                original_enabled       BOOLEAN,
+                detail                 VARCHAR(500),
+                requested_by           VARCHAR(120),
+                created_at             TIMESTAMP    NOT NULL DEFAULT NOW(),
+                applied_at             TIMESTAMP,
+                finished_at            TIMESTAMP,
+                undo_requested_at      TIMESTAMP,
+                undo_requested_by      VARCHAR(120),
+                next_check_at          TIMESTAMP,
+                attempts               INTEGER      NOT NULL DEFAULT 0,
+                last_error             VARCHAR(500),
+                alerted_at             TIMESTAMP,
+                updated_at             TIMESTAMP    NOT NULL DEFAULT NOW()
+            )
+            """);
+        jdbcTemplate.execute(
+            "CREATE INDEX IF NOT EXISTS idx_roomba_schedule_skips_state ON roomba_schedule_skips (state, scheduled_for)");
+
         // Superseded by roomba_native_schedule (2026-09-06): this table backed an
         // app-side-only "scheduler" that fired a plain start command at the right time
         // but never wrote the robot's own native schedule, so nothing it created ever

@@ -9,6 +9,7 @@ import CleanModal, { type CleanRoomOption } from '../components/CleanModal';
 import RoomRunDetailModal from '../components/RoomRunDetailModal';
 import RoombaControls from '../components/RoombaControls';
 import RoombaNativeSchedules from '../components/RoombaNativeSchedules';
+import RoombaSkipClean from '../components/RoombaSkipClean';
 import RoombaMaintenance from '../components/RoombaMaintenance';
 import { usePageMeta } from '../components/shell/PageMeta';
 import {
@@ -19,6 +20,7 @@ import {
 import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts, fetchRoombaLastPosition } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useRoombaNativeSchedules } from '../hooks/useRoombaNativeSchedules';
+import { useRoombaScheduleSkips } from '../hooks/useRoombaScheduleSkips';
 import { useAuth } from '../context/AuthContext';
 import { cleaningMinutes, isRecharging, roomsSummary } from '../utils/roomba';
 import {
@@ -124,6 +126,8 @@ export default memo(function Roomba() {
 
   // The same query the Schedules panel reads (one request): the "Next clean" readout.
   const { query: schedulesQuery } = useRoombaNativeSchedules(true);
+  // Skipped cleans: passed over by "Next clean", and skipped or undone under it.
+  const skips = useRoombaScheduleSkips();
 
   const status = statusQuery.data ?? null;
   const device = deviceQuery.data ?? null;
@@ -411,7 +415,7 @@ export default memo(function Roomba() {
     );
   }
 
-  const next = nextScheduledClean(schedulesQuery.data, now);
+  const next = nextScheduledClean(schedulesQuery.data, now, skips.query.data);
   const [nextValue, nextUnit] = next ? splitTime(formatTime(next.at)) : [DASH, undefined];
   const nextNote = next
     ? [nextCleanDay(next, now), next.name].filter(Boolean).join(', ')
@@ -550,6 +554,7 @@ export default memo(function Roomba() {
           ) : undefined
         }
       >
+        <RoombaSkipClean skips={skips} schedules={schedulesQuery.data} next={next} isAdmin={isAdmin} now={now} />
         {/* A refresh that failed while a reading is held: the reading stays, with a heads-up. */}
         {statusQuery.isError && statusQuery.data !== undefined && (
           <Notice

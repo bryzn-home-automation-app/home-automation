@@ -603,6 +603,7 @@ class MainLoop(unittest.IsolatedAsyncioTestCase):
             refresh_parts=nothing,
             sync_history=nothing,
             run_live_map=nothing,
+            _check_schedule_skips=nothing,
             FAST_POLL_INTERVAL=1,
         )
         env = {"IROBOT_EMAIL": "e", "IROBOT_PASSWORD": "p", "POSTGRES_PASSWORD": "x"}

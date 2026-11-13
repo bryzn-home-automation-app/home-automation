@@ -51,6 +51,7 @@ from roombapy_prime.prime_factory import PrimeFactory
 from roombapy_prime.vendor_errors import vendor_error
 
 import coverage_passes
+import schedule_skips
 from command_flow import (
     CMD_TICK_SECONDS,
     CONFIRMED,
@@ -1258,6 +1259,13 @@ MERGE_ROOMS = "merge_rooms"
 CLEAN_ROOM = "clean_room"
 CLEAN_ROOMS = "clean_rooms"
 LIST_SCHEDULES = "list_schedules"
+# The backend queues these when a scheduled clean is skipped or a skip undone (the skip itself
+# is a roomba_schedule_skips row): they only wake the poller to run a skip pass at once.
+SKIP_CLEAN = "skip_clean"
+UNDO_SKIP = "undo_skip"
+# Between those, the main loop looks for skips with something due this often (database only;
+# the cloud is read only when one is due).
+SKIP_CHECK_SECONDS = 30
 
 # Commands that (may) start a mission. After one, the poller polls at the fast
 # cadence for a short window so mission start — and thus the live dot + coverage
@@ -1696,6 +1704,215 @@ async def _list_schedules(robot, conninfo):
     return True, f"{len(rows)} schedule(s)"
 
 
+# ---------------------------------------------------------------------------
+# Skipped scheduled cleans (rules in schedule_skips.py)
+# ---------------------------------------------------------------------------
+_SKIP_COLUMNS = ("id, household_schedule_id, schedule_id, skip_date, schedule_hour, schedule_minute, "
+                 "scheduled_for, restore_after, state, undo_requested_at, next_check_at, attempts, last_error")
+
+
+def _utc(dt):
+    """A TIMESTAMP column (UTC wall clock, no zone) as an aware UTC datetime."""
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+
+def _db_time(dt):
+    """An aware datetime as the naive UTC the roomba_* TIMESTAMP columns hold."""
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def _skip_from_row(r):
+    return schedule_skips.Skip(
+        id=r[0], container_id=r[1], schedule_id=r[2], skip_date=r[3], hour=r[4], minute=r[5],
+        scheduled_for=_utc(r[6]), restore_after=_utc(r[7]), state=r[8], undo=r[9] is not None,
+        next_check_at=_utc(r[10]), attempts=r[11] or 0, last_error=r[12],
+    )
+
+
+def _load_active_skips(conninfo):
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        rows = conn.execute(
+            f"SELECT {_SKIP_COLUMNS} FROM roomba_schedule_skips "
+            "WHERE state IN ('PENDING', 'APPLYING', 'APPLIED') ORDER BY scheduled_for, id"
+        ).fetchall()
+    return [_skip_from_row(r) for r in rows]
+
+
+def _load_skip_outcome(conninfo, skip_id):
+    """(state, detail, last_error) of one skip, or None."""
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        return conn.execute(
+            "SELECT state, detail, last_error FROM roomba_schedule_skips WHERE id = %s", (skip_id,)
+        ).fetchone()
+
+
+def _skip_assignments(c, now):
+    """The SET list and its values for one schedule_skips.Change."""
+    sets, params = [], []
+    for column, value in (("state", c.state), ("detail", c.detail), ("original_enabled", c.original_enabled),
+                          ("attempts", c.attempts), ("last_error", c.last_error)):
+        if value is not None:
+            sets.append(f"{column} = %s")
+            params.append(value)
+    for column, value in (("next_check_at", c.next_check_at), ("applied_at", c.applied_at),
+                          ("finished_at", c.finished_at)):
+        if value is not None:
+            sets.append(f"{column} = %s")
+            params.append(_db_time(value))
+    if c.clear_error:
+        sets += ["attempts = 0", "last_error = NULL"]
+    sets.append("updated_at = %s")
+    params.append(_db_time(now))
+    return sets, params
+
+
+def _save_skip_changes(conninfo, changes, now):
+    """Write each change onto its row. Only the columns the poller owns: never
+    undo_requested_at (the backend's) or alerted_at."""
+    changes = [c for c in changes if c is not None]
+    if not changes:
+        return
+    with psycopg.connect(conninfo, autocommit=True) as conn:
+        for c in changes:
+            sets, params = _skip_assignments(c, now)
+            conn.execute(f"UPDATE roomba_schedule_skips SET {', '.join(sets)} WHERE id = %s", (*params, c.skip_id))
+
+
+async def _read_schedule_containers(robot):
+    """(household_id, [(household_schedule_id, [entries])]) as the cloud has them now. Raw, so
+    an unreadable answer raises instead of reading as "no schedules" (schedule_skips.containers)."""
+    household_id = await robot.get_household_id()
+    if not household_id:
+        raise RuntimeError("no household_id")
+    return household_id, schedule_skips.containers(await robot.get_schedules_raw(household_id))
+
+
+async def _set_schedule_enabled(robot, household_id, conts, container_id, schedule_id, enabled):
+    """THE schedule write: one schedule's `enabled` flag, on the container exactly as just
+    read. update_schedules() replaces the container's whole list, so every schedule in it goes
+    back, each through roombapy-prime's HouseholdSchedule, which keeps the fields it doesn't
+    model. Sends PUT /v1/households/{household_id}/settings/schedule/{container_id} with
+    {"schedules": [{"schedule_id": ..., "options": {...the read copy, "enabled": <enabled>}}]}."""
+    import dataclasses
+
+    from roombapy_prime.models.schedules_dnd import HouseholdSchedule
+
+    entries = next((e for cid, e in conts if cid == container_id), None)
+    target = schedule_skips.find_entry(conts, container_id, schedule_id)
+    if entries is None or target is None:
+        raise LookupError("the schedule isn't in the cloud's copy")
+    schedules = []
+    for entry in entries:
+        hs = HouseholdSchedule.from_json(entry)
+        if entry is target:
+            if hs.options.enabled is None:
+                raise ValueError("the schedule has no on/off flag to change")
+            hs = dataclasses.replace(hs, options=dataclasses.replace(hs.options, enabled=enabled))
+        schedules.append(hs)
+    await robot.update_schedules(household_id, container_id, schedules)
+
+
+def _err(e):
+    return f"{type(e).__name__}: {e}"
+
+
+async def _run_schedule_skips(robot, conninfo, now=None, tz=None):
+    """One pass over the active skips. Settles what needs no cloud; reads the cloud only when a
+    skip is due; writes only to switch one schedule off or back on, and then reads it back to
+    check. A failed read or write is stored on the skip and retried later (its own backoff,
+    never a tight loop). Refreshes roomba_native_schedule from whatever it read. Returns a
+    summary for the log; raises only on a database error."""
+    now = now or datetime.now(timezone.utc)
+    changes = {}
+    live = []
+    for s in _load_active_skips(conninfo):
+        c = schedule_skips.settle_offline(s, now)
+        if c is not None:
+            changes[s.id] = c
+        else:
+            live.append(s)
+    groups = schedule_skips.groups_due(live, now)
+    if not groups:
+        _save_skip_changes(conninfo, changes.values(), now)
+        return f"{len(changes)} settled" if changes else "nothing due"
+
+    try:
+        household_id, conts = await _read_schedule_containers(robot)
+    except Exception as e:  # noqa: BLE001 — retried per skip, with its backoff
+        for group in groups.values():
+            for s in group:
+                if s.due(now):
+                    changes[s.id] = schedule_skips.retry(s, now, f"couldn't read the schedules ({_err(e)})")
+        _save_skip_changes(conninfo, changes.values(), now)
+        return f"couldn't read the schedules ({_err(e)})"
+
+    plans = [schedule_skips.plan_group(g, schedule_skips.find_entry(conts, *key), now, tz) for key, g in groups.items()]
+    _save_skip_changes(conninfo, [m for p in plans for m in p.marks], now)  # APPLYING, before any send
+    sent = []
+    for p in plans:
+        if p.write is None:
+            continue
+        try:
+            await _set_schedule_enabled(robot, household_id, conts, p.container_id, p.schedule_id, p.write)
+            sent.append(p)
+            log.info("Schedule %s switched %s for a skipped clean", p.container_id, "on" if p.write else "off")
+        except Exception as e:  # noqa: BLE001
+            log.warning("Couldn't switch schedule %s %s: %s", p.container_id, "on" if p.write else "off", _err(e))
+            p.fail(now, f"couldn't switch the schedule {'on' if p.write else 'off'} ({_err(e)})")
+    if sent:
+        # Confirm on a fresh read: a write the cloud accepts but doesn't keep is a failure too.
+        try:
+            _, conts = await _read_schedule_containers(robot)
+            for p in sent:
+                entry = schedule_skips.find_entry(conts, p.container_id, p.schedule_id)
+                options = entry.get("options") if entry else None
+                if not isinstance(options, dict) or options.get("enabled") is not p.write:
+                    p.fail(now, f"the iRobot cloud took the change but still shows the schedule {'off' if p.write else 'on'}")
+        except Exception as e:  # noqa: BLE001
+            for p in sent:
+                p.fail(now, f"couldn't check the change ({_err(e)})")
+    for p in plans:
+        changes.update(p.changes)
+    try:
+        _replace_native_schedules(conninfo, robot.blid, schedule_skips.mirror_rows(conts))
+    except Exception as e:  # noqa: BLE001 — the page's copy only; the skips matter more
+        log.warning("schedule mirror refresh failed: %s", _err(e))
+    _save_skip_changes(conninfo, changes.values(), now)
+    return f"{len(changes)} skip(s) updated"
+
+
+async def _check_schedule_skips(robot, conninfo):
+    """The main loop's periodic pass. Fail-open: a problem here never fails the cycle (which
+    would drop the cloud link and log in again); the skips keep their own retry times."""
+    try:
+        summary = await _run_schedule_skips(robot, conninfo)
+        if summary != "nothing due":
+            log.info("Schedule skips: %s", summary)
+    except Exception as e:  # noqa: BLE001 — e.g. the database is restarting; tried again next check
+        log.warning("schedule skip check failed: %s", _err(e))
+
+
+async def _skip_command(robot, conninfo, arg):
+    """A skip asked for or undone on the page: run a pass now instead of at the next check,
+    and report what became of that skip on the command row."""
+    await _run_schedule_skips(robot, conninfo)
+    try:
+        skip_id = int(arg)
+    except (TypeError, ValueError):
+        return True, "skips checked"
+    row = _load_skip_outcome(conninfo, skip_id)
+    if row is None:
+        return False, f"no skip #{skip_id}"
+    state, detail, last_error = row
+    if state == schedule_skips.FAILED:
+        return False, detail or "couldn't skip it"
+    if last_error and state in schedule_skips.ACTIVE:
+        return False, f"{last_error}; trying again shortly"
+    return True, f"skip #{skip_id} {state.lower()}" + (f": {detail}" if detail else "")
+
+
 async def _robot_command(robot, conninfo, command, arg):
     """Send one robot (cloud MQTT) command. Returns (outcome, detail): SENT once the broker
     confirmed it (PUBACK; that it reached the robot is checked afterwards), UNCONFIRMED
@@ -1719,8 +1936,8 @@ async def _robot_command(robot, conninfo, command, arg):
 
 
 async def _rest_command(robot, conninfo, state, command, arg):
-    """Map edits and the schedule read: cloud REST calls, no MQTT link involved (the REST
-    client logs in again by itself on a 403). Returns (ok, detail)."""
+    """Map edits, the schedule read and the skip passes: cloud REST calls, no MQTT link
+    involved (the REST client logs in again by itself on a 403). Returns (ok, detail)."""
     if command == RENAME_ROOM:
         return await _rename_room(robot, conninfo, arg, state)
     if command == SPLIT_ROOM:
@@ -1729,6 +1946,8 @@ async def _rest_command(robot, conninfo, state, command, arg):
         return await _merge_rooms(robot, conninfo, arg, state)
     if command == LIST_SCHEDULES:
         return await _list_schedules(robot, conninfo)
+    if command in (SKIP_CLEAN, UNDO_SKIP):
+        return await _skip_command(robot, conninfo, arg)
     return False, f"unknown command: {command}"
 
 
@@ -2301,6 +2520,7 @@ async def main():
             link = CloudLink(session, (email, password, country, blid), state)
             runner = CommandRunner(link, conninfo, state)
             last_poll = 0.0
+            skips_due = 0.0  # the first good cycle (start-up, after an outage) checks the skips
             woke = "start"
             failures = 0  # failed cycles in a row
             while True:
@@ -2341,6 +2561,11 @@ async def main():
                     # down), a minute after each run ends, and every half hour.
                     if not wake.is_set() and now >= state.history_due:
                         await sync_history(robot, conninfo, state)
+                    # Skipped scheduled cleans: switch a schedule off before the start it skips
+                    # and back on after it, retrying until it is (fail-open; schedule_skips.py).
+                    if not wake.is_set() and now >= skips_due:
+                        skips_due = now + SKIP_CHECK_SECONDS
+                        await _check_schedule_skips(robot, conninfo)
                     # Keep the concurrent live-position task in sync with mission state.
                     link.live_task = await _manage_live_task(link.live_task, robot, conninfo, state)
                     runner.sweep_if_due()
