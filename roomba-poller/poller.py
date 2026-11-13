@@ -1896,6 +1896,20 @@ async def refresh_schedules(robot, conninfo, robot_id, state, clock=time.monoton
         log.warning("schedule refresh failed: %s", _err(e))
 
 
+class ScheduleNotSent(Exception):
+    """A schedule write that stopped before anything was sent."""
+
+
+def _write_refused(e):
+    """Whether a failed schedule write certainly changed nothing: it never went (ScheduleNotSent)
+    or the cloud answered it with a 4xx (roombapy-prime's RestClientError and
+    RestRateLimitedError carry .status). A timeout, a dropped connection or a 5xx may have taken."""
+    if isinstance(e, ScheduleNotSent):
+        return True
+    status = getattr(e, "status", None)
+    return isinstance(status, int) and not isinstance(status, bool) and 400 <= status < 500
+
+
 class _RawSchedule:
     """One schedule for update_schedules(), going back exactly as the cloud gave it. roombapy-prime
     0.8.3's update_schedules() only calls .to_json() on each item (rest_client.py builds
@@ -1922,9 +1936,9 @@ async def _set_schedule_enabled(robot, household_id, conts, container_id, schedu
     entries = next((e for cid, e in conts if cid == container_id), None)
     target = schedule_skips.find_entry(conts, container_id, schedule_id)
     if entries is None or target is None:
-        raise LookupError("the schedule isn't in the cloud's copy")
+        raise ScheduleNotSent("the schedule isn't in the cloud's copy")
     if not isinstance(target.get("options"), dict) or not isinstance(target["options"].get("enabled"), bool):
-        raise ValueError("the schedule has no on/off flag to change")
+        raise ScheduleNotSent("the schedule has no on/off flag to change")
     schedules = []
     for entry in entries:
         body = copy.deepcopy(entry)
@@ -1998,7 +2012,7 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None, state=None):
             log.info("Schedule %s switched %s for a skipped clean", p.container_id, "on" if p.write else "off")
         except Exception as e:  # noqa: BLE001
             log.warning("Couldn't switch schedule %s %s: %s", p.container_id, "on" if p.write else "off", _err(e))
-            p.fail(now, f"couldn't switch the schedule {'on' if p.write else 'off'} ({_err(e)})")
+            p.fail(now, f"couldn't switch the schedule {'on' if p.write else 'off'} ({_err(e)})", refused=_write_refused(e))
     if sent:
         # Confirm on a fresh read: a write the cloud accepts but doesn't keep is a failure too.
         try:

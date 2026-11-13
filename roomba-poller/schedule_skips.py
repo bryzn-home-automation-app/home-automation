@@ -301,10 +301,17 @@ class GroupPlan:
     changes: dict = field(default_factory=dict)
     writers: list = field(default_factory=list)
 
-    def fail(self, now, error):
-        """The send failed or didn't show: the writers try again; the rest stand."""
+    def fail(self, now, error, refused=False):
+        """The send failed or didn't show: the writers try again; the rest stand. A switch-off
+        that certainly didn't happen (`refused`: nothing was sent, or the cloud turned it down
+        with a 4xx) puts its skips back to PENDING. Left APPLYING, a schedule the owner switched
+        off in the app afterwards would read as ours and be switched back on after the clean.
+        A timeout or a dropped connection leaves APPLYING: it may have taken."""
         for s in self.writers:
-            self.changes[s.id] = retry(s, now, error)
+            c = retry(s, now, error)
+            if refused and self.write is False:
+                c.state = PENDING
+            self.changes[s.id] = c
 
 
 def _look_again(skip, now):

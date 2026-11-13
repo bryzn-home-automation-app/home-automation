@@ -286,6 +286,7 @@ class FakeCloud:
         self.reads = 0
         self.fail_reads = False
         self.fail_writes = False
+        self.write_error = TimeoutError("PUT timed out")
         self.ignore_writes = False
 
     def add(self, schedule, days, **kw):
@@ -308,7 +309,7 @@ class FakeCloud:
         body = [s.to_json() for s in schedules]
         self.writes.append((household_id, container_id, body))
         if self.fail_writes:
-            raise TimeoutError("PUT timed out")
+            raise self.write_error
         if not self.ignore_writes:
             self.containers[container_id] = [{"options": copy.deepcopy(b["options"])} for b in body]
         return {}
@@ -453,6 +454,42 @@ class Pass(unittest.IsolatedAsyncioTestCase):
         await self.run_at(at(17, 9, 30))
         self.assertEqual(self.table.state(1), ss.RESTORED)
         self.assertTrue(self.cloud.options(TUE_THU)["enabled"])
+
+    async def test_a_switch_off_the_cloud_turned_down_goes_back_to_pending(self):
+        class Refused(Exception):
+            status = 400
+
+        self.table.add(skip(1, TUE_THU, 17))
+        self.cloud.fail_writes = True
+        self.cloud.write_error = Refused("HTTP 400 from the schedule endpoint")
+        await self.run_at(at(16, 20))
+        s = self.table.rows[1]["skip"]
+        self.assertEqual((s.state, s.attempts), (ss.PENDING, 1))
+        # The owner then switches it off in the iRobot app: theirs, not ours to switch back on.
+        self.cloud.fail_writes = False
+        self.cloud.options(TUE_THU)["enabled"] = False
+        await self.run_at(s.next_check_at)
+        self.assertEqual((self.table.state(1), self.table.rows[1]["detail"]), (ss.CANCELLED, ss.ALREADY_OFF))
+        self.assertEqual(len(self.cloud.writes), 1)
+
+    async def test_a_switch_off_that_may_have_taken_stays_applying(self):
+        for error in (TimeoutError("PUT timed out"), type("ServerError", (Exception,), {"status": 502})("HTTP 502")):
+            table = Table()
+            table.add(skip(1, TUE_THU, 17))
+            self.cloud.fail_writes, self.cloud.write_error = True, error
+            with mock.patch.multiple(poller, _load_active_skips=table.load, _save_skip_changes=table.save):
+                await self.run_at(at(16, 20))
+            self.assertEqual(table.state(1), ss.APPLYING, repr(error))
+
+    def test_what_counts_as_a_refused_write(self):
+        self.assertTrue(poller._write_refused(poller.ScheduleNotSent("the schedule isn't in the cloud's copy")))
+        self.assertFalse(poller._write_refused(TimeoutError()))
+        self.assertFalse(poller._write_refused(OSError("Cannot connect to host")))
+        if _stubs.real_roombapy_prime():
+            from roombapy_prime.rest_client import RestClientError, RestRateLimitedError, RestServerError
+            self.assertTrue(poller._write_refused(RestClientError("HTTP 400", 400)))
+            self.assertTrue(poller._write_refused(RestRateLimitedError("HTTP 429", 429, None, retry_after=60)))
+            self.assertFalse(poller._write_refused(RestServerError("HTTP 503", 503)))
 
     async def test_an_empty_answer_while_a_schedule_is_off_for_us_is_a_miss_not_a_deletion(self):
         self.cloud.add(TUE_THU, [2, 3, 4], enabled=False)
