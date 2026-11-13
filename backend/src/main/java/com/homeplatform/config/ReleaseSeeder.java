@@ -11,17 +11,22 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Seeds the {@code app_releases} table from the code-authored history below.
  * Release notes are hand-written in plain language for the whole household; this
  * class is the source of truth. On each startup it upserts every entry by version
  * (insert if new, refresh the fields if the wording changed), so the DB always
- * mirrors what's committed here.
+ * mirrors what's committed here, and removes any version no longer listed.
  *
- * <p>To cut a new version: prepend a {@link #define} entry to {@link #HISTORY}
- * (newest first). Display order is assigned automatically from list position, so
- * it never depends on string-comparing semantic versions.
+ * <p>Notes go out once a week, on Friday morning: one entry for everything that
+ * shipped since the last one, not an entry per deploy. During the week, add each
+ * change to {@code RELEASE_NOTES_PENDING.md} at the repo root; on Friday, prepend
+ * a single {@link #define} entry to {@link #HISTORY} (newest first) from that file
+ * and empty it. Display order is assigned automatically from list position, so it
+ * never depends on string-comparing semantic versions.
  */
 @Component
 @Profile("!test")
@@ -38,152 +43,67 @@ public class ReleaseSeeder implements CommandLineRunner {
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
             define("2.9.1", "stable", LocalDate.of(2026, 11, 13),
-                    "Who has the app open",
-                    "People shows anyone with the app open as online, not only guests.",
-                    List.of(
-                            change("fixed", "People: house members and Bryan show as online while they have the app open. Before, only guests could, and a guest stayed online for up to 30 days."),
-                            change("improved", "People: someone who is away shows when they were last active, and the list refreshes every minute."))),
-            define("2.9.0", "stable", LocalDate.of(2026, 11, 13),
-                    "Dock tanks and skipping a clean",
-                    "The Roomba page says which dock tank needs attention, and a scheduled clean can be skipped.",
-                    List.of(
-                            change("new", "Roomba: the page says when the dock's clean-water tank is empty or its dirty-water tank is full, instead of Ready, and an alert is sent."),
-                            change("new", "Roomba: an alert when a scheduled clean didn't start, with the dock's reason when there is one."),
-                            change("new", "Roomba: Bryan can skip today's or tomorrow's scheduled clean, and undo it. The schedule is switched off in the iRobot app around that clean and back on afterwards."),
-                            change("improved", "Roomba: the robot's schedules are read again every few hours, so Next clean follows changes made in the iRobot app."))),
-            define("2.8.0", "stable", LocalDate.of(2026, 11, 12),
-                    "Where the Roomba was last seen",
-                    "When the robot stops away from its dock, the map marks where it was last seen.",
-                    List.of(
-                            change("new", "Roomba: when the robot is stopped away from its dock, the map marks where it was last seen and the status says which room and when."),
-                            change("improved", "Roomba: the robot's position is now followed on its way back to the dock, so a robot that never makes it home is marked where it gave up."),
-                            change("fixed", "Roomba: a robot stopped away from its dock is no longer described as docked and ready."))),
-            define("2.7.0", "stable", LocalDate.of(2026, 11, 12),
-                    "How long each clean takes",
-                    "The Roomba page charts each clean's cleaning, recharging and paused time.",
-                    List.of(
-                            change("new", "Roomba: Time per clean charts the last 14 cleans, split into cleaning, recharging and paused time, with the typical clean and how often it had to recharge."),
-                            change("improved", "Roomba: cleaning time no longer counts minutes spent paused, in the list of cleans, a clean's details and the Cleaning complete alert."))),
-            define("2.6.0", "stable", LocalDate.of(2026, 11, 11),
-                    "Forgot your password?",
-                    "House members can set a new Home password themselves by confirming their birthday.",
-                    List.of(
-                            change("new", "Forgot password? on the sign-in page lets a house member set a new Home password after confirming their birthday. It works only at the app's secure address."),
-                            change("new", "People: Bryan can set each member's birthday and clear wrong tries. He is told about every reset and every wrong birthday."),
-                            change("fixed", "Profile: the switches on the Weather alerts card stay inside the card."))),
-            define("2.5.0", "stable", LocalDate.of(2026, 11, 11),
-                    "A clearer Roomba map and quicker commands",
-                    "The map shows cleaned ground in its own colour and where the robot went over twice, and commands reach the robot sooner.",
-                    List.of(
-                            change("new", "The Roomba map shows ground cleaned this run in teal, and ground cleaned twice with a cross-ruled pattern."),
-                            change("improved", "Roomba commands are sent the moment you press them instead of waiting several seconds."),
-                            change("improved", "A command now shows as done once the robot actually reacts, and says so if it never does."),
-                            change("fixed", "Pausing or docking mid-clean no longer interrupts the robot's live position on the map."))),
-            define("2.4.0", "stable", LocalDate.of(2026, 11, 11),
-                    "Reminders and a week of weather",
-                    "Set household reminders like trash day, see the week's weather on Home, and find containers grouped by project.",
-                    List.of(
-                            change("new", "Reminders: set up chores like trash day, choose when to get a heads-up, and mark them done for the week. They show on Home and can alert your phone."),
-                            change("new", "Home shows the week's weather by default, with a switch to the next 24 hours."),
-                            change("improved", "Server health groups containers by project, the way Docker does."),
-                            change("improved", "The Roomba connection uses the latest version of its library, which reconnects more reliably."))),
-            define("2.3.0", "stable", LocalDate.of(2026, 11, 11),
-                    "Both thermostats at once",
-                    "Climate shows every thermostat side by side, and the camera battery chart zooms in properly.",
-                    List.of(
-                            change("improved", "Climate: Downstairs and Upstairs each have their own panel, side by side, with no tabs. Their history is on one chart."),
-                            change("fixed", "Camera batteries: full batteries now get a zoomed scale, such as 80–100%, instead of 0–100%."),
-                            change("fixed", "Just after midnight, something from an hour ago reads \"1 hr ago\" instead of \"Yesterday\"."))),
-            define("2.2.0", "stable", LocalDate.of(2026, 11, 11),
-                    "A clearer Roomba map",
-                    "The Roomba map is easier to read, and the camera battery chart zooms in on the levels your cameras really sit at.",
-                    List.of(
-                            change("improved", "Roomba map: rooms are shaded so they stand apart, names always fit, and the robot and its dock no longer look alike."),
-                            change("improved", "Roomba map: cleaned floor shows as lanes, and off-limits and no-mop areas each have their own pattern."),
-                            change("improved", "Camera batteries: the chart fits its scale to the readings, with a switch back to 0–100%."))),
-            define("2.1.0", "stable", LocalDate.of(2026, 11, 10),
-                    "Pick your own colour",
-                    "Choose any colour for the app, see both cameras' batteries on one chart, and get clearer Roomba controls.",
-                    List.of(
-                            change("new", "Profile, Appearance has a colour wheel. Pick any colour or type its code, and the whole app takes it on."),
-                            change("improved", "Cameras: every battery camera is on one chart, so you can compare how they charge."),
-                            change("improved", "On a computer, pages now use the full width of the window."),
-                            change("fixed", "Roomba: Pause is offered for the whole clean, and each command now says whether it was sent or failed."))),
-            define("2.0.0", "stable", LocalDate.of(2026, 11, 10),
-                    "A new look",
-                    "Every tab except Maintenance has a new design: one dial, a plain answer and a few numbers at the top of each page.",
+                    "A new look, a smarter Roomba page and reminders",
+                    "This week: a new design, Roomba tools for when a clean goes wrong, reminders, password reset, Gas by the bill and Server health.",
                     List.of(
                             change("new", "A new look across the app, in light and dark. Each page opens with the answer to what you came for."),
                             change("new", "Alerts are always one tap away, at the top of every page."),
+                            change("new", "Profile, Appearance has a colour wheel. Pick any colour or type its code, and the whole app takes it on."),
+                            change("new", "Reminders: set up chores like trash day, choose when to get a heads-up, and mark them done for the week. They show on Home and can alert your phone."),
+                            change("new", "Home shows the week's weather by default, with a switch to the next 24 hours."),
+                            change("new", "Forgot password? on the sign-in page lets a house member set a new Home password after confirming their birthday. It works only at the app's secure address."),
+                            change("new", "People: Bryan can set each member's birthday and clear wrong tries. He is told about every reset and every wrong birthday."),
+                            change("new", "Roomba: when the robot is stopped away from its dock, the map marks where it was last seen and the status says which room and when."),
+                            change("new", "Roomba: the page says when the dock's clean-water tank is empty or its dirty-water tank is full, instead of Ready, and an alert is sent."),
+                            change("new", "Roomba: an alert when a scheduled clean didn't start, with the dock's reason when there is one."),
+                            change("new", "Roomba: Bryan can skip today's or tomorrow's scheduled clean, and undo it. The schedule is switched off in the iRobot app around that clean and back on afterwards."),
+                            change("new", "Roomba: Time per clean charts the last 14 cleans, split into cleaning, recharging and paused time, with the typical clean and how often it had to recharge."),
+                            change("new", "Roomba map: ground cleaned this run shows in teal, and ground cleaned twice with a cross-ruled pattern."),
+                            change("new", "Gas: charts of gas used and gas charges for every bill, with the outside temperature for each billing cycle."),
+                            change("new", "Gas: the last bill is broken down line by line, with what a CCF of gas really costs and what you pay with none."),
+                            change("new", "Server health shows the NUC's processor, memory, drive, temperatures and Wi-Fi now, and over the last day, week or month."),
+                            change("new", "Server health lists each app container, grouped by project, with the memory it uses, and the programs working the NUC hardest."),
+                            change("new", "Server health spells out problems: a drive filling up, Docker not responding, running hot, set to sleep, or Windows waiting to restart."),
+                            change("new", "Admins are told when the NUC restarts, and whether it crashed or lost power, and when a problem lasts."),
                             change("improved", "Pages are named in plain words: Utilities, Climate, People, Alerts, Server health."),
                             change("improved", "The four colour palettes are now four finishes for the background. The theme can also follow your phone."),
+                            change("improved", "On a computer, pages use the full width of the window."),
                             change("improved", "When something fails to load, the page says so and offers Try again instead of looking empty."),
+                            change("improved", "Climate: Downstairs and Upstairs each have their own panel, side by side, with no tabs. Their history is on one chart."),
+                            change("improved", "Cameras: every battery camera is on one chart, with a scale that fits the readings and a switch back to 0–100%."),
+                            change("improved", "Gas shows your last bill, the gas it used, its flat charges and when the next bill should arrive."),
+                            change("improved", "Roomba map: rooms are shaded so they stand apart, names always fit, and off-limits and no-mop areas each have their own pattern."),
+                            change("improved", "Roomba commands are sent the moment you press them, and show as done once the robot actually reacts."),
+                            change("improved", "Roomba: the robot's position is followed on its way back to the dock, so a robot that never makes it home is marked where it gave up."),
+                            change("improved", "Roomba: cleaning time no longer counts minutes spent paused."),
+                            change("improved", "Roomba: the robot's schedules are read again every few hours, so Next clean follows changes made in the iRobot app."),
+                            change("improved", "People: someone who is away shows when they were last active, and the list refreshes every minute."),
+                            change("fixed", "People: house members and Bryan show as online while they have the app open. Before, only guests could, and a guest stayed online for up to 30 days."),
+                            change("fixed", "Roomba: a robot stopped away from its dock is no longer described as docked and ready."),
+                            change("fixed", "Roomba: Pause is offered for the whole clean, and pausing or docking no longer interrupts the live position on the map."),
+                            change("fixed", "On an iPhone, the bottom bar stays at the bottom of the screen on every tab."),
+                            change("fixed", "On an iPhone, live view no longer sticks on \"Waking camera…\". If the phone holds the video back, one tap on Play starts every camera."),
+                            change("fixed", "The Living Room camera no longer takes half a minute to start when someone's in the room."),
+                            change("fixed", "Gas costs used a made-up price per unit and missed the flat charges, which are about half the bill."),
+                            change("fixed", "Water bills come in again: the Gmail sign-in no longer runs out every week."),
                             change("fixed", "A brief server hiccup no longer signs you out."),
                             change("fixed", "The guest Wi-Fi code now scans in the dark theme."),
-                            change("fixed", "Dates, money and numbers read the same way on every page."))),
-            define("1.10.1", "stable", LocalDate.of(2026, 11, 8),
-                    "Cameras start more reliably",
-                    "Live view on an iPhone no longer gets stuck on \"Waking camera…\".",
-                    List.of(
-                            change("fixed", "On an iPhone, live view no longer sticks on \"Waking camera…\" when the video has arrived. If the phone holds it back, one tap on Play starts every camera."),
-                            change("fixed", "The Living Room camera no longer takes half a minute to start when someone's in the room."))),
-            define("1.10.0", "stable", LocalDate.of(2026, 11, 7),
-                    "Gas, by the bill",
-                    "The Gas tab now shows what each gas bill used and paid for, and when the next one comes.",
-                    List.of(
-                            change("improved", "Gas shows your last bill, the gas it used, its flat charges and when the next bill should arrive."),
-                            change("new", "Charts of gas used and gas charges for every bill, with the outside temperature for each billing cycle."),
-                            change("new", "The last gas bill is broken down line by line, with what a CCF of gas really costs and what you pay with none."),
-                            change("fixed", "Gas costs used a made-up price per unit and missed the flat charges, which are about half the bill."))),
-            define("1.9.2", "stable", LocalDate.of(2026, 11, 7),
-                    "Bottom bar, for real",
-                    "On an iPhone the bottom bar stays at the bottom of the screen, on every tab.",
-                    List.of(
-                            change("fixed", "On an iPhone, the bottom bar no longer floats up the screen as you scroll. Pages now scroll above it instead of under it."))),
-            define("1.9.1", "stable", LocalDate.of(2026, 11, 7),
-                    "Bottom bar fix",
-                    "The bottom bar stays at the bottom on an iPhone after you use the menu.",
-                    List.of(
-                            change("fixed", "On an iPhone, the bottom bar no longer drifts up the screen with the page after the menu or a pop-up has been open."),
-                            change("improved", "When NUC Health stops hearing from the NUC, it says the numbers are from the last report and how to get the monitor going again."))),
-            define("1.9.0", "stable", LocalDate.of(2026, 11, 7),
-                    "NUC Health",
-                    "A new admin page that keeps an eye on the NUC itself: how busy, how full, how hot, and whether it restarted.",
-                    List.of(
-                            change("new", "Admin → NUC Health shows the NUC's processor, memory, drive, temperatures and Wi-Fi now, and over the last day, week or month."),
-                            change("new", "It lists each app container with the memory it uses, and the programs working the NUC hardest."),
-                            change("new", "Problems are spelled out: a drive filling up, Docker not responding, running hot, set to sleep, or Windows waiting to restart."),
-                            change("new", "Admins are told when the NUC restarts, and whether it crashed or lost power, and when a problem lasts."),
-                            change("fixed", "Water bills come in again: the Gmail sign-in no longer runs out every week."))),
+                            change("fixed", "Dates, money and numbers read the same way on every page, and something from an hour ago reads \"1 hr ago\" just after midnight."),
+                            change("fixed", "Profile: the switches on the Weather alerts card stay inside the card."))),
             define("1.8.1", "stable", LocalDate.of(2026, 11, 6),
-                    "Thermostat changes in the log, phone fixes",
-                    "See who changed a thermostat and when, and a round of fixes for pop-ups on a phone.",
+                    "Weather alerts, accurate Roomba history and phone fixes",
+                    "This week: weather alerts you choose, Roomba history that matches the iRobot app, full-screen cameras, and a round of phone and security fixes.",
                     List.of(
                             change("new", "The admin Logs page lists every thermostat change someone made: at the thermostat, in the ecobee app, or in this app."),
-                            change("improved", "A thermostat card says \"Set by schedule\" when ecobee's schedule changed it, instead of \"Set at ecobee\"."),
-                            change("fixed", "On a phone, a recording now has a close button you can reach, and the back gesture closes it instead of leaving Cameras. The same goes for a bill."),
-                            change("fixed", "Edit Profile and a Roomba run's details fit on a phone screen, so Save and Close can be reached."),
-                            change("fixed", "Swiping on a pop-up no longer scrolls the page behind it."),
-                            change("fixed", "Notifications no longer overlap each other on a phone."),
-                            change("fixed", "Pages start below the status bar in the Home Screen app."),
-                            change("fixed", "A change made in this app was recorded twice."))),
-            define("1.8.0", "stable", LocalDate.of(2026, 11, 5),
-                    "Weather alerts",
-                    "Choose the weather you want a heads-up about, when to check, and what counts.",
-                    List.of(
                             change("new", "Weather alerts under Profile: rain, thunderstorms, freeze, extreme heat, high wind, and snow or ice."),
                             change("new", "Each is checked at a time you pick, for the hours you pick. Rain at 8 PM through 8 AM tells you whether to pause the sprinklers."),
                             change("new", "Set what counts: the chance of rain, how cold, how hot, or how windy."),
                             change("new", "Official National Weather Service warnings for home (tornado, severe storm, flood and more) as soon as they're issued."),
                             change("new", "\"Check the forecast now\" shows what an alert would say right now."),
-                            change("fixed", "The phone menu scrolls on its own instead of scrolling the page behind it."))),
-            define("1.7.0", "stable", LocalDate.of(2026, 11, 5),
-                    "Accurate Roomba history, full-screen cameras, fixes",
-                    "Roomba runs now match the iRobot app, cameras go full screen, and a round of reliability and security fixes.",
-                    List.of(
                             change("new", "Roomba runs show the rooms cleaned, the settings, recharge stops and how often the bin was emptied."),
                             change("new", "Tap ⤢ on a live camera to watch it full screen."),
                             change("new", "An alert when a Roomba clean doesn't finish (stuck), with what stopped it."),
+                            change("improved", "A thermostat card says \"Set by schedule\" when ecobee's schedule changed it, instead of \"Set at ecobee\"."),
                             change("improved", "Roomba history comes from iRobot's own records: real cleaning time and area, and runs that happened while the server was off."),
                             change("improved", "The Roomba tab says when it's docked mid-clean to recharge instead of calling the run finished."),
                             change("improved", "The Roomba's live position no longer drops out every hour during a clean."),
@@ -191,11 +111,18 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("improved", "The monthly estimate covers all of last month, not the first day or two of this one."),
                             change("improved", "Admins get an alert when the water-bill Gmail sign-in expires."),
                             change("improved", "After an update the app reloads itself instead of showing a blank page; a broken page no longer takes down the whole app."),
+                            change("fixed", "On a phone, a recording now has a close button you can reach, and the back gesture closes it instead of leaving Cameras. The same goes for a bill."),
+                            change("fixed", "Edit Profile and a Roomba run's details fit on a phone screen, so Save and Close can be reached."),
+                            change("fixed", "Swiping on a pop-up no longer scrolls the page behind it."),
+                            change("fixed", "Notifications no longer overlap each other on a phone."),
+                            change("fixed", "Pages start below the status bar in the Home Screen app."),
+                            change("fixed", "A change made in this app was recorded twice."),
+                            change("fixed", "The phone menu scrolls on its own instead of scrolling the page behind it."),
                             change("fixed", "Pages that need sign-in can no longer be reached without it."),
                             change("fixed", "Maintenance dates no longer show one day early, and editing a record no longer duplicates its photos."),
                             change("fixed", "A thermostat change made just before leaving the page is still sent."),
                             change("fixed", "\"Last updated\" times show correctly on iPhone and on the Debug page."),
-                            change("fixed", "Signing out clears what the last person was looking at; a hiccup while the server restarts no longer signs you out."))),
+                            change("fixed", "Signing out clears what the last person was looking at."))),
             define("1.6.0", "stable", LocalDate.of(2026, 10, 26),
                     "Who's Home, phone alerts and recordings",
                     "See who's home, get alerts on your phone, play back camera clips, and pull down to refresh.",
@@ -273,30 +200,19 @@ public class ReleaseSeeder implements CommandLineRunner {
                             change("fixed", "Corrected daily trends, rolling averages and partial-day totals."))
             ),
             define("1.1.2", "stable", LocalDate.of(2026, 8, 25),
-                    "Clean your way",
-                    "Start a clean for the whole house or just the rooms you pick.",
+                    "Clean your way, faster and smoother",
+                    "This week: start a clean for the whole house or just the rooms you pick, and the app feels quicker throughout.",
                     List.of(
                             change("new", "Clean: choose rooms, suction, passes and vacuum, mop or both."),
-                            change("improved", "The robot still docks itself when it's done."))
-            ),
-            define("1.1.1", "stable", LocalDate.of(2026, 8, 24),
-                    "Smoother pop-ups",
-                    "Pop-up windows feel snappy again.",
-                    List.of(
-                            change("fixed", "Editing your profile no longer lags."),
-                            change("fixed", "Other pop-ups respond more smoothly too."))
-            ),
-            define("1.1.0", "stable", LocalDate.of(2026, 8, 24),
-                    "Faster and smoother",
-                    "The app feels quicker, the live vacuum map is smooth, and Home greets you by name.",
-                    List.of(
+                            change("improved", "The robot still docks itself when it's done."),
                             change("improved", "Screens and charts respond faster."),
                             change("improved", "Home greets you by name and loads lighter."),
                             change("improved", "The live vacuum map stays smooth while it cleans."),
                             change("improved", "Theme and accent color changes are instant."),
                             change("improved", "Smoother scrolling on phones and in long lists."),
-                            change("fixed", "Usage charts no longer fail to appear when a page opens."))
-            ),
+                            change("fixed", "Editing your profile no longer lags."),
+                            change("fixed", "Other pop-ups respond more smoothly too."),
+                            change("fixed", "Usage charts no longer fail to appear when a page opens."))),
             define("1.0.0", "beta", LocalDate.of(2026, 8, 22),
                     "Welcome to HomeOS",
                     "One place to see the house, track utilities and run the robot vacuum.",
@@ -335,8 +251,15 @@ public class ReleaseSeeder implements CommandLineRunner {
                 updated++;
             }
         }
-        if (inserted > 0 || updated > 0) {
-            log.info("ReleaseSeeder: {} version(s) known — {} inserted, {} updated", total, inserted, updated);
+        // A version folded into its week's entry is no longer in HISTORY: drop its row.
+        Set<String> known = HISTORY.stream().map(AppRelease::getVersion).collect(Collectors.toSet());
+        List<AppRelease> retired = repository.findAll().stream()
+                .filter(r -> !known.contains(r.getVersion()))
+                .toList();
+        repository.deleteAll(retired);
+        if (inserted > 0 || updated > 0 || !retired.isEmpty()) {
+            log.info("ReleaseSeeder: {} version(s) known — {} inserted, {} updated, {} retired",
+                    total, inserted, updated, retired.size());
         }
     }
 
