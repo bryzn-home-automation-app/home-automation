@@ -42,6 +42,17 @@ Dedup is two-layered so re-polls and process restarts never double-insert:
   inserting, the poller checks `SELECT 1 FROM roomba_runs WHERE
   source = 'roombapy-prime' AND started_at = <mission start>`.
 
+### Live position (the map's dot and "last seen" marker)
+
+While a mission runs, and on the trip home after it (`hmPostMsn`, though the run
+is recorded as it starts home), the live-map stream keeps one `roomba_position`
+row (`UNIQUE robot_id`) up to date, at most once a second. A sample that arrives
+inside that second is held and written when it is up, and whatever is held when
+the stream stops is written then, so the row ends where the robot stopped (on the
+dock, or wherever it got stuck or its battery ran out), stamped with the time the
+sample arrived. The backend serves it fresh for the live dot (`/position`, 204
+after 15 s) and whatever its age for the "last seen" marker (`/position/last`).
+
 ### Pass count (the map's "Cleaned twice")
 
 The cloud's live coverage (`coverage.geojson` in the live-map bundle) is a union

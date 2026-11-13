@@ -20,6 +20,8 @@ const state = {
   status: {} as Record<string, unknown>,
   /** What the commands list returns (newest first). */
   commands: [] as Array<Record<string, unknown>>,
+  /** The stored position, however old (GET /roomba/position/last). */
+  lastPosition: null as Record<string, unknown> | null,
 };
 
 vi.mock('../context/AuthContext', () => ({
@@ -56,6 +58,7 @@ vi.mock('../api/roomba', () => ({
   fetchRoombaParts: async () => [],
   fetchRoombaCommands: async () => state.commands,
   fetchRoombaPosition: async () => null,
+  fetchRoombaLastPosition: async () => state.lastPosition,
   fetchRoombaCoverage: async () => null,
   fetchRoombaNativeSchedules: async () => [],
   refreshRoombaNativeSchedules: async () => ({}),
@@ -84,6 +87,7 @@ describe('Roomba page', () => {
     state.runsFail = false;
     state.status = {};
     state.commands = [];
+    state.lastPosition = null;
     vi.mocked(roombaApi.sendRoombaCommand).mockClear();
     vi.mocked(roombaApi.fetchRoombaStatus).mockClear();
   });
@@ -111,6 +115,22 @@ describe('Roomba page', () => {
     expect(await screen.findByText(/Rosie hasn't checked in since/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Pause$/ })).toBeNull();
     expect(screen.getByText('Offline')).toBeTruthy();
+  });
+
+  it('says where a robot that stopped away from its dock was last seen, and not once it is docked', async () => {
+    // Nov 12: the mission ran out with the robot in the living room; its stored phase is "stop".
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+    state.lastPosition = { robotId: 'r1', x: -5.55, y: 4.63, theta: -2.42, updatedAt: tenMinutesAgo };
+    state.status = { phase: 'stop', cycle: 'none', batteryPct: 11 };
+    const { unmount } = renderPage();
+    expect(await screen.findByText('Rosie is stopped away from the dock.')).toBeTruthy();
+    expect(screen.getByText(/^Last seen (yesterday )?at \d{1,2}:\d\d/)).toBeTruthy();
+    unmount();
+
+    state.status = {};
+    renderPage();
+    expect(await screen.findByText('Rosie is docked and ready.')).toBeTruthy();
+    expect(screen.queryByText(/Last seen/)).toBeNull();
   });
 
   it('lists runs by their visible words and opens the run dialog (B-132)', async () => {

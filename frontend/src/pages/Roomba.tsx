@@ -1,6 +1,6 @@
 import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import RoombaMap, { type LastClean, type RoomSelection, type SplitLine } from '../components/RoombaMap';
+import RoombaMap, { type LastClean, type LastSeenMark, type RoomSelection, type SplitLine } from '../components/RoombaMap';
 import RoomRenameModal from '../components/RoomRenameModal';
 import RoomSplitModal from '../components/RoomSplitModal';
 import RoomMergeModal from '../components/RoomMergeModal';
@@ -16,13 +16,13 @@ import {
   Num, Panel, QueryState, Readout, Readouts, Ring, Row, Screen, Seg, SegPanel, SkelPanel, SkelRows, Split, Stack,
   Verdict, useSearchParamState, type ChartTone,
 } from '../components/ui';
-import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts } from '../api/roomba';
+import { fetchRoombaStatus, fetchRoombaRuns, fetchRoombaMap, fetchRoombaDevice, fetchRoombaParts, fetchRoombaLastPosition } from '../api/roomba';
 import { useJitteredInterval } from '../hooks/useJitteredInterval';
 import { useRoombaNativeSchedules } from '../hooks/useRoombaNativeSchedules';
 import { useAuth } from '../context/AuthContext';
 import { cleaningMinutes, isRecharging, roomsSummary } from '../utils/roomba';
 import {
-  initiatorLabel, nextCleanDay, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
+  initiatorLabel, lastSeen, nextCleanDay, nextScheduledClean, padLabel, roombaState, roombaVerdict, runStatus,
 } from '../utils/roombaStatus';
 import { batteryStatus, humanize, onlineStatus, type Tone } from '../utils/status';
 import { DASH, NBSP, formatDayName, formatDuration, formatNumber, formatStamp, formatTime, plural } from '../utils/format';
@@ -112,6 +112,16 @@ export default memo(function Roomba() {
     refetchIntervalInBackground: false,
   });
 
+  // The last position the robot reported, however old: the map's "last seen" marker when it
+  // has stopped away from its dock. Read with the status, which decides whether it shows.
+  const lastPositionQuery = useQuery({
+    queryKey: ['roomba-last-position'],
+    queryFn: fetchRoombaLastPosition,
+    staleTime: 20_000,
+    refetchInterval: statusInterval,
+    refetchIntervalInBackground: false,
+  });
+
   // The same query the Schedules panel reads (one request): the "Next clean" readout.
   const { query: schedulesQuery } = useRoombaNativeSchedules(true);
 
@@ -138,6 +148,8 @@ export default memo(function Roomba() {
     const refetchMap = () => queryClient.invalidateQueries({ queryKey: ['roomba-map'] });
     const refetchParts = () => queryClient.invalidateQueries({ queryKey: ['roomba-parts'] });
     queryClient.invalidateQueries({ queryKey: ['roomba-runs'] });
+    // Where it stopped, if that wasn't the dock: the newest position, not the last poll's.
+    queryClient.invalidateQueries({ queryKey: ['roomba-last-position'] });
     refetchMap();
     // Part counters land ~40s after the run (PARTS_REFRESH_AFTER_RUN in the poller).
     const timers = [
@@ -303,6 +315,16 @@ export default memo(function Roomba() {
     [lastConfirmed, lastCleanLabel],
   );
 
+  // Away from the dock and not moving: where it was last seen, on the map and in the verdict.
+  const seen = lastSeen({ status, position: lastPositionQuery.data, geojson: mapQuery.data?.geojson, now });
+  const seenX = seen?.x;
+  const seenY = seen?.y;
+  const seenLabel = seen?.short;
+  const lastSeenMark = useMemo<LastSeenMark | null>(
+    () => (seenX != null && seenY != null && seenLabel ? { x: seenX, y: seenY, label: seenLabel } : null),
+    [seenX, seenY, seenLabel],
+  );
+
   // ── The answer ─────────────────────────────────────────
   const statusPending = statusQuery.data === undefined && !statusQuery.isError;
   const statusFailed = statusQuery.data === undefined && statusQuery.isError;
@@ -325,7 +347,7 @@ export default memo(function Roomba() {
       </Verdict>
     );
   } else {
-    const v = roombaVerdict({ status, parts: partsQuery.data });
+    const v = roombaVerdict({ status, parts: partsQuery.data, lastSeen: seen });
     verdict = (
       <Verdict
         tone={v.tone}
@@ -491,6 +513,7 @@ export default memo(function Roomba() {
         cleanMode={cleanMode}
         onSelectCleanRoom={handleSelectCleanRoom}
         lastClean={lastClean}
+        lastSeen={lastSeenMark}
       />
       {modeBanner}
       {isAdmin && !modeBanner && mapQuery.data && cleanRooms.length > 0 && (

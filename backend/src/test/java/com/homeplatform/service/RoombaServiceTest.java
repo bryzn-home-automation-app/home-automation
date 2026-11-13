@@ -670,4 +670,47 @@ class RoombaServiceTest {
             assertTrue(service.getPosition().isEmpty());
         }
     }
+
+    @Nested
+    @DisplayName("getLastPosition")
+    class GetLastPosition {
+
+        @Test
+        @DisplayName("returns a position hours old, with its time, while the live one is empty")
+        void staleIsStillTheLastPosition() {
+            // 2026-11-12: the robot stopped in the living room at 11:00 AM and never docked.
+            RoombaPosition p = RoombaPosition.builder()
+                    .robotId("robot-1")
+                    .x(-5.550261)
+                    .y(4.627603)
+                    .theta(-2.42268)
+                    .updatedAt(LocalDateTime.of(2026, 11, 12, 17, 0, 34, 314_398_000))
+                    .build();
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(p));
+
+            assertTrue(service.getPosition().isEmpty());
+            RoombaPositionResponse r = service.getLastPosition().orElseThrow();
+            assertEquals("robot-1", r.robotId());
+            assertEquals(-5.550261, r.x());
+            assertEquals(4.627603, r.y());
+            assertEquals(-2.42268, r.theta());
+            assertEquals("2026-11-12T17:00:34.314398Z", r.updatedAt());
+        }
+
+        @Test
+        @DisplayName("empty when there is no row, or one without a fix or a time")
+        void emptyWithoutAFix() {
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.empty());
+            assertTrue(service.getLastPosition().isEmpty());
+
+            RoombaPosition noFix = RoombaPosition.builder().robotId("robot-1").x(null).y(2.0)
+                    .updatedAt(LocalDateTime.now(java.time.ZoneOffset.UTC)).build();
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(noFix));
+            assertTrue(service.getLastPosition().isEmpty());
+
+            RoombaPosition noTime = RoombaPosition.builder().robotId("robot-1").x(1.0).y(2.0).build();
+            when(positionRepo.findTopByOrderByUpdatedAtDesc()).thenReturn(Optional.of(noTime));
+            assertTrue(service.getLastPosition().isEmpty());
+        }
+    }
 }

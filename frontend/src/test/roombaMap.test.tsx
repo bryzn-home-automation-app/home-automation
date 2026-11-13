@@ -14,11 +14,11 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 } as unknown as typeof ResizeObserver;
 
-// What the coverage poll returns; a test sets it before rendering a running map.
-const live = vi.hoisted(() => ({ coverage: null as unknown }));
+// What the coverage and position polls return; a test sets them before rendering a running map.
+const live = vi.hoisted(() => ({ coverage: null as unknown, position: null as unknown }));
 
 vi.mock('../api/roomba', () => ({
-  fetchRoombaPosition: async () => null,
+  fetchRoombaPosition: async () => live.position,
   fetchRoombaCoverage: async () => live.coverage,
 }));
 
@@ -100,6 +100,41 @@ describe('RoombaMap', () => {
     renderMap({ cleanMode: true, onSelectCleanRoom });
     fireEvent.click(screen.getByRole('button', { name: 'Clean Kitchen' }));
     expect(onSelectCleanRoom).toHaveBeenCalledWith({ id: '1', name: 'Kitchen' });
+  });
+
+  describe('last seen', () => {
+    const seen = { x: 7.5, y: 2, label: 'Last seen 11:00 AM' };
+    const marker = (c: HTMLElement) => c.querySelector('g[aria-label="Where Rosie was last seen"]');
+
+    it('marks where the robot stopped, as an outline, and keys it with its time', () => {
+      const { container } = renderMap({ lastSeen: seen });
+      const mark = marker(container);
+      expect(mark).not.toBeNull();
+      // A dashed ring around a hollow puck: no pulse, no heading, unlike the live robot.
+      const [ring, puck] = Array.from(mark?.querySelectorAll('circle') ?? []);
+      expect(ring.getAttribute('stroke-dasharray')).toBeTruthy();
+      expect(puck.getAttribute('fill')).toBe('var(--appmap-plate)');
+      expect(mark?.querySelector('.roomba-halo, path')).toBeNull();
+      const key = screen.getByRole('list', { name: 'Map key' });
+      expect(within(key).getByText('Last seen 11:00 AM')).toBeInTheDocument();
+      expect(within(key).queryByText('Rosie')).toBeNull();
+    });
+
+    it('gives way to the live dot', async () => {
+      live.position = { robotId: 'r1', x: 3, y: 2, theta: 0, updatedAt: new Date().toISOString() };
+      const { container } = renderMap({ running: true, lastSeen: seen });
+      const key = screen.getByRole('list', { name: 'Map key' });
+      expect(await within(key).findByText('Rosie')).toBeInTheDocument();
+      expect(marker(container)).toBeNull();
+      expect(within(key).queryByText('Last seen 11:00 AM')).toBeNull();
+      live.position = null;
+    });
+
+    it('draws nothing without one', () => {
+      const { container } = renderMap();
+      expect(marker(container)).toBeNull();
+      expect(screen.queryByText(/Last seen/)).toBeNull();
+    });
   });
 
   describe('while cleaning', () => {

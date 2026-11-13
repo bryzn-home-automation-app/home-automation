@@ -17,6 +17,7 @@ import com.homeplatform.model.RoombaDevice;
 import com.homeplatform.model.RoombaMap;
 import com.homeplatform.model.RoombaNativeSchedule;
 import com.homeplatform.model.RoombaPart;
+import com.homeplatform.model.RoombaPosition;
 import com.homeplatform.model.RoombaRun;
 import com.homeplatform.model.RoombaStatus;
 import com.homeplatform.repository.RoombaCommandRepository;
@@ -224,8 +225,23 @@ public class RoombaService {
         LocalDateTime cutoff = LocalDateTime.now(ZoneOffset.UTC).minusSeconds(POSITION_STALE_SECONDS);
         return positionRepo.findTopByOrderByUpdatedAtDesc()
                 .filter(p -> p.getUpdatedAt() != null && p.getUpdatedAt().isAfter(cutoff))
-                .map(p -> new RoombaPositionResponse(
-                        p.getRobotId(), p.getX(), p.getY(), p.getTheta(), iso(p.getUpdatedAt())));
+                .map(this::toPositionResponse);
+    }
+
+    /**
+     * The last position the poller stored, however old, with its time — where the robot
+     * was last seen. The map draws it when the robot is away from its dock and not moving
+     * (stuck, paused, battery flat), so someone can go and find it. The live dot keeps
+     * using {@link #getPosition()}.
+     */
+    public Optional<RoombaPositionResponse> getLastPosition() {
+        return positionRepo.findTopByOrderByUpdatedAtDesc()
+                .filter(p -> p.getUpdatedAt() != null && p.getX() != null && p.getY() != null)
+                .map(this::toPositionResponse);
+    }
+
+    private RoombaPositionResponse toPositionResponse(RoombaPosition p) {
+        return new RoombaPositionResponse(p.getRobotId(), p.getX(), p.getY(), p.getTheta(), iso(p.getUpdatedAt()));
     }
 
     public Optional<RoombaDeviceResponse> getDevice() {

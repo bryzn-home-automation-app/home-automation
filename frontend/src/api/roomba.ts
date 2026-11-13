@@ -51,6 +51,16 @@ export async function fetchRoombaPosition(): Promise<RoombaPosition | null> {
 }
 
 /**
+ * The last position the robot reported, however old (`updatedAt` says when), for the map's
+ * "last seen" marker. Null only when it has never reported one (204).
+ */
+export async function fetchRoombaLastPosition(): Promise<RoombaPosition | null> {
+  const res = await api.get<RoombaPosition | ''>('/roomba/position/last');
+  if (isNoContent(res.status, res.data)) return null;
+  return res.data as RoombaPosition;
+}
+
+/**
  * Ground cleaned twice or more this mission, counted by the poller from the live
  * position stream (the cloud's coverage has no pass count). `rects` are
  * [ix, iy, w, h] in grid cells: metres = value * cell, y up as in the map.

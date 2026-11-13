@@ -86,6 +86,17 @@ public class RoombaController {
     }
 
     /**
+     * The last stored position whatever its age (its {@code updatedAt} says when), for the
+     * map's "last seen" marker; 204 only when the robot has never reported one.
+     */
+    @GetMapping("/position/last")
+    public ResponseEntity<RoombaPositionResponse> getLastPosition() {
+        return service.getLastPosition()
+                .map(ResponseEntity::ok)
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
+    /**
      * Real (robot/cloud-side) schedules — what the iRobot app itself reads, not an
      * app-side approximation. Empty until a "list_schedules" command has run at
      * least once (see {@code POST /api/admin/roomba/command} with

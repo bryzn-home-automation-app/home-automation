@@ -100,10 +100,16 @@ log = logging.getLogger("roomba-poller")
 
 # Phases that mean the mission is over. Anything else with a missionId is "running".
 TERMINAL_PHASES = {"charge", "stop", "hmPostMsn"}
+# The live-position stream also follows the robot home after the mission (hmPostMsn),
+# although the run ends there: its last position should be where it stopped, on the dock
+# or wherever it gave up on the way, not where it finished cleaning.
+LIVE_AFTER_MISSION_PHASES = {"hmPostMsn"}
 
 # Live position (watch_live_map) DB write throttle — the stream can emit many
-# samples/sec; we persist at most one row per this many seconds.
+# samples/sec; we persist at most one row per this many seconds (LivePositionWriter).
 LIVE_WRITE_MIN_INTERVAL = 1.0
+# How long the end of a stream waits for its last position to be written.
+LIVE_FINAL_WRITE_TIMEOUT = 5.0
 # Live cleaning-coverage refresh throttle. The coverage layer only needs to grow
 # every few seconds, and each update downloads + untars the live-map bundle, so
 # process at most one MapUpdateMessage per this many seconds.
@@ -208,6 +214,13 @@ def _classify(phase, error):
     return "COMPLETED"
 
 
+def _wants_live_position(cms):
+    """Whether the live-position stream should run: a mission under way, or the trip home
+    after one. It stops once the robot is docked (charge) or stopped (stop)."""
+    phase = cms.get("phase")
+    return bool(cms.get("missionId")) and (phase not in TERMINAL_PHASES or phase in LIVE_AFTER_MISSION_PHASES)
+
+
 def _recharging(cms):
     """Docked to recharge partway through a mission. The robot resumes the same
     missionId once charged (a whole-house clean here takes ~2 recharge stops), so
@@ -233,7 +246,7 @@ class PollerState:
         self.completed_missions = set()  # missionIds already INSERTed this process
         self.last_map_version = None  # last map version successfully persisted
         self.device_synced = False    # static device identity/firmware persisted this process
-        self.mission_running = False  # true while a mission is actively cleaning (drives the live-map task)
+        self.mission_running = False  # true while a mission is under way or the robot heads home after one (drives the live-map task and the fast poll)
         self.map_refresh_due = None   # monotonic ts: re-fetch the map bundle soon (set after a map edit)
         self.robot_name = None        # user-assigned name from the account (e.g. "iRummy")
         self.fast_poll_until = 0.0    # monotonic ts: poll at the fast cadence until this time (set after a mission-starting command)
@@ -514,19 +527,24 @@ def upsert_map(conninfo, robot_id, map_id, map_version, name, geojson):
         conn.execute(sql, (robot_id, map_id, map_version, name, Json(geojson)))
 
 
-def upsert_position(conninfo, robot_id, x, y, theta):
-    """UPSERT the latest live position (UNIQUE robot_id). x/y meters, theta radians."""
+def upsert_position(conninfo, robot_id, x, y, theta, seen_at=None):
+    """UPSERT the latest live position (UNIQUE robot_id). x/y meters, theta radians;
+    `seen_at` is when the sample arrived (UTC, default now), which the map shows as
+    "last seen" — a sample held back by the write throttle keeps its own time."""
     sql = """
         INSERT INTO roomba_position (robot_id, x, y, theta, updated_at)
-        VALUES (%s, %s, %s, %s, NOW())
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (robot_id) DO UPDATE SET
             x = EXCLUDED.x,
             y = EXCLUDED.y,
             theta = EXCLUDED.theta,
-            updated_at = NOW()
+            updated_at = EXCLUDED.updated_at
     """
+    # The column is a plain timestamp holding UTC: send UTC wall-clock, so the session's
+    # time zone can't shift it.
+    at = (seen_at or datetime.now(timezone.utc)).astimezone(timezone.utc).replace(tzinfo=None)
     with psycopg.connect(conninfo, autocommit=True) as conn:
-        conn.execute(sql, (robot_id, x, y, theta))
+        conn.execute(sql, (robot_id, x, y, theta, at))
 
 
 def upsert_coverage(conninfo, robot_id, mission_id, coverage):
@@ -676,10 +694,65 @@ async def _count_passes(state, conninfo, robot_id, msg):
 # ---------------------------------------------------------------------------
 # Live position stream (concurrent task, shares the single robot connection)
 # ---------------------------------------------------------------------------
+class LivePositionWriter:
+    """Writes the robot's newest live position to roomba_position at most once per
+    `interval`, without losing the last one. The throttle used to drop a sample that came
+    within a second of the previous write, so when the robot stopped (stuck, paused, flat
+    battery) the row could hold where it was up to a second earlier, and that was the
+    "last seen" spot. Now a sample inside the interval is held and written when the
+    interval is up, and whatever is held when the stream ends is written then. Each row
+    carries the time its sample arrived. One write at a time, in order, from one task."""
+
+    def __init__(self, conninfo, robot_id, interval, clock=time.monotonic):
+        self.conninfo = conninfo
+        self.robot_id = robot_id
+        self.interval = interval
+        self._clock = clock
+        self._held = None        # (x, y, theta, seen_at) not written yet
+        self._last_write = None  # clock() at the last write
+        self._task = None        # the task writing held samples
+        self._closing = asyncio.Event()  # set by close(): no more waiting out the interval
+
+    def offer(self, x, y, theta):
+        self._held = (x, y, theta, datetime.now(timezone.utc))
+        if self._task is None or self._task.done():
+            self._task = asyncio.ensure_future(self._drain())
+
+    async def _drain(self):
+        while self._held is not None:
+            if self._last_write is not None and not self._closing.is_set():
+                wait = self.interval - (self._clock() - self._last_write)
+                if wait > 0:
+                    with contextlib.suppress(asyncio.TimeoutError, TimeoutError):
+                        await asyncio.wait_for(self._closing.wait(), wait)
+            sample, self._held = self._held, None
+            self._last_write = self._clock()
+            try:
+                # Blocking psycopg write — off the event loop so ~1/s writes don't
+                # stall the robot connection's other tasks.
+                await asyncio.to_thread(upsert_position, self.conninfo, self.robot_id, *sample)
+            except Exception as e:  # noqa: BLE001 — fail-open; the next sample (or close) retries
+                if self._held is None:
+                    self._held = sample
+                log.warning("live position write failed: %s: %s", type(e).__name__, e)
+                return
+
+    async def close(self, timeout=LIVE_FINAL_WRITE_TIMEOUT):
+        """The stream has ended (or its task is being cancelled): write what is held, the
+        last place the robot reported, at once. Waits for a write already under way rather
+        than cancelling it, so an older row can never land after a newer one."""
+        self._closing.set()
+        if self._held is not None and (self._task is None or self._task.done()):
+            self._task = asyncio.ensure_future(self._drain())
+        if self._task is not None and not self._task.done():
+            await asyncio.wait({self._task}, timeout=timeout)
+
+
 async def run_live_map(robot, conninfo, robot_id, state=None):
     """Stream live position from watch_live_map() and UPSERT the latest point
-    (throttled to ~1/sec) into roomba_position. With `state`, every sample also
-    goes into the mission's pass count (_count_passes).
+    (throttled to ~1/sec, the last one never dropped: LivePositionWriter) into
+    roomba_position. With `state`, every sample also goes into the mission's pass
+    count (_count_passes).
 
     Runs as a CONCURRENT task over the SAME robot connection as the main loop —
     it opens no second cloud connection. Strictly fail-open: every error is
@@ -695,7 +768,7 @@ async def run_live_map(robot, conninfo, robot_id, state=None):
     MapUpdateMessage (the other stream shape) carries the live-map bundle URL,
     from which we extract cleaning coverage (see _persist_coverage).
     """
-    last_write = 0.0
+    writer = LivePositionWriter(conninfo, robot_id, LIVE_WRITE_MIN_INTERVAL)
     last_coverage = 0.0
     bundle_files = None
     try:
@@ -719,15 +792,9 @@ async def run_live_map(robot, conninfo, robot_id, state=None):
                     continue
                 if state is not None:
                     await _count_passes(state, conninfo, robot_id, msg)
-                now = time.monotonic()
-                if now - last_write < LIVE_WRITE_MIN_INTERVAL:
-                    continue  # throttle DB writes; keep only ~1 sample/sec
                 sample = msg.updates[-1]  # newest point in this trajectory-like message
                 x, y = sample.point
-                # Blocking psycopg write — off the event loop so ~1/s writes don't
-                # stall the robot connection's other tasks.
-                await asyncio.to_thread(upsert_position, conninfo, robot_id, x, y, sample.orientation)
-                last_write = now
+                writer.offer(x, y, sample.orientation)
             except Exception as e:  # noqa: BLE001 — one bad sample must not end the stream
                 log.warning("live sample failed: %s: %s", type(e).__name__, e)
     except asyncio.CancelledError:
@@ -738,6 +805,10 @@ async def run_live_map(robot, conninfo, robot_id, state=None):
         log.info("live position stream unavailable (no dot): %s", e)
     except Exception as e:  # noqa: BLE001 — fail-open; a new task starts on reconnect
         log.warning("live position stream ended (%s: %s)", type(e).__name__, e)
+    finally:
+        # The stream is stopping (the robot docked or stopped, or the link dropped), so the
+        # newest sample is where the robot is now: write it even if the throttle held it.
+        await writer.close()
 
 
 async def _cancel_live_task(task):
@@ -1132,9 +1203,8 @@ async def poll_once(robot, conninfo, state):
     name = state.robot_name or getattr(robot, "name", None)
     robot_id = robot.blid
 
-    # Drives the concurrent live-position task (started only mid-mission).
-    _cms = rep.get("cleanMissionStatus") or {}
-    state.mission_running = bool(_cms.get("missionId")) and _cms.get("phase") not in TERMINAL_PHASES
+    # Drives the concurrent live-position task (started only mid-mission and on the way home).
+    state.mission_running = _wants_live_position(rep.get("cleanMissionStatus") or {})
 
     if not state.device_synced:
         try:
@@ -1669,8 +1739,7 @@ async def read_status(robot, conninfo, state, stats, timeout):
     would blank the lifetime counters), and the next poll writes it. Returns the reported
     state. Raises when the read fails."""
     rep = _reported(await robot.get_named_shadow("ro-currentstate", timeout=timeout))
-    cms = rep.get("cleanMissionStatus") or {}
-    state.mission_running = bool(cms.get("missionId")) and cms.get("phase") not in TERMINAL_PHASES
+    state.mission_running = _wants_live_position(rep.get("cleanMissionStatus") or {})
     if stats is not None:
         try:
             upsert_status(conninfo, robot.blid, state.robot_name or getattr(robot, "name", None),

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  commandLabel, commandState, cycleLabel, nextScheduledClean, padLabel, partsSummary, roombaState, roombaVerdict,
-  runStatus, scheduleDays, scheduleLine,
+  commandLabel, commandState, cycleLabel, lastSeen, lastSeenWords, nextScheduledClean, padLabel, partsSummary, roomAt,
+  roombaState, roombaVerdict, runStatus, scheduleDays, scheduleLine,
 } from '../utils/roombaStatus';
+import type { RoombaMapGeoJson } from '../types';
 import { labelPoint, isFromControl } from '../components/RoombaMap';
 import { cleanScopeSummary } from '../components/CleanModal';
 import { endedLabel } from '../components/RoomRunDetailModal';
@@ -106,6 +107,117 @@ describe('roombaVerdict', () => {
     const ok = roombaVerdict({ status: { ...base, batteryPct: 100 }, parts: [], now: NOW });
     expect(ok).toMatchObject({ tone: 'ok', sentence: 'Rosie is docked and ready.', note: 'Battery at 100%.' });
     expect(roombaVerdict({ status: null }).tone).toBe('neutral');
+  });
+});
+
+describe('lastSeen', () => {
+  // Nov 12 2026: the robot paused in the living room at 11:00:34 AM, its mission ran out at
+  // 12:30 PM and it never docked. The stored state then: phase "stop", cycle "none", 11%.
+  const rect = (x0: number, y0: number, x1: number, y1: number) => ({
+    type: 'Polygon' as const,
+    coordinates: [[[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]]],
+  });
+  const geojson = {
+    rooms: {
+      type: 'FeatureCollection',
+      features: [
+        { type: 'Feature', id: 10, properties: { name: 'Living Room' }, geometry: rect(-7.6, 2.6, -1.25, 8.4) },
+        { type: 'Feature', id: 12, properties: { name: 'Kitchen' }, geometry: rect(-7.6, -0.3, -1.8, 2.6) },
+        { type: 'Feature', id: 15, properties: { name: 'Office' }, geometry: { type: 'MultiPolygon', coordinates: [rect(0.05, 4.9, 3.7, 8.4).coordinates] } },
+      ],
+    },
+    dockPose: { type: 'FeatureCollection', features: [{ type: 'Feature', properties: {}, geometry: { type: 'Point', coordinates: [1.0926, 5.7441] } }] },
+  } as RoombaMapGeoJson;
+  const stopped = { phase: 'stop', cycle: 'none', missionStart: null };
+  const nov12 = { x: -5.550261, y: 4.627603, updatedAt: '2026-11-12T17:00:34.314398Z' };
+  const at = (iso: string) => new Date(iso);
+  // 1:30 PM at home.
+  const NOV12 = at('2026-11-12T19:30:00Z');
+
+  it("shows the Nov 12 stop in the living room, with its time", () => {
+    const s = lastSeen({ status: stopped, position: nov12, geojson, now: NOV12 });
+    expect(s).toMatchObject({ x: -5.550261, y: 4.627603, room: 'Living Room', at: nov12.updatedAt });
+    expect(norm(s?.words ?? '')).toBe('Last seen in Living Room at 11:00 AM');
+    expect(norm(s?.short ?? '')).toBe('Last seen 11:00 AM');
+  });
+
+  it('hides it once the robot is on its dock, however it got there', () => {
+    // Back on the dock (it docked, or someone carried it there): charging, the bin emptying,
+    // recharging partway through a clean.
+    for (const status of [
+      { phase: 'charge', cycle: 'none', missionStart: null },
+      { phase: 'evac', cycle: 'clean', missionStart: null },
+      { phase: 'charge', cycle: 'clean', missionStart: '2026-11-12T15:00:15Z' },
+    ]) {
+      expect(lastSeen({ status, position: nov12, geojson, now: NOV12 }), status.phase).toBeNull();
+    }
+  });
+
+  it("doesn't draw a marker on the dock itself", () => {
+    const byTheDock = { ...nov12, x: 1.4, y: 5.5 };
+    expect(lastSeen({ status: stopped, position: byTheDock, geojson, now: NOV12 })).toBeNull();
+    const aMetreOff = { ...nov12, x: 1.0926, y: 4.7 };
+    expect(lastSeen({ status: stopped, position: aMetreOff, geojson, now: NOV12 })).not.toBeNull();
+  });
+
+  it('leaves a moving robot to the live dot, until its position stops changing', () => {
+    const cleaning = { phase: 'run', cycle: 'clean', missionStart: '2026-11-12T15:00:15Z' };
+    const recent = { ...nov12, updatedAt: '2026-11-12T19:29:30Z' };
+    expect(lastSeen({ status: cleaning, position: recent, geojson, now: NOV12 })).toBeNull();
+    expect(lastSeen({ status: { ...cleaning, phase: 'hmPostMsn' }, position: recent, geojson, now: NOV12 })).toBeNull();
+    // "Cleaning" for two hours without a new position: it died mid-clean and its cloud state froze.
+    expect(lastSeen({ status: cleaning, position: nov12, geojson, now: NOV12 })?.room).toBe('Living Room');
+    expect(lastSeen({ status: { ...cleaning, phase: 'hmPostMsn' }, position: nov12, geojson, now: NOV12 })).not.toBeNull();
+  });
+
+  it('shows a stuck or paused robot at once', () => {
+    const justNow = { ...nov12, updatedAt: '2026-11-12T19:29:55Z' };
+    const stuck = { ...stopped, phase: 'stuck', cycle: 'clean' };
+    const paused = { ...stopped, cycle: 'clean', missionStart: '2026-11-12T15:00:15Z' };
+    expect(lastSeen({ status: stuck, position: justNow, geojson, now: NOV12 })).not.toBeNull();
+    expect(lastSeen({ status: paused, position: justNow, geojson, now: NOV12 })).not.toBeNull();
+  });
+
+  it("ignores a position from before this clean began: the robot has left the dock since", () => {
+    const newClean = { phase: 'stuck', cycle: 'clean', missionStart: '2026-11-13T15:00:00Z' };
+    expect(lastSeen({ status: newClean, position: nov12, geojson, now: at('2026-11-13T15:02:00Z') })).toBeNull();
+  });
+
+  it('leaves the room out when the spot is in none, and needs a status and a fix', () => {
+    const hall = { ...nov12, x: -0.5, y: 4.0 };
+    expect(norm(lastSeen({ status: stopped, position: hall, geojson, now: NOV12 })?.words ?? '')).toBe('Last seen at 11:00 AM');
+    expect(lastSeen({ status: stopped, position: nov12, geojson: null, now: NOV12 })?.room).toBeNull();
+    expect(lastSeen({ status: null, position: nov12, geojson, now: NOV12 })).toBeNull();
+    expect(lastSeen({ status: stopped, position: null, geojson, now: NOV12 })).toBeNull();
+    expect(lastSeen({ status: stopped, position: { ...nov12, x: Number.NaN }, geojson, now: NOV12 })).toBeNull();
+  });
+
+  it('says the day when it was not today', () => {
+    expect(norm(lastSeenWords('Living Room', nov12.updatedAt, at('2026-11-13T14:00:00Z')))).toBe('Last seen in Living Room yesterday at 11:00 AM');
+    expect(norm(lastSeenWords(null, nov12.updatedAt, at('2026-11-16T14:00:00Z')))).toBe('Last seen on Thu, Nov 12 at 11:00 AM');
+    const s = lastSeen({ status: stopped, position: nov12, geojson, now: at('2026-11-13T14:00:00Z') });
+    expect(norm(s?.short ?? '')).toBe('Last seen yesterday, 11:00 AM');
+  });
+
+  it('finds the room in a multi-part room too', () => {
+    expect(roomAt(geojson, 2, 6)).toBe('Office');
+    expect(roomAt(geojson, -3, 1)).toBe('Kitchen');
+    expect(roomAt(geojson, 20, 20)).toBeNull();
+    expect(roomAt(undefined, 0, 0)).toBeNull();
+  });
+
+  it('puts it in the verdict, and never says "docked" with it', () => {
+    const words = { words: 'Last seen in Living Room at 11:00 AM' };
+    const status = { ...base, phase: 'stop', cycle: 'none', batteryPct: 11 };
+    const v = roombaVerdict({ status, lastSeen: words, now: NOV12 });
+    expect(v).toMatchObject({ tone: 'headsup', sentence: 'Rosie is stopped away from the dock.', note: 'Last seen in Living Room at 11:00 AM.' });
+    // Without a marker (none stored, or on the dock) the old words stand.
+    expect(roombaVerdict({ status: base, now: NOV12 }).sentence).toBe('Rosie is docked and ready.');
+    const err = roombaVerdict({ status: { ...status, error: 17, errorText: 'Stuck on a cable' }, lastSeen: words, now: NOV12 });
+    expect(err.note).toBe('Last seen in Living Room at 11:00 AM. Sort it out at the robot, then start the clean again.');
+    const paused = roombaVerdict({ status: { ...status, cycle: 'clean' }, lastSeen: words, now: NOV12 });
+    expect(paused).toMatchObject({ sentence: 'Rosie is paused partway through a clean.', note: 'Last seen in Living Room at 11:00 AM. Resume it, or send it home to the dock.' });
+    expect(roombaVerdict({ status: { ...status, phase: 'stuck' }, lastSeen: words, now: NOV12 })).toMatchObject({ tone: 'problem', sentence: 'Rosie is stuck.' });
   });
 });
 

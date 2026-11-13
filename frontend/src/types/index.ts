@@ -308,8 +308,9 @@ export interface RoombaRun {
 
 /**
  * Live robot position for the map dot (GET /api/roomba/position, or null = 204
- * when none/stale). x/y are meters in the map bundle's coordinate space; theta
- * is the raw wire heading in radians (provisional — may point out the back).
+ * when none/stale), or the last one whatever its age (GET /api/roomba/position/last).
+ * x/y are meters in the map bundle's coordinate space; theta is the raw wire
+ * heading in radians (provisional — may point out the back).
  */
 export interface RoombaPosition {
   robotId: string;

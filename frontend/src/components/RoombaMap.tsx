@@ -80,6 +80,19 @@ interface RoombaMapProps {
    * and the key's words for it ("Cleaned yesterday"). Keep it referentially stable.
    */
   lastClean?: LastClean | null;
+  /**
+   * Where the robot was last seen, when it is away from its dock and not moving (the page
+   * decides: utils/roombaStatus lastSeen). Drawn as a hollow puck in a still, dashed ring,
+   * never like the live dot, and keyed with its time. Keep it referentially stable.
+   */
+  lastSeen?: LastSeenMark | null;
+}
+
+/** The "last seen" marker: metres in the map's space, and the key's words ("Last seen 11:00 AM"). */
+export interface LastSeenMark {
+  x: number;
+  y: number;
+  label: string;
 }
 
 /** The last finished clean, for the docked map's quiet "cleaned" lanes. */
@@ -220,6 +233,7 @@ export default memo(function RoombaMap({
   robotName,
   aside,
   lastClean,
+  lastSeen,
 }: RoombaMapProps) {
   const geo = map?.geojson;
   // Room hover highlight is driven purely by CSS `:hover` on the hit-area group
@@ -702,7 +716,9 @@ export default memo(function RoombaMap({
     const upp = unitsPerPx(width, drawnWidth);
     const glyphSize = 16 * upp;
     const wallW = Math.max(maxDim * 0.0055, 2.5 * upp);
-    return (
+    // Two parts, so the "last seen" marker can sit between them: on the plate with the walls and
+    // the dock, under the room names, whose halo keeps a name readable where the marker meets it.
+    const marks = (
       <>
         {/* Keep-out zones: a diagonal hatch in a solid red edge. No-mop zones: a dot screen
             in a dashed amber edge. The key under the map draws the same two. */}
@@ -806,7 +822,10 @@ export default memo(function RoombaMap({
             </g>
           );
         })}
-
+      </>
+    );
+    const names = (
+      <>
         {/* Room names — ink on the plate, each fitted inside its room (see `labels`). In edit
             mode, unnamed rooms show a "Name this room" prompt instead. A halo in the room's
             own tone keeps a name readable over a zone's hatch or the cleaned lanes. */}
@@ -947,6 +966,7 @@ export default memo(function RoombaMap({
             })}
       </>
     );
+    return { marks, names };
   }, [model, isMerging, isCleaning, canEdit, mergeSelection, onToggleMergeRoom, onSelectCleanRoom, onSelectRoom, drawnWidth, labels, idKeepOut, idNoMop]);
 
   // The legend names only the marks this plan actually has.
@@ -1064,6 +1084,15 @@ export default memo(function RoombaMap({
         })()
       : null;
 
+  // Where it was last seen: never alongside the live dot, which is where it is now.
+  const seen =
+    !robot && lastSeen && Number.isFinite(lastSeen.x) && Number.isFinite(lastSeen.y)
+      ? (() => {
+          const [cx, cy] = project([lastSeen.x, lastSeen.y]);
+          return { cx, cy, r: Math.max(maxDim * 0.014, 8 * upp) };
+        })()
+      : null;
+
   const interactive = canEdit || isMerging || isCleaning;
   const name = robotName?.trim() || 'Robot';
 
@@ -1140,9 +1169,31 @@ export default memo(function RoombaMap({
           );
         })()}
 
-        {/* Static overlay layers (zones, walls, dock, labels, room hit-areas) —
+        {/* Static overlay layers (zones, walls, dock; then labels, room hit-areas) —
             memoized; unaffected by position/coverage polls. */}
-        {staticOverlay}
+        {staticOverlay?.marks}
+
+        {/* Last seen — the robot's outline where it stopped: a hollow puck in a dashed search
+            ring, still and in outline where the live robot is solid, pulsing and pointed, so
+            it never reads as "here now, moving". Under the names and the room hit areas. */}
+        {seen && (
+          <g aria-label={`Where ${name} was last seen`} style={{ pointerEvents: 'none' }}>
+            <circle
+              cx={seen.cx}
+              cy={seen.cy}
+              r={seen.r * 2.3}
+              fill="var(--apptext)"
+              fillOpacity={0.07}
+              stroke="var(--apptext)"
+              strokeWidth={1.25 * upp}
+              strokeDasharray={`${3 * upp} ${2.5 * upp}`}
+            />
+            <circle cx={seen.cx} cy={seen.cy} r={seen.r} fill="var(--appmap-plate)" stroke="var(--apptext)" strokeWidth={2 * upp} />
+            <circle cx={seen.cx} cy={seen.cy} r={seen.r * 0.3} fill="var(--apptext)" />
+          </g>
+        )}
+
+        {staticOverlay?.names}
 
         {/* Live robot — a round puck seen from above (its CLEAN button ring, and a notch
             at the front when the heading is known), so it never reads as the square dock.
@@ -1262,6 +1313,7 @@ export default memo(function RoombaMap({
             {legend?.noMop && <MapKey kind="nomop">No mopping</MapKey>}
             {legend?.wall && <MapKey kind="wall">Virtual wall</MapKey>}
             {robot && <MapKey kind="robot">{name}</MapKey>}
+            {seen && lastSeen && <MapKey kind="lastseen">{lastSeen.label}</MapKey>}
             {legend?.dock && <MapKey kind="dock">Dock</MapKey>}
             {labels.keyed.map((k) => (
               <MapKey key={`n-${k.n}`} kind="num" n={k.n}>{k.name}</MapKey>
@@ -1314,7 +1366,7 @@ export function twicePath(
   return d;
 }
 
-type MapKeyKind = 'cleaned' | 'twice' | 'last' | 'keepout' | 'nomop' | 'wall' | 'robot' | 'dock' | 'num';
+type MapKeyKind = 'cleaned' | 'twice' | 'last' | 'keepout' | 'nomop' | 'wall' | 'robot' | 'lastseen' | 'dock' | 'num';
 
 /** A legend swatch, drawn with the same strokes, hatches and fills as the mark on the plan. */
 function MapSwatch({ kind, n }: { kind: MapKeyKind; n?: number }) {
@@ -1397,6 +1449,15 @@ function MapSwatch({ kind, n }: { kind: MapKeyKind; n?: number }) {
         <g>
           <path d={robotPointer(4.6)} transform="translate(6.5 6)" fill="var(--apptext)" />
           <circle cx={6.5} cy={6} r={1.6} fill="var(--appmap-plate)" />
+        </g>
+      );
+      break;
+    case 'lastseen':
+      body = (
+        <g>
+          <circle cx={9} cy={6} r={5.4} fill="var(--apptext)" fillOpacity={0.07} stroke="var(--apptext)" strokeWidth={1} strokeDasharray="2 1.6" />
+          <circle cx={9} cy={6} r={2.6} fill="var(--appmap-plate)" stroke="var(--apptext)" strokeWidth={1.2} />
+          <circle cx={9} cy={6} r={0.8} fill="var(--apptext)" />
         </g>
       );
       break;
