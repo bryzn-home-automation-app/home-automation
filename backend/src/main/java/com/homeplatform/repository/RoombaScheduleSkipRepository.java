@@ -26,6 +26,9 @@ public interface RoombaScheduleSkipRepository extends JpaRepository<RoombaSchedu
 
     List<RoombaScheduleSkip> findByAlertedAtIsNullAndStateIn(Collection<String> states);
 
+    /** Ended skips not alerted on, with this outcome (a schedule left off that the cloud stopped listing). */
+    List<RoombaScheduleSkip> findByAlertedAtIsNullAndStateAndDetail(String state, String detail);
+
     /**
      * Ask the poller to undo a skip. Only these columns: the poller writes the state at any
      * moment, and saving the whole entity could put back a state it had just moved on from.

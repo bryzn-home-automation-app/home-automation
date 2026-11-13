@@ -24,7 +24,9 @@ THE RULES
 * Never left off by us. A skip is a database row, so a restart, an outage or a failed write
   only delays the switch back on: the poller keeps retrying (RETRY_SECONDS) until the cloud
   shows the schedule on. APPLYING is stored before the switch-off is sent, so a restart in
-  the middle of the send still knows the schedule may be off because of us.
+  the middle of the send still knows the schedule may be off because of us. A schedule we
+  switched off that a read doesn't list is looked for again; only GONE_AFTER_MISSES reads in a
+  row without it end the skip, and the backend then tells the admins to check the app.
 * Two skips of one schedule (today's and tomorrow's) share the time it is off: the second
   joins the first instead of the schedule going on and off between them.
 """
@@ -69,7 +71,14 @@ UNDONE_KEPT_OFF = "Undone. The schedule stays off for another skipped clean."
 TOO_LATE = "The schedule couldn't be switched off before the clean was due, so it may have run."
 CHANGED = "The schedule's days or time were changed in the iRobot app, so this clean wasn't skipped."
 GONE = "The schedule was deleted in the iRobot app, so there was nothing to skip."
-GONE_WHILE_OFF = "The schedule was deleted in the iRobot app, so there was nothing to switch back on."
+# The backend alerts the admins when a skip ends with this detail (RoombaScheduleSkipService
+# GONE_WHILE_OFF, the same words; tests/test_schedule_skips.py checks they match).
+GONE_WHILE_OFF = "The iRobot cloud no longer lists the schedule, so it couldn't be switched back on."
+# last_error while a schedule switched off by us is missing from the cloud's reads.
+MISSING = "the iRobot cloud's schedules don't list it"
+# A schedule switched off by us must be missing from this many reads in a row before the skip
+# ends without switching it back on: one odd answer must never leave it off for good.
+GONE_AFTER_MISSES = 3
 ALREADY_OFF = "The schedule was already off in the iRobot app, so there was nothing to skip."
 WAITING = "The schedule is switched off after its earlier clean has started."
 OFF = "The schedule is switched off in the iRobot app until the skipped clean has passed."
@@ -185,14 +194,15 @@ def groups_due(skips, now):
 # ---------------------------------------------------------------------------
 def containers(raw):
     """[(household_schedule_id, [schedule entries])] from the raw schedule response. Raises
-    ValueError on anything but the documented shape: an answer that can't be read must never
-    pass for "the schedule was deleted" (that would drop a skip and leave its schedule off)."""
+    ValueError on anything but the documented shape, a container without its id included: an
+    answer that can't be read must never pass for "the schedule was deleted" (that would drop a
+    skip and leave its schedule off)."""
     if not isinstance(raw, dict) or not isinstance(raw.get("household_schedules"), list):
         raise ValueError("unexpected schedule response from the iRobot cloud")
     out = []
     for c in raw["household_schedules"]:
         if not isinstance(c, dict) or not c.get("household_schedule_id"):
-            continue
+            raise ValueError("a schedule list from the iRobot cloud without its id")
         entries = c.get("schedules")
         if not isinstance(entries, list):
             raise ValueError("unexpected schedule list from the iRobot cloud")
@@ -319,10 +329,20 @@ def plan_group(skips, entry, now, tz=None):
 
     options = entry.get("options") if isinstance(entry, dict) else None
     if not isinstance(options, dict):
-        # Deleted in the app: nothing to skip, nothing to switch back on.
+        # Not in the cloud's copy. A skip that switched nothing off has nothing left to do. One
+        # that did (or may have: APPLYING) is looked for again, and only after GONE_AFTER_MISSES
+        # reads in a row without it does it end with nothing to switch back on (the backend
+        # tells the admins). An empty schedule list counts as a miss like any other.
         for s in skips:
-            put(s, _finish(s, RESTORED if s.state == APPLIED else CANCELLED,
-                           GONE_WHILE_OFF if s.state == APPLIED else GONE, now))
+            if s.state not in (APPLIED, APPLYING):
+                put(s, _finish(s, CANCELLED, GONE, now))
+                continue
+            misses = s.attempts + 1 if s.last_error == MISSING else 1
+            if misses >= GONE_AFTER_MISSES:
+                put(s, _finish(s, RESTORED, GONE_WHILE_OFF, now))
+            else:
+                put(s, Change(s.id, attempts=misses, last_error=MISSING,
+                              next_check_at=now + timedelta(seconds=retry_delay(misses))))
         return plan
 
     enabled = options.get("enabled")

@@ -131,12 +131,41 @@ class Rules(unittest.TestCase):
         self.assertIsNone(p.write)
         self.assertEqual(p.changes[1].state, ss.CANCELLED)
 
-    def test_a_deleted_schedule_ends_its_skips_with_nothing_to_write(self):
-        pending, applied = skip(1, TUE_THU, 18), skip(2, TUE_THU, 17, state=ss.APPLIED)
-        p = self.plan([pending, applied], None, at(17, 9, 30))
+    def test_a_deleted_schedule_ends_a_skip_that_switched_nothing_off_at_once(self):
+        p = self.plan([skip(1, TUE_THU, 18)], None, at(17, 9, 30))
         self.assertIsNone(p.write)
         self.assertEqual((p.changes[1].state, p.changes[1].detail), (ss.CANCELLED, ss.GONE))
-        self.assertEqual((p.changes[2].state, p.changes[2].detail), (ss.RESTORED, ss.GONE_WHILE_OFF))
+
+    def test_a_schedule_we_switched_off_must_be_missing_from_three_reads_in_a_row(self):
+        # One odd answer (an empty list, a container missing) must never end the skip with the
+        # schedule left off: it is looked for again, and only the third miss in a row ends it.
+        for state in (ss.APPLIED, ss.APPLYING):
+            s = skip(2, TUE_THU, 17, state=state)
+            now = at(17, 9, 30)
+            for n in (1, 2):
+                c = self.plan([s], None, now).changes[2]
+                self.assertIsNone(c.state, f"{state}: miss {n}")
+                self.assertEqual((c.attempts, c.last_error), (n, ss.MISSING))
+                self.assertEqual(c.next_check_at, now + timedelta(seconds=ss.retry_delay(n)))
+                s.attempts, s.last_error, now = c.attempts, c.last_error, c.next_check_at
+            p = self.plan([s], None, now)
+            self.assertIsNone(p.write)
+            self.assertEqual((p.changes[2].state, p.changes[2].detail), (ss.RESTORED, ss.GONE_WHILE_OFF))
+        # Misses only count in a row: a failed read in between starts the count again.
+        s = skip(2, TUE_THU, 17, state=ss.APPLIED, attempts=2, last_error="couldn't read the schedules (OSError)")
+        self.assertEqual(self.plan([s], None, at(17, 9, 30)).changes[2].attempts, 1)
+        # Found again: the skip carries on, back on after its time as usual.
+        s = skip(2, TUE_THU, 17, state=ss.APPLIED, attempts=2, last_error=ss.MISSING)
+        p = self.plan([s], entry(TUE_THU, [2, 3, 4], enabled=False), at(17, 9, 30))
+        self.assertIs(p.write, True)
+
+    def test_the_backend_alerts_on_the_same_words(self):
+        java = os.path.join(os.path.dirname(os.path.dirname(HERE)), "backend", "src", "main", "java", "com",
+                            "homeplatform", "service", "RoombaScheduleSkipService.java")
+        if not os.path.exists(java):
+            self.skipTest("the backend isn't beside the poller here")
+        with open(java, encoding="utf-8") as f:
+            self.assertIn(f'GONE_WHILE_OFF = "{ss.GONE_WHILE_OFF}"', f.read())
 
     def test_a_schedule_the_owner_had_switched_off_is_not_ours_to_switch_back_on(self):
         p = self.plan([skip(1, TUE_THU, 17)], entry(TUE_THU, [2, 3, 4], enabled=False), at(16, 20))
@@ -215,7 +244,10 @@ class Rules(unittest.TestCase):
 
     def test_an_unreadable_answer_is_never_taken_for_a_deleted_schedule(self):
         for raw in (None, [], {"error": "InternalError"}, {"household_schedules": None},
-                    {"household_schedules": [{"household_schedule_id": TUE_THU, "schedules": None}]}):
+                    {"household_schedules": [{"household_schedule_id": TUE_THU, "schedules": None}]},
+                    {"household_schedules": [{"schedules": [entry(TUE_THU, [2])]}]},
+                    {"household_schedules": [{"household_schedule_id": "", "schedules": []}]},
+                    {"household_schedules": ["?"]}):
             with self.assertRaises(ValueError):
                 ss.containers(raw)
         conts = ss.containers({"household_schedules": [{"household_schedule_id": TUE_THU, "schedules": [entry(TUE_THU, [2])]}]})
@@ -420,6 +452,16 @@ class Pass(unittest.IsolatedAsyncioTestCase):
         await self.run_at(at(17, 9, 30))
         self.assertEqual(self.table.state(1), ss.RESTORED)
         self.assertTrue(self.cloud.options(TUE_THU)["enabled"])
+
+    async def test_an_empty_answer_while_a_schedule_is_off_for_us_is_a_miss_not_a_deletion(self):
+        self.cloud.add(TUE_THU, [2, 3, 4], enabled=False)
+        self.table.add(skip(1, TUE_THU, 17, state=ss.APPLIED, next_check_at=at(17, 9, 30)))
+        self.cloud.containers = {}
+        await self.run_at(at(17, 9, 30))
+        s = self.table.rows[1]["skip"]
+        self.assertEqual((s.state, s.attempts, s.last_error), (ss.APPLIED, 1, ss.MISSING))
+        self.assertEqual(self.cloud.writes, [])
+        self.assertIsNone(self.table.mirror, "an empty answer doesn't wipe the page's copy")
 
     async def test_an_unreadable_cloud_writes_nothing_and_tries_again(self):
         self.table.add(skip(1, TUE_THU, 17))

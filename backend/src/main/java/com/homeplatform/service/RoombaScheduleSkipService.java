@@ -76,6 +76,12 @@ public class RoombaScheduleSkipService {
     static final String CANCELLED = "CANCELLED";
     static final String FAILED = "FAILED";
     static final List<String> ACTIVE = List.of(PENDING, APPLYING, APPLIED);
+    /**
+     * The detail of a skip that ended with its schedule still switched off because the iRobot
+     * cloud stopped listing it (three reads in a row). The same words as GONE_WHILE_OFF in
+     * roomba-poller/schedule_skips.py, whose tests check they match.
+     */
+    static final String GONE_WHILE_OFF = "The iRobot cloud no longer lists the schedule, so it couldn't be switched back on.";
 
     /** Command rows that wake the poller for a skip pass (roomba-poller/poller.py SKIP_CLEAN, UNDO_SKIP). */
     static final String SKIP_COMMAND = "skip_clean";
@@ -236,7 +242,7 @@ public class RoombaScheduleSkipService {
 
     // ── Alerts ──────────────────────────────────────────────────────────
 
-    /** A skip that couldn't be made, or a schedule left off: tell the admins, once per skip. */
+    /** A skip that couldn't be made, or a schedule left off or gone: tell the admins, once per skip. */
     @Scheduled(initialDelay = 300_000, fixedDelay = 60_000)
     public void checkFailures() {
         try {
@@ -248,7 +254,10 @@ public class RoombaScheduleSkipService {
 
     void alertFailures() {
         LocalDateTime now = utc(clock.instant());
-        for (RoombaScheduleSkip s : skips.findByAlertedAtIsNullAndStateIn(List.of(PENDING, APPLYING, APPLIED, FAILED))) {
+        List<RoombaScheduleSkip> candidates = new java.util.ArrayList<>(
+                skips.findByAlertedAtIsNullAndStateIn(List.of(PENDING, APPLYING, APPLIED, FAILED)));
+        candidates.addAll(skips.findByAlertedAtIsNullAndStateAndDetail(RESTORED, GONE_WHILE_OFF));
+        for (RoombaScheduleSkip s : candidates) {
             Alert alert = alertFor(s, now);
             if (alert == null || skips.markAlerted(s.getId(), now) == 0) continue;
             log.warn("Roomba skip #{}: {}", s.getId(), alert.title());
@@ -268,6 +277,12 @@ public class RoombaScheduleSkipService {
     static Alert alertFor(RoombaScheduleSkip s, LocalDateTime now) {
         String why = s.getLastError() != null && !s.getLastError().isBlank() ? " (" + s.getLastError() + ")" : "";
         String state = s.getState();
+        if (RESTORED.equals(state) && GONE_WHILE_OFF.equals(s.getDetail())) {
+            return new Alert(Severity.WARNING, "A skipped Roomba schedule has gone missing",
+                    "Skipping " + cleanName(s) + " switched its schedule off in the iRobot app, and the iRobot cloud"
+                            + " no longer lists that schedule, so the home app couldn't switch it back on. Check the"
+                            + " iRobot app: the schedule we switched off is no longer there.");
+        }
         boolean notSkipped = FAILED.equals(state)
                 || (PENDING.equals(state) && s.getUndoRequestedAt() == null
                     && now.isAfter(s.getScheduledFor().plus(NOT_SKIPPED_ALERT)));

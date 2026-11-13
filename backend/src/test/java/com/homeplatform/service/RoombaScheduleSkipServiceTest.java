@@ -305,6 +305,26 @@ class RoombaScheduleSkipServiceTest {
         }
 
         @Test
+        @DisplayName("a skip that ended with its schedule gone from the cloud while off: a warning to check the app")
+        void goneWhileOff() {
+            admins();
+            RoombaScheduleSkip s = row("RESTORED");
+            s.setDetail(RoombaScheduleSkipService.GONE_WHILE_OFF);
+            when(skips.findByAlertedAtIsNullAndStateAndDetail("RESTORED", RoombaScheduleSkipService.GONE_WHILE_OFF))
+                    .thenReturn(List.of(s));
+            at(11, 17, 9, 40).alertFailures();
+            ArgumentCaptor<String> msg = ArgumentCaptor.forClass(String.class);
+            verify(notifications).send(eq(1L), eq(AlertType.ROOMBA_ERROR), eq(Severity.WARNING),
+                    eq("A skipped Roomba schedule has gone missing"), msg.capture());
+            assertTrue(msg.getValue().contains("Check the iRobot app: the schedule we switched off is no longer there."));
+            verify(skips).markAlerted(eq(7L), any());
+            // Any other way a skip ends says nothing.
+            RoombaScheduleSkip back = row("RESTORED");
+            back.setDetail("Done. The schedule is back on.");
+            assertNull(RoombaScheduleSkipService.alertFor(back, LocalDateTime.of(2026, 11, 17, 16, 0)));
+        }
+
+        @Test
         @DisplayName("nothing for a skip going to plan")
         void quiet() {
             assertNull(RoombaScheduleSkipService.alertFor(row("APPLIED"), LocalDateTime.of(2026, 11, 17, 15, 45)));
