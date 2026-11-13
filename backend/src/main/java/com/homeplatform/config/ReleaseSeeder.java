@@ -37,6 +37,12 @@ public class ReleaseSeeder implements CommandLineRunner {
 
     /** Newest release first. Keep every summary and change to one short line. */
     private static final List<AppRelease> HISTORY = List.of(
+            define("2.9.1", "stable", LocalDate.of(2026, 11, 13),
+                    "Who has the app open",
+                    "People shows anyone with the app open as online, not only guests.",
+                    List.of(
+                            change("fixed", "People: house members and Bryan show as online while they have the app open. Before, only guests could, and a guest stayed online for up to 30 days."),
+                            change("improved", "People: someone who is away shows when they were last active, and the list refreshes every minute."))),
             define("2.9.0", "stable", LocalDate.of(2026, 11, 13),
                     "Dock tanks and skipping a clean",
                     "The Roomba page says which dock tank needs attention, and a scheduled clean can be skipped.",
