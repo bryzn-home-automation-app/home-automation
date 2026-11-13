@@ -428,11 +428,19 @@ public class AlertEngine {
      * five minutes when it's idle, so this is two readings, not one that cleared on the next.
      */
     static final Duration DOCK_ISSUE_SETTLE = Duration.ofMinutes(10);
+    /**
+     * No second alert for the same kind of complaint within this long of the last one. The
+     * poller restarts {@code since} whenever the complaint drops out of a reading, and the dock
+     * can stop reporting its tank state while the robot is out, so without this a tank left
+     * empty could alert again after every clean.
+     */
+    static final Duration DOCK_REPEAT_QUIET = Duration.ofHours(12);
 
     /**
      * The dock's complaint (clean-water tank empty, dirty-water tank full, …), once per
      * occurrence: the poller keeps {@code since} while the same complaint stands, so a member
-     * hears about it once, and again only after it was fixed and came back (or changed).
+     * hears about it once, and again only after it was fixed and came back (or changed), and
+     * not within {@link #DOCK_REPEAT_QUIET} of the last alert for that kind.
      */
     void maybeDockAlert(Long userId, RoombaStatusResponse s) {
         RoombaDockIssue issue = s.dockIssue();
@@ -442,7 +450,9 @@ public class AlertEngine {
         if (since != null && since.isAfter(now.minus(DOCK_ISSUE_SETTLE))) return;
         String title = RoombaDock.alertTitle(issue.kind());
         // No start recorded (a poller from before dock_issue_since): at most once a day.
-        if (!isNewRoombaSince(userId, title, since != null ? since : now.minus(Duration.ofDays(1)))) return;
+        Instant quiet = now.minus(DOCK_REPEAT_QUIET);
+        Instant from = since == null ? now.minus(Duration.ofDays(1)) : since.isBefore(quiet) ? since : quiet;
+        if (!isNewRoombaSince(userId, title, from)) return;
         createRoomba(userId, AlertType.ROOMBA_ATTENTION, Severity.WARNING, title,
                 RoombaDock.alertMessage(issue.kind(), issue.code(), s.name()));
     }

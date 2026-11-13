@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -479,7 +480,7 @@ class AlertEngineTest {
     class DockAlerts {
 
         @Test
-        @DisplayName("Nov 13: the clean-water tank, said plainly, deduped from when it began")
+        @DisplayName("Nov 13: the clean-water tank, said plainly, deduped from when it began or 12 hours back")
         void cleanWaterTank() {
             List<Instant> since = new ArrayList<>();
             watchEngine(nov13(), List.of(NOV12), NOV13, false, since).generateRoombaAlerts(1L);
@@ -487,7 +488,26 @@ class AlertEngineTest {
                     eq("Roomba dock — clean-water tank empty"),
                     eq("The dock's clean-water tank is empty. Refill it and iRummy can mop again. "
                             + "If it's full, push it in firmly; a loose tank reads as empty. Dock code 671."));
-            assertEquals(Instant.parse("2026-11-13T15:01:00Z"), since.get(0));  // then the missed start's 9:00
+            // It began at 9:01 AM, an hour ago: the check reaches back 12 hours (then the missed start's 9:00).
+            assertEquals(NOV13.toInstant().minus(Duration.ofHours(12)), since.get(0));
+        }
+
+        @Test
+        @DisplayName("a complaint that restarted while the robot was out doesn't alert again within 12 hours")
+        void restartedComplaint() {
+            // The dock dropped the tank state during the 9:00 clean, so the complaint restarted at
+            // 10:51 AM; the first alert went out hours before. The check covers those 12 hours.
+            var restarted = new RoombaDockIssue("clean_water_empty", 671, NOV13.plusMinutes(48).toInstant().toString());
+            var status = docked(restarted, List.of("The dock's clean-water tank is empty"), null, "none", true);
+            List<Instant> from = new ArrayList<>();
+            watchEngine(status, List.of(NOV12), NOV13.plusHours(1), true, from).generateRoombaWatchAlerts(1L);
+            assertEquals(NOV13.plusHours(1).toInstant().minus(Duration.ofHours(12)), from.get(0));
+            verify(notificationService, never()).send(anyLong(), any(), any(), eq("Roomba dock — clean-water tank empty"), any());
+            // A complaint older than that is checked from its own start.
+            var old = new RoombaDockIssue("clean_water_empty", 671, NOV13.minusHours(20).toInstant().toString());
+            List<Instant> from2 = new ArrayList<>();
+            watchEngine(docked(old, List.of(), null, "none", true), List.of(NOV12), NOV13, true, from2).generateRoombaWatchAlerts(1L);
+            assertEquals(NOV13.minusHours(20).toInstant(), from2.get(0));
         }
 
         @Test
