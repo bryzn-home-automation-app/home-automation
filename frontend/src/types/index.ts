@@ -412,6 +412,34 @@ export interface RoombaNativeSchedule {
   updatedAt: string;
 }
 
+/**
+ * One skipped scheduled clean (GET /api/roomba/schedule-skips). iRobot has no "skip once", so
+ * the poller switches the schedule off in the iRobot app across the skipped start and back on
+ * at {@link restoreAfter}. `date`/`hour`/`minute` are the home's clock.
+ *   PENDING   not switched off yet (it waits for an earlier clean of the same schedule)
+ *   APPLYING / APPLIED   off in the iRobot app until restoreAfter
+ *   RESTORED  back on · CANCELLED  nothing was switched off · FAILED  couldn't be in time
+ */
+export interface RoombaScheduleSkip {
+  id: number;
+  householdScheduleId: string;
+  scheduleId: string | null;
+  date: string;
+  hour: number;
+  minute: number;
+  scheduledFor: string;
+  restoreAfter: string;
+  state: 'PENDING' | 'APPLYING' | 'APPLIED' | 'RESTORED' | 'CANCELLED' | 'FAILED' | string;
+  detail: string | null;
+  /** The last cloud call that failed, while it is being retried. */
+  lastError: string | null;
+  undoRequested: boolean;
+  requestedBy: string | null;
+  createdAt: string;
+  appliedAt: string | null;
+  finishedAt: string | null;
+}
+
 // ── Minimal GeoJSON (only what the map renderer consumes) ──
 
 export type GeoPosition = number[]; // [x, y] in meters

@@ -13,7 +13,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt \
     && apt-get purge -y git && apt-get autoremove -y
 
-COPY poller.py coverage_passes.py command_flow.py dock_issues.py ./
+COPY poller.py coverage_passes.py command_flow.py dock_issues.py schedule_skips.py ./
 
 # Unbuffered stdout so `docker compose logs` shows lines as they happen.
 ENV PYTHONUNBUFFERED=1

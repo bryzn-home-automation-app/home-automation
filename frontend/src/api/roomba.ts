@@ -8,6 +8,7 @@ import type {
   RoombaPart,
   RoombaPosition,
   RoombaRun,
+  RoombaScheduleSkip,
   RoombaStatus,
 } from '../types';
 
@@ -219,5 +220,23 @@ export async function fetchRoombaNativeSchedules(): Promise<RoombaNativeSchedule
  *  roomba-v4-integration/probes/probe6-8 for the tooling that does it today. */
 export async function refreshRoombaNativeSchedules(): Promise<RoombaCommand> {
   const res = await api.post<RoombaCommand>('/admin/roomba/command', { command: 'list_schedules' });
+  return res.data;
+}
+
+/** Skipped scheduled cleans still under way, and those settled in the last two days. */
+export async function fetchRoombaScheduleSkips(): Promise<RoombaScheduleSkip[]> {
+  const res = await api.get<RoombaScheduleSkip[]>('/roomba/schedule-skips');
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+/** Skip one schedule's clean on `date` (today or tomorrow at home, "YYYY-MM-DD"). ADMIN only. */
+export async function skipRoombaClean(householdScheduleId: string, date: string): Promise<RoombaScheduleSkip> {
+  const res = await api.post<RoombaScheduleSkip>('/admin/roomba/schedule-skips', { householdScheduleId, date });
+  return res.data;
+}
+
+/** Undo a skip: the clean runs after all (the schedule goes back on). ADMIN only. */
+export async function undoRoombaSkip(id: number): Promise<RoombaScheduleSkip> {
+  const res = await api.post<RoombaScheduleSkip>(`/admin/roomba/schedule-skips/${id}/undo`);
   return res.data;
 }

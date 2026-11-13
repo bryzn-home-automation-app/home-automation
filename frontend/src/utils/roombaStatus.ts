@@ -6,6 +6,8 @@ import {
 import { pointInRings, type Pt } from './mapLabels';
 import { humanize, roombaPhaseStatus, type Tone } from './status';
 import { isRecharging } from './roomba';
+import type { RoombaScheduleSkip } from '../types';
+import { heldSchedules, runsOnWeekday, skippedCleans } from './roombaSkips';
 
 /*
  * The robot's state in one place, for every screen that shows it (the Roomba page, Home's
@@ -489,6 +491,8 @@ const COMMAND: Record<string, string> = {
   split_room: 'Divide a room',
   merge_rooms: 'Merge rooms',
   list_schedules: 'Read schedules',
+  skip_clean: 'Skip a clean',
+  undo_skip: 'Undo a skip',
 };
 
 /** A queued command's name in words (B-120: never "clean_rooms"). */
@@ -564,26 +568,35 @@ export interface NextClean {
 
 /**
  * The next time an enabled schedule fires, in the home's time (schedule hours are the robot's
- * local time, which is the home's). Null when nothing is enabled.
+ * local time, which is the home's). Null when nothing is enabled. With `skips`, a skipped clean
+ * is passed over, and a schedule switched off only for a skip still counts (it goes back on).
  */
 export function nextScheduledClean(
-  schedules: readonly Pick<RoombaNativeSchedule, 'days' | 'hour' | 'minute' | 'enabled' | 'name'>[] | null | undefined,
+  schedules: readonly (Pick<RoombaNativeSchedule, 'days' | 'hour' | 'minute' | 'enabled' | 'name'> & { householdScheduleId?: string })[] | null | undefined,
   now: Date | number = Date.now(),
+  skips?: readonly RoombaScheduleSkip[] | null,
 ): NextClean | null {
   const today = homeClock(now);
   const key = homeDayKey(now);
   if (!today || !key || !schedules) return null;
   const nowMinutes = today.hour * 60 + today.minute;
+  const held = heldSchedules(skips);
+  const skipped = skippedCleans(skips);
   let best: { offset: number; minutes: number; s: (typeof schedules)[number] } | null = null;
   for (const s of schedules) {
-    if (!s.enabled || s.hour == null || s.minute == null) continue;
+    const id = s.householdScheduleId ?? '';
+    if (!(s.enabled || held.has(id)) || s.hour == null || s.minute == null) continue;
     const minutes = s.hour * 60 + s.minute;
-    for (let offset = 0; offset <= 7; offset++) {
-      // 0 = Sunday in HomeClock; schedules count 1 = Monday … 7 = Sunday.
+    // Two weeks: a weekly clean that is skipped is next seen a week on.
+    for (let offset = 0; offset <= 14; offset++) {
+      // 0 = Sunday in HomeClock; schedules count 1 = Monday … 7 = Sunday (or iRobot's 0).
       const wd = (today.weekday + offset) % 7;
-      const iso = wd === 0 ? 7 : wd;
-      if (!s.days.includes(iso)) continue;
+      if (!runsOnWeekday(s.days, wd)) continue;
       if (offset === 0 && minutes <= nowMinutes) continue;
+      if (skipped.size > 0) {
+        const day = new Date(Date.UTC(today.year, today.month - 1, today.day + offset));
+        if (skipped.has(`${id}|${wallClock(day.getUTCFullYear(), day.getUTCMonth() + 1, day.getUTCDate(), 0, 0).slice(0, 10)}`)) continue;
+      }
       if (!best || offset < best.offset || (offset === best.offset && minutes < best.minutes)) best = { offset, minutes, s };
       break;
     }

@@ -93,6 +93,23 @@ each command logs one line with its timings:
 command #47 (dock) confirmed | queued->seen 3 ms [notify] | seen->sent 160 ms [link fresh, round trip 3.1s ago] | sent->confirmed 2300 ms | total 2463 ms
 ```
 
+### Skipping a scheduled clean
+
+The schedules are the robot's own, in iRobot's cloud, which has no "skip once". A skip is a
+`roomba_schedule_skips` row (the backend inserts it, then queues `skip_clean` / `undo_skip`
+to wake the poller); the poller switches that one schedule off across the skipped start and
+back on 30 minutes after it. The write is `update_schedules()` on the container just read
+with `get_schedules_raw()`, every schedule sent back as read and only `enabled` changed, then
+read back to check. A schedule running on several days is switched off only once its run
+before the skipped one has started; a skipped start the owner changed or deleted in the
+iRobot app drops the skip without a write; a schedule they switched back on there ends it.
+`APPLYING` is stored before the switch-off goes out, so a restart mid-send still knows the
+schedule may be off. Failed reads and writes are retried per skip (1, 2, 5, 10, then every
+15 min, never faster) until the schedule is back on; the main loop checks every 30 s and on
+start-up, fail-open. The backend alerts the admins if a skip couldn't be made in time or a
+schedule is still off an hour after it should be back on. The rules are in
+`schedule_skips.py`.
+
 ## Robustness
 
 Fail-open. Any cloud or DB error in a cycle is logged and swallowed; the loop

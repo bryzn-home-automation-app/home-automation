@@ -22,6 +22,9 @@ const state = {
   commands: [] as Array<Record<string, unknown>>,
   /** The stored position, however old (GET /roomba/position/last). */
   lastPosition: null as Record<string, unknown> | null,
+  /** The robot's schedules and the skipped cleans. */
+  schedules: [] as Array<Record<string, unknown>>,
+  skips: [] as Array<Record<string, unknown>>,
 };
 
 vi.mock('../context/AuthContext', () => ({
@@ -60,8 +63,11 @@ vi.mock('../api/roomba', () => ({
   fetchRoombaPosition: async () => null,
   fetchRoombaLastPosition: async () => state.lastPosition,
   fetchRoombaCoverage: async () => null,
-  fetchRoombaNativeSchedules: async () => [],
+  fetchRoombaNativeSchedules: async () => state.schedules,
   refreshRoombaNativeSchedules: async () => ({}),
+  fetchRoombaScheduleSkips: async () => state.skips,
+  skipRoombaClean: vi.fn(async (householdScheduleId: string, date: string) => ({ id: 9, householdScheduleId, date })),
+  undoRoombaSkip: vi.fn(async (id: number) => ({ id })),
   sendRoombaCommand: vi.fn(async (command: string) => ({ id: 1, command, status: 'PENDING' })),
   cleanRoombaRooms: vi.fn(),
   cleanRoombaRoom: vi.fn(),
@@ -88,6 +94,8 @@ describe('Roomba page', () => {
     state.status = {};
     state.commands = [];
     state.lastPosition = null;
+    state.schedules = [];
+    state.skips = [];
     vi.mocked(roombaApi.sendRoombaCommand).mockClear();
     vi.mocked(roombaApi.fetchRoombaStatus).mockClear();
   });
@@ -279,6 +287,80 @@ describe('Roomba page', () => {
       state.commands = [cmdRow({ status: 'FAILED', detail: 'the robot didn\'t react' })];
       await vi.advanceTimersByTimeAsync(20_000);
       expect(await screen.findByText("Pause failed: the robot didn't react")).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // ─── Skipping a scheduled clean ─────────────────────────────────────
+  // Mon Nov 16 2026, 8:00 AM at home: Mon + Fri and Tue – Thu schedules, both at 9:00 AM.
+  const schedule = (id: string, days: number[], enabled = true) => ({
+    householdScheduleId: id, name: 'Regular Schedule', frequency: 'WEEKLY', days, hour: 9, minute: 0, enabled,
+    roomCount: 6, operatingModes: [2], updatedAt: '2026-10-08T14:30:45Z',
+  });
+  const skipRow = (over: Record<string, unknown>) => ({
+    id: 5, householdScheduleId: 'hh_TUETHU', scheduleId: 'hh_TUETHU', date: '2026-11-17', hour: 9, minute: 0,
+    scheduledFor: '2026-11-17T15:00:00Z', restoreAfter: '2026-11-17T15:30:00Z', state: 'APPLIED', detail: null,
+    lastError: null, undoRequested: false, requestedBy: 'user:1', createdAt: '2026-11-16T13:00:00Z',
+    appliedAt: '2026-11-16T13:00:05Z', finishedAt: null, ...over,
+  });
+  const atHome = (iso: string) => vi.useFakeTimers({ shouldAdvanceTime: true, now: new Date(iso) });
+
+  it("offers today's and tomorrow's clean by time, and skips the one pressed", async () => {
+    atHome('2026-11-16T14:00:00Z');
+    try {
+      state.schedules = [schedule('hh_MONFRI', [1, 5]), schedule('hh_TUETHU', [2, 3, 4])];
+      renderPage();
+      expect(await screen.findByRole('button', { name: /^Skip today's 9:00\sAM clean$/ })).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /^Skip tomorrow's 9:00\sAM clean$/ }));
+      await waitFor(() => expect(roombaApi.skipRoombaClean).toHaveBeenCalledWith('hh_TUETHU', '2026-11-17'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says which clean is skipped and when the next one is, with an Undo for an admin', async () => {
+    atHome('2026-11-17T02:00:00Z'); // Mon 8 PM
+    try {
+      state.schedules = [schedule('hh_MONFRI', [1, 5]), schedule('hh_TUETHU', [2, 3, 4], false)];
+      state.skips = [skipRow({})];
+      renderPage();
+      const notice = (await screen.findByText("Tomorrow's 9:00 AM clean is skipped.")).closest('.fp-notice') as HTMLElement;
+      expect(notice.textContent).toMatch(/Next clean Wednesday at 9:00\sAM\./);
+      expect(notice.textContent).toMatch(/The Tue – Thu schedule is off in the iRobot app until tomorrow at 9:30\sAM/);
+      // The readout passes over the skipped clean; tomorrow's key is gone, nothing left today.
+      expect(screen.queryByRole('button', { name: /Skip tomorrow/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Skip today/ })).toBeNull();
+      fireEvent.click(within(notice).getByRole('button', { name: 'Undo' }));
+      await waitFor(() => expect(roombaApi.undoRoombaSkip).toHaveBeenCalledWith(5));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('shows a member what is skipped, without the keys', async () => {
+    atHome('2026-11-17T02:00:00Z');
+    try {
+      state.role = 'USER';
+      state.schedules = [schedule('hh_MONFRI', [1, 5]), schedule('hh_TUETHU', [2, 3, 4], false)];
+      state.skips = [skipRow({})];
+      renderPage();
+      expect(await screen.findByText("Tomorrow's 9:00 AM clean is skipped.")).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^Skip / })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says when a skip couldn't be made", async () => {
+    atHome('2026-11-17T15:20:00Z'); // Tue 9:20 AM
+    try {
+      state.schedules = [schedule('hh_MONFRI', [1, 5]), schedule('hh_TUETHU', [2, 3, 4])];
+      state.skips = [skipRow({ state: 'FAILED', detail: "The schedule couldn't be switched off before the clean was due, so it may have run." })];
+      renderPage();
+      const title = await screen.findByText("Couldn't skip today's 9:00 AM clean.");
+      expect(title.closest('.fp-notice')?.className).toMatch(/fp-notice--problem/);
     } finally {
       vi.useRealTimers();
     }
