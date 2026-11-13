@@ -8,6 +8,7 @@ import asyncio
 import copy
 import os
 import sys
+import types
 import unittest
 from datetime import date, datetime, timedelta, timezone
 from unittest import mock
@@ -835,6 +836,16 @@ class MainLoopSkips(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(checks, [1], "checked once on the first cycle, then every SKIP_CHECK_SECONDS")
         self.assertEqual(logins, [1])
 
+    async def test_the_first_poll_is_at_once_even_just_after_the_host_boots(self):
+        # time.monotonic() counts from the host's boot: 5 s after a NUC reboot it reads ~5.
+        import time as real_time
+        started = real_time.monotonic()
+        robot = LoopRobot()
+        just_booted = types.SimpleNamespace(monotonic=lambda: 5.0 + real_time.monotonic() - started)
+        with mock.patch.object(poller, "time", just_booted):
+            await self.run_main(robot, 0.5, _run_schedule_skips=lambda *a, **k: asyncio.sleep(0, "nothing due"))
+        self.assertGreater(robot.shadow_reads, 0, "polled on the first cycle, not POLL_INTERVAL_SECONDS after boot")
+
     async def test_a_schedule_read_that_fails_or_hangs_costs_no_cycle_and_no_login(self):
         for broken in ("fails", "hangs"):
             robot = LoopRobot(schedules=broken)
@@ -869,9 +880,11 @@ class LoopRobot:
         self._mqtt = self._Mqtt()
         self.schedules = schedules
         self.schedule_reads = 0
+        self.shadow_reads = 0
         self.disconnects = 0
 
     async def get_named_shadow(self, name, timeout=8.0):
+        self.shadow_reads += 1
         return type("R", (), {"payload": {"state": {"reported": {}}}})()
 
     async def get_household_id(self):

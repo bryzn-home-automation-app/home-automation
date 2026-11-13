@@ -1298,6 +1298,7 @@ SKIP_CHECK_SECONDS = 30
 MISSION_START_COMMANDS = {"start", "resume", CLEAN_ROOM, CLEAN_ROOMS, "favorite"}
 FAST_POLL_INTERVAL = 10   # seconds — poll cadence while a mission runs or was just commanded
 FAST_POLL_WINDOW = 180    # seconds — how long to fast-poll after a mission-starting command
+NEVER = float("-inf")     # a monotonic time before any other (the last poll, before the first)
 
 
 def _fetch_pending(conninfo, limit=5):
@@ -2656,7 +2657,10 @@ async def main():
             # reacts. See command_flow.py.
             link = CloudLink(session, (email, password, country, blid), state)
             runner = CommandRunner(link, conninfo, state)
-            last_poll = 0.0
+            # "Never": time.monotonic() counts from the host's boot, so 0.0 only meant "long
+            # ago" once the host had been up longer than the poll interval (just after a NUC
+            # reboot the first poll waited up to POLL_INTERVAL_SECONDS).
+            last_poll = NEVER
             skips_due = 0.0  # the first good cycle (start-up, after an outage) checks the skips
             woke = "start"
             failures = 0  # failed cycles in a row
@@ -2670,7 +2674,7 @@ async def main():
                     await runner.run_followup_if_due()
                     await link.ensure()  # in case a reconnect above didn't complete
                     if link.poll_now:
-                        last_poll = 0.0  # poll immediately after (re)connect
+                        last_poll = NEVER  # poll immediately after (re)connect
                         link.poll_now = False
                     robot = link.robot
                     now = time.monotonic()
