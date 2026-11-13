@@ -29,6 +29,12 @@ def _missing(name):
         return True
 
 
+def real_roombapy_prime():
+    """Whether the real roombapy_prime is in use (the poller image), not the stand-ins below
+    (a stand-in module has no file)."""
+    return getattr(sys.modules.get("roombapy_prime"), "__file__", None) is not None
+
+
 def _no_database(*_args, **_kwargs):
     raise RuntimeError("psycopg stub: the tests have no database")
 
@@ -50,6 +56,31 @@ class _MissionCommandType(enum.Enum):
 
 class _RegionType(enum.Enum):
     RID = "rid"
+
+
+# roombapy_prime.models.livemap (0.8.3) as poller.py reads it: frozen dataclasses with the
+# library's own fields, so a test builds a message the way the library does (keywords, no
+# assigning afterwards) and the same test runs against the real classes in the poller image.
+@dataclasses.dataclass(frozen=True)
+class _PositionSample:
+    point: tuple
+    orientation: float
+    operating_modes: int
+
+
+@dataclasses.dataclass(frozen=True)
+class _PositionUpdateMessage:
+    sequence_number: int
+    updates: list
+    last_update_timestamp: object
+    expires_at: object = None
+
+
+@dataclasses.dataclass(frozen=True)
+class _MapUpdateMessage:
+    livemap_url: str
+    livemap_url_raw: object = None
+    timestamp: object = None
 
 
 @dataclasses.dataclass(frozen=True)
@@ -96,8 +127,9 @@ def install():
         _module("roombapy_prime.auth", login=_no_database)
         _module("roombapy_prime.models")
         _module("roombapy_prime.models.livemap",
-                MapUpdateMessage=type("MapUpdateMessage", (), {}),
-                PositionUpdateMessage=type("PositionUpdateMessage", (), {}))
+                MapUpdateMessage=_MapUpdateMessage,
+                PositionUpdateMessage=_PositionUpdateMessage,
+                PositionSample=_PositionSample)
         _module("roombapy_prime.models.map_bundle", parse_map_bundle=lambda raw: {})
         _module("roombapy_prime.models.robot_info", DockState=_DockState)
         _module("roombapy_prime.models.mission_control",

@@ -3,6 +3,12 @@ The live-position stream's writes (poller.py LivePositionWriter, run_live_map) a
 stream runs. The row it keeps is where the map says the robot was last seen, so the last
 sample before the robot stops must be the one stored, never one from a second earlier.
 Nothing touches a network or database: upsert_position is replaced by a list.
+
+Messages are built as roombapy_prime builds them. Its livemap classes are frozen dataclasses,
+so the stand-ins in _stubs.py are too: these tests used to make a message with __new__ and
+assign `updates` afterwards, which the stand-ins allowed and the real 0.8.3 refuses
+(FrozenInstanceError), so in the poller image the two run_live_map tests errored before
+reaching poller.py at all.
 """
 import asyncio
 import os
@@ -20,6 +26,7 @@ import _stubs  # noqa: E402
 _stubs.install()
 
 import poller  # noqa: E402
+from roombapy_prime.models.livemap import PositionSample  # noqa: E402
 
 
 def cms(phase, mission="M1", cycle="clean"):
@@ -118,17 +125,13 @@ class LivePositionWriterTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.writes.rows, [])
 
 
-class Sample:
-    def __init__(self, x, y, theta=0.0, modes=2):
-        self.point = (x, y)
-        self.orientation = theta
-        self.operating_modes = modes
-
-
 def position(*points):
-    msg = poller.PositionUpdateMessage.__new__(poller.PositionUpdateMessage)
-    msg.updates = [Sample(x, y) for x, y in points]
-    return msg
+    """A PositionUpdateMessage with a sample per (x, y), built with the library's own fields."""
+    return poller.PositionUpdateMessage(
+        sequence_number=1,
+        updates=[PositionSample(point=(x, y), orientation=0.0, operating_modes=2) for x, y in points],
+        last_update_timestamp=datetime.now(timezone.utc),
+    )
 
 
 class Robot:
@@ -152,6 +155,14 @@ class Robot:
         await asyncio.Event().wait()
 
 
+class Ends(Robot):
+    """A stream that ends on its own after its messages."""
+
+    async def watch_live_map(self):
+        async for m in self.messages_apart():
+            yield m
+
+
 class RunLiveMapTest(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.writes = Writes()
@@ -170,14 +181,29 @@ class RunLiveMapTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.writes.points, [(0.0, 0.0), (0.7, 0.2)])
 
     async def test_a_stream_that_ends_on_its_own_stores_its_last_sample_too(self):
-        class Ends(Robot):
-            async def watch_live_map(self):
-                async for m in self.messages_apart():
-                    yield m
-
         robot = Ends(position((1.0, 1.0)), position((2.0, 2.0)))
         await asyncio.wait_for(poller.run_live_map(robot, "conninfo", "BLID"), 1.0)
         self.assertEqual(self.writes.points, [(1.0, 1.0), (2.0, 2.0)])
+
+    @unittest.skipUnless(_stubs.real_roombapy_prime(), "needs the real roombapy_prime (the poller image)")
+    async def test_messages_the_real_library_parses_are_stored_and_counted(self):
+        # The wire format (cur_path: sequence, then x, y, heading, modes per sample, then the
+        # time), through the library's own parser: the fields run_live_map and the pass count
+        # read are the ones it fills in.
+        from roombapy_prime.models.livemap import parse_livemap_message_data
+
+        wire = [
+            {"pos_update": {"cur_path": [1, 0.5, 0.25, 1.5, 2, 1_763_046_000]}},
+            {"pos_update": {"cur_path": [2, 0.6, 0.3, 1.6, 2, 0.7, 0.35, 1.7, 2, 1_763_046_001]}},
+        ]
+        state = poller.PollerState()
+        state.active = {"started_at": datetime(2026, 11, 13, 15, 0, tzinfo=timezone.utc)}
+        robot = Ends(*[parse_livemap_message_data(w) for w in wire])
+        # The pass count's database reads and writes fail here (no database); it carries on.
+        with self.assertLogs("roomba-poller", "WARNING"):
+            await asyncio.wait_for(poller.run_live_map(robot, "conninfo", "BLID", state), 5.0)
+        self.assertEqual([row[:3] for row in self.writes.rows], [(0.5, 0.25, 1.5), (0.7, 0.35, 1.7)])
+        self.assertGreater(len(state.passes.cells), 0, "every sample went into the pass count")
 
 
 if __name__ == "__main__":
