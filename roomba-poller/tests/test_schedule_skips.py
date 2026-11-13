@@ -288,6 +288,9 @@ class FakeCloud:
         self.fail_writes = False
         self.write_error = TimeoutError("PUT timed out")
         self.ignore_writes = False
+        self.household_calls = 0
+        self.hang_reads = False
+        self.hang_writes = False
 
     def add(self, schedule, days, **kw):
         self.containers[schedule] = [entry(schedule, days, **kw)]
@@ -296,10 +299,13 @@ class FakeCloud:
         return self.containers[schedule][0]["options"]
 
     async def get_household_id(self):
+        self.household_calls += 1
         return "HOUSEHOLD"
 
     async def get_schedules_raw(self, household_id):
         self.reads += 1
+        if self.hang_reads:
+            await asyncio.Event().wait()
         if self.fail_reads:
             raise OSError("Cannot connect to host")
         return {"household_schedules": [{"household_schedule_id": cid, "schedules": copy.deepcopy(e)}
@@ -308,6 +314,8 @@ class FakeCloud:
     async def update_schedules(self, household_id, container_id, schedules):
         body = [s.to_json() for s in schedules]
         self.writes.append((household_id, container_id, body))
+        if self.hang_writes:
+            await asyncio.Event().wait()
         if self.fail_writes:
             raise self.write_error
         if not self.ignore_writes:
@@ -626,6 +634,60 @@ class RawWrite(unittest.IsolatedAsyncioTestCase):
         self.assertEqual([e["options"]["enabled"] for e in cloud.containers["HH"]], [False, False],
                          "the second write kept the first one's switch-off")
         self.assertEqual((table.state(1), table.state(2)), (ss.APPLIED, ss.APPLIED))
+
+
+class BoundedPass(unittest.IsolatedAsyncioTestCase):
+    """A skip pass runs inline in the main loop, so it is cut off after SKIP_PASS_TIMEOUT, and
+    the household id is looked up once, not before every read."""
+
+    def setUp(self):
+        self.cloud = FakeCloud()
+        self.cloud.add(TUE_THU, [2, 3, 4])
+        self.table = Table()
+        self.state = poller.PollerState()
+        patcher = mock.patch.multiple(
+            poller, _load_active_skips=self.table.load, _save_skip_changes=self.table.save,
+            _load_skip_outcome=self.table.outcome, _replace_native_schedules=self.table.replace_mirror,
+            SKIP_PASS_TIMEOUT=0.1,
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    async def test_the_household_is_looked_up_once(self):
+        self.table.add(skip(1, TUE_THU, 17))
+        with mock.patch.object(poller, "datetime", wraps=datetime) as dt:
+            dt.now.return_value = at(16, 20)
+            await poller._check_schedule_skips(self.cloud, "conninfo", self.state)  # read, switch off, check
+        await poller.refresh_schedules(self.cloud, "conninfo", "BLID", self.state)
+        self.assertEqual((self.cloud.reads, self.cloud.household_calls), (3, 1))
+
+    async def test_a_pass_the_cloud_holds_up_is_cut_off_and_its_skips_wait(self):
+        self.table.add(skip(1, TUE_THU, 17))
+        self.cloud.hang_reads = True
+        with self.assertLogs("roomba-poller", "WARNING") as logs:
+            await asyncio.wait_for(poller._check_schedule_skips(self.cloud, "conninfo", self.state), 1.0)
+        self.assertIn("cut off", "\n".join(logs.output))
+        self.assertIn(1, self.state.skip_holds)
+        # The next checks leave the cloud alone until the skip's backoff is over.
+        await poller._check_schedule_skips(self.cloud, "conninfo", self.state)
+        self.assertEqual(self.cloud.reads, 1)
+
+    async def test_a_send_cut_off_is_left_applying_for_the_next_read(self):
+        self.table.add(skip(1, TUE_THU, 17))
+        self.cloud.hang_writes = True
+        with mock.patch.object(poller, "datetime", wraps=datetime) as dt:
+            dt.now.return_value = at(16, 20)
+            ok, detail = await asyncio.wait_for(
+                poller._rest_command(self.cloud, "conninfo", self.state, poller.SKIP_CLEAN, "1"), 1.0)
+        self.assertFalse(ok)
+        self.assertIn("too slow", detail)
+        self.assertEqual(self.table.state(1), ss.APPLYING)
+        # The write did land: the next pass finds the schedule off and takes it as ours.
+        self.cloud.hang_writes = False
+        self.cloud.options(TUE_THU)["enabled"] = False
+        self.state.skip_holds.clear()
+        await poller._run_schedule_skips(self.cloud, "conninfo", now=at(16, 20, 2), tz=HOME, state=self.state)
+        self.assertEqual(self.table.state(1), ss.APPLIED)
 
 
 class FakePg:

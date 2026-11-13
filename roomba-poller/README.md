@@ -106,9 +106,21 @@ iRobot app drops the skip without a write; a schedule they switched back on ther
 `APPLYING` is stored before the switch-off goes out, so a restart mid-send still knows the
 schedule may be off. Failed reads and writes are retried per skip (1, 2, 5, 10, then every
 15 min, never faster) until the schedule is back on; the main loop checks every 30 s and on
-start-up, fail-open. The backend alerts the admins if a skip couldn't be made in time or a
-schedule is still off an hour after it should be back on. The rules are in
-`schedule_skips.py`.
+start-up, fail-open, and a pass is cut off after 60 s (its skips then wait out their backoff).
+A row the database won't take is held in memory for its backoff, so it can't turn into a cloud
+read every pass. A switch-off the cloud turned down (4xx) goes back to `PENDING`; one that timed
+out stays `APPLYING`. A schedule switched off by us that a read doesn't list is looked for
+again; only three reads in a row without it end the skip. The backend alerts the admins if a
+skip couldn't be made in time, a schedule is still off an hour after it should be back on, or a
+schedule we switched off has gone. The rules are in `schedule_skips.py`.
+
+### The schedule mirror
+
+`roomba_native_schedule` (what the page's Schedules panel, its Next clean tile and the
+backend's "Scheduled clean didn't start" alert read) is re-read from the cloud on start-up and
+every 3 hours (`refresh_schedules`, a REST read, nothing sent to the robot), on every skip pass
+that reads the schedules anyway, and on the page's "Read schedules". An unreadable or empty
+reply never wipes it; only "Read schedules" replaces it with whatever the cloud says.
 
 ## Robustness
 

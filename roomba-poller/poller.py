@@ -262,6 +262,8 @@ class PollerState:
         # Skips whose row couldn't be written: skip id -> (not before, aware UTC; writes failed in
         # a row). Keeps a database that won't take a row from making each pass read the cloud.
         self.skip_holds = {}
+        self.skips_in_flight = set()  # the due skips of the pass under way (held if it is cut off)
+        self.household_id = None      # the account's household, for the schedule reads (looked up once)
         # Pass count for the running mission (coverage_passes.PassGrid). Lives here,
         # not in the live-map task: that task stops on a pause or recharge and is
         # restarted on every reconnect, and the count must carry on across all three.
@@ -1843,13 +1845,32 @@ def _persist_skip_changes(conninfo, state, changes, now):
     return failed
 
 
-async def _read_schedule_containers(robot):
+def _status_4xx(e):
+    """Whether a cloud call failed with a 4xx answer (roombapy-prime's RestClientError and
+    RestRateLimitedError carry .status)."""
+    status = getattr(e, "status", None)
+    return isinstance(status, int) and not isinstance(status, bool) and 400 <= status < 500
+
+
+async def _read_schedule_containers(robot, state=None):
     """(household_id, [(household_schedule_id, [entries])]) as the cloud has them now. Raw, so
-    an unreadable answer raises instead of reading as "no schedules" (schedule_skips.containers)."""
-    household_id = await robot.get_household_id()
+    an unreadable answer raises instead of reading as "no schedules" (schedule_skips.containers).
+    The household id is looked up once per process (in `state`, a PollerState) and asked for
+    again only after a 4xx, so a read is one cloud call, not two."""
+    household_id = state.household_id if state is not None else None
     if not household_id:
-        raise RuntimeError("no household_id")
-    return household_id, schedule_skips.containers(await robot.get_schedules_raw(household_id))
+        household_id = await robot.get_household_id()
+        if not household_id:
+            raise RuntimeError("no household_id")
+        if state is not None:
+            state.household_id = household_id
+    try:
+        raw = await robot.get_schedules_raw(household_id)
+    except Exception as e:
+        if state is not None and _status_4xx(e):
+            state.household_id = None
+        raise
+    return household_id, schedule_skips.containers(raw)
 
 
 def _write_schedule_mirror(conninfo, robot_id, conts):
@@ -1885,7 +1906,7 @@ async def refresh_schedules(robot, conninfo, robot_id, state, clock=time.monoton
         return
     state.schedules_due = now + SCHEDULES_RETRY_SECONDS
     try:
-        _, conts = await asyncio.wait_for(_read_schedule_containers(robot), SCHEDULES_READ_TIMEOUT)
+        _, conts = await asyncio.wait_for(_read_schedule_containers(robot, state), SCHEDULES_READ_TIMEOUT)
         written = _write_schedule_mirror(conninfo, robot_id, conts)
         state.schedules_due = now + SCHEDULES_REFRESH_SECONDS
         if written is None:
@@ -1904,10 +1925,7 @@ def _write_refused(e):
     """Whether a failed schedule write certainly changed nothing: it never went (ScheduleNotSent)
     or the cloud answered it with a 4xx (roombapy-prime's RestClientError and
     RestRateLimitedError carry .status). A timeout, a dropped connection or a 5xx may have taken."""
-    if isinstance(e, ScheduleNotSent):
-        return True
-    status = getattr(e, "status", None)
-    return isinstance(status, int) and not isinstance(status, bool) and 400 <= status < 500
+    return isinstance(e, ScheduleNotSent) or _status_4xx(e)
 
 
 class _RawSchedule:
@@ -1983,13 +2001,18 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None, state=None):
         _persist_skip_changes(conninfo, state, changes.values(), now)
         return f"{len(changes)} settled" if changes else "nothing due"
 
+    if state is not None:
+        # Held back from the cloud for their backoff if the pass is cut off (_bounded_skip_pass).
+        state.skips_in_flight = {s.id for g in groups.values() for s in g if s.due(now)}
     try:
-        household_id, conts = await _read_schedule_containers(robot)
+        household_id, conts = await _read_schedule_containers(robot, state)
     except Exception as e:  # noqa: BLE001 — retried per skip, with its backoff
         for group in groups.values():
             for s in group:
                 if s.due(now):
                     changes[s.id] = schedule_skips.retry(s, now, f"couldn't read the schedules ({_err(e)})")
+        if state is not None:
+            state.skips_in_flight = set()
         _persist_skip_changes(conninfo, state, changes.values(), now)
         return f"couldn't read the schedules ({_err(e)})"
 
@@ -2016,7 +2039,7 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None, state=None):
     if sent:
         # Confirm on a fresh read: a write the cloud accepts but doesn't keep is a failure too.
         try:
-            _, conts = await _read_schedule_containers(robot)
+            _, conts = await _read_schedule_containers(robot, state)
             for p in sent:
                 entry = schedule_skips.find_entry(conts, p.container_id, p.schedule_id)
                 options = entry.get("options") if entry else None
@@ -2032,16 +2055,40 @@ async def _run_schedule_skips(robot, conninfo, now=None, tz=None, state=None):
     except Exception as e:  # noqa: BLE001 — the page's copy only; the skips matter more
         log.warning("schedule mirror refresh failed: %s", _err(e))
     _persist_skip_changes(conninfo, state, changes.values(), now)
+    if state is not None:
+        state.skips_in_flight = set()
     return f"{len(changes)} skip(s) updated"
+
+
+# A skip pass runs inline in the main loop (a queued "Dock" waits behind it) and can make four
+# cloud calls, so it is cut off after this. A send cut off is left APPLYING, which the next read
+# settles; the skips it was working on wait out their backoff before the cloud is tried again.
+SKIP_PASS_TIMEOUT = 60.0
+
+
+async def _bounded_skip_pass(robot, conninfo, state):
+    """_run_schedule_skips(), cut off after SKIP_PASS_TIMEOUT. Raises TimeoutError when it was."""
+    try:
+        return await asyncio.wait_for(_run_schedule_skips(robot, conninfo, state=state), SKIP_PASS_TIMEOUT)
+    except (asyncio.TimeoutError, TimeoutError):
+        if state is not None:
+            now = datetime.now(timezone.utc)
+            for skip_id in state.skips_in_flight:
+                count = state.skip_holds.get(skip_id, (None, 0))[1] + 1
+                state.skip_holds[skip_id] = (now + timedelta(seconds=schedule_skips.retry_delay(count)), count)
+            state.skips_in_flight = set()
+        raise
 
 
 async def _check_schedule_skips(robot, conninfo, state=None):
     """The main loop's periodic pass. Fail-open: a problem here never fails the cycle (which
     would drop the cloud link and log in again); the skips keep their own retry times."""
     try:
-        summary = await _run_schedule_skips(robot, conninfo, state=state)
+        summary = await _bounded_skip_pass(robot, conninfo, state)
         if summary != "nothing due":
             log.info("Schedule skips: %s", summary)
+    except (asyncio.TimeoutError, TimeoutError):
+        log.warning("schedule skip check cut off after %.0f s; the iRobot cloud is slow", SKIP_PASS_TIMEOUT)
     except Exception as e:  # noqa: BLE001 — e.g. the database is restarting; tried again next check
         log.warning("schedule skip check failed: %s", _err(e))
 
@@ -2049,7 +2096,10 @@ async def _check_schedule_skips(robot, conninfo, state=None):
 async def _skip_command(robot, conninfo, arg, state=None):
     """A skip asked for or undone on the page: run a pass now instead of at the next check,
     and report what became of that skip on the command row."""
-    await _run_schedule_skips(robot, conninfo, state=state)
+    try:
+        await _bounded_skip_pass(robot, conninfo, state)
+    except (asyncio.TimeoutError, TimeoutError):
+        return False, "the iRobot cloud was too slow to answer; trying again shortly"
     try:
         skip_id = int(arg)
     except (TypeError, ValueError):
@@ -2057,12 +2107,12 @@ async def _skip_command(robot, conninfo, arg, state=None):
     row = _load_skip_outcome(conninfo, skip_id)
     if row is None:
         return False, f"no skip #{skip_id}"
-    state, detail, last_error = row
-    if state == schedule_skips.FAILED:
+    outcome, detail, last_error = row
+    if outcome == schedule_skips.FAILED:
         return False, detail or "couldn't skip it"
-    if last_error and state in schedule_skips.ACTIVE:
+    if last_error and outcome in schedule_skips.ACTIVE:
         return False, f"{last_error}; trying again shortly"
-    return True, f"skip #{skip_id} {state.lower()}" + (f": {detail}" if detail else "")
+    return True, f"skip #{skip_id} {outcome.lower()}" + (f": {detail}" if detail else "")
 
 
 async def _robot_command(robot, conninfo, command, arg):
