@@ -42,10 +42,32 @@ public class RoombaScheduleSkipController {
         return userId == null ? null : "user:" + userId;
     }
 
-    /** Skips under way, and those settled in the last two days. */
+    /**
+     * Skips under way, and those settled in the last two days. Who asked for a skip and the raw
+     * cloud errors (they hold URLs with the household id) are for admins: everyone else gets the
+     * skip without them.
+     */
     @GetMapping("/roomba/schedule-skips")
-    public ResponseEntity<List<RoombaScheduleSkipResponse>> list() {
-        return ResponseEntity.ok(service.recent());
+    public ResponseEntity<List<RoombaScheduleSkipResponse>> list(HttpServletRequest request) {
+        List<RoombaScheduleSkipResponse> skips = service.recent();
+        if ("ADMIN".equals(request.getAttribute("role"))) return ResponseEntity.ok(skips);
+        return ResponseEntity.ok(skips.stream().map(RoombaScheduleSkipController::forMember).toList());
+    }
+
+    /**
+     * A skip without requestedBy and lastError. A FAILED skip's detail ends with the error in
+     * brackets (roomba-poller/schedule_skips.py settle_offline); that part goes too.
+     */
+    static RoombaScheduleSkipResponse forMember(RoombaScheduleSkipResponse s) {
+        String detail = s.detail();
+        if (detail != null && s.lastError() != null) {
+            int bracket = detail.indexOf(" (");
+            if (bracket > 0) detail = detail.substring(0, bracket);
+        }
+        return new RoombaScheduleSkipResponse(
+                s.id(), s.householdScheduleId(), s.scheduleId(), s.date(), s.hour(), s.minute(),
+                s.scheduledFor(), s.restoreAfter(), s.state(), detail, null, s.undoRequested(), null,
+                s.createdAt(), s.appliedAt(), s.finishedAt());
     }
 
     /** Skip today's or tomorrow's clean of one schedule. */

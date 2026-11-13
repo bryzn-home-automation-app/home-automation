@@ -45,6 +45,31 @@ class RoombaScheduleSkipControllerTest {
     }
 
     @Test
+    @DisplayName("who skipped and the raw cloud error are for admins; members and guests get the skip without them")
+    void privateFields() throws Exception {
+        var failed = new RoombaScheduleSkipResponse(
+                8L, "hh_TUETHU_s", "hh_TUETHU_s", "2026-11-17", 9, 0, "2026-11-17T15:00Z", "2026-11-17T15:30Z",
+                "FAILED", "The schedule couldn't be switched off before the clean was due, so it may have run."
+                        + " (couldn't read the schedules (OSError: https://x/v1/households/hh-42/settings/schedule))",
+                "couldn't read the schedules (OSError: https://x/v1/households/hh-42/settings/schedule)",
+                false, "user:5", "2026-11-17T02:00Z", null, "2026-11-17T15:00Z");
+        when(service.recent()).thenReturn(List.of(SKIP, failed));
+        for (String role : new String[]{"USER", "GUEST"}) {
+            mvc.perform(get("/api/roomba/schedule-skips").requestAttr("role", role))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].requestedBy").doesNotExist())
+                    .andExpect(jsonPath("$[1].lastError").doesNotExist())
+                    .andExpect(jsonPath("$[1].requestedBy").doesNotExist())
+                    .andExpect(jsonPath("$[1].detail").value(
+                            "The schedule couldn't be switched off before the clean was due, so it may have run."))
+                    .andExpect(jsonPath("$[1].state").value("FAILED"));
+        }
+        mvc.perform(get("/api/roomba/schedule-skips").requestAttr("role", "ADMIN"))
+                .andExpect(jsonPath("$[1].requestedBy").value("user:5"))
+                .andExpect(jsonPath("$[1].lastError").value(org.hamcrest.Matchers.containsString("hh-42")));
+    }
+
+    @Test
     @DisplayName("an admin skips a clean, recorded as theirs")
     void adminSkips() throws Exception {
         when(service.skip("hh_TUETHU_s", "2026-11-17", "user:5")).thenReturn(SKIP);
