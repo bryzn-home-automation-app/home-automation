@@ -28,6 +28,7 @@ Credentials + config come from env only (never a file):
 """
 import asyncio
 import contextlib
+import copy
 import gzip
 import hashlib
 import io
@@ -1894,29 +1895,46 @@ async def refresh_schedules(robot, conninfo, robot_id, state, clock=time.monoton
         log.warning("schedule refresh failed: %s", _err(e))
 
 
+class _RawSchedule:
+    """One schedule for update_schedules(), going back exactly as the cloud gave it. roombapy-prime
+    0.8.3's update_schedules() only calls .to_json() on each item (rest_client.py builds
+    {"schedules": [s.to_json() for s in schedules]}); its own HouseholdSchedule would drop what it
+    doesn't model (unknown keys in start/end/after/until or beside options, nulls, empty lists)
+    and raises on a frequency it doesn't know."""
+
+    def __init__(self, body):
+        self._body = body
+
+    def to_json(self):
+        return copy.deepcopy(self._body)
+
+
 async def _set_schedule_enabled(robot, household_id, conts, container_id, schedule_id, enabled):
     """THE schedule write: one schedule's `enabled` flag, on the container exactly as just
     read. update_schedules() replaces the container's whole list, so every schedule in it goes
-    back, each through roombapy-prime's HouseholdSchedule, which keeps the fields it doesn't
-    model. Sends PUT /v1/households/{household_id}/settings/schedule/{container_id} with
-    {"schedules": [{"schedule_id": ..., "options": {...the read copy, "enabled": <enabled>}}]}."""
-    import dataclasses
-
-    from roombapy_prime.models.schedules_dnd import HouseholdSchedule
-
+    back as read, the target with only `enabled` changed (and each with its schedule_id beside
+    its options, as the library's own write sends it). Sends PUT
+    /v1/households/{household_id}/settings/schedule/{container_id} with
+    {"schedules": [{...the read entry, "schedule_id": ..., "options": {..., "enabled": <enabled>}}]}.
+    Once it is sent, `conts` shows the change, so a second write to the same container in the
+    same pass (another of its schedules) starts from this one instead of undoing it."""
     entries = next((e for cid, e in conts if cid == container_id), None)
     target = schedule_skips.find_entry(conts, container_id, schedule_id)
     if entries is None or target is None:
         raise LookupError("the schedule isn't in the cloud's copy")
+    if not isinstance(target.get("options"), dict) or not isinstance(target["options"].get("enabled"), bool):
+        raise ValueError("the schedule has no on/off flag to change")
     schedules = []
     for entry in entries:
-        hs = HouseholdSchedule.from_json(entry)
+        body = copy.deepcopy(entry)
+        sid = schedule_skips.entry_id(entry)
+        if sid:
+            body.setdefault("schedule_id", sid)
         if entry is target:
-            if hs.options.enabled is None:
-                raise ValueError("the schedule has no on/off flag to change")
-            hs = dataclasses.replace(hs, options=dataclasses.replace(hs.options, enabled=enabled))
-        schedules.append(hs)
+            body["options"]["enabled"] = enabled
+        schedules.append(_RawSchedule(body))
     await robot.update_schedules(household_id, container_id, schedules)
+    target["options"]["enabled"] = enabled
 
 
 def _err(e):

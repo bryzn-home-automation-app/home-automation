@@ -83,35 +83,6 @@ class _MapUpdateMessage:
     timestamp: object = None
 
 
-@dataclasses.dataclass(frozen=True)
-class _ScheduleOptions:
-    """roombapy_prime's ScheduleOptions as far as a schedule write uses it: every field the
-    server sent goes back unchanged, `enabled` as set."""
-    raw: dict
-    enabled: object = None
-
-    def to_json(self):
-        body = dict(self.raw)
-        if self.enabled is not None:
-            body["enabled"] = self.enabled
-        return body
-
-
-@dataclasses.dataclass(frozen=True)
-class _HouseholdSchedule:
-    schedule_id: str
-    options: _ScheduleOptions
-
-    @classmethod
-    def from_json(cls, data):
-        options = data.get("options") or {}
-        return cls(schedule_id=data.get("schedule_id") or options.get("schedule_id") or "",
-                   options=_ScheduleOptions(raw=dict(options), enabled=options.get("enabled")))
-
-    def to_json(self):
-        return {"schedule_id": self.schedule_id, "options": self.options.to_json()}
-
-
 def install():
     if _missing("aiohttp"):
         _module("aiohttp", ClientSession=object)
@@ -138,6 +109,5 @@ def install():
                 Region=type("Region", (_Record,), {}),
                 RegionType=_RegionType,
                 RoutineCommand=type("RoutineCommand", (_Record,), {}))
-        _module("roombapy_prime.models.schedules_dnd", HouseholdSchedule=_HouseholdSchedule)
         _module("roombapy_prime.prime_factory", PrimeFactory=type("PrimeFactory", (), {}))
         _module("roombapy_prime.vendor_errors", vendor_error=lambda code: None)

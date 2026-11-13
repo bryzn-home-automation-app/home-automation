@@ -507,6 +507,89 @@ class Assignments(unittest.TestCase):
         self.assertFalse(any("undo_requested" in s or "alerted" in s for s in sets))
 
 
+def odd_entry(schedule):
+    """A schedule entry with what roombapy-prime's own dataclasses don't model: unknown keys inside
+    start/end and beside options and on a command wrapper, nulls, empty lists, a frequency it
+    doesn't know. The write must send all of it back."""
+    body = entry(schedule, [2, 3, 4])
+    o = body["options"]
+    o["start"]["tz_hint"] = {"x": None}
+    o["end"] = {"hour": None, "min": 30, "mystery": []}
+    o["after"] = None
+    o["until"] = {"date": None}
+    o["exclude"] = []
+    o["frequency"] = "EVERY_OTHER_FULL_MOON"
+    o["commands"][0]["wrapper_extra"] = {"keep": [1, None]}
+    body["beside_options"] = {"n": None}
+    return body
+
+
+class RawWrite(unittest.IsolatedAsyncioTestCase):
+    """The schedule write sends the cloud's copy back as it was read, but for `enabled`."""
+
+    async def write(self, robot, conts, container, schedule, enabled):
+        await poller._set_schedule_enabled(robot, "HOUSEHOLD", conts, container, schedule, enabled)
+
+    async def test_everything_read_goes_back_but_enabled(self):
+        sent = []
+
+        class Robot:
+            async def update_schedules(self, household_id, container_id, schedules):
+                sent.append({"schedules": [s.to_json() for s in schedules]})  # what 0.8.3 sends
+
+        target, other = odd_entry("A"), odd_entry("B")
+        conts = [("HH", [copy.deepcopy(target), copy.deepcopy(other)])]
+        await self.write(Robot(), conts, "HH", "A", False)
+        expected = [copy.deepcopy(target), copy.deepcopy(other)]
+        expected[0]["options"]["enabled"] = False
+        for e, sid in zip(expected, ("A", "B")):
+            e["schedule_id"] = sid
+        self.assertEqual(sent, [{"schedules": expected}])
+
+    @unittest.skipUnless(_stubs.real_roombapy_prime(), "needs the real roombapy_prime (the poller image)")
+    async def test_through_the_real_library_nothing_is_lost(self):
+        # The pinned library's own update_schedules() builds the body; only the HTTP call is faked.
+        from roombapy_prime.rest_client import PrimeRestClient
+
+        requests = []
+
+        class Rest:
+            _http_base_auth = "https://example.invalid"
+
+            async def _request_object(self, method, url, **kwargs):
+                requests.append((method, url, kwargs.get("body")))
+                return {}
+
+        class Robot:
+            async def update_schedules(self, household_id, container_id, schedules):
+                return await PrimeRestClient.update_schedules(Rest(), household_id, container_id, schedules)
+
+        target = odd_entry("A")
+        conts = [("HH", [copy.deepcopy(target)])]
+        await self.write(Robot(), conts, "HH", "A", False)
+        (method, url, body), = requests
+        self.assertEqual(method, "PUT")
+        self.assertTrue(url.endswith("/v1/households/HOUSEHOLD/settings/schedule/HH"))
+        expected = copy.deepcopy(target)
+        expected["options"]["enabled"] = False
+        expected["schedule_id"] = "A"
+        self.assertEqual(body, {"schedules": [expected]})
+
+    async def test_two_schedules_of_one_container_in_one_pass_both_stay_switched(self):
+        cloud = FakeCloud()
+        cloud.containers["HH"] = [entry("A", [2, 3, 4]), entry("B", [1, 5])]
+        table = Table()
+        table.add(skip(1, "A", 17, container_id="HH"))
+        table.add(skip(2, "B", 20, container_id="HH"))
+        with mock.patch.multiple(poller, _load_active_skips=table.load, _save_skip_changes=table.save,
+                                 _replace_native_schedules=table.replace_mirror):
+            await poller._run_schedule_skips(cloud, "conninfo", now=at(16, 20), tz=HOME)
+        self.assertEqual(len(cloud.writes), 2)
+        self.assertEqual([e["options"]["enabled"] for e in cloud.containers["HH"]], [False, False],
+                         "the second write kept the first one's switch-off")
+        self.assertEqual((table.state(1), table.state(2)), (ss.APPLIED, ss.APPLIED))
+
+
 class FakePg:
     """psycopg.connect() for _save_skip_changes: keeps each UPDATE, and refuses one that binds a
     string over 500 characters (roomba_schedule_skips.detail / last_error are VARCHAR(500)), or
